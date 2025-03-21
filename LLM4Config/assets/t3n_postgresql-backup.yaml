@@ -1,0 +1,74 @@
+---
+# Source: postgresql-backup/templates/secret-gcs.yaml
+kind: Secret
+apiVersion: v1
+metadata:
+  name: my-postgresql-backup-gcs
+  labels:
+    app.kubernetes.io/name: postgresql-backup
+    app.kubernetes.io/instance: my-postgresql-backup
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: postgresql-backup-0.0.1
+type: Opaque
+data:
+  key.json: |-
+---
+# Source: postgresql-backup/templates/secret-postgresql.yaml
+kind: Secret
+apiVersion: v1
+metadata:
+  name: my-postgresql-backup-postgresql
+  labels:
+    app.kubernetes.io/name: postgresql-backup
+    app.kubernetes.io/instance: my-postgresql-backup
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: postgresql-backup-0.0.1
+data:
+  DB_USER: ""
+  DB_PASS: ""
+---
+# Source: postgresql-backup/templates/cm.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-postgresql-backup
+  labels:
+    app.kubernetes.io/name: postgresql-backup
+    app.kubernetes.io/instance: my-postgresql-backup
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: postgresql-backup-0.0.1
+data:
+  postgresql-backup.sh: "#!/bin/sh -e\n\n# The following variables must be set.\n# DB_HOST=localhost\n#
+    DB_USER=root\n# DB_PASS=password\n# DB_NAME='dbname\n# FILENAME=filename\n#\n# The
+    following line prefixes the backups with the defined directory. it must be blank
+    or end with a /\n# GSPATH=\n#\n# Change this if command is not in $PATH\n# PGDUMPPATH=\n#
+    GSUTILPATH=\n#\n# Change this if you want temporary file to be created in specific
+    path\n# TMP_PATH=\n\nDATESTAMP=$(date +\"_%Y-%m-%d\")\nDAY=$(date +\"%d\")\nDAYOFWEEK=$(date
+    +\"%A\")\n\nif [ \"$DAY\" = \"01\" ]; then\n\tPERIOD=month\nelif [ \"$DAYOFWEEK\"
+    = \"Sunday\" ]; then\n\tPERIOD=week\nelse\n\tPERIOD=day\nfi\n\nprintf \"Selected
+    period: %s\\\\n\" \"$PERIOD\"\ngcloud auth activate-service-account --key-file=/etc/gcloud/key.json\nprintf
+    \"\\\\nStarting backing up the database to a file...\\\\n\"\n\"${PGDUMPPATH}pg_dump\"
+    -Fc --dbname=postgresql://${DB_USER}:${DB_PASS}@${DB_HOST}/${DB_NAME} > ${TMP_PATH}${FILENAME}${DATESTAMP}.db\nprintf
+    \"Done backing up the database to a file.\\\\n\\\\nStarting compression...\\\\n\"\ngzip
+    \"${TMP_PATH}${FILENAME}${DATESTAMP}.db\"\nprintf \"Done compressing the backup
+    file.\\\\n\\\\nRemoving old backup (2 %ss ago)...\\\\n\" \"$PERIOD\"\n\"${GSUTILPATH}gsutil\"
+    rm -R \"gs://${GSBUCKET}/${GSPATH}previous_${PERIOD}/\" || true\nprintf \"Old backup
+    removed.\\\\n\\\\nMoving the backup from past %s to another folder...\\\\n\" \"$PERIOD\"\n\"${GSUTILPATH}gsutil\"
+    mv \"gs://${GSBUCKET}/${GSPATH}${PERIOD}/\" \"gs://${GSBUCKET}/${GSPATH}previous_${PERIOD}\"
+    || true\nprintf \"Past backup moved.\\\\n\\\\nUploading the new backup...\\\\n\"\n\"${GSUTILPATH}gsutil\"
+    cp \"${TMP_PATH}${FILENAME}${DATESTAMP}.db.gz\" \"gs://${GSBUCKET}/${GSPATH}${PERIOD}/\"\nprintf
+    \"New backup uploaded.\\\\n\\\\nAll done.\"\n"
+  postgresql-restore.sh: "#!/bin/sh -e\n\n# The following variables must be set.\n#
+    DB_HOST=localhost\n# DB_USER=root\n# DB_PASS=password\n# DB_NAME='--all-databases'\n#
+    GSBUCKET=bucketname\n# FILENAME=filename\n#\n# The following line prefixes the backups
+    with the defined directory. it must be blank or end with a /\n# GSPATH=\n#\n# Change
+    this if command is not in $PATH\n# postgresqlPATH=\n# GSUTILPATH=\n#\n# Change this
+    if you want temporary file to be created in specific path\n# TMP_PATH=\n\ngcloud
+    auth activate-service-account --key-file=/etc/gcloud/key.json\nprintf \"\\\\nGetting
+    latest Backup...\"\n\"${GSUTILPATH}gsutil\" cp \"gs://${GSBUCKET}/${GSPATH}day/${FILENAME}_*.db.gz\"
+    \"${TMP_PATH}${FILENAME}.db.gz\"\nprintf \"\\\\nUncompressing the SQL-Dump...\"\ngunzip
+    \"${TMP_PATH}${FILENAME}.db.gz\"\nprintf \"\\\\nImporting the SQL-Dump\"\n\"${PGRESTOREPATH}pg_restore\"
+    -c -d postgresql://${DB_USER}:${DB_PASS}@${DB_HOST}/${DB_NAME} ${TMP_PATH}${FILENAME}.db\nif
+    [ ! -z \"$SANITIZE_ENABLED\" ]; then\n\tprintf \"\\\\nExecuting sanitize SQL-Commands\"\n\t\"${PGRESTOREPATH}pg_restore\"
+    -c -d postgresql://${DB_USER}:${DB_PASS}@${DB_HOST}/${DB_NAME} \"/tmp/sanitize.sql\"\n\tprintf
+    \"\\\\nFinished executing Sanitize\"\nelse\n\tprintf \"\\\\nSanitize is disabled\"\nfi\n"

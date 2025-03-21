@@ -1,0 +1,133 @@
+---
+# Source: mssqlserver-2019/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-mssqlserver-2019-secret
+  labels:
+    app: my-mssqlserver-2019
+    chart: mssqlserver-2019-1.2.3
+    release: my-mssqlserver-2019
+    heritage: Helm
+type: Opaque
+data:
+  
+  sapassword: "S1EwaVJpWHVWdWprTXV3YzE4V1A="
+---
+# Source: mssqlserver-2019/templates/pvc-data.yaml
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: my-mssqlserver-2019-data
+  labels:
+    app: my-mssqlserver-2019
+    chart: "mssqlserver-2019-1.2.3"
+    release: "my-mssqlserver-2019"
+    heritage: "Helm"
+spec:
+  accessModes:
+    - "ReadWriteOnce"
+  resources:
+    requests:
+      storage: "1Gi"
+---
+# Source: mssqlserver-2019/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-mssqlserver-2019
+  labels:
+    app: my-mssqlserver-2019
+    chart: mssqlserver-2019-1.2.3
+    release: my-mssqlserver-2019
+    heritage: Helm
+spec:
+  type: ClusterIP
+  ports:
+  - name: mssql
+    port: 1433
+    targetPort: mssql
+    protocol: TCP
+  selector:
+    app: my-mssqlserver-2019
+    release: my-mssqlserver-2019
+---
+# Source: mssqlserver-2019/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-mssqlserver-2019
+  labels:
+    app: my-mssqlserver-2019
+    chart: mssqlserver-2019-1.2.3
+    release: my-mssqlserver-2019
+    heritage: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: my-mssqlserver-2019
+      release: my-mssqlserver-2019
+  template:
+    metadata:
+      labels:
+        app: my-mssqlserver-2019
+        release: my-mssqlserver-2019
+    spec:
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        fsGroup: 10001
+      containers:
+        - name: mssqlserver-2019
+          image: "mcr.microsoft.com/mssql/server:2019-CU16-ubuntu-20.04"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: ACCEPT_EULA
+              value: "N"
+            - name: MSSQL_PID
+              value: "Developer"
+            - name: SA_PASSWORD
+              valueFrom:
+               secretKeyRef:
+                 name: my-mssqlserver-2019-secret
+                 key: sapassword
+            - name: MSSQL_DATA_DIR
+              value: /var/opt/mssql
+            - name: MSSQL_TCP_PORT
+              value: "1433"
+            - name: MSSQL_COLLATION
+              value: "SQL_Latin1_General_CP1_CI_AS"
+            - name: MSSQL_LCID
+              value: "1033"
+            - name: MSSQL_ENABLE_HADR
+              value: "0"
+            
+            - name: MSSQL_MEMORY_LIMIT_MB
+              valueFrom:
+                resourceFieldRef:
+                  resource: limits.memory
+                  divisor: 1Mi
+            
+          ports:
+            - name: mssql
+              containerPort: 1433
+          volumeMounts:
+            - name: data
+              mountPath: /var/opt/mssql
+          livenessProbe:
+             tcpSocket:
+               port: mssql
+             initialDelaySeconds: 15
+             periodSeconds: 20
+          readinessProbe:
+             tcpSocket:
+               port: mssql
+             initialDelaySeconds: 5
+             periodSeconds: 10
+          resources:
+            limits:
+              memory: 2Gi
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: my-mssqlserver-2019-data

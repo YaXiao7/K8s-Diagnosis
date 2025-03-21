@@ -1,0 +1,177 @@
+---
+# Source: cluster-manager/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-cluster-manager
+  labels:
+    app.kubernetes.io/component: cluster-manager
+    helm.sh/chart: cluster-manager-0.18.0
+    app.kubernetes.io/name: my-cluster-manager
+    app.kubernetes.io/instance: my-cluster-manager
+    app.kubernetes.io/version: "1.7.10"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: cluster-manager/templates/configmap.yaml
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  # Hardcoded for now since other tools know it under this name
+  name: cluster-manager-gc-pv-to-skip
+  labels:
+    app.kubernetes.io/component: cluster-manager
+    helm.sh/chart: cluster-manager-0.18.0
+    app.kubernetes.io/name: my-cluster-manager
+    app.kubernetes.io/instance: my-cluster-manager
+    app.kubernetes.io/version: "1.7.10"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: cluster-manager/templates/clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-cluster-manager
+  labels:
+    app.kubernetes.io/component: cluster-manager
+    helm.sh/chart: cluster-manager-0.18.0
+    app.kubernetes.io/name: my-cluster-manager
+    app.kubernetes.io/instance: my-cluster-manager
+    app.kubernetes.io/version: "1.7.10"
+    app.kubernetes.io/managed-by: Helm
+rules:
+  # Default resources
+  - apiGroups:
+      - ""
+      - apps
+      - batch
+    resources:
+      - deployments
+      - jobs
+      - pods
+      - pods/exec
+      - persistentvolumes
+      - persistentvolumeclaims
+      - secrets
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+
+  - apiGroups:
+      - ""
+      - networking.k8s.io
+    resources:
+      - clusterroles
+      - clusterrolebindings
+      - configmaps
+      - ingresses
+      - ingressclasses
+      - namespaces
+      - nodes
+    verbs:
+      - get
+      - list
+      - watch
+
+  # CRD
+  - apiGroups:
+      - topolvm.io
+      - topolvm.cybozu.com
+      - networking.istio.io
+    resources:
+      - logicalvolumes
+      - sidecars
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+
+  - apiGroups:
+      - wiremind.io
+    resources:
+      - releaseinfo
+      - expecteddeploymentscales
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+---
+# Source: cluster-manager/templates/clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-cluster-manager
+  labels:
+    app.kubernetes.io/component: cluster-manager
+    helm.sh/chart: cluster-manager-0.18.0
+    app.kubernetes.io/name: my-cluster-manager
+    app.kubernetes.io/instance: my-cluster-manager
+    app.kubernetes.io/version: "1.7.10"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-cluster-manager
+subjects:
+  - kind: ServiceAccount
+    name: my-cluster-manager
+    namespace: default
+---
+# Source: cluster-manager/templates/role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: my-cluster-manager
+  labels:
+    app.kubernetes.io/component: cluster-manager
+    helm.sh/chart: cluster-manager-0.18.0
+    app.kubernetes.io/name: my-cluster-manager
+    app.kubernetes.io/instance: my-cluster-manager
+    app.kubernetes.io/version: "1.7.10"
+    app.kubernetes.io/managed-by: Helm
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - "configmaps"
+    resourceNames:
+      - "cluster-manager-gc-pv-to-skip"
+    verbs:
+      - "get"
+      - "list"
+      - "patch"
+      - "update"
+      - "watch"
+---
+# Source: cluster-manager/templates/rolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: my-cluster-manager
+  labels:
+    app.kubernetes.io/component: cluster-manager
+    helm.sh/chart: cluster-manager-0.18.0
+    app.kubernetes.io/name: my-cluster-manager
+    app.kubernetes.io/instance: my-cluster-manager
+    app.kubernetes.io/version: "1.7.10"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: my-cluster-manager
+subjects:
+  - kind: ServiceAccount
+    name: my-cluster-manager
+    namespace: default

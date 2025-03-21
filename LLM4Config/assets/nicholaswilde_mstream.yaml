@@ -1,0 +1,71 @@
+---
+# Source: mstream/templates/common.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-mstream
+  labels:
+    helm.sh/chart: mstream-2.1.2
+    app.kubernetes.io/name: mstream
+    app.kubernetes.io/instance: my-mstream
+    app.kubernetes.io/version: "v5.2.5"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3000
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: mstream
+    app.kubernetes.io/instance: my-mstream
+---
+# Source: mstream/templates/common.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-mstream
+  labels:
+    helm.sh/chart: mstream-2.1.2
+    app.kubernetes.io/name: mstream
+    app.kubernetes.io/instance: my-mstream
+    app.kubernetes.io/version: "v5.2.5"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mstream
+      app.kubernetes.io/instance: my-mstream
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mstream
+        app.kubernetes.io/instance: my-mstream
+    spec:
+      serviceAccountName: default
+      dnsPolicy: ClusterFirst
+      containers:
+      - name: my-mstream
+        image: "ghcr.io/linuxserver/mstream:version-v5.2.5"
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 3000
+          protocol: TCP
+        volumeMounts:
+        livenessProbe:
+          tcpSocket:
+            port: http
+          initialDelaySeconds: 30
+          failureThreshold: 5
+          timeoutSeconds: 10
+        readinessProbe:
+          tcpSocket:
+            port: http
+          initialDelaySeconds: 30
+          failureThreshold: 5
+          timeoutSeconds: 10

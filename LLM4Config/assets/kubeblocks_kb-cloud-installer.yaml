@@ -1,0 +1,1973 @@
+---
+# Source: kb-cloud-installer/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kb-cloud-installer
+  labels:
+    helm.sh/chart: kb-cloud-installer-0.27.40
+    app.kubernetes.io/name: kb-cloud-installer
+    app.kubernetes.io/instance: my-kb-cloud-installer
+    app.kubernetes.io/version: "0.27.40"
+    app.kubernetes.io/managed-by: Helm
+automountServiceAccountToken: true
+---
+# Source: kb-cloud-installer/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kb-cloud-installer-config
+  labels:
+    helm.sh/chart: kb-cloud-installer-0.27.40
+    app.kubernetes.io/name: kb-cloud-installer
+    app.kubernetes.io/instance: my-kb-cloud-installer
+    app.kubernetes.io/version: "0.27.40"
+    app.kubernetes.io/managed-by: Helm
+data:
+  NAME: "kb-cloud"
+  NAMESPACE: "kb-cloud"
+  DEBUG: "false"
+  CLOUD_VERSION: "0.27.40"
+  DOMAIN: "mytest.kubeblocks.com"
+  CONSOLE_DOMAIN: "console"
+  ADMIN_DOMAIN: "admin"
+  API_DOMAIN: "api"
+  AUTH_DOMAIN: "auth"
+  META_DB_TYPE: "zalando"
+  INIT_META_DB: "true"
+  KB_STORAGE_CLASS: ""
+  ACTION: "install"
+  IMAGE_REGISTRY: "apecloud-registry.cn-zhangjiakou.cr.aliyuncs.com"
+  META_DB_PASSWORD: "passw0rd123"
+  META_DB_CLUSTER_NAME: "apecloud-pg"
+  EXTERNAL_META_DB_HOST: ""
+  EXTERNAL_META_DB_PORT: "5432"
+  EXTERNAL_META_DB_USER: "postgres"
+  EXTERNAL_META_DB_PASSWORD: ""
+  EXTERNAL_META_DB_DATABASE: "postgres"
+  LOGTO_ENABLED: "true"
+  LOGTO_HOST_NETWORK: "false"
+  LOGTO_NODE_NAME: ""
+  LOGTO_HOST_IP: ""
+  KUBE_PROVIDER: ""
+  INGRESS_CLASS_NAME: "nginx"
+  ENABLED_ENGINES: "postgresql,redis,apecloud-mysql,mongodb,mysql"
+  DEPLOY_MODE: "offline"
+  TLS_ENABLED: "true"
+  KB_INSTALLER_VERSION: "v0.27.40-0.9.1-beta.18-offline"
+  OTELD_VERSION: "0.6.3"
+  KBCLI_VERSION: "0.9.1-beta.9"
+  KUBEBLOCKS_VERSION: "0.9.1-beta.18"
+  GEMINI_VERSION: "0.6.4-beta.5"
+  REPLICAS: "1"
+---
+# Source: kb-cloud-installer/templates/pg-cluster.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pg-cluster-values
+  labels:
+    helm.sh/chart: kb-cloud-installer-0.27.40
+    app.kubernetes.io/name: kb-cloud-installer
+    app.kubernetes.io/instance: my-kb-cloud-installer
+    app.kubernetes.io/version: "0.27.40"
+    app.kubernetes.io/managed-by: Helm
+data:
+  minimal-postgres-manifest.yaml: |-
+    apiVersion: "acid.zalan.do/v1"
+    kind: postgresql
+    metadata:
+      name: "apecloud-pg"
+    spec:
+      teamId: "acid"
+      volume:
+        size: 20Gi
+      resources:
+        requests:
+          cpu: "1"
+          memory: "1Gi"
+        limits:
+          cpu: "1"
+          memory: "1Gi"
+      tolerations:
+        - effect: NoSchedule
+          key: node-role.cloud.kubeblocks.io/control-plane
+          operator: Exists
+        - effect: NoSchedule
+          key: node-role.cloud.kubeblocks.io/data-plane
+          operator: Exists
+        - effect: NoSchedule
+          key: kb-controller
+          operator: Equal
+          value: "true"
+        - effect: NoExecute
+          key: node.kubernetes.io/not-ready
+          operator: Exists
+          tolerationSeconds: 10
+        - effect: NoExecute
+          key: node.kubernetes.io/unreachable
+          operator: Exists
+          tolerationSeconds: 10
+      numberOfInstances: 2
+      users:
+        # database owner
+        zalando:
+          - superuser
+          - createdb
+
+        # role for application foo
+        foo_user: # or 'foo_user: []'
+
+      #databases: name->owner
+      databases:
+        foo: zalando
+      postgresql:
+        version: "14"
+        parameters:  # Expert section
+          max_connections: "1000"
+          log_statement: "all"
+      patroni:
+        failsafe_mode: false
+        initdb:
+          encoding: "UTF8"
+          locale: "en_US.UTF-8"
+          data-checksums: "true"
+        pg_hba:
+          - local   all             all                                   trust
+          - hostssl all             +zalandos    127.0.0.1/32       pam
+          - host    all             all                127.0.0.1/32       md5
+          - hostssl all             +zalandos    ::1/128            pam
+          - host    all             all                ::1/128            md5
+          - local   replication     standby                    trust
+          - hostssl replication     standby all                md5
+          - hostnossl all           all                all                md5
+          - hostssl all             +zalandos    all                pam
+          - hostssl all             all                all                md5
+        #    slots:
+        #      permanent_physical_1:
+        #        type: physical
+        #      permanent_logical_1:
+        #        type: logical
+        #        database: foo
+        #        plugin: pgoutput
+        ttl: 30
+        loop_wait: 10
+        retry_timeout: 10
+        synchronous_mode: false
+        synchronous_mode_strict: false
+        synchronous_node_count: 1
+        maximum_lag_on_failover: 33554432
+---
+# Source: kb-cloud-installer/templates/scripts.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kb-cloud-installer-scripts
+  labels:
+    helm.sh/chart: kb-cloud-installer-0.27.40
+    app.kubernetes.io/name: kb-cloud-installer
+    app.kubernetes.io/instance: my-kb-cloud-installer
+    app.kubernetes.io/version: "0.27.40"
+    app.kubernetes.io/managed-by: Helm
+data:
+  
+  base.sh: |-
+    #!/bin/bash
+    
+    function parse_yaml_filed() {
+        local values_file=$1
+        local field_name=$2
+        local target_file=$3
+        filed_val=$(yq e ".$field_name" "$values_file")
+        if [ -z "$filed_val" ] || [ "$filed_val" = "null" ] || [ "$filed_val" = "{}" ]; then
+            echo "$field_name: {}" >>"$target_file"
+        else
+            echo "$field_name:" >>"$target_file"
+            # shellcheck disable=SC2001
+            echo "$filed_val" | sed 's/^/  /' >>"$target_file"
+        fi
+    }
+    
+    function parse_array_filed() {
+        local values_file=$1
+        local field_name=$2
+        local target_file=$3
+        filed_val=$(yq e ".$field_name" "$values_file")
+        if [ -z "$filed_val" ] || [ "$filed_val" = "null" ] || [ "$filed_val" = "[]" ]; then
+            echo "$field_name: []" >>"$target_file"
+        else
+            echo "$field_name:" >>"$target_file"
+            # shellcheck disable=SC2001
+            echo "$filed_val" | sed 's/^/  /' >>"$target_file"
+        fi
+    }
+    
+    # build a yaml config for scheduling policy that read the values from the values.example.yaml
+    function build_scheduling_policy_cfg() {
+        local cfg_file=$1
+        local values_path="/installer/values/values.example.yaml"
+        echo -n >"$cfg_file"
+        # read the values from the values.example.yaml
+        parse_yaml_filed "$values_path" "nodeSelector" "$cfg_file"
+        parse_array_filed "$values_path" "tolerations" "$cfg_file"
+        parse_yaml_filed "$values_path" "affinity" "$cfg_file"
+        echo "scheduling policy config file: $cfg_file"
+    }
+    
+    function get_meta_db_host() {
+        local meta_db_host
+        if [ "$META_DB_TYPE" == "external" ]; then
+            meta_db_host="${EXTERNAL_META_DB_HOST}"
+        elif [ "$META_DB_TYPE" == "kubeblocks" ]; then
+            meta_db_host="${pg_name}-postgresql.$NAMESPACE"
+        elif [ "$META_DB_TYPE" == "zalando" ]; then
+            meta_db_host="${META_DB_CLUSTER_NAME}.$NAMESPACE"
+        fi
+        echo "$meta_db_host"
+    }
+    
+    function get_meta_db_port() {
+        local meta_db_port
+        if [ "$META_DB_TYPE" == "external" ]; then
+            meta_db_port="${EXTERNAL_META_DB_PORT}"
+        else
+            meta_db_port="5432"
+        fi
+        echo "$meta_db_port"
+    }
+    
+    function get_meta_db_host_port() {
+        echo "$(get_meta_db_host):$(get_meta_db_port)"
+    }
+    
+  db-init.sh: |-
+    #!/bin/bash
+    
+    function get_meta_db_dsn() {
+        local database=$1
+        local host
+        local port
+        local user
+        local password
+        if [ "$META_DB_TYPE" == "external" ]; then
+            host="$EXTERNAL_META_DB_HOST"
+            port="$EXTERNAL_META_DB_PORT"
+            user="$EXTERNAL_META_DB_USER"
+            password="$EXTERNAL_META_DB_PASSWORD"
+        elif [ "$META_DB_TYPE" == "kubeblocks" ]; then
+            local pg_conn_credential="${pg_name}-conn-credential"
+            host=$(kubectl get secret "$pg_conn_credential" -n "$NAMESPACE" -o jsonpath='{.data.host}' | base64 -d).$NAMESPACE
+            port=$(kubectl get secret "$pg_conn_credential" -n "$NAMESPACE" -o jsonpath='{.data.port}' | base64 -d)
+            user=$(kubectl get secret "$pg_conn_credential" -n "$NAMESPACE" -o jsonpath='{.data.username}' | base64 -d)
+            password=$(kubectl get secret "$pg_conn_credential" -n "$NAMESPACE" -o jsonpath='{.data.password}' | base64 -d)
+        elif [ "$META_DB_TYPE" == "zalando" ]; then
+            host=$META_DB_CLUSTER_NAME.$NAMESPACE
+            port=5432
+            user=$(kubectl -n $NAMESPACE get secret postgres.$META_DB_CLUSTER_NAME.credentials.postgresql.acid.zalan.do -o 'jsonpath={.data.username}' | base64 -d)
+            password=$(kubectl -n $NAMESPACE get secret postgres.$META_DB_CLUSTER_NAME.credentials.postgresql.acid.zalan.do -o 'jsonpath={.data.password}' | base64 -d)
+        fi
+        echo "postgres://$user:$password@$host:$port/$database?sslmode=disable"
+    }
+    
+    function create_databases() {
+        if [ "$INIT_META_DB" == false ]; then
+            echo "INIT_META_DB is false, skip init meta database"
+            return
+        fi
+    
+        local database="postgres"
+        if [ "$META_DB_TYPE" == "external" ]; then
+            database="$EXTERNAL_META_DB_DATABASE"
+        fi
+        dsn=$(get_meta_db_dsn "$database")
+        echo "meta database $dsn"
+    
+        # SQLs，about kubeblockscloud,frontend,logto and grafana
+        sqls=(
+            "create database kubeblockscloud;"
+            "create user kubeblockscloud with encrypted password '$META_DB_PASSWORD';"
+            "grant all privileges on database kubeblockscloud to kubeblockscloud;"
+            "create database cloud_frontend;"
+            "create user cloud_frontend with encrypted password '$META_DB_PASSWORD';"
+            "grant all privileges on database cloud_frontend to cloud_frontend;"
+            "create database logto;"
+            "create user logto with encrypted password '$META_DB_PASSWORD';"
+            "grant all privileges on database logto to logto;"
+            "ALTER USER logto CREATEROLE;"
+            "create database grafana;"
+            "grant all privileges on database grafana to kubeblockscloud;"
+        )
+    
+        if [ "$DEBUG" = "true" ]; then
+            echo "sqls to execute:" "${sqls[@]}"
+        fi
+    
+        for sql in "${sqls[@]}"; do
+            psql "${dsn}" -a -c "$sql"
+        done
+    }
+    
+    function get_kb_cluster_status() {
+        local name=$1
+        local namespace=$2
+        kbcli -n "$namespace" cluster list "$name" --output json | jq -r '.status.phase'
+    }
+    
+    function get_zalando_cluster_status(){
+        kubectl get postgresql $META_DB_CLUSTER_NAME -n $NAMESPACE -o json | jq -r '.status.PostgresClusterStatus'
+    }
+    
+    # check if zalando cluster is running
+    function wait_zalando_clusters_running() {
+        local times=0
+        while true; do
+            if [[ $times -gt 300 ]]; then
+                echo "Timeout: Cluster did not reach running state within 300 checks"
+                exit 1
+            fi
+    
+            # get cluster status
+            pg_status=$(get_zalando_cluster_status)
+            if [ "$pg_status" = "Running" ]; then
+                echo "Cluster $META_DB_CLUSTER_NAME is running, performing subsequent operations..."
+                # exit loop
+                break
+            fi
+            times=$((times + 1))
+            sleep 5
+            echo "Checking cluster status (attempt $times)..."
+        done
+    }
+    
+    # check if cluster is running
+    function wait_kb_clusters_running() {
+        local times=0
+        while true; do
+            if [[ $times -gt 300 ]]; then
+                echo "Timeout: Cluster did not reach running state within 300 checks"
+                exit 1
+            fi
+    
+            # get cluster status
+            pg_status=$(get_kb_cluster_status "$pg_name" "$NAMESPACE")
+            if [ "$pg_status" = "Running" ]; then
+                echo "Cluster $pg_name is running, performing subsequent operations..."
+                # exit loop
+                break
+            fi
+            times=$((times + 1))
+            sleep 5
+            echo "Checking cluster status (attempt $times)..."
+        done
+    }
+    
+    function check_max_connections() {
+        local times=0
+        local max_connections=$1
+        dsn=$(get_meta_db_dsn "postgres")
+        echo "check max_connections ..."
+        echo "meta database URL: $dsn"
+        while true; do
+            if [[ $times -gt 300 ]]; then
+                echo "Timeout: Cluster max_connections did not reach 1000 within 300 checks"
+                exit 1
+            fi
+            result=$(psql "${dsn}" -t -c "SHOW max_connections;" 2>/dev/null)
+            result=$(echo $result | xargs)
+            if [ "$result" == "$max_connections" ]; then
+                echo "max_connections is set to $max_connections."
+                break
+            else
+                echo "max_connections is not set to $max_connections. Current value: $result"
+                echo "Waiting for 5 seconds before retrying..."
+                sleep 2
+            fi
+        done
+    }
+    
+    function create_kb_clusters() {
+        # create postgresql
+        echo "create postgresql cluster ... "
+    
+        # dry-run to generate the cluster yaml
+        kbcli -n "$NAMESPACE" cluster create $pg_name --cluster-definition=postgresql --cluster-version=postgresql-14.8.0 --set cpu=1,memory=1Gi,storage=20Gi,replicas=1 --dry-run >/tmp/kb-apecloud-pg.yaml
+    
+        # get tolerations from values.example.yaml
+        yq e '.tolerations' "/installer/values/values.example.yaml" > /tmp/kb-apecloud-pg-tolerations.yaml
+        # merge tolerations into kb-apecloud-pg.yaml
+        yq e --inplace '.spec.tolerations = load("'"/tmp/kb-apecloud-pg-tolerations.yaml"'")' /tmp/kb-apecloud-pg.yaml
+    
+        # create cluster with the specified tolerations
+        kubectl apply -f /tmp/kb-apecloud-pg.yaml
+    
+        echo "wait clusters running ... "
+        wait_kb_clusters_running
+        echo "Cluster started successfully!"
+    
+        # refer to issue https://github.com/apecloud/kubeblocks/issues/7559
+        # we should close the audit log
+        echo "set meta database max_connections and disable audit log ... "
+        kbcli -n "$NAMESPACE" cluster configure $pg_name --components postgresql --set pgaudit.log=none,max_connections=1000
+    
+        # wait max_connections set
+        set +e
+        check_max_connections 1000
+        set -e
+    
+        # init database
+        create_databases
+    }
+    
+    function create_zalando_clusters() {
+        local values_path="/installer/pg-cluster-values/minimal-postgres-manifest.yaml"
+    
+        # create a Postgres cluster
+        echo "create zalando postgresql cluster ... "
+        kubectl apply -f $values_path -n "$NAMESPACE"
+    
+        echo "wait clusters running ... "
+        wait_zalando_clusters_running
+        echo "Cluster started successfully!"
+    
+        # init database
+        create_databases
+    }
+    
+    function check_zalando_cluster_exist() {
+        if  kubectl get postgresql -n "$NAMESPACE" "$META_DB_CLUSTER_NAME" >/dev/null 2>&1; then
+            echo "true"
+        else
+            # check apecloud-pg-0/1 exists
+            pods=$(kubectl get pods -n "$NAMESPACE" --no-headers -o custom-columns=":metadata.name" | grep "^$META_DB_CLUSTER_NAME")
+            if [ -z "$pods" ]; then
+                echo "false"
+            else
+                echo "true"
+            fi
+        fi
+    }
+    
+    function check_kb_cluster_exist() {
+        local cluster_name=$1
+        local namespace=$2
+        if kbcli -n "$namespace" cluster list "$cluster_name" >/dev/null 2>&1; then
+            echo "true"
+        else
+            echo "false"
+        fi
+    }
+    
+    function check_ns_exist() {
+        local namespace=$1
+        if kubectl get ns "$namespace" >/dev/null 2>&1; then
+            echo "true"
+        else
+            echo "false"
+        fi
+    }
+    
+    # create postgresql cluster and init database
+    function init_meta_database_in_kubeblocks() {
+        # create namespace
+        echo "create namespace $NAMESPACE"
+        ns_exist=$(check_ns_exist "$NAMESPACE")
+        if [ "$ns_exist" = "true" ]; then
+            echo "$NAMESPACE exists"
+        else
+            echo "$NAMESPACE not exists"
+            kubectl create ns "$NAMESPACE"
+        fi
+    
+        # check if cluster already created
+        pg_exist=$(check_kb_cluster_exist "$pg_name" "$NAMESPACE")
+        if [ "$pg_exist" = "true" ]; then
+            echo "Cluster $pg_name already exist"
+            # get cluster status
+            wait_pg_clusters_running
+    
+            # try to init database, maybe some database already exists that will
+            # cause error, so we ignore the error
+            set +e
+            create_databases || true
+            set -e
+        else
+            create_kb_clusters
+        fi
+        echo "init meta databases done"
+    }
+    
+    # create zalando postgresql cluster and init database
+    function init_meta_database_in_zalando(){
+        # create namespace
+        echo "create namespace $NAMESPACE"
+        ns_exist=$(check_ns_exist "$NAMESPACE")
+        if [ "$ns_exist" = "true" ]; then
+            echo "$NAMESPACE exists"
+        else
+            echo "$NAMESPACE not exists"
+            kubectl create ns "$NAMESPACE"
+        fi
+    
+        # check if cluster already created
+        pg_exist=$(check_zalando_cluster_exist)
+        if [ "$pg_exist" = "true" ]; then
+            echo "Cluster $pg_name already exist"
+            # get cluster status
+            wait_zalando_clusters_running
+    
+            # try to init database, maybe some database already exists that will
+            # cause error, so we ignore the error
+            set +e
+            create_databases || true
+            set -e
+        else
+            create_zalando_clusters
+        fi
+        echo "init meta databases done"
+    }
+  installer.sh: |-
+    #!/bin/bash
+    
+    set -e
+    
+    source "./scripts/base.sh"
+    source "./scripts/precheck.sh"
+    source "./scripts/kubeblocks.sh"
+    source "./scripts/zalando.sh"
+    source "./scripts/db-init.sh"
+    source "./scripts/logto.sh"
+    
+    pg_name="$META_DB_CLUSTER_NAME"
+    cloud_release_name="$NAME"
+    fqdn_scheme="http"
+    
+    if [ "$DEBUG" = "true" ]; then
+        set -x
+    fi
+    
+    # if tls is enabled, set fqdn scheme to https
+    if [ "$TLS_ENABLED" = "true" ]; then
+        fqdn_scheme="https"
+    elif [ "$TLS_ENABLED" = "false" ]; then
+        fqdn_scheme="http"
+    fi
+    
+    extra_values_yaml="/installer/values/values.extra.yaml"
+    
+    function update_meta_db() {
+        local kubeblockscloud_dsn="$1"
+        sqls=()
+        if [ -n "$KB_INSTALLER_VERSION" ]; then
+            sqls+=("update configuration set value ='${KB_INSTALLER_VERSION}' where key='KUBEBLOCKS_INSTALLER_VERSION';")
+        fi
+        if [ -n "$OTELD_VERSION" ]; then
+            sqls+=("update configuration set value ='${OTELD_VERSION}' where key='OTELD_VERSION';")
+        fi
+        if [ -n "$KBCLI_VERSION" ]; then
+            sqls+=("update configuration set value ='${KBCLI_VERSION}' where key='KBCLI_VERSION';")
+        fi
+        if [ -n "$GEMINI_VERSION" ]; then
+            sqls+=("update configuration set value ='${GEMINI_VERSION}' where key='GEMINI_VERSION';")
+        fi
+        if [ -n "$KUBEBLOCKS_VERSION" ]; then
+            sqls+=("update configuration set value ='${KUBEBLOCKS_VERSION}' where key='KUBEBLOCKS_VERSION';")
+        fi
+        for sql in "${sqls[@]}"; do
+            echo "executing sql: $sql"
+            psql "$kubeblockscloud_dsn" -a -c "$sql"
+        done
+    }
+    
+    function update_grafana_password() {
+        # after first installation, upgrade the values
+        # update grafana key
+        grafana_admin_password=$(kubectl get secret "${cloud_release_name}-grafana" -o jsonpath="{.data.admin-password}" -n "$NAMESPACE" | base64 -d)
+        upgrade_cmd=(
+            helm -n "$NAMESPACE" upgrade "$cloud_release_name" "charts/kubeblocks-cloud-v${CLOUD_VERSION}.tgz"
+            --wait --timeout=30m
+            --reset-then-reuse-values
+            -f "$extra_values_yaml"
+            --set deploy.apiserver.grafanaPassword="$grafana_admin_password"
+        )
+        if [ "$DEBUG" = "true" ]; then
+            upgrade_cmd+=("--debug")
+        fi
+        echo "${upgrade_cmd[@]}"
+        "${upgrade_cmd[@]}"
+    }
+    
+    function install_cloud() {
+        local values_path="/installer/values/values.example.yaml"
+    
+        local meta_db_host
+        local meta_db_port
+        local meta_db_host_port
+        meta_db_host=$(get_meta_db_host)
+        meta_db_port=$(get_meta_db_port)
+        meta_db_host_port=$(get_meta_db_host_port)
+    
+        # set the database URL
+        local kubeblockscloud_dsn="postgres://kubeblockscloud:$META_DB_PASSWORD@$meta_db_host_port/kubeblockscloud?sslmode=disable"
+        local cloud_frontend_db_addr="$meta_db_host"
+        local grafana_dsn="postgres://kubeblockscloud:$META_DB_PASSWORD@$meta_db_host_port/grafana?sslmode=disable"
+        local grafana_host="${cloud_release_name}-grafana:80"
+        local apiserver_endpoint_domain="${fqdn_scheme}://api.$DOMAIN"
+        local auth_endpoint_domain="${fqdn_scheme}://auth.$DOMAIN/"
+        if [ -n "$API_DOMAIN" ]; then
+            apiserver_endpoint_domain="${fqdn_scheme}://$API_DOMAIN.$DOMAIN"
+        fi
+        if [ -n "$AUTH_DOMAIN" ]; then
+            auth_endpoint_domain="${fqdn_scheme}://$AUTH_DOMAIN.$DOMAIN/"
+        fi
+    
+        local idp_issue_url=""
+        local auth_domain=""
+        # generate the idp issue url
+        if [ "$LOGTO_ENABLED" = "true" ]; then
+            if [ -n "$LOGTO_HOST_IP" ]; then
+                idp_issue_url="http://$LOGTO_HOST_IP:3001/oidc"
+                auth_domain="${fqdn_scheme}://$LOGTO_HOST_IP:3001/"
+            else
+                # use the ingress host name that will be created by cloud
+                idp_issue_url="http://logto-core.$NAMESPACE.svc.cluster.local:3001/oidc"
+                auth_domain="$auth_endpoint_domain"
+            fi
+        fi
+    
+        image_version="v${CLOUD_VERSION}"
+    
+        # NOTE: the --set values will overwrite the values in extra_values_yaml and values.yaml
+        install_cmd=(
+            helm upgrade -i "$cloud_release_name" "charts/kubeblocks-cloud-v${CLOUD_VERSION}.tgz"
+            -f "$values_path" -n "$NAMESPACE" --create-namespace
+            --timeout=30m --wait
+            -f "$extra_values_yaml"
+            # images
+            --set images.registry="$IMAGE_REGISTRY"
+            --set images.sentry.tag="$image_version"
+            --set images.sentryInit.tag="$image_version"
+            --set images.relay.tag="$image_version"
+            --set images.apiserver.tag="$image_version"
+            --set images.openconsole.tag="$image_version"
+            --set images.taskManager.tag="$image_version"
+            --set images.cr4w.tag="$image_version"
+            --set images.busybox.repository="apecloud/busybox"
+            # deploy
+            --set deploy.postgresql.dsn="$kubeblockscloud_dsn"
+            --set deploy.apiserver.grafanaHost="$grafana_host"
+            --set deploy.apiserver.alertConfigMapNamespace="$NAMESPACE"
+            --set deploy.apiserver.idpIssuerUrl="$idp_issue_url"
+            --set deploy.apiserver.imageRegistry="$IMAGE_REGISTRY"
+            --set deploy.apiserver.initEngineOptions="true"
+            --set deploy.apiserver.deployMode="$DEPLOY_MODE"
+            --set deploy.taskManager.apiserverEndpoint="$apiserver_endpoint_domain"
+            --set deploy.openconsole.db.addr="$cloud_frontend_db_addr"
+            --set deploy.openconsole.db.port="$meta_db_port"
+            --set deploy.openconsole.db.name="cloud_frontend"
+            --set deploy.openconsole.db.username="cloud_frontend"
+            --set deploy.openconsole.db.password="$META_DB_PASSWORD"
+            --set deploy.openconsole.yarnOpts="init-start"
+            --set deploy.openconsole.openapiServerEndpoint="$apiserver_endpoint_domain"
+            --set deploy.openconsole.authDomain="$auth_domain"
+            # fqdn
+            --set fqdn.domain="$DOMAIN"
+            --set fqdn.scheme="$fqdn_scheme"
+            --set fqdn.hostname="$CONSOLE_DOMAIN"
+            --set fqdn.apiserverHostname="$API_DOMAIN"
+            --set fqdn.adminHostname="$ADMIN_DOMAIN"
+            --set fqdn.authHostname="$AUTH_DOMAIN"
+            # ingress
+            --set ingress.className="$INGRESS_CLASS_NAME"
+            # grafana
+            --set "grafana.grafana\\.ini.database.url=$grafana_dsn"
+            --set "grafana.grafana\\.ini.database.user=kubeblockscloud"
+            --set "grafana.grafana\\.ini.database.password=$META_DB_PASSWORD"
+            --set "grafana.grafana\\.ini.server.root_url=$apiserver_endpoint_domain/dashboard/v1"
+            --set grafana.image.repository="$IMAGE_REGISTRY/apecloud/grafana"
+            # servicemirror
+            --set servicemirror.image.repository="$IMAGE_REGISTRY/apecloud/servicemirror"
+            # argo-workflows
+            --set argo-workflows.controller.image.registry="$IMAGE_REGISTRY"
+            --set argo-workflows.controller.image.repository=apecloud/workflow-controller
+            --set argo-workflows.server.image.registry="$IMAGE_REGISTRY"
+            --set argo-workflows.server.image.repository=apecloud/argocli
+            --set argo-workflows.executor.image.registry="$IMAGE_REGISTRY"
+            --set argo-workflows.executor.image.repository=apecloud/argoexec
+            # dms
+            --set dms.images.registry="$IMAGE_REGISTRY"
+        )
+        if [ "$DEBUG" = "true" ]; then
+            install_cmd+=("--debug")
+        fi
+        if [ "$TLS_ENABLED" = "true" ]; then
+            install_cmd+=(--set certificate.enabled=true)
+            install_cmd+=(--set deploy.openconsole.protocol="https")
+        elif [ "$TLS_ENABLED" = "false" ]; then
+            install_cmd+=(--set certificate.enabled=false)
+            install_cmd+=(--set deploy.openconsole.protocol="http")
+        fi
+        echo "${install_cmd[@]}"
+        "${install_cmd[@]}"
+    
+        # update meta database
+        update_meta_db "$kubeblockscloud_dsn"
+    
+        # update grafana password
+        update_grafana_password
+    
+        # restart apiserver, make sure the new grafana password take effect
+        echo "restart apiserver ..."
+        kubectl -n "$NAMESPACE" rollout restart deployment apiserver
+    }
+    
+    function upgrade() {
+        image_version="v${CLOUD_VERSION}"
+        upgrade_cmd=(
+            helm -n "$NAMESPACE" upgrade "$cloud_release_name" "charts/kubeblocks-cloud-v${CLOUD_VERSION}.tgz"
+            --reset-then-reuse-values
+            --timeout=30m --wait
+            -f "$extra_values_yaml"
+            # images
+            --set images.sentry.tag="$image_version"
+            --set images.sentryInit.tag="$image_version"
+            --set images.relay.tag="$image_version"
+            --set images.apiserver.tag="$image_version"
+            --set images.openconsole.tag="$image_version"
+            --set images.taskManager.tag="$image_version"
+            --set images.cr4w.tag="$image_version"
+            # fqdn
+            --set fqdn.scheme="${fqdn_scheme}"
+        )
+        if [ "$TLS_ENABLED" = "true" ]; then
+            upgrade_cmd+=(--set certificate.enabled=true)
+        elif [ "$TLS_ENABLED" = "false" ]; then
+            upgrade_cmd+=(--set certificate.enabled=false)
+        fi
+        if [ "$DEBUG" = "true" ]; then
+            upgrade_cmd+=("--debug")
+        fi
+        echo "${upgrade_cmd[@]}"
+        "${upgrade_cmd[@]}"
+    }
+    
+    function delete_kb_cluster() {
+        local cluster_name=$1
+        local namespace=$2
+    
+        exist=$(check_kb_cluster_exist "$cluster_name" "$namespace")
+        if [ "$exist" = "false" ]; then
+            return
+        fi
+    
+        echo "delete cluster $cluster_name ..."
+        kbcli -n "$namespace" cluster delete "$cluster_name" --auto-approve
+    
+        # wait for cluster being deleted
+        while [ "$exist" = "true" ]; do
+            echo "waiting for cluster deleted ..."
+            sleep 2
+            exist=$(check_kb_cluster_exist "$cluster_name" "$namespace")
+        done
+    }
+    
+    function delete_zalando_cluster() {
+        local cluster_name=$1
+        local namespace=$2
+    
+        exist=$(check_zalando_cluster_exist "$cluster_name" "$namespace")
+        if [ "$exist" = "false" ]; then
+            return
+        fi
+    
+        echo "delete cluster $cluster_name ..."
+        kubectl delete postgresql -n "$namespace" "$cluster_name"
+    
+        # wait for cluster being deleted
+        while [ "$exist" = "true" ]; do
+            echo "waiting for cluster deleted ..."
+            sleep 2
+            exist=$(check_zalando_cluster_exist "$cluster_name" "$namespace")
+        done
+    
+        echo "waiting for all the other resources to be deleted before uninstalling pg operator"
+        sleep 5
+    }
+    
+    function uninstall() {
+        # uninstall cloud
+        if helm -n "$NAMESPACE" list -a --filter "$cloud_release_name" | grep -q "$cloud_release_name"; then
+            echo "uninstall $cloud_release_name ... "
+            helm -n "$NAMESPACE" uninstall "$cloud_release_name"
+        fi
+    
+        # uninstall logto
+        uninstall_logto
+    
+        if [ "$META_DB_TYPE" = "kubeblocks" ]; then
+            # delete meta database
+            delete_kb_cluster "$pg_name" "$NAMESPACE"
+            # uninstall KubeBlocks
+            uninstall_kubeblocks
+        elif [ "$META_DB_TYPE" = "zalando" ]; then
+            # delete meta database
+            delete_zalando_cluster "$META_DB_CLUSTER_NAME" "$NAMESPACE"
+            # uninstall zalando operator
+            uninstall_zalando_operator
+        fi
+    }
+    
+    case $ACTION in
+        install)
+            # pre check the kubernetes cluster
+            pre_check
+    
+            # init meta database, we can use KubeBlocks to provision the database or
+            # use an external database. If we use KubeBlocks, we need to install
+            # KubeBlocks first then create the meta database.
+            echo "meta database type: $META_DB_TYPE"
+            if [ "$META_DB_TYPE" == "external" ]; then
+                create_databases || true
+            elif [ "$META_DB_TYPE" == "kubeblocks" ]; then
+                # install KubeBlocks and enable some addons
+                install_kubeblocks
+                # init meta database
+                init_meta_database_in_kubeblocks
+            elif [ "$META_DB_TYPE" == "zalando" ]; then
+                # install zalando operator
+                install_zalando_operator
+                # init meta database
+                init_meta_database_in_zalando
+            else
+                echo "unknown meta database type: $META_DB_TYPE"
+                exit 1
+            fi
+    
+            # install and init logto
+            install_and_init_logto
+    
+            # install cloud
+            install_cloud
+            ;;
+    
+        upgrade)
+            upgrade
+            ;;
+    
+        uninstall)
+            uninstall
+            ;;
+    
+        *)
+            echo "Usage: $0 {install|upgrade|uninstall}"
+            exit 1
+            ;;
+    esac
+    
+  kubeblocks.sh: |-
+    #!/bin/bash
+    
+    function step() {
+        echo -e "\e(0a\e(B $1"
+    }
+    
+    uninstall_kubeblocks() {
+        if kubectl get crd | grep clusters.apps.kubeblocks.io; then
+            echo "getting remained clusters"
+            if [ "$(kubectl get clusters.apps.kubeblocks.io -o json -A | jq '.items | length')" != '0' ]; then
+                echo "there are remained kubeblocks clusters, you need to manually clean them"
+                exit 1
+            else
+                echo "there are no remained kubeblocks clusters"
+            fi
+        fi
+    
+        kbcli -v=2 kubeblocks uninstall \
+            --auto-approve=true \
+            --remove-namespace=true \
+            --remove-pvcs=true \
+            --remove-pvs=true
+    }
+    
+    function disable_addon() {
+        addon=$1
+        echo "disable addon $addon ..."
+        kbcli addon disable "$addon" || {
+            exit_code=$?
+            echo "warning: failed to disable $addon with exit code $exit_code"
+            true
+        }
+    
+        cnt=0
+        while true; do
+            status=$(kbcli addon list "$addon" --output json | jq -r '.status.phase')
+            if [ "$status" = "Disabled" ]; then
+                echo "addon $addon is disabled"
+                sleep 2
+                break
+            fi
+            echo "Waiting for $addon to be disabled ..."
+            cnt=$((cnt + 1))
+            if ((cnt % 3 == 0)); then
+                echo "disable $addon again ..."
+                kbcli addon disable "$addon" || {
+                    exit_code=$?
+                    echo "warning: failed to disable $addon with exit code $exit_code"
+                    true
+                }
+            fi
+            sleep 2
+        done
+    }
+    
+    function enable_addon() {
+        addon=$1
+        echo "enable addon $addon ..."
+    
+        # disable addon first, then enable it with new image registry
+        disable_addon "$addon"
+    
+        cmd=(kbcli addon enable "$addon")
+        if [ -n "$IMAGE_REGISTRY" ]; then
+            case $addon in
+                postgresql)
+                    cmd+=(--set image.registry="${IMAGE_REGISTRY}" --set metrics.image.registry="${IMAGE_REGISTRY}")
+                    if [ "$DEPLOY_MODE" = "offline" ]; then
+                        cmd+=(--set "enabledClusterVersions={postgresql-14.8.0}")
+                    fi
+                    ;;
+                redis)
+                    cmd+=(--set image.registry="${IMAGE_REGISTRY}" --set metrics.image.registry="${IMAGE_REGISTRY}")
+                    cmd+=(--set redisTwemproxyImage.registry="${IMAGE_REGISTRY}")
+                    cmd+=(--set busyboxImage.registry="${IMAGE_REGISTRY}")
+                    cmd+=(--set busyboxImage.repository=library/busybox)
+                    ;;
+    
+                mysql)
+                    cmd+=(--set image.registry="${IMAGE_REGISTRY}" --set metrics.image.registry="${IMAGE_REGISTRY}")
+                    ;;
+    
+                apecloud-mysql)
+                    cmd+=(--set image.registry="${IMAGE_REGISTRY}" --set metrics.image.registry="${IMAGE_REGISTRY}")
+                    cmd+=(--set backupTool.image.registry="${IMAGE_REGISTRY}" --set wesqlscale.image.registry="${IMAGE_REGISTRY}")
+                    ;;
+    
+                mongodb)
+                    cmd+=(--set image.registry="${IMAGE_REGISTRY}" --set metrics.image.registry="${IMAGE_REGISTRY}")
+                    if [ "$DEPLOY_MODE" = "offline" ]; then
+                        cmd+=(--set "enabledClusterVersions={mongodb-6.0}")
+                    fi
+                    ;;
+            esac
+        fi
+        echo "${cmd[@]}"
+        "${cmd[@]}"
+    
+        # wait for addon enabled
+        cnt=0
+        while true; do
+            status=$(kbcli addon list "$addon" --output json | jq -r '.status.phase')
+            if [ "$status" = "Enabled" ]; then
+                echo "addon $addon is enabled"
+                break
+            fi
+            echo "Waiting for $addon to be enabled ..."
+            cnt=$((cnt + 1))
+            if ((cnt % 3 == 0)); then
+                echo "enable $addon again ..."
+                "${cmd[@]}" || {
+                    exit_code=$?
+                    echo "warning: failed to enable $addon with exit code $exit_code"
+                    true
+                }
+            fi
+            sleep 2
+        done
+    }
+    
+    function install_kubeblocks() {
+        kb_namespace=kb-system
+    
+        # check if KubeBlocks is already installed
+        if kbcli version | grep -qi KubeBlocks; then
+            echo "KubeBlocks already installed, skipping install"
+            return
+        fi
+    
+        # Since `kbcli version` doesn't return kb version, kb deployment doesn't exist.
+        # But there's still a chance that there are some remained resources from
+        # last failed installation, like CRDs.
+        echo "cleaning up remained kubeblocks resources ..."
+        uninstall_kubeblocks
+    
+        # create CRDs
+        step "create CRDs ..."
+        kubectl create -f ./crds/kubeblocks_crds.yaml
+    
+        # wait crds created
+        sleep 5
+    
+        # find KubeBlocks helm chart
+        for f in charts/kubeblocks-*.tgz; do
+            if [[ "$f" != *cloud* ]]; then
+                kb_helm_chart=$f
+                break
+            fi
+        done
+        step "install kubeblocks ${kb_helm_chart} ..."
+        install_cmd=(
+            helm install kubeblocks "${kb_helm_chart}"
+            --namespace="$kb_namespace"
+            --create-namespace
+            --timeout=60m
+            --wait
+            --atomic
+            --set image.registry="$IMAGE_REGISTRY"
+        )
+        if [ -n "$KB_STORAGE_CLASS" ]; then
+            install_cmd+=(--set storageClass.name="$KB_STORAGE_CLASS")
+            install_cmd+=(--set storageClass.create=false)
+        fi
+        if [ "$DEBUG" = "true" ]; then
+            install_cmd+=("--debug")
+        fi
+    
+        # generate a temporary value file for scheduling policy
+        build_scheduling_policy_cfg /tmp/kb-scheduling-policy.yaml
+        install_cmd+=(-f /tmp/kb-scheduling-policy.yaml)
+    
+        echo "${install_cmd[@]}"
+        "${install_cmd[@]}"
+    
+        # enable engine addons and set its image registry
+        engines="$ENABLED_ENGINES"
+        if [ -z "$engines" ]; then
+            engines="postgresql"
+        else
+            engines=$(echo "$engines" | tr ',' ' ')
+            # check if postgresql is in the list, if not, add them
+            if ! echo "$engines" | grep -q postgresql; then
+                engines="$engines postgresql"
+            fi
+        fi
+    
+        step "Enable addons $engines ..."
+        for engine in $engines; do
+            enable_addon "$engine"
+        done
+    }
+    
+  logto.sh: |-
+    #!/bin/bash
+    
+    #
+    # install logto
+    #
+    
+    function install_and_init_logto() {
+        if [ "$LOGTO_ENABLED" != "true" ]; then
+            echo "logto is not enabled, do not install it."
+            return
+        fi
+    
+        echo "check if logto exists ... "
+        if helm -n "$NAMESPACE" list -a | grep -q logto; then
+            echo "logto already installed in namespace $NAMESPACE, skip installation."
+            return
+        fi
+    
+        echo "install logto ... "
+        local meta_db_host_port
+        meta_db_host_port=$(get_meta_db_host_port)
+        logto_db_url="postgres://logto:$META_DB_PASSWORD@$meta_db_host_port/logto?sslmode=disable"
+    
+        local logto_fqdn_scheme="http"
+    
+        # find logto helm chart
+        for f in charts/logto-*.tgz; do
+            logto_helm_chart=$f
+            break
+        done
+        logto_install_cmd=(
+            helm install logto -n "$NAMESPACE" "${logto_helm_chart}" --create-namespace
+            --set dbUrl="$logto_db_url"
+            --set image.registry="$IMAGE_REGISTRY"
+            --set replicaCount="$REPLICAS"
+            --wait
+            --timeout=30m
+            --atomic
+        )
+    
+        if [ "$LOGTO_HOST_NETWORK" = "false" ]; then
+            logto_install_cmd+=(--set hostNetwork=false)
+        else
+            logto_install_cmd+=(--set hostNetwork=true)
+        fi
+    
+        if [ -n "$LOGTO_HOST_IP" ]; then
+            logto_install_cmd+=(
+                --set coreEndpoint="${logto_fqdn_scheme}://$LOGTO_HOST_IP:3001"
+                --set adminEndpoint="${logto_fqdn_scheme}://$LOGTO_HOST_IP:3002"
+            )
+        else
+            logto_install_cmd+=(
+                --set coreEndpoint="${logto_fqdn_scheme}://logto-core.$NAMESPACE.svc.cluster.local:3001"
+                --set adminEndpoint="${logto_fqdn_scheme}://logto-admin.$NAMESPACE.svc.cluster.local:3002"
+            )
+        fi
+    
+        if [ -n "$LOGTO_NODE_NAME" ]; then
+            logto_install_cmd+=(--set "nodeSelector.kubernetes\\.io/hostname=$LOGTO_NODE_NAME")
+        fi
+        if [ "$DEBUG" = "true" ]; then
+            logto_install_cmd+=("--debug")
+        fi
+        if [ -n "$IMAGE_PULL_SECRETS" ]; then
+            logto_install_cmd+=(--set-json imagePullSecrets="$IMAGE_PULL_SECRETS")
+        fi
+    
+        # generate a temporary value file for scheduling policy
+        build_scheduling_policy_cfg /tmp/logto-scheduling-policy.yaml
+        logto_install_cmd+=(-f /tmp/logto-scheduling-policy.yaml)
+    
+        echo "${logto_install_cmd[@]}"
+        "${logto_install_cmd[@]}"
+    
+        # wait until logto deployed, and logto pod running for a while to make sure the db is initialized
+        echo "wait logto deployed ... "
+        local times=1
+        while true; do
+            if [[ $times -gt 300 ]]; then
+                break
+            fi
+            if helm list -n "$NAMESPACE" --output json | jq -r '.[] | select(.name=="logto" and .status=="deployed") | .name' | grep -q 'logto'; then
+                ready_cnt=$(kubectl get deployment -n "$NAMESPACE" logto -o jsonpath='{.status.readyReplicas}')
+                desired_cnt=$(kubectl get deployment -n "$NAMESPACE" logto -o jsonpath='{.status.replicas}')
+                if [ "$ready_cnt" = "$desired_cnt" ]; then
+                    echo "logto deployed"
+                    break
+                fi
+            fi
+            if helm list -n "$NAMESPACE" --output json | jq -r '.[] | select(.name=="logto" and .status=="failed") | .name' | grep -q 'logto'; then
+                echo "logto failed"
+                break
+            fi
+            times=$((times + 1))
+            sleep 5
+            echo "checking logto status..."
+        done
+    
+        # initialize logto meta db
+        echo "init logto meta database"
+        console_endpoint="$fqdn_scheme://console.$DOMAIN"
+        if [ -n "$CONSOLE_DOMAIN" ]; then
+            console_endpoint="$fqdn_scheme://$CONSOLE_DOMAIN.$DOMAIN"
+        fi
+        admin_endpoint="$fqdn_scheme://admin.$DOMAIN"
+        if [ -n "$ADMIN_DOMAIN" ]; then
+            admin_endpoint="$fqdn_scheme://$ADMIN_DOMAIN.$DOMAIN"
+        fi
+    
+        # SQLs, logto meta db initializations
+        sqls=(
+            "insert into public.applications (tenant_id, id, name, secret, description, type, oidc_client_metadata, custom_client_metadata, created_at) values ('default', 'zgojvqasnefk2h3rtwoho','KubeBlocks Cloud','iiI34JF1y1W4jNvVk1hCwWPhqtOnP8BF','','SPA', '{\"redirectUris\": [\"${console_endpoint}/callback\", \"${admin_endpoint}/callback\"], \"postLogoutRedirectUris\": [\"${console_endpoint}\",\"${admin_endpoint}\"]}', '{\"corsAllowedOrigins\": [\"${console_endpoint}\",\"${admin_endpoint}\"], \"rotateRefreshToken\": true, \"idTokenTtl\": 2592000, \"refreshTokenTtlInDays\": 14, \"alwaysIssueRefreshToken\": false}', now())"
+            "insert into public.applications (tenant_id, id, name, secret, description, type, oidc_client_metadata, custom_client_metadata, created_at) values ('default', '7d305yqkjj8qj9glxkfn3','KubeBlocks M2M','D1HTGTgwxoembbQXsWxfJeio3abhdz1Y','','MachineToMachine','{\"redirectUris\": [], \"postLogoutRedirectUris\": []}','{}', now())"
+            "insert into public.applications_roles (tenant_id, id, application_id, role_id) values ('default','9z542i7t53395mzoydpq3','7d305yqkjj8qj9glxkfn3', 'admin-role')"
+            "update public.sign_in_experiences set sign_in = '{\"methods\": [{\"password\": true, \"identifier\": \"username\", \"verificationCode\": false, \"isPasswordPrimary\": true}, {\"password\": true, \"identifier\": \"email\", \"verificationCode\": true, \"isPasswordPrimary\": true}]}' , sign_up = '{\"verify\": true, \"password\": true, \"identifiers\": [\"username\"]}' where tenant_id = 'default' and id = 'default';"
+            "update public.sign_in_experiences set password_policy='{\"rejects\": {\"pwned\": false}}'"
+        )
+    
+        # construct psql dsn
+        dsn=$(get_meta_db_dsn "logto")
+        echo "$dsn"
+    
+        # wait for tables being created
+        while true; do
+            if psql "${dsn}" -t -c "SELECT to_regclass('applications');" | grep -q applications; then
+                echo "logto tables created"
+                break
+            else
+                echo "waiting for logto tables being created ..."
+                sleep 1
+            fi
+        done
+    
+        for sql in "${sqls[@]}"; do
+            psql "${dsn}" -a -c "$sql"
+        done
+    }
+    
+    function uninstall_logto() {
+        echo "check if logto exists ... "
+        if helm -n "$NAMESPACE" list -a --filter "logto" | grep -q logto; then
+            echo "uninstall logto ... "
+            helm uninstall logto -n "$NAMESPACE"
+            return
+        fi
+        echo "logto not installed in namespace $NAMESPACE, skip uninstallation."
+    }
+    
+  precheck.sh: |-
+    #!/bin/absh
+    
+    #
+    # pre check the environment, such as kubernetes version
+    #
+    
+    function pre_check() {
+        # check kubernetes version is greater than or equal to 1.20
+        echo "check kubernetes version .. "
+        k8s_v_json=$(kubectl version -o json)
+        echo "$k8s_v_json"
+        major=$(echo "$k8s_v_json" | jq -r '.serverVersion.major')
+        minor=$(echo "$k8s_v_json" | jq -r '.serverVersion.minor')
+        if [ "$major" -lt 1 ] || ([ "$major" -eq 1 ] && [ "$minor" -lt 20 ]); then
+            echo "Kubernetes version is less than 1.20, please upgrade to 1.20 or later"
+            exit 1
+        fi
+    
+        helm version
+    }
+    
+  zalando.sh: |-
+    #!/bin/bash
+    
+    function uninstall_zalando_operator() {
+        helm uninstall postgres-operator -n "$NAMESPACE"
+        echo "zalando operator uninstalled"
+    }
+    
+    function install_zalando_operator() {
+        zalando_namespace=$NAMESPACE
+    
+        # check if Zalando Operator is already installed
+        if helm list -A | grep "postgres-operator" >/dev/null 2>&1; then
+            echo "zalando postgres-operator chart is deployed"
+            return
+        fi
+    
+        # find Zalando helm chart
+        for f in charts/postgres-operator-*.tgz; do
+            zalando_helm_chart=$f
+            break
+        done
+    
+        # zalando operator values.yaml
+        # ref https://github.com/zalando/postgres-operator/blob/master/charts/postgres-operator/values.yaml
+        install_cmd=(
+            helm install postgres-operator "${zalando_helm_chart}"
+            --namespace="$zalando_namespace"
+            --create-namespace
+            --timeout=60m
+            --wait
+            --atomic
+            --set image.registry="$IMAGE_REGISTRY"
+            --set image.repository=apecloud/postgres-operator
+            --set configGeneral.docker_image="$IMAGE_REGISTRY"/apecloud/spilo-16:3.2-p3
+        )
+    
+        if [ -n "$IMAGE_PULL_SECRETS" ]; then
+            install_cmd+=(--set-json "'imagePullSecrets=$IMAGE_PULL_SECRETS'")
+            # set image pull secrets for postgresql cluster
+            # ref https://github.com/zalando/postgres-operator/issues/546
+            echo "{\"apiVersion\": \"v1\",\"imagePullSecrets\": $IMAGE_PULL_SECRETS,\"kind\": \"ServiceAccount\",\"metadata\":{\"name\": \"postgres-pod\"}}" > /tmp/zalando_pod_sa_def.json
+            install_cmd+=(--set-file configKubernetes.pod_service_account_definition=/tmp/zalando_pod_sa_def.json)
+        fi
+    
+        # generate a temporary value file for scheduling policy
+        build_scheduling_policy_cfg /tmp/zalando-scheduling-policy.yaml
+        install_cmd+=(-f /tmp/zalando-scheduling-policy.yaml)
+    
+        # install the postgres-operator
+        echo "${install_cmd[@]}"
+        eval "${install_cmd[@]}"
+    
+        echo "wait zalando pg operator deployed ... "
+        local times=1
+        while true; do
+            if [[ $times -gt 120 ]]; then
+                break
+            fi
+            pod_status=$(kubectl get pod -n "$zalando_namespace" -l app.kubernetes.io/name=postgres-operator -o jsonpath='{.items[*].status.phase}')
+            if [ "$pod_status" = "Running" ]; then
+                echo "zalando pg operator deployed"
+                break
+            fi
+            times=$((times + 1))
+            sleep 5
+            echo "checking zalando pg operator status..."
+        done
+    }
+---
+# Source: kb-cloud-installer/templates/values.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kb-cloud-values
+  labels:
+    helm.sh/chart: kb-cloud-installer-0.27.40
+    app.kubernetes.io/name: kb-cloud-installer
+    app.kubernetes.io/instance: my-kb-cloud-installer
+    app.kubernetes.io/version: "0.27.40"
+    app.kubernetes.io/managed-by: Helm
+data:
+  values.extra.yaml: |-
+    {}
+  values.example.yaml: |-
+    replicaCount: 1
+    images:
+      sentry:
+        name: sentry
+        repository: apecloud/sentry
+        tag: ''
+      sentryInit:
+        name: sentry-init
+        repository: apecloud/sentry-init
+        tag: ''
+      relay:
+        name: relay
+        repository: apecloud/relay
+        tag: ''
+      apiserver:
+        name: apiserver
+        repository: apecloud/apiserver
+        tag: ''
+      openconsole:
+        name: openconsole
+        repository: apecloud/openconsole
+        tag: ''
+        redisRepo: "apecloud/redis"
+        redisTag: "7.0.5"
+      cubetranFront:
+        name: cubetran-front
+        repository: apecloud/cubetran-front
+        defaultTag: ""
+      taskManager:
+        name: task-manager
+        repository: apecloud/task-manager
+        tag: ''
+      cr4w:
+        name: cr4w
+        repository: apecloud/cr4w
+        tag: ''
+      busybox:
+        repository: apecloud/busybox
+        tag: 'latest'
+      pullPolicy: IfNotPresent    
+    serviceAccount:
+      # Specifies whether a service account should be created
+      create: true
+      # Annotations to add to the service account
+      annotations: {}
+      # The name of the service account to use.
+      # If not set and create is true, a name is auto generated.
+      name: ""
+    # -- Annotations for the all deployed pods
+    podAnnotations: {}
+    # Pod Security Context
+    podSecurityContext: {}
+    # fsGroup: 2000
+
+    # Security Context
+    securityContext: {}
+    # capabilities:
+    #   drop:
+    #   - ALL
+    # readOnlyRootFilesystem: true
+    # runAsNonRoot: true
+    # runAsUser: 1000
+
+    # List of services and their port numbers. When "port" is not
+    # specified in "services.<name>.ports" list then service exposes on
+    # containerPort instead.
+    services:
+      # -- sentry service config
+      sentry:
+        name: sentry
+        type: ClusterIP
+        annotations: {}
+        ports:
+          - name: http
+            containerPort: 11000
+          - name: rpc
+            containerPort: 10000
+          - name: relay-peering
+            containerPort: 10001
+      # -- relay service config
+      relay:
+        type: LoadBalancer
+        annotations: {}
+        name: relay
+        ports:
+          - name: https
+            containerPort: 443
+      apiserver:
+        type: ClusterIP
+        annotations: {}
+        name: apiserver
+        ports:
+          - name: http
+            containerPort: 8080
+            port: 8080
+      # -- dashboard service config
+      openconsole:
+        type: ClusterIP
+        annotations: {}
+        name: openconsole
+        ports:
+          - port: 80
+            containerPort: 7001
+            name: http
+
+    ingress:
+      # - install ingress resources.
+      enabled: true
+      connectEnabled: false
+      className: "nginx"
+      # - Annotation for ingress resources. The ssl-passthrough annotation
+      # - is mandatory for connect ingress.
+      annotations: {}
+      # kubernetes.io/ingress.class: nginx
+      # kubernetes.io/tls-acme: "true"
+      connectAnnotations: {}
+      # -- Ingress TLS for console
+      tls: []
+      #  - secretName: chart-example-tls
+      #    hosts:
+      #      - chart-example.com
+
+    resources: {}
+    # We usually recommend not to specify default resources and to leave this as a conscious
+    # choice for the user. This also increases chances charts run on environments with little
+    # resources, such as Minikube. If you do want to specify resources, uncomment the following
+    # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+    # limits:
+    #   cpu: 100m
+    #   memory: 128Mi
+    # requests:
+    #   cpu: 100m
+    #   memory: 128Mi
+
+    # Autoscale deployment resource
+    autoscaling:
+      enabled: false
+      minReplicas: 1
+      maxReplicas: 100
+      targetCPUUtilizationPercentage: 80
+    nodeSelector:
+      {}
+    tolerations:
+      - effect: NoSchedule
+        key: node-role.cloud.kubeblocks.io/control-plane
+        operator: Exists
+      - effect: NoSchedule
+        key: node-role.cloud.kubeblocks.io/data-plane
+        operator: Exists
+      - effect: NoSchedule
+        key: kb-controller
+        operator: Equal
+        value: "true"
+      - effect: NoExecute
+        key: node.kubernetes.io/not-ready
+        operator: Exists
+        tolerationSeconds: 10
+      - effect: NoExecute
+        key: node.kubernetes.io/unreachable
+        operator: Exists
+        tolerationSeconds: 10
+    affinity:
+      nodeAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+        - preference:
+            matchExpressions:
+            - key: kb-controller
+              operator: In
+              values:
+              - "true"
+            - key: node-role.cloud.kubeblocks.io/control-plane
+              operator: In
+              values:
+              - ""
+          weight: 100
+
+    fqdn:
+      # -- Root domain
+      domain: mytest.kubeblocks.com
+      website: apecloud.cn
+      # -- subdomain used for viewing dashboard
+      hostname: "console"
+      # -- a wildcard subdomain used for controller cluster to target
+      # -- cluster communication
+      coreConnectorSubdomain: "*.core"
+      # -- a wildcard subdomain used for controller cluster to end user
+      # -- communication
+      userSubdomain: "*.connect"
+      # -- subdomain used for viewing api
+      apiserverHostname: "api"
+      # -- subdomain used for viewing admin
+      adminHostname: "admin"
+      # -- fqdn scheme
+      scheme: "http"
+
+    sentry:
+      # -- Enable apecloud migrations
+      automigrate: true
+      database:
+        address: ""
+        username: ""
+        password: ""
+        name: ""
+        dsn: ""
+      initialize:
+        # -- Partner name
+        partner: "KubeBlocks Cloud"
+        # -- Partner description
+        partnerDesc: "Default Partner"
+        # -- Partner host
+        partnerHost: "kubeblocks.com"
+        # -- Organization name
+        org: "Apecloud"
+        # -- Organization description
+        orgDesc: "Default Organization"
+        # -- Admin email address
+        adminEmail: "admin@apecloud.local"
+        # -- Admin first name
+        adminFirstName: "Admin"
+        # -- Admin last name
+        adminLastName: "User"
+
+    auditLogs:
+      # -- database or elasticsearch for storing audit logs
+      # -- database(postgres) by default
+      storage: "database"
+
+    deploy:
+      platform: ""
+      apiserver:
+        ginMode: "release"
+        serveAdmin: true
+        servePublic: true
+        serveInternal: true
+        idpName: "logto"
+        idpIssuerUrl: ""
+        idpAudience: "zgojvqasnefk2h3rtwoho"
+        idpM2MClientId: "7d305yqkjj8qj9glxkfn3"
+        idpM2MClientSecret: "D1HTGTgwxoembbQXsWxfJeio3abhdz1Y"
+        idpInsecureSkipVerify: true
+        caCert: ""
+        adminAccountAuth0: "YXV0aDA6N2RkMTliNTUtN2E3Yi00OTEzLTg0MGQtMWRhOTZhOWU1NmY1Cg=="
+        adminAccountTaskManager: "dGFza01hbmFnZXI6N2RkMTliNTUtN2E3Yi00OTEzLTg0MGQtMWRhOTZhOWU1NmY1"
+        metricsQueryUrl: "http://gemini-victoria-metrics-cluster-vmselect.kb-system:8481/select/0/prometheus/api/v1/query_range"
+        grafanaHost: "kb-cloud-grafana:80"
+        grafanaUser: "admin"
+        grafanaPassword: "123456"
+        basePath: ""
+        # for deployment in public cloud without domain
+        # basePath: "/apiserver"
+        sonyflakeMachineID: "1"
+        aliyunSMSEndpoint: ""
+        aliyunSMSAccessKeyId: ""
+        aliyunSMSAccessKeySecret: ""
+        cloudAPIServer: ""
+        alertSMSTmplCode: ""
+        verifySMSTmplCode: ""
+        smsSignName: "ApeCloud"
+        llmContextWindow: ""
+        llmMaxTokens: 4095
+        llmOutputFormatterEnabled: true
+        # when apiserver start, will read sql files from this path and init the meta database
+        # if this value is empty, will not init the meta database
+        # the migration path in the apiserver container is /etc/apiserver/migration
+        migrationPath: "/etc/apiserver/migration"
+        # only true in ksr
+        enableAccessToken: false
+      taskManager:
+        enabled: false
+        apiserverEndpoint: ""
+        apiserverToken: "dGFza01hbmFnZXI6N2RkMTliNTUtN2E3Yi00OTEzLTg0MGQtMWRhOTZhOWU1NmY1"
+        smtpEndpoint: ""
+        smtpFrom: ""
+        smtpFromName: ""
+        smtpSupport: "support@apecloud.com"
+        smtpInvitation: ""
+      terraform:
+        awsAccessKeyId: ""
+        awsSecretAccessKey: ""
+        alicloudAccessKey: ""
+        alicloudSecretKey: ""
+      openconsole:
+        locale: "zh-CN"
+        openapiServerEndpoint: ""
+        basePath: ""
+        xframe: "true"
+        authType: "logto"
+        authDomain: ""
+        authAppId: "zgojvqasnefk2h3rtwoho"
+        authAppSecret: "iiI34JF1y1W4jNvVk1hCwWPhqtOnP8BF"
+        themeOptions: '["dark"]'
+        protocol: "http"
+        # if first time deploy, set this value to "init-start" to init the console database
+        yarnOpts: "start"
+      website:
+        enabled: false
+      cr4w:
+        enabled: true
+        dbMaxIdleConns: ""
+        dbMaxOpenConns: ""
+        dbConnMaxLifetime: ""
+      docs:
+        enabled: false
+      relay:
+        enabled: false
+      sentry:
+        enabled: false
+        bootstrapKek: "dGFza01hbmFnZXI6N2RkMTliNTUtN2E3Yi00OTEzLTg0MGQtMWRhOTZhOWU1NmY1"
+      victoriametrics:
+        enabled: false
+        apiAuth:
+          username: ""
+          password: ""
+      grafana:
+        enabled: true
+      cubetranFront:
+        enabled: true
+
+    grafana:
+      replicas: 1
+      nodeSelector:
+        {}
+      tolerations:
+        - effect: NoSchedule
+          key: node-role.cloud.kubeblocks.io/control-plane
+          operator: Exists
+        - effect: NoSchedule
+          key: node-role.cloud.kubeblocks.io/data-plane
+          operator: Exists
+        - effect: NoSchedule
+          key: kb-controller
+          operator: Equal
+          value: "true"
+        - effect: NoExecute
+          key: node.kubernetes.io/not-ready
+          operator: Exists
+          tolerationSeconds: 10
+        - effect: NoExecute
+          key: node.kubernetes.io/unreachable
+          operator: Exists
+          tolerationSeconds: 10
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - preference:
+              matchExpressions:
+              - key: kb-controller
+                operator: In
+                values:
+                - "true"
+              - key: node-role.cloud.kubeblocks.io/control-plane
+                operator: In
+                values:
+                - ""
+            weight: 100
+      grafana.ini:
+        security:
+          allow_embedding: true
+        auth.anonymous:
+          enabled: true
+        database:
+          type: "postgres"
+      datasources:
+        datasources.yaml:
+          apiVersion: 1
+          datasources:
+            - name: VictoriaMetrics
+              type: prometheus
+              url: http://gemini-victoria-metrics-cluster-vmselect.kb-system:8481/select/0/prometheus/
+              access: proxy
+              isDefault: true
+
+    servicemirror:
+      enabled: true
+      mode: server
+      serviceType: NodePort
+      nodeSelector:
+        {}
+      tolerations:
+        - effect: NoSchedule
+          key: node-role.cloud.kubeblocks.io/control-plane
+          operator: Exists
+        - effect: NoSchedule
+          key: node-role.cloud.kubeblocks.io/data-plane
+          operator: Exists
+        - effect: NoSchedule
+          key: kb-controller
+          operator: Equal
+          value: "true"
+        - effect: NoExecute
+          key: node.kubernetes.io/not-ready
+          operator: Exists
+          tolerationSeconds: 10
+        - effect: NoExecute
+          key: node.kubernetes.io/unreachable
+          operator: Exists
+          tolerationSeconds: 10
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - preference:
+              matchExpressions:
+              - key: kb-controller
+                operator: In
+                values:
+                - "true"
+              - key: node-role.cloud.kubeblocks.io/control-plane
+                operator: In
+                values:
+                - ""
+            weight: 100
+
+      # cert/key are PEM encoded data,
+      # refer to https://github.com/apecloud/servicemirror/blob/from-scratch/deploy/helm/values-server.yaml
+      # for an example.
+      #
+      # Read the readme for more information: https://github.com/apecloud/servicemirror
+      tlsCert: |
+        -----BEGIN CERTIFICATE-----
+        MIIBmTCCAUCgAwIBAgIRAPLddImqxF5FFmtA5O4ITCkwCgYIKoZIzj0EAwIwKzEp
+        MCcGA1UEAxMgcm9vdC5zZXJ2aWNlbWlycm9yLmNsdXN0ZXIubG9jYWwwHhcNMjQw
+        MzI2MDU1MTQ1WhcNMzQwMzI0MDU1MTQ1WjArMSkwJwYDVQQDEyByb290LnNlcnZp
+        Y2VtaXJyb3IuY2x1c3Rlci5sb2NhbDBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IA
+        BJrYfOhtffJnkjlDMF59oZ9p/btkQsyW3K1uadbjOPMYSjLn0YCpRqeuuoMJIF6F
+        9lFr6JxqIqScv1MaBiUHtIijRTBDMA4GA1UdDwEB/wQEAwIBBjASBgNVHRMBAf8E
+        CDAGAQH/AgEBMB0GA1UdDgQWBBTHfcs/Ek59B01Qs+JkZ07W8o/8ADAKBggqhkjO
+        PQQDAgNHADBEAiAmHsDiEb/ddXg72Y+7wbxeaPs2D3GpYT1272G4bsggFgIgcWSn
+        wM5a0RrB7OlWi9+HsZ8Z5mC/tZRnS1ybR4bfG8U=
+        -----END CERTIFICATE-----
+      tlsKey: |
+        -----BEGIN EC PRIVATE KEY-----
+        MHcCAQEEIJJ2iNrwhrZCOTsVuUDq/+SAYIlCDTjGaWS16qM6iFxQoAoGCCqGSM49
+        AwEHoUQDQgAEmth86G198meSOUMwXn2hn2n9u2RCzJbcrW5p1uM48xhKMufRgKlG
+        p666gwkgXoX2UWvonGoipJy/UxoGJQe0iA==
+        -----END EC PRIVATE KEY-----
+
+    argo-workflows:
+      enabled: true
+      workflow:
+        serviceAccount:
+          # this account will be bind to the appropriate role
+          # use default so that we don't need to specify serviceaccount when creating workflows
+          name: argo-workflow
+      controller:
+        nodeSelector:
+          {}
+        tolerations:
+          - effect: NoSchedule
+            key: node-role.cloud.kubeblocks.io/control-plane
+            operator: Exists
+          - effect: NoSchedule
+            key: node-role.cloud.kubeblocks.io/data-plane
+            operator: Exists
+          - effect: NoSchedule
+            key: kb-controller
+            operator: Equal
+            value: "true"
+          - effect: NoExecute
+            key: node.kubernetes.io/not-ready
+            operator: Exists
+            tolerationSeconds: 10
+          - effect: NoExecute
+            key: node.kubernetes.io/unreachable
+            operator: Exists
+            tolerationSeconds: 10
+        affinity:
+          nodeAffinity:
+            preferredDuringSchedulingIgnoredDuringExecution:
+            - preference:
+                matchExpressions:
+                - key: kb-controller
+                  operator: In
+                  values:
+                  - "true"
+                - key: node-role.cloud.kubeblocks.io/control-plane
+                  operator: In
+                  values:
+                  - ""
+              weight: 100
+        # namespace which argo is deployed is already included
+        workflowNamespaces:
+          - default
+      server:
+        nodeSelector:
+          {}
+        tolerations:
+          - effect: NoSchedule
+            key: node-role.cloud.kubeblocks.io/control-plane
+            operator: Exists
+          - effect: NoSchedule
+            key: node-role.cloud.kubeblocks.io/data-plane
+            operator: Exists
+          - effect: NoSchedule
+            key: kb-controller
+            operator: Equal
+            value: "true"
+          - effect: NoExecute
+            key: node.kubernetes.io/not-ready
+            operator: Exists
+            tolerationSeconds: 10
+          - effect: NoExecute
+            key: node.kubernetes.io/unreachable
+            operator: Exists
+            tolerationSeconds: 10
+        affinity:
+          nodeAffinity:
+            preferredDuringSchedulingIgnoredDuringExecution:
+            - preference:
+                matchExpressions:
+                - key: kb-controller
+                  operator: In
+                  values:
+                  - "true"
+                - key: node-role.cloud.kubeblocks.io/control-plane
+                  operator: In
+                  values:
+                  - ""
+              weight: 100
+
+    dms:
+      enabled: true
+      replicaCount: 1
+      nodeSelector:
+        {}
+      tolerations:
+        - effect: NoSchedule
+          key: node-role.cloud.kubeblocks.io/control-plane
+          operator: Exists
+        - effect: NoSchedule
+          key: node-role.cloud.kubeblocks.io/data-plane
+          operator: Exists
+        - effect: NoSchedule
+          key: kb-controller
+          operator: Equal
+          value: "true"
+        - effect: NoExecute
+          key: node.kubernetes.io/not-ready
+          operator: Exists
+          tolerationSeconds: 10
+        - effect: NoExecute
+          key: node.kubernetes.io/unreachable
+          operator: Exists
+          tolerationSeconds: 10
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - preference:
+              matchExpressions:
+              - key: kb-controller
+                operator: In
+                values:
+                - "true"
+              - key: node-role.cloud.kubeblocks.io/control-plane
+                operator: In
+                values:
+                - ""
+            weight: 100
+---
+# Source: kb-cloud-installer/templates/clusterrole.yaml
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: kb-cloud-installer-cluster-role
+  labels:
+    helm.sh/chart: kb-cloud-installer-0.27.40
+    app.kubernetes.io/name: kb-cloud-installer
+    app.kubernetes.io/instance: my-kb-cloud-installer
+    app.kubernetes.io/version: "0.27.40"
+    app.kubernetes.io/managed-by: Helm
+rules:
+  - verbs:
+      - '*'
+    apiGroups:
+      - '*'
+    resources:
+      - '*'
+---
+# Source: kb-cloud-installer/templates/clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kb-cloud-installer-role-binding
+  labels:
+    helm.sh/chart: kb-cloud-installer-0.27.40
+    app.kubernetes.io/name: kb-cloud-installer
+    app.kubernetes.io/instance: my-kb-cloud-installer
+    app.kubernetes.io/version: "0.27.40"
+    app.kubernetes.io/managed-by: Helm
+subjects:
+  - kind: ServiceAccount
+    name: kb-cloud-installer
+    namespace: default
+roleRef:
+  kind: ClusterRole
+  name: kb-cloud-installer-cluster-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: kb-cloud-installer/templates/installer-job.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kb-cloud-installer
+  labels:
+    helm.sh/chart: kb-cloud-installer-0.27.40
+    app.kubernetes.io/name: kb-cloud-installer
+    app.kubernetes.io/instance: my-kb-cloud-installer
+    app.kubernetes.io/version: "0.27.40"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  template:
+    metadata:
+      name: "my-kb-cloud-installer"
+      labels:
+        helm.sh/chart: kb-cloud-installer-0.27.40
+        app.kubernetes.io/name: kb-cloud-installer
+        app.kubernetes.io/instance: my-kb-cloud-installer
+        app.kubernetes.io/version: "0.27.40"
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      serviceAccountName: kb-cloud-installer
+      securityContext:
+        {}
+      restartPolicy: Never
+      containers:
+        - name: installer
+          securityContext:
+            {}
+          image: "apecloud-registry.cn-zhangjiakou.cr.aliyuncs.com/apecloud/kb-cloud-installer:v0.27.40"
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: kb-cloud-installer-config
+          command:
+            - "bash"
+            - "-c"
+            - "/installer/scripts/installer.sh"
+          resources:
+            {}
+          volumeMounts:
+            - name: scripts
+              mountPath: /installer/scripts
+            - name: values
+              mountPath: /installer/values
+            - name: pg-cluster-values
+              mountPath: /installer/pg-cluster-values
+      volumes:
+        - name: scripts
+          configMap:
+            name: kb-cloud-installer-scripts
+            defaultMode: 0755
+        - name: values
+          configMap:
+            name: kb-cloud-values
+            defaultMode: 0755
+        - name: pg-cluster-values
+          configMap:
+            name: pg-cluster-values
+            defaultMode: 0755

@@ -1,0 +1,109 @@
+---
+# Source: carbonetes-analyzer/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: carbonetes-analyzer
+  labels:
+    helm.sh/chart: carbonetes-analyzer-1.0.6
+    app.kubernetes.io/name: carbonetes-analyzer
+    app.kubernetes.io/instance: my-carbonetes-analyzer
+    app.kubernetes.io/version: "1.0.3"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: carbonetes-analyzer/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-carbonetes-analyzer
+  labels:
+    helm.sh/chart: carbonetes-analyzer-1.0.6
+    app.kubernetes.io/name: carbonetes-analyzer
+    app.kubernetes.io/instance: my-carbonetes-analyzer
+    app.kubernetes.io/version: "1.0.3"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3000
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: carbonetes-analyzer
+    app.kubernetes.io/instance: my-carbonetes-analyzer
+---
+# Source: carbonetes-analyzer/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-carbonetes-analyzer
+  labels:
+    helm.sh/chart: carbonetes-analyzer-1.0.6
+    app.kubernetes.io/name: carbonetes-analyzer
+    app.kubernetes.io/instance: my-carbonetes-analyzer
+    app.kubernetes.io/version: "1.0.3"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: carbonetes-analyzer
+      app.kubernetes.io/instance: my-carbonetes-analyzer
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: carbonetes-analyzer
+        app.kubernetes.io/instance: my-carbonetes-analyzer
+    spec:
+      serviceAccountName: carbonetes-analyzer
+      securityContext:
+        {}
+      containers:
+        - name: carbonetes-analyzer
+          securityContext:
+            {}
+          image: "carbonetes/carbonetes-analyzer:1.0.3"
+          imagePullPolicy: Always
+          env:
+            - name: CARBONETES_USERNAME
+              value: 
+            - name: CARBONETES_PASSWORD
+              value: 
+            - name: DEBUG
+              value: "false"
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+            {}
+---
+# Source: carbonetes-analyzer/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-carbonetes-analyzer-test-connection"
+  labels:
+    helm.sh/chart: carbonetes-analyzer-1.0.6
+    app.kubernetes.io/name: carbonetes-analyzer
+    app.kubernetes.io/instance: my-carbonetes-analyzer
+    app.kubernetes.io/version: "1.0.3"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-carbonetes-analyzer:3000']
+  restartPolicy: Never

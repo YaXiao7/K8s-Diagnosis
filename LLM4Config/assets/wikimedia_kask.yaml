@@ -1,0 +1,168 @@
+---
+# Source: kask/templates/networkpolicy.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: kask-my-kask
+  labels:
+    app: kask
+    chart: kask-0.2.3
+    release: my-kask
+    heritage: Helm
+spec:
+  podSelector:
+    matchLabels:
+      app: kask
+      release: my-kask
+  policyTypes:
+    - Ingress
+  ingress:
+    - ports:
+      - port: 8081
+        protocol: TCP
+---
+# Source: kask/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: config-my-kask
+  labels:
+    app: kask
+    chart: kask-0.2.3
+    release: my-kask
+    heritage: Helm
+data:
+  config.yaml: |-     #
+    base_uri: kask/v1
+    cassandra:
+      hosts:
+        - my-kask-cassandra
+      authentication:
+        password: cassandra
+        username: cassandra
+      keyspace: kask
+      table: values
+    default_ttl: 86400
+    listen_address: 0.0.0.0
+    listen_port: 8081
+    service_name: kask
+    log_level: info
+    openapi_spec: openapi.yaml
+---
+# Source: kask/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: kask-my-kask
+  labels:
+    app: kask
+    chart: kask-0.2.3
+    release: my-kask
+    heritage: Helm
+spec:
+  type: NodePort
+  selector:
+    app: kask
+    release: my-kask
+    routed_via: my-kask
+  ports:
+  - name: http
+    protocol: TCP
+    port: 8081
+---
+# Source: kask/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kask-my-kask
+  labels:
+    app: kask
+    chart: kask-0.2.3
+    release: my-kask
+    heritage: Helm
+spec:
+  selector:
+    matchLabels:
+      app: kask
+      release: my-kask
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: kask
+        release: my-kask
+        routed_via: my-kask
+      annotations:
+        checksum/config: 77f492fa379980986fc179d6f15f772671435e505b0ffe735bd77b9612461987
+        prometheus.io/port: "8081"
+        prometheus.io/scrape: "true"
+        
+    spec:
+      
+      containers:
+        # The main application container
+        - name: kask-my-kask
+          image: "docker-registry.wikimedia.org/repos/mediawiki/services/kask:latest"
+          command: ["./kask"]
+          args: ["--config", "/etc/kask/config.yaml"]
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8081
+          livenessProbe:
+            tcpSocket:
+              port: 8081
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+          env:
+            - name: SERVICE_IDENTIFIER
+              value: kask-my-kask
+          volumeMounts:
+            - name: config-volume
+              mountPath: /etc/kask
+          resources:
+            requests:
+              cpu: 150m
+              memory: 100Mi
+            limits:
+              cpu: 150m
+              memory: 150Mi          
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+               drop:
+               - ALL
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+        
+      volumes:
+        - name: config-volume
+          configMap:
+            name: config-my-kask
+---
+# Source: kask/templates/tests/test-service-checker.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: 'kask-my-kask-service-checker'
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  containers:
+  - name: 'kask-my-kask-service-checker'
+    image: "docker-registry.wikimedia.org/service-checker"
+    imagePullPolicy: IfNotPresent
+    args: ["-t", "5", "-s", "/openapi", '$(KASK_MY_KASK_SERVICE_HOST)', 'http://kask-my-kask:8081']    
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+         drop:
+         - ALL
+      runAsNonRoot: true
+      seccompProfile:
+        type: RuntimeDefault
+  dnsPolicy: ClusterFirst
+  restartPolicy: Never

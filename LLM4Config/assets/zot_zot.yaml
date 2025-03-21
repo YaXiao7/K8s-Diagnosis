@@ -1,0 +1,152 @@
+---
+# Source: zot/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-zot
+  labels:
+    helm.sh/chart: zot-0.1.61
+    app.kubernetes.io/name: zot
+    app.kubernetes.io/instance: my-zot
+    app.kubernetes.io/version: "v2.1.2-rc1"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: zot/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-zot
+  labels:
+    helm.sh/chart: zot-0.1.61
+    app.kubernetes.io/name: zot
+    app.kubernetes.io/instance: my-zot
+    app.kubernetes.io/version: "v2.1.2-rc1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: NodePort
+  ports:
+    - port: 5000
+      targetPort: zot
+      protocol: TCP
+      name: zot
+  selector:
+    app.kubernetes.io/name: zot
+    app.kubernetes.io/instance: my-zot
+---
+# Source: zot/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-zot
+  labels:
+    helm.sh/chart: zot-0.1.61
+    app.kubernetes.io/name: zot
+    app.kubernetes.io/instance: my-zot
+    app.kubernetes.io/version: "v2.1.2-rc1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: zot
+      app.kubernetes.io/instance: my-zot
+  template:
+    metadata:
+      annotations:
+      labels:
+        app.kubernetes.io/name: zot
+        app.kubernetes.io/instance: my-zot
+    spec:
+      serviceAccountName: my-zot
+      securityContext:
+        null
+      containers:
+        - name: zot
+          securityContext:
+            null
+          image: "ghcr.io/project-zot/zot-linux-amd64:v2.1.2-rc1"
+          imagePullPolicy: IfNotPresent
+          env:
+            null
+          ports:
+            - name: zot
+              containerPort: 5000
+              protocol: TCP
+          livenessProbe:
+            initialDelaySeconds: 5
+            httpGet:
+              path: /v2/
+              port: 5000
+              scheme: HTTP
+          readinessProbe:
+            initialDelaySeconds: 5
+            httpGet:
+              path: /v2/
+              port: 5000
+              scheme: HTTP
+          startupProbe:
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+            httpGet:
+              path: /v2/
+              port: 5000
+              scheme: HTTP
+          resources:
+            null
+---
+# Source: zot/templates/tests/test-connection-fails.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-zot-test-connection-fails"
+  labels:
+    helm.sh/chart: zot-0.1.61
+    app.kubernetes.io/name: zot
+    app.kubernetes.io/instance: my-zot
+    app.kubernetes.io/version: "v2.1.2-rc1"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded,hook-failed
+spec:
+  containers:
+    - name: wget
+      image: alpine:3.18
+      command:
+      - sh
+      - -c
+      - |
+        scheme="http"
+        echo "$scheme"
+          wget --no-check-certificate $scheme://my-zot:5000/v2/_catalog
+  restartPolicy: Never
+---
+# Source: zot/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-zot-test-connection"
+  labels:
+    helm.sh/chart: zot-0.1.61
+    app.kubernetes.io/name: zot
+    app.kubernetes.io/instance: my-zot
+    app.kubernetes.io/version: "v2.1.2-rc1"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded,hook-failed
+spec:
+  containers:
+    - name: wget
+      image: alpine:3.18
+      command:
+      - sh
+      - -c
+      - |
+        scheme="http"
+        echo "$scheme"
+          wget --no-check-certificate $scheme://my-zot:5000/v2/_catalog
+  restartPolicy: Never

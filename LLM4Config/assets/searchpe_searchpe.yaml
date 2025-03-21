@@ -1,0 +1,279 @@
+---
+# Source: searchpe/templates/db-secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-searchpe-db
+  labels:
+    helm.sh/chart: searchpe-4.1.0
+    app.kubernetes.io/name: searchpe
+    app.kubernetes.io/instance: my-searchpe
+    app.kubernetes.io/version: "4.1.0"
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+stringData:
+  username: "db_username"
+  password: "db_password"
+  database: "searchpe_db"
+---
+# Source: searchpe/templates/db.yaml
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: my-searchpe-db
+  labels:
+    helm.sh/chart: searchpe-4.1.0
+    app.kubernetes.io/name: searchpe
+    app.kubernetes.io/instance: my-searchpe
+    app.kubernetes.io/version: "4.1.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+---
+# Source: searchpe/templates/db.yaml
+kind: Service
+apiVersion: v1
+metadata:
+  name: my-searchpe-db
+spec:
+  ports:
+    - name: tcp
+      protocol: TCP
+      port: 5432
+      targetPort: 5432
+  selector:
+    app.kubernetes.io/name: my-searchpe-db
+  type: ClusterIP
+  sessionAffinity: None
+---
+# Source: searchpe/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-searchpe
+  labels:
+    helm.sh/chart: searchpe-4.1.0
+    app.kubernetes.io/name: searchpe
+    app.kubernetes.io/instance: my-searchpe
+    app.kubernetes.io/version: "4.1.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: searchpe
+    app.kubernetes.io/instance: my-searchpe
+---
+# Source: searchpe/templates/db.yaml
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: my-searchpe-db
+  labels:
+    app.openshift.io/runtime: postgresql
+    app.kubernetes.io/name: my-searchpe-db
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: my-searchpe-db
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: my-searchpe-db
+    spec:
+      volumes:
+        - name: db-data
+          persistentVolumeClaim:
+            claimName: my-searchpe-db
+      containers:
+        - name: postgres
+          image: postgres:13.7
+          ports:
+            - containerPort: 5432
+              protocol: TCP
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  key: username
+                  name: my-searchpe-db
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: password
+                  name: my-searchpe-db
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  key: database
+                  name: my-searchpe-db
+          resources:
+            limits:
+              cpu: 500m
+              memory: 512Mi
+            requests:
+              cpu: 250m
+              memory: 64Mi
+          livenessProbe:
+            exec:
+              command:
+                - "/bin/sh"
+                - "-c"
+                - 'psql -U $POSTGRES_USER -d $POSTGRES_DB -c ''SELECT 1'' '
+            initialDelaySeconds: 60
+            timeoutSeconds: 10
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - "/bin/sh"
+                - "-c"
+                - 'psql -U $POSTGRES_USER -d $POSTGRES_DB -c ''SELECT 1'' '
+            initialDelaySeconds: 10
+            timeoutSeconds: 1
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+          terminationMessagePath: "/dev/termination-log"
+          terminationMessagePolicy: File
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - name: db-data
+              mountPath: "/var/lib/postgresql"
+          securityContext:
+            privileged: false
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
+      dnsPolicy: ClusterFirst
+      securityContext: { }
+      schedulerName: default-scheduler
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 25%
+      maxSurge: 25%
+  revisionHistoryLimit: 10
+  progressDeadlineSeconds: 600
+---
+# Source: searchpe/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-searchpe
+  labels:
+    app.openshift.io/runtime: quarkus
+    helm.sh/chart: searchpe-4.1.0
+    app.kubernetes.io/name: searchpe
+    app.kubernetes.io/instance: my-searchpe
+    app.kubernetes.io/version: "4.1.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    app.openshift.io/vcs-ref: master
+    app.openshift.io/vcs-uri: https://github.com/project-openubl/searchpe.git
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: searchpe
+      app.kubernetes.io/instance: my-searchpe
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: searchpe
+        app.kubernetes.io/instance: my-searchpe
+    spec:
+      containers:
+        - name: searchpe
+          image: "quay.io/projectopenubl/searchpe:v4.1.0"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: https
+              containerPort: 8443
+              protocol: TCP
+            - containerPort: 9779
+              name: prometheus
+              protocol: TCP
+            - containerPort: 8778
+              name: jolokia
+              protocol: TCP
+          env:
+            - name: QUARKUS_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  key: username
+                  name: my-searchpe-db
+                  optional: false
+            - name: QUARKUS_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: password
+                  name: my-searchpe-db
+                  optional: false
+            - name: QUARKUS_DATASOURCE_JDBC_URL
+              value: "jdbc:postgresql://my-searchpe-db:5432/searchpe_db"
+          envFrom:
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /q/health/live
+              port: 8080
+              scheme: HTTP
+            initialDelaySeconds: 10
+            successThreshold: 1
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /q/health/ready
+              port: 8080
+              scheme: HTTP
+          securityContext:
+            privileged: false
+          resources:
+            limits:
+              cpu: 500m
+              memory: 512Mi
+            requests:
+              cpu: 250m
+              memory: 64Mi
+          volumeMounts:
+            - mountPath: /opt/workspace
+              name: workspace
+              readOnly: false
+      volumes:
+        - emptyDir: { }
+          name: workspace
+---
+# Source: searchpe/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-searchpe-test-connection"
+  labels:
+    helm.sh/chart: searchpe-4.1.0
+    app.kubernetes.io/name: searchpe
+    app.kubernetes.io/instance: my-searchpe
+    app.kubernetes.io/version: "4.1.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-searchpe:8080']
+  restartPolicy: Never

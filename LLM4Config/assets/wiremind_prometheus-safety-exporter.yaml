@@ -1,0 +1,206 @@
+---
+# Source: prometheus-safety-exporter/templates/configmap.yaml
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: my-prometheus-safety-exporter
+  labels:
+    helm.sh/chart: prometheus-safety-exporter-0.4.0
+    app.kubernetes.io/name: prometheus-safety-exporter
+    app.kubernetes.io/instance: my-prometheus-safety-exporter
+    app.kubernetes.io/version: "0.6.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+  generate-json.sh: |-
+    #!/bin/sh
+    set -e;
+    set -x;
+
+    readonly DIRNAME=$(dirname "$0");
+
+    mkdir /tmp/json-exporter
+    python3 -m http.server -b 127.0.0.1 8000 -d /tmp/json-exporter &
+
+    # To circumvent https://github.com/pyupio/safety/blob/b56a4dc89b6364594d67386bedac0524df519327/safety/constants.py#L36C5-L36C19
+    export HOME=/tmp
+
+    # install in user mode in case the container does not run as root
+    PATH=$PATH:/tmp/.local/bin
+    pip install safety --user --break-system-packages
+
+    OUTPUT="/tmp/json-exporter/results.json"
+
+    # Avoid spamming safety in case of reboot in a loop
+    sleep $((RANDOM % 3600))
+
+    while true; do
+      safety --disable-optional-telemetry check -r requirements.txt --continue-on-error --save-json $OUTPUT
+      sleep $DELAY_BETWEEN_CHECKS;
+    done
+
+  json-exporter-config.yml: |
+    ---
+    modules:
+      default:
+        metrics:
+        - name: safety_vulnerabilities
+          type: object
+          help: Python Safety Vulnerabilities
+          path: '{ .vulnerabilities.* }'
+          labels:
+            package_name: '{ .package_name }'
+            analyzed_version: '{ .analyzed_version }'
+            vulnerability_id: '{ .vulnerability_id }'
+            
+          values:
+            severity: '{ .severity.cvssv3.base_score }'
+            detected: 1
+        - name: safety_vulnerabilities
+          type: object
+          help: Python Safety Vulnerabilities found
+          path: '{ .report_meta }'
+          values:
+            found: '{ .vulnerabilities_found }'
+---
+# Source: prometheus-safety-exporter/templates/deployment.yaml
+# This
+# - fetches the list of postgresql backups (basebackups) from wal-g on s3
+# - takes the last one
+# - turn it into prometheus metrics, to be used in alerts and grafana dashboards
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-prometheus-safety-exporter
+  labels:
+    helm.sh/chart: prometheus-safety-exporter-0.4.0
+    app.kubernetes.io/name: prometheus-safety-exporter
+    app.kubernetes.io/instance: my-prometheus-safety-exporter
+    app.kubernetes.io/version: "0.6.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus-safety-exporter
+      app.kubernetes.io/instance: my-prometheus-safety-exporter
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      annotations:
+        checksum/config: 6f13506f0d74cef5383537f49cb775fdd9d466189ff80c8dc2f80be16761d82f
+      labels:
+        helm.sh/chart: prometheus-safety-exporter-0.4.0
+        app.kubernetes.io/name: prometheus-safety-exporter
+        app.kubernetes.io/instance: my-prometheus-safety-exporter
+        app.kubernetes.io/version: "0.6.0"
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      serviceAccountName: default
+      securityContext:
+        {}
+      containers:
+        - name: safety
+          image: setme:setme
+          imagePullPolicy: "IfNotPresent"
+          env:
+            - name: DELAY_BETWEEN_CHECKS
+              value: "604800"
+          command: ["/bin/sh"]
+          args: ["/generate-json.sh"]
+          resources:
+            limits:
+              cpu: 2
+              memory: 300Mi
+            requests:
+              cpu: 1m
+              memory: 100Mi
+          volumeMounts:
+            - name: json
+              mountPath: /generate-json.sh
+              subPath: generate-json.sh
+          securityContext:
+            {}
+        - name: prometheus-json-exporter
+          image: "quay.io/prometheuscommunity/json-exporter:v0.6.0"
+          imagePullPolicy: "IfNotPresent"
+          ports:
+            - name: http
+              containerPort: 7979
+              protocol: TCP
+          resources:
+            limits:
+              cpu: 2
+              memory: 64Mi
+            requests:
+              cpu: 1m
+              memory: 15Mi
+          volumeMounts:
+            - name: json
+              mountPath: /config.yml
+              subPath: json-exporter-config.yml
+          startupProbe:
+            failureThreshold: 50
+            httpGet:
+              path: /
+              port: http
+          livenessProbe:
+            failureThreshold: 5
+            httpGet:
+              path: /
+              port: http
+            periodSeconds: 300
+            timeoutSeconds: 3
+          readinessProbe:
+            failureThreshold: 2
+            httpGet:
+              path: /
+              port: http
+            periodSeconds: 120
+            timeoutSeconds: 3
+          securityContext:
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+      volumes:
+        - name: json
+          configMap:
+            name: my-prometheus-safety-exporter
+            defaultMode: 420
+      terminationGracePeriodSeconds: 1
+---
+# Source: prometheus-safety-exporter/templates/podmonitor.yaml
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: my-prometheus-safety-exporter
+  labels:
+    helm.sh/chart: prometheus-safety-exporter-0.4.0
+    app.kubernetes.io/name: prometheus-safety-exporter
+    app.kubernetes.io/instance: my-prometheus-safety-exporter
+    app.kubernetes.io/version: "0.6.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  podMetricsEndpoints:
+    - interval: "60s"
+      port: http
+      path: /probe
+      params:
+        target:
+        - http://localhost:8000/results.json
+        module:
+        - default
+  namespaceSelector:
+    matchNames:
+      - default
+  selector:
+    matchLabels:
+      helm.sh/chart: prometheus-safety-exporter-0.4.0
+      app.kubernetes.io/name: prometheus-safety-exporter
+      app.kubernetes.io/instance: my-prometheus-safety-exporter
+      app.kubernetes.io/version: "0.6.0"
+      app.kubernetes.io/managed-by: Helm

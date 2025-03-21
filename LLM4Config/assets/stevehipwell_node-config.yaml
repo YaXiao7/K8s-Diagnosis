@@ -1,0 +1,102 @@
+---
+# Source: node-config/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-node-config
+  labels:
+    helm.sh/chart: node-config-0.6.0
+    app.kubernetes.io/name: node-config
+    app.kubernetes.io/instance: my-node-config
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+automountServiceAccountToken:
+---
+# Source: node-config/templates/configmap-scripts.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: config
+  namespace: default
+  labels:
+    helm.sh/chart: node-config-0.6.0
+    app.kubernetes.io/name: node-config
+    app.kubernetes.io/instance: my-node-config
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+  config.sh: |-
+    #!/usr/bin/env sh
+    set -eu
+    echo "Hello World!"
+---
+# Source: node-config/templates/daemonset.yaml
+kind: DaemonSet
+apiVersion: apps/v1
+metadata:
+  name: my-node-config
+  namespace: default
+  labels:
+    helm.sh/chart: node-config-0.6.0
+    app.kubernetes.io/name: node-config
+    app.kubernetes.io/instance: my-node-config
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 100%
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: node-config
+      app.kubernetes.io/instance: my-node-config
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: node-config
+        app.kubernetes.io/instance: my-node-config
+      annotations:
+        checksum/scripts: bada150b5b0a336c45762b21d6f1502182cc7f40f6f394afd479d709c47ead69
+    spec:
+      serviceAccountName: my-node-config
+      hostPID: false
+      initContainers:
+        - name: config
+          image: docker.io/alpine:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - /opt/config.sh
+          volumeMounts:
+            - name: config
+              mountPath: /opt/config.sh
+              subPath: config.sh
+              readOnly: true
+      containers:
+        - name: pause
+          securityContext:
+            runAsNonRoot: true
+            readOnlyRootFilesystem: true
+            privileged: false
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - all
+          image: registry.k8s.io/pause:3.10
+          imagePullPolicy: IfNotPresent
+          resources:
+            limits:
+              cpu: 100m
+              memory: 8Mi
+            requests:
+              cpu: 10m
+              memory: 8Mi
+      volumes:
+        - name: config
+          configMap:
+            name: config
+            defaultMode: 0755
+      nodeSelector:
+        kubernetes.io/os: linux

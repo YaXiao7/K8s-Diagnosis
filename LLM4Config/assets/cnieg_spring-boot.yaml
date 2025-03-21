@@ -1,0 +1,79 @@
+---
+# Source: spring-boot/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-spring-boot
+  labels:
+    app.kubernetes.io/name: spring-boot
+    helm.sh/chart: spring-boot-0.1.0
+    app.kubernetes.io/instance: my-spring-boot
+    app.kubernetes.io/version: "1.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: spring-boot
+    app.kubernetes.io/instance: my-spring-boot
+---
+# Source: spring-boot/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-spring-boot
+  labels:
+    app.kubernetes.io/name: spring-boot
+    helm.sh/chart: spring-boot-0.1.0
+    app.kubernetes.io/instance: my-spring-boot
+    app.kubernetes.io/version: "1.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: spring-boot
+      app.kubernetes.io/instance: my-spring-boot
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: spring-boot
+        app.kubernetes.io/instance: my-spring-boot
+      annotations:
+        {}
+    spec:
+      containers:
+        - name: spring-boot
+          image: "springguides/demo:latest"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          resources:
+            {}
+---
+# Source: spring-boot/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-spring-boot-test-connection"
+  labels:
+    app.kubernetes.io/name: spring-boot
+    helm.sh/chart: spring-boot-0.1.0
+    app.kubernetes.io/instance: my-spring-boot
+    app.kubernetes.io/version: "1.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args:  ['my-spring-boot:80/actuator/health']
+  restartPolicy: Never

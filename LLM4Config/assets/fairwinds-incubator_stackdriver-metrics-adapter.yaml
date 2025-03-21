@@ -1,0 +1,212 @@
+---
+# Source: stackdriver-metrics-adapter/templates/rbac.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-stackdriver-metrics-adapter
+  labels:
+    app.kubernetes.io/name: stackdriver-metrics-adapter
+    helm.sh/chart: stackdriver-metrics-adapter-0.3.0
+    app.kubernetes.io/instance: my-stackdriver-metrics-adapter
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: stackdriver-metrics-adapter/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-stackdriver-metrics-adapter-external-metrics-reader
+  labels:
+    app.kubernetes.io/name: stackdriver-metrics-adapter
+    helm.sh/chart: stackdriver-metrics-adapter-0.3.0
+    app.kubernetes.io/instance: my-stackdriver-metrics-adapter
+    app.kubernetes.io/managed-by: Helm
+rules:
+- apiGroups:
+  - "external.metrics.k8s.io"
+  resources:
+  - "*"
+  verbs:
+  - list
+  - get
+  - watch
+---
+# Source: stackdriver-metrics-adapter/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-stackdriver-metrics-adapter:system:auth-delegator
+  labels:
+    app.kubernetes.io/name: stackdriver-metrics-adapter
+    helm.sh/chart: stackdriver-metrics-adapter-0.3.0
+    app.kubernetes.io/instance: my-stackdriver-metrics-adapter
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+- kind: ServiceAccount
+  name: my-stackdriver-metrics-adapter
+  namespace: default
+---
+# Source: stackdriver-metrics-adapter/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-stackdriver-metrics-adapter-resource-reader
+  labels:
+    app.kubernetes.io/name: stackdriver-metrics-adapter
+    helm.sh/chart: stackdriver-metrics-adapter-0.3.0
+    app.kubernetes.io/instance: my-stackdriver-metrics-adapter
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: view
+subjects:
+- kind: ServiceAccount
+  name: my-stackdriver-metrics-adapter
+  namespace: default
+---
+# Source: stackdriver-metrics-adapter/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-stackdriver-metrics-adapter-external-metrics-reader
+  labels:
+    app.kubernetes.io/name: stackdriver-metrics-adapter
+    helm.sh/chart: stackdriver-metrics-adapter-0.3.0
+    app.kubernetes.io/instance: my-stackdriver-metrics-adapter
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-stackdriver-metrics-adapter-external-metrics-reader
+subjects:
+- kind: ServiceAccount
+  name: horizontal-pod-autoscaler
+  namespace: kube-system
+---
+# Source: stackdriver-metrics-adapter/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: my-stackdriver-metrics-adapter-auth-reader
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/name: stackdriver-metrics-adapter
+    helm.sh/chart: stackdriver-metrics-adapter-0.3.0
+    app.kubernetes.io/instance: my-stackdriver-metrics-adapter
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: extension-apiserver-authentication-reader
+subjects:
+- kind: ServiceAccount
+  name: my-stackdriver-metrics-adapter
+  namespace: default
+---
+# Source: stackdriver-metrics-adapter/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/name: stackdriver-metrics-adapter
+    helm.sh/chart: stackdriver-metrics-adapter-0.3.0
+    app.kubernetes.io/instance: my-stackdriver-metrics-adapter
+    app.kubernetes.io/managed-by: Helm
+  name: my-stackdriver-metrics-adapter
+spec:
+  ports:
+  - port: 443
+    protocol: TCP
+    targetPort: 443
+  selector:
+    app.kubernetes.io/name: stackdriver-metrics-adapter
+    app.kubernetes.io/instance: my-stackdriver-metrics-adapter
+  type: ClusterIP
+---
+# Source: stackdriver-metrics-adapter/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stackdriver-metrics-adapter
+  labels:
+    app.kubernetes.io/name: stackdriver-metrics-adapter
+    helm.sh/chart: stackdriver-metrics-adapter-0.3.0
+    app.kubernetes.io/instance: my-stackdriver-metrics-adapter
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: stackdriver-metrics-adapter
+      app.kubernetes.io/instance: my-stackdriver-metrics-adapter
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: stackdriver-metrics-adapter
+        app.kubernetes.io/instance: my-stackdriver-metrics-adapter
+        kubernetes.io/cluster-service: "true"
+    spec:
+      serviceAccountName: my-stackdriver-metrics-adapter
+      containers:
+      - image: gcr.io/gke-release/custom-metrics-stackdriver-adapter:v0.13.1-gke.0
+        imagePullPolicy: IfNotPresent
+        name: stackdriver-adapter
+        command:
+        - /adapter
+        - --use-new-resource-model=false
+        resources:
+          limits:
+            cpu: 250m
+            memory: 200Mi
+          requests:
+            cpu: 250m
+            memory: 200Mi
+---
+# Source: stackdriver-metrics-adapter/templates/apiService.yaml
+apiVersion: apiregistration.k8s.io/v1
+kind: APIService
+metadata:
+  name: v1beta1.custom.metrics.k8s.io
+spec:
+  insecureSkipTLSVerify: true
+  group: custom.metrics.k8s.io
+  groupPriorityMinimum: 100
+  versionPriority: 100
+  service:
+    name: my-stackdriver-metrics-adapter
+    namespace: default
+  version: v1beta1
+---
+# Source: stackdriver-metrics-adapter/templates/apiService.yaml
+apiVersion: apiregistration.k8s.io/v1
+kind: APIService
+metadata:
+  name: v1beta2.custom.metrics.k8s.io
+spec:
+  insecureSkipTLSVerify: true
+  group: custom.metrics.k8s.io
+  groupPriorityMinimum: 100
+  versionPriority: 200
+  service:
+    name: my-stackdriver-metrics-adapter
+    namespace: default
+  version: v1beta2
+---
+# Source: stackdriver-metrics-adapter/templates/apiService.yaml
+apiVersion: apiregistration.k8s.io/v1
+kind: APIService
+metadata:
+  name: v1beta1.external.metrics.k8s.io
+spec:
+  insecureSkipTLSVerify: true
+  group: external.metrics.k8s.io
+  groupPriorityMinimum: 100
+  versionPriority: 100
+  service:
+    name: my-stackdriver-metrics-adapter
+    namespace: default
+  version: v1beta1

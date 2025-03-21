@@ -1,0 +1,434 @@
+---
+# Source: fastdfs-nginx/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-fastdfs-nginx
+  labels:
+    app: my-fastdfs-nginx
+    chart: fastdfs-nginx-2.1.0
+    release: "my-fastdfs-nginx"
+    heritage: "Helm"
+data:
+  tracker.conf: |
+    #tracker.conf
+    upstream fdfs_group1 {
+        dynamic_resolve fallback=stale fail_timeout=30s;
+        server my-fastdfs-nginx-storage-group1-0.my-fastdfs-nginx-storage-group1-headless:8080;
+        server my-fastdfs-nginx-storage-group1-1.my-fastdfs-nginx-storage-group1-headless:8080;
+        check interval=3000 rise=2 fall=5 timeout=1000 type=http;
+    }
+    upstream fdfs_group2 {
+        dynamic_resolve fallback=stale fail_timeout=30s;
+        server my-fastdfs-nginx-storage-group2-0.my-fastdfs-nginx-storage-group2-headless:8080;
+        server my-fastdfs-nginx-storage-group2-1.my-fastdfs-nginx-storage-group2-headless:8080;
+        check interval=3000 rise=2 fall=5 timeout=1000 type=http;
+    }
+    server {
+        listen       80 ;
+        # server_name  _ ;
+    
+        location / {
+            root   html;
+            index  index.html index.htm;
+        }
+        location /status {
+            check_status;
+            access_log   off;
+            allow 127.0.0.1;
+            deny all;
+        }
+        location ~/group1/ {
+            proxy_pass http://fdfs_group1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+        location ~/group2/ {
+            proxy_pass http://fdfs_group2;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+    }
+---
+# Source: fastdfs-nginx/templates/storage-service-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-fastdfs-nginx-storage-group1-headless
+  labels:
+    app: fastdfs-nginx
+    chart: fastdfs-nginx-2.1.0
+    release: my-fastdfs-nginx
+    heritage: Helm
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+    - name: storage
+      port: 23000
+      targetPort: 
+      protocol: TCP
+    - name: storagenginx
+      port: 8080
+      targetPort: 
+      protocol: TCP
+  selector:
+    app: fastdfs-nginx-storage-group1
+    release: my-fastdfs-nginx
+---
+# Source: fastdfs-nginx/templates/storage-service-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-fastdfs-nginx-storage-group2-headless
+  labels:
+    app: fastdfs-nginx
+    chart: fastdfs-nginx-2.1.0
+    release: my-fastdfs-nginx
+    heritage: Helm
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+    - name: storage
+      port: 23000
+      targetPort: 
+      protocol: TCP
+    - name: storagenginx
+      port: 8080
+      targetPort: 
+      protocol: TCP
+  selector:
+    app: fastdfs-nginx-storage-group2
+    release: my-fastdfs-nginx
+---
+# Source: fastdfs-nginx/templates/storage-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-fastdfs-nginx-storage-group1
+  labels:
+    app: fastdfs-nginx
+    chart: fastdfs-nginx-2.1.0
+    release: my-fastdfs-nginx
+    heritage: Helm
+spec:
+  ports:
+    - name: storage
+      port: 23000
+      targetPort: 
+      protocol: TCP
+    - name: storagenginx
+      port: 8080
+      targetPort: 
+      protocol: TCP
+  selector:
+    app: fastdfs-nginx-storage-group1
+    release: my-fastdfs-nginx
+---
+# Source: fastdfs-nginx/templates/storage-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-fastdfs-nginx-storage-group2
+  labels:
+    app: fastdfs-nginx
+    chart: fastdfs-nginx-2.1.0
+    release: my-fastdfs-nginx
+    heritage: Helm
+spec:
+  ports:
+    - name: storage
+      port: 23000
+      targetPort: 
+      protocol: TCP
+    - name: storagenginx
+      port: 8080
+      targetPort: 
+      protocol: TCP
+  selector:
+    app: fastdfs-nginx-storage-group2
+    release: my-fastdfs-nginx
+---
+# Source: fastdfs-nginx/templates/tracker-service-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-fastdfs-nginx-tracker-headless
+  labels:
+    app: fastdfs-nginx
+    chart: fastdfs-nginx-2.1.0
+    release: my-fastdfs-nginx
+    heritage: Helm
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+    - name: tracker
+      port: 22122
+      targetPort: 
+      protocol: TCP
+    - name: trackernginx
+      port: 80
+      targetPort: 
+      protocol: TCP
+  selector:
+    app: fastdfs-nginx-tracker
+    release: my-fastdfs-nginx
+---
+# Source: fastdfs-nginx/templates/tracker-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-fastdfs-nginx-tracker
+  labels:
+    app: fastdfs-nginx
+    chart: fastdfs-nginx-2.1.0
+    release: my-fastdfs-nginx
+    heritage: Helm
+spec:
+  ports:
+    - name: tracker
+      port: 22122
+      targetPort: 
+      protocol: TCP
+    - name: trackernginx
+      port: 80
+      targetPort: 
+      protocol: TCP
+  selector:
+    app: fastdfs-nginx-tracker
+    release: my-fastdfs-nginx
+---
+# Source: fastdfs-nginx/templates/storage-statefulset.yaml
+apiVersion: "apps/v1"
+kind: StatefulSet
+metadata:
+  labels:
+    app: fastdfs-nginx
+    chart: fastdfs-nginx-2.1.0
+    heritage: Helm
+    release: my-fastdfs-nginx
+  name: my-fastdfs-nginx-storage-group1
+spec:
+  selector:
+    matchLabels:
+      app: fastdfs-nginx-storage-group1
+      release: my-fastdfs-nginx
+  serviceName: my-fastdfs-nginx-storage-group1-headless
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        app: fastdfs-nginx-storage-group1
+        release: my-fastdfs-nginx
+      annotations:
+    spec:
+      containers:
+        - name: fastdfs-nginx
+          image: "ygqygq2/fastdfs-nginx:V6.08-tengine"
+          imagePullPolicy: "IfNotPresent"
+          args:
+            - storage
+          env:
+            - name: GROUP_NAME
+              value: group1
+            - name: TRACKER_SERVER
+              value: my-fastdfs-nginx-tracker-headless:22122
+          ports:
+            - name: storage
+              containerPort: 23000
+            - name: storage-nginx
+              containerPort: 8080
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+          volumeMounts:
+          - name: data-storage
+            mountPath: /var/fdfs
+          readinessProbe:
+            exec:
+              command:
+                - bash
+                - "-c"
+                - |
+                  set -x
+                  ps aux |grep 'fdfs_storaged /etc/fdfs/storage.conf start'|grep -v grep \
+                  && curl --connect-timeout 1 -s 127.0.0.1:8080
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            failureThreshold: 3
+          livenessProbe:
+            exec:
+              command:
+                - bash
+                - "-c"
+                - |
+                  set -x
+                  ps aux |grep 'fdfs_storaged /etc/fdfs/storage.conf start'|grep -v grep \
+                  && curl --connect-timeout 1 -s 127.0.0.1:8080
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            failureThreshold: 3
+      volumes:
+      - name: data-storage
+        emptyDir: {}
+---
+# Source: fastdfs-nginx/templates/storage-statefulset.yaml
+apiVersion: "apps/v1"
+kind: StatefulSet
+metadata:
+  labels:
+    app: fastdfs-nginx
+    chart: fastdfs-nginx-2.1.0
+    heritage: Helm
+    release: my-fastdfs-nginx
+  name: my-fastdfs-nginx-storage-group2
+spec:
+  selector:
+    matchLabels:
+      app: fastdfs-nginx-storage-group2
+      release: my-fastdfs-nginx
+  serviceName: my-fastdfs-nginx-storage-group2-headless
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        app: fastdfs-nginx-storage-group2
+        release: my-fastdfs-nginx
+      annotations:
+    spec:
+      containers:
+        - name: fastdfs-nginx
+          image: "ygqygq2/fastdfs-nginx:V6.08-tengine"
+          imagePullPolicy: "IfNotPresent"
+          args:
+            - storage
+          env:
+            - name: GROUP_NAME
+              value: group2
+            - name: TRACKER_SERVER
+              value: my-fastdfs-nginx-tracker-headless:22122
+          ports:
+            - name: storage
+              containerPort: 23000
+            - name: storage-nginx
+              containerPort: 8080
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+          volumeMounts:
+          - name: data-storage
+            mountPath: /var/fdfs
+          readinessProbe:
+            exec:
+              command:
+                - bash
+                - "-c"
+                - |
+                  set -x
+                  ps aux |grep 'fdfs_storaged /etc/fdfs/storage.conf start'|grep -v grep \
+                  && curl --connect-timeout 1 -s 127.0.0.1:8080
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            failureThreshold: 3
+          livenessProbe:
+            exec:
+              command:
+                - bash
+                - "-c"
+                - |
+                  set -x
+                  ps aux |grep 'fdfs_storaged /etc/fdfs/storage.conf start'|grep -v grep \
+                  && curl --connect-timeout 1 -s 127.0.0.1:8080
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            failureThreshold: 3
+      volumes:
+      - name: data-storage
+        emptyDir: {}
+---
+# Source: fastdfs-nginx/templates/tracker-statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  labels:
+    app: fastdfs-nginx
+    chart: fastdfs-nginx-2.1.0
+    heritage: Helm
+    release: my-fastdfs-nginx
+  name: my-fastdfs-nginx-tracker
+spec:
+  selector:
+    matchLabels:
+      app: fastdfs-nginx-tracker
+      release: my-fastdfs-nginx
+  serviceName: my-fastdfs-nginx-tracker-headless
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        app: fastdfs-nginx-tracker
+        release: my-fastdfs-nginx
+      annotations:
+    spec:
+      containers:
+        - name: fastdfs-nginx
+          image: "ygqygq2/fastdfs-nginx:V6.08-tengine"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: TRACKER_SERVER
+              value: my-fastdfs-nginx-tracker-headless:22122
+          ports:
+            - name: tracker
+              containerPort: 22122
+            - name: tracker-nginx
+              containerPort: 80
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+          volumeMounts:
+          - name: data-tracker
+            mountPath: /var/fdfs
+          - name: config-map
+            mountPath: /usr/local/nginx/conf/conf.d
+          readinessProbe:
+            exec:
+              command:
+                - bash
+                - "-c"
+                - |
+                  set -x
+                  curl --connect-timeout 1 -s 127.0.0.1:80 \
+                  && /usr/local/nginx/sbin/nginx -s reload || {
+                    echo 127.0.0.1 my-fastdfs-nginx-storage-group1-headless >> /etc/hosts
+                    echo 127.0.0.1 my-fastdfs-nginx-storage-group2-headless >> /etc/hosts
+                    /usr/local/nginx/sbin/nginx
+                    cat /etc/hosts > /tmp/hosts.tmp
+                    sed -i "/my-fastdfs-nginx-storage-group1-headless/d" /tmp/hosts.tmp
+                    sed -i "/my-fastdfs-nginx-storage-group2-headless/d" /tmp/hosts.tmp
+                    cat /tmp/hosts.tmp > /etc/hosts
+                  }
+            initialDelaySeconds: 5
+            periodSeconds: 60
+          livenessProbe:
+            exec:
+              command:
+                - bash
+                - "-c"
+                - |
+                  set -ex
+                  ps aux |grep 'fdfs_trackerd /etc/fdfs/tracker.conf start'|grep -v grep 
+            initialDelaySeconds: 5
+            periodSeconds: 20
+      volumes:
+      - name: config-map
+        configMap:
+          name: my-fastdfs-nginx
+      - name: data-tracker
+        emptyDir: {}

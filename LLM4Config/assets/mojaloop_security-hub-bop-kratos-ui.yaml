@@ -1,0 +1,183 @@
+---
+# Source: security-hub-bop-kratos-ui/templates/service-account.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-security-hub-bop-kratos-ui
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: security-hub-bop-kratos-ui
+    helm.sh/chart: security-hub-bop-kratos-ui-1.0.0
+    app.kubernetes.io/instance: my-security-hub-bop-kratos-ui
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: security-hub-bop-kratos-ui
+---
+# Source: security-hub-bop-kratos-ui/templates/config.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-security-hub-bop-kratos-ui-config
+  labels:
+    app.kubernetes.io/name: security-hub-bop-kratos-ui
+    helm.sh/chart: security-hub-bop-kratos-ui-1.0.0
+    app.kubernetes.io/instance: my-security-hub-bop-kratos-ui
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: security-hub-bop-kratos-ui
+data:
+  default.json: |
+    {}
+---
+# Source: security-hub-bop-kratos-ui/templates/config.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-security-hub-bop-kratos-ui-config-env
+  labels:
+    app.kubernetes.io/name: security-hub-bop-kratos-ui
+    helm.sh/chart: security-hub-bop-kratos-ui-1.0.0
+    app.kubernetes.io/instance: my-security-hub-bop-kratos-ui
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: security-hub-bop-kratos-ui
+data:
+  ROCKET_PORT: "8000"
+  ROCKET_REGISTRATION_ENDPOINT: "http://kratos-public/self-service/registration/flows"
+---
+# Source: security-hub-bop-kratos-ui/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-security-hub-bop-kratos-ui
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: security-hub-bop-kratos-ui
+    helm.sh/chart: security-hub-bop-kratos-ui-1.0.0
+    app.kubernetes.io/instance: my-security-hub-bop-kratos-ui
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: security-hub-bop-kratos-ui
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8000
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: security-hub-bop-kratos-ui
+    app.kubernetes.io/instance: my-security-hub-bop-kratos-ui
+    app.kubernetes.io/component: security-hub-bop-kratos-ui
+---
+# Source: security-hub-bop-kratos-ui/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-security-hub-bop-kratos-ui
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: security-hub-bop-kratos-ui
+    helm.sh/chart: security-hub-bop-kratos-ui-1.0.0
+    app.kubernetes.io/instance: my-security-hub-bop-kratos-ui
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: security-hub-bop-kratos-ui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: security-hub-bop-kratos-ui
+      app.kubernetes.io/instance: my-security-hub-bop-kratos-ui
+      app.kubernetes.io/component: security-hub-bop-kratos-ui
+  template:
+    metadata:
+      annotations: 
+        checksum/config: 8e3cbd0ef3a6049ce1a7878a1a406c95ee02aaa18f99963bcf393d85527eecc9
+      labels:
+        app.kubernetes.io/name: security-hub-bop-kratos-ui
+        helm.sh/chart: security-hub-bop-kratos-ui-1.0.0
+        app.kubernetes.io/instance: my-security-hub-bop-kratos-ui
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/component: security-hub-bop-kratos-ui
+        app.kubernetes.io/version: 1.0.0
+    spec:
+      serviceAccountName: my-security-hub-bop-kratos-ui
+      
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: security-hub-bop-kratos-ui
+                    app.kubernetes.io/instance: my-security-hub-bop-kratos-ui
+                    app.kubernetes.io/component: security-hub-bop-kratos-ui
+                namespaces:
+                  - "default"
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+      initContainers:
+      containers:
+        - name: security-hub-bop-kratos-ui
+          image: ghcr.io/modusbox/oidcer:latest
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsUser: 1001
+          ports:
+            - name: http
+              containerPort: 8000
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 15
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 15
+          volumeMounts:
+            - name: my-security-hub-bop-kratos-ui-config-volume
+              mountPath: /opt/app/config
+          envFrom:
+          - configMapRef:
+              name: my-security-hub-bop-kratos-ui-config-env
+
+      volumes:
+        - name: my-security-hub-bop-kratos-ui-config-volume
+          configMap:
+            name: my-security-hub-bop-kratos-ui-config
+            items:
+            - key: default.json
+              path: default.json
+---
+# Source: security-hub-bop-kratos-ui/templates/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: my-security-hub-bop-kratos-ui
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: security-hub-bop-kratos-ui
+    helm.sh/chart: security-hub-bop-kratos-ui-1.0.0
+    app.kubernetes.io/instance: my-security-hub-bop-kratos-ui
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: security-hub-bop-kratos-ui
+spec:
+  ## TODO: add this as an option, and it depends on stable API ingress version
+  # ingressClassName: "external-lb"
+  rules:
+    - host: security-hub-bop-kratos-ui.local
+      http:
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: my-security-hub-bop-kratos-ui
+                port:
+                  name: http

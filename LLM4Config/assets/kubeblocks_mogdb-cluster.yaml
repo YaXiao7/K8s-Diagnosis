@@ -1,0 +1,79 @@
+---
+# Source: mogdb-cluster/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: my-mogdb-cluster-switchover-role
+  namespace: default
+  labels:
+    helm.sh/chart: mogdb-cluster-0.9.0
+    app.kubernetes.io/version: "5.0.0"
+    app.kubernetes.io/instance: my-mogdb-cluster
+    app.kubernetes.io/required-by: pod
+rules:
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+---
+# Source: mogdb-cluster/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: my-mogdb-cluster-switchover
+  namespace: default
+  labels:
+    helm.sh/chart: mogdb-cluster-0.9.0
+    app.kubernetes.io/version: "5.0.0"
+    app.kubernetes.io/instance: my-mogdb-cluster
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: my-mogdb-cluster-switchover-role
+subjects:
+  - kind: ServiceAccount
+    name: kb-my-mogdb-cluster
+---
+# Source: mogdb-cluster/templates/cluster.yaml
+apiVersion: apps.kubeblocks.io/v1alpha1
+kind: Cluster
+metadata:
+  name: my-mogdb-cluster
+  namespace: default
+  labels: 
+    helm.sh/chart: mogdb-cluster-0.9.0
+    app.kubernetes.io/version: "5.0.0"
+    app.kubernetes.io/instance: my-mogdb-cluster
+spec:
+  clusterVersionRef: mogdb-5.0.5
+  terminationPolicy: Delete  
+  affinity:
+    podAntiAffinity: Preferred
+    topologyKeys:
+      - kubernetes.io/hostname
+    tenancy: SharedNode
+  clusterDefinitionRef: mogdb
+  componentSpecs:
+    - name: mogdb
+      componentDefRef: mogdb      
+      disableExporter: true      
+      replicas: 2
+      enabledLogs:
+        - running
+      monitor: true
+      serviceAccountName:       
+      resources:
+        limits:
+          cpu: "1"
+          memory: "2Gi"
+        requests:
+          cpu: "1"
+          memory: "2Gi"      
+      volumeClaimTemplates:
+        - name: data # ref clusterDefinition components.containers.volumeMounts.name
+          spec:
+            accessModes:
+              - ReadWriteOnce
+            resources:
+              requests:
+                storage: 20Gi      
+      services:

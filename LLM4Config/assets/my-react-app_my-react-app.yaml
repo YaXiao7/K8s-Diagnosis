@@ -1,0 +1,102 @@
+---
+# Source: my-react-app/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-my-react-app
+  labels:
+    helm.sh/chart: my-react-app-0.1.5
+    app.kubernetes.io/name: my-react-app
+    app.kubernetes.io/instance: my-my-react-app
+    app.kubernetes.io/version: "0.1.4"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: my-react-app/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-my-react-app
+  labels:
+    helm.sh/chart: my-react-app-0.1.5
+    app.kubernetes.io/name: my-react-app
+    app.kubernetes.io/instance: my-my-react-app
+    app.kubernetes.io/version: "0.1.4"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: my-react-app
+    app.kubernetes.io/instance: my-my-react-app
+---
+# Source: my-react-app/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-my-react-app
+  labels:
+    helm.sh/chart: my-react-app-0.1.5
+    app.kubernetes.io/name: my-react-app
+    app.kubernetes.io/instance: my-my-react-app
+    app.kubernetes.io/version: "0.1.4"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: my-react-app
+      app.kubernetes.io/instance: my-my-react-app
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: my-react-app
+        app.kubernetes.io/instance: my-my-react-app
+    spec:
+      serviceAccountName: my-my-react-app
+      securityContext:
+        {}
+      containers:
+        - name: my-react-app
+          securityContext:
+            {}
+          image: "nginx:latest"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+            {}
+---
+# Source: my-react-app/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-my-react-app-test-connection"
+  labels:
+    helm.sh/chart: my-react-app-0.1.5
+    app.kubernetes.io/name: my-react-app
+    app.kubernetes.io/instance: my-my-react-app
+    app.kubernetes.io/version: "0.1.4"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-my-react-app:80']
+  restartPolicy: Never

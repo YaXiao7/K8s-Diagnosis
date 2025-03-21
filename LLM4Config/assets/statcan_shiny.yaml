@@ -1,0 +1,182 @@
+---
+# Source: shiny/templates/configmap/nginx.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-shiny-nginx
+  labels:
+    app.kubernetes.io/name: shiny
+    helm.sh/chart: shiny-0.1.3
+    app.kubernetes.io/instance: my-shiny
+    app.kubernetes.io/managed-by: Helm
+data:
+  nginx.conf: |
+    user  nginx;
+    worker_processes  auto;
+
+    error_log  /var/log/nginx/error.log warn;
+    pid        /var/run/nginx.pid;
+
+
+    events {
+        worker_connections  1024;
+    }
+
+    http {
+        include       /etc/nginx/mime.types;
+        default_type  application/octet-stream;
+
+        log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+                          '$status $body_bytes_sent "$http_referer" '
+                          '"$http_user_agent" "$http_x_forwarded_for"';
+
+        access_log  /var/log/nginx/access.log  main;
+        sendfile        on;
+        keepalive_timeout  65;
+
+        server {
+          listen 80;
+
+          location / {
+            proxy_pass http://127.0.0.1:3838;
+            proxy_redirect / $scheme://$http_host/;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_read_timeout 20d;
+            proxy_buffering off;
+          }
+      }
+    }
+---
+# Source: shiny/templates/configmap/shiny.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-shiny
+  labels:
+    app.kubernetes.io/name: shiny
+    helm.sh/chart: shiny-0.1.3
+    app.kubernetes.io/instance: my-shiny
+    app.kubernetes.io/managed-by: Helm
+data:
+  shiny-server.conf: |
+    # Instruct Shiny Server to run applications as the user "shiny"
+    run_as shiny;
+
+    # Preserve the logs so the shiny server does not automatically delete them.
+    preserve_logs true;
+
+    # Define a server that listens on port 3838
+    server {
+        # Instruct this server to listen on port 80.
+        listen 3838;
+
+        # Define a location at the base URL
+        location / {
+
+            # Host the directory of Shiny Apps stored in this directory
+            site_dir /srv/shiny-server;
+
+            # Log all Shiny output to files in this directory
+            log_dir /var/log/shiny-server;
+
+            # When a user visits the base URL rather than a particular application,
+            # an index of the applications available in this directory will be shown.
+            directory_index on;
+        }
+    }
+---
+# Source: shiny/templates/svc/shiny.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-shiny
+  labels:
+    app.kubernetes.io/name: shiny
+    helm.sh/chart: shiny-0.1.3
+    app.kubernetes.io/instance: my-shiny
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http-proxy
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: shiny
+    app.kubernetes.io/instance: my-shiny
+---
+# Source: shiny/templates/deploy/shiny.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-shiny
+  labels:
+    app.kubernetes.io/name: shiny
+    helm.sh/chart: shiny-0.1.3
+    app.kubernetes.io/instance: my-shiny
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: shiny
+      app.kubernetes.io/instance: my-shiny
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: shiny
+        app.kubernetes.io/instance: my-shiny
+      annotations:
+        sidecar.istio.io/inject: "false"
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.16.0-alpine
+          imagePullPolicy: IfNotPresent
+          ports:
+          - name: http-proxy
+            containerPort: 80
+            protocol: TCP
+          volumeMounts:
+          - name: my-shiny-nginx
+            mountPath: /etc/nginx/nginx.conf
+            subPath: nginx.conf
+        - name: shiny
+          image: "k8scc01covidacr.azurecr.io/shiny:latest"
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - name: my-shiny
+              mountPath: /etc/shiny-server
+            - mountPath: /srv/shiny-server
+              name: files
+          ports:
+            - name: http
+              containerPort: 3838
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+            {}
+      volumes:
+        - name: my-shiny
+          configMap:
+            name: my-shiny
+            items:
+              - key: shiny-server.conf
+                path: shiny-server.conf
+        - name: my-shiny-nginx
+          configMap:
+            name: my-shiny-nginx
+        - azureFile:
+            secretName: shiny-innovation-storage
+            shareName: shiny-innovation-files
+          name: files

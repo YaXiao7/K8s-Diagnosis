@@ -1,0 +1,179 @@
+---
+# Source: kube-image-webhook/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-kube-image-webhook
+  labels:
+    helm.sh/chart: kube-image-webhook-0.1.3
+    app.kubernetes.io/name: kube-image-webhook
+    app.kubernetes.io/instance: my-kube-image-webhook
+    app.kubernetes.io/version: "v0.2.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: kube-image-webhook/templates/config.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-kube-image-webhook
+  labels:
+    helm.sh/chart: kube-image-webhook-0.1.3
+    app.kubernetes.io/name: kube-image-webhook
+    app.kubernetes.io/instance: my-kube-image-webhook
+    app.kubernetes.io/version: "v0.2.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+  config.yaml: |
+    images: []
+---
+# Source: kube-image-webhook/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-kube-image-webhook
+  labels:
+    helm.sh/chart: kube-image-webhook-0.1.3
+    app.kubernetes.io/name: kube-image-webhook
+    app.kubernetes.io/instance: my-kube-image-webhook
+    app.kubernetes.io/version: "v0.2.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 443
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: kube-image-webhook
+    app.kubernetes.io/instance: my-kube-image-webhook
+---
+# Source: kube-image-webhook/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-kube-image-webhook
+  labels:
+    helm.sh/chart: kube-image-webhook-0.1.3
+    app.kubernetes.io/name: kube-image-webhook
+    app.kubernetes.io/instance: my-kube-image-webhook
+    app.kubernetes.io/version: "v0.2.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kube-image-webhook
+      app.kubernetes.io/instance: my-kube-image-webhook
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kube-image-webhook
+        app.kubernetes.io/instance: my-kube-image-webhook
+    spec:
+      serviceAccountName: my-kube-image-webhook
+      securityContext:
+        fsGroup: 1001
+        runAsGroup: 1001
+        runAsNonRoot: true
+        runAsUser: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: kube-image-webhook
+          securityContext:
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsGroup: 1001
+            runAsNonRoot: true
+            runAsUser: 1001
+          image: "registry.gitlab.com/autokubeops/kube-image-webhook:v0.2.0"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: WEBHOOK_CONFIG_PATH
+              value: /var/run/config/config.yaml
+            - name: WEBHOOK_TLS_CERT
+              value: /var/run/secrets/certs/tls.crt
+            - name: WEBHOOK_TLS_KEY
+              value: /var/run/secrets/certs/tls.key
+            - name: WEBHOOK_LOG_LEVEL
+              value: "1"
+          ports:
+            - name: http
+              containerPort: 8443
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+              scheme: HTTPS
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+              scheme: HTTPS
+          resources:
+            {}
+          volumeMounts:
+            - mountPath: /var/run/secrets/certs
+              name: certs
+              readOnly: true
+            - mountPath: /var/run/config
+              name: config
+              readOnly: true
+            - mountPath: /tmp/
+              name: tmp
+              readOnly: false
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: config
+          configMap:
+            name: my-kube-image-webhook
+        - name: certs
+          secret:
+            optional: false
+            secretName:
+---
+# Source: kube-image-webhook/templates/mwc.yaml
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: my-kube-image-webhook
+  labels:
+    helm.sh/chart: kube-image-webhook-0.1.3
+    app.kubernetes.io/name: kube-image-webhook
+    app.kubernetes.io/instance: my-kube-image-webhook
+    app.kubernetes.io/version: "v0.2.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+webhooks:
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      caBundle: 
+      service:
+        name: my-kube-image-webhook
+        namespace: default
+        path: /mutate
+        port: 443
+    name: kube-image-webhook.dcas.dev
+    sideEffects: NoneOnDryRun
+    namespaceSelector:
+      {}
+    objectSelector:
+      {}
+    rules:
+      - apiGroups:
+          - ""
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - pods
+        scope: "*"

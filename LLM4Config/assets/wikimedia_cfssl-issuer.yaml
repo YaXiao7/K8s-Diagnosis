@@ -1,0 +1,282 @@
+---
+# Source: cfssl-issuer/templates/networkpolicy.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: my-cfssl-issuer-prometheus
+  labels:
+    helm.sh/chart: cfssl-issuer-0.4.2
+    app.kubernetes.io/name: cfssl-issuer
+    app.kubernetes.io/instance: my-cfssl-issuer
+    app.kubernetes.io/version: "0.4.0-1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: cfssl-issuer
+      app.kubernetes.io/instance: my-cfssl-issuer
+  policyTypes:
+    - Ingress
+  ingress:
+    - ports:
+      # Metrics
+      - port: 8080
+        protocol: TCP
+      # Probes
+      - port: 8081
+        protocol: TCP
+---
+# Source: cfssl-issuer/templates/networkpolicy.yaml
+apiVersion: crd.projectcalico.org/v1
+kind: NetworkPolicy
+metadata:
+  name: my-cfssl-issuer-egress-external-services-pki
+  labels:
+    helm.sh/chart: cfssl-issuer-0.4.2
+    app.kubernetes.io/name: cfssl-issuer
+    app.kubernetes.io/instance: my-cfssl-issuer
+    app.kubernetes.io/version: "0.4.0-1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector: "app.kubernetes.io/name == 'cfssl-issuer' && app.kubernetes.io/instance == 'my-cfssl-issuer'"
+  types:
+  - Egress
+  egress:
+    - action: Allow
+      destination:
+        services:
+          name: pki-multirootca
+          namespace: external-services
+---
+# Source: cfssl-issuer/templates/service_account.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    helm.sh/chart: cfssl-issuer-0.4.2
+    app.kubernetes.io/name: cfssl-issuer
+    app.kubernetes.io/instance: my-cfssl-issuer
+    app.kubernetes.io/version: "0.4.0-1"
+    app.kubernetes.io/managed-by: Helm
+  name: controller-manager
+---
+# Source: cfssl-issuer/templates/rbac_roles.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cfssl-issuer-cert-manager-controller-approve:cfssl-issuer.wikimedia.org
+rules:
+- apiGroups:
+  - cert-manager.io
+  resourceNames:
+  - issuers.cfssl-issuer.wikimedia.org/*
+  - clusterissuers.cfssl-issuer.wikimedia.org/*
+  resources:
+  - signers
+  verbs:
+  - approve
+---
+# Source: cfssl-issuer/templates/rbac_roles.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cfssl-issuer-manager-role
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - cert-manager.io
+  resources:
+  - certificaterequests
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - cert-manager.io
+  resources:
+  - certificaterequests/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - cfssl-issuer.wikimedia.org
+  resources:
+  - clusterissuers
+  - issuers
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - cfssl-issuer.wikimedia.org
+  resources:
+  - clusterissuers/status
+  - issuers/status
+  verbs:
+  - get
+  - patch
+  - update
+---
+# Source: cfssl-issuer/templates/rbac_rolebindings.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cfssl-issuer-cert-manager-controller-approve:cfssl-issuer.wikimedia.org
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cfssl-issuer-cert-manager-controller-approve:cfssl-issuer.wikimedia.org
+subjects:
+- kind: ServiceAccount
+  name: cert-manager
+  namespace: cert-manager
+---
+# Source: cfssl-issuer/templates/rbac_rolebindings.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cfssl-issuer-manager-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cfssl-issuer-manager-role
+subjects:
+- kind: ServiceAccount
+  name: controller-manager
+  namespace: default
+---
+# Source: cfssl-issuer/templates/rbac_roles.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cfssl-issuer-leader-election-role
+  namespace: default
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+---
+# Source: cfssl-issuer/templates/rbac_rolebindings.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cfssl-issuer-leader-election-rolebinding
+  namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: cfssl-issuer-leader-election-role
+subjects:
+- kind: ServiceAccount
+  name: controller-manager
+  namespace: default
+---
+# Source: cfssl-issuer/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-cfssl-issuer
+  labels:
+    helm.sh/chart: cfssl-issuer-0.4.2
+    app.kubernetes.io/name: cfssl-issuer
+    app.kubernetes.io/instance: my-cfssl-issuer
+    app.kubernetes.io/version: "0.4.0-1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cfssl-issuer
+      app.kubernetes.io/instance: my-cfssl-issuer
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+      labels:
+        app.kubernetes.io/name: cfssl-issuer
+        app.kubernetes.io/instance: my-cfssl-issuer
+    spec:
+      securityContext:
+        {}
+      priorityClassName: "system-cluster-critical"
+      containers:
+        - name: cfssl-issuer
+          image: "docker-registry.wikimedia.org/cfssl-issuer:0.4.0-1"
+          imagePullPolicy: IfNotPresent
+          args:
+            - --enable-leader-election
+          ports:
+            - name: metrics
+              containerPort: 8080
+              protocol: TCP
+            - name: healthz
+              containerPort: 8081
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: healthz
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: healthz
+          resources:
+            limits:
+              cpu: 200m
+              memory: 250Mi
+            requests:
+              cpu: 200m
+              memory: 150Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+      serviceAccountName: controller-manager

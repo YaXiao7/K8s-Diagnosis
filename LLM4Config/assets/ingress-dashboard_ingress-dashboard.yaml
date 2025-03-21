@@ -1,0 +1,263 @@
+---
+# Source: ingress-dashboard/templates/rbac.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-ingress-dashboard
+---
+# Source: ingress-dashboard/templates/config.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-ingress-dashboard-nginx
+data:
+  default.conf: |
+    server {
+        listen       80;
+        server_name  localhost;
+
+        location / {
+            root   /usr/share/nginx/html;
+            index  index.html index.htm;
+        }
+
+        error_page   500 502 503 504  /50x.html;
+        location = /50x.html {
+            root   /usr/share/nginx/html;
+        }
+
+        location ^~ /img/ {
+            set $imageserver images.svc.cluster.local:8080;
+            proxy_pass http://$imageserver;
+
+            proxy_redirect     off;
+            proxy_set_header   Host $host;
+            proxy_set_header   X-Real-IP $remote_addr;
+            proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header   X-Forwarded-Host $server_name;
+        }
+    }
+---
+# Source: ingress-dashboard/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ingress-lister
+rules:
+- apiGroups:
+  - ""
+  - networking.k8s.io
+  resources:
+  - ingresses
+  - services
+  verbs:
+  - list
+  - watch
+  - get
+---
+# Source: ingress-dashboard/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-ingress-dashboard-role-binding
+subjects:
+- kind: ServiceAccount
+  name: my-ingress-dashboard
+  namespace: default
+roleRef:
+  kind: ClusterRole
+  name: ingress-lister
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: ingress-dashboard/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-ingress-dashboard
+spec:
+  selector:
+    app: my-ingress-dashboard
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 80
+---
+# Source: ingress-dashboard/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: images
+spec:
+  selector:
+    app: my-ingress-dashboard-images
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080
+---
+# Source: ingress-dashboard/templates/dashboard.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-ingress-dashboard
+  labels:
+    app: my-ingress-dashboard
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: my-ingress-dashboard
+  template:
+    metadata:
+      labels:
+        app: my-ingress-dashboard
+    spec:
+      serviceAccountName: my-ingress-dashboard
+      volumes:
+      - name: data-volume
+        emptyDir: {}
+      - name: nginx-config
+        configMap:
+          name: my-ingress-dashboard-nginx
+      containers:
+        - name: dashboard
+          image: taemon1337/ingress-dashboard:0.0.10
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: VITE_IMAGE_API
+              value: http://images.svc
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /favicon.png
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /favicon.png
+              port: http
+          resources:
+            limits:
+              cpu: 100m
+              memory: 128Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+          volumeMounts:
+            - mountPath: /data
+              name: data-volume
+              readOnly: true
+            - mountPath: /etc/nginx/conf.d
+              name: nginx-config
+        - name: kubectl
+          image: bitnami/kubectl:latest
+          imagePullPolicy: IfNotPresent
+          command:
+          - /bin/sh
+          - -c
+          - "while true; do kubectl get ingress -A -o json > /data/data.json && echo LOG-$(date) Downloaded /data/data.json ; sleep 3600; done"
+          volumeMounts:
+            - mountPath: /data
+              name: data-volume
+              readOnly: false
+          resources:
+            limits:
+              cpu: 100m
+              memory: 128Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+---
+# Source: ingress-dashboard/templates/images-api.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-ingress-dashboard-images
+  labels:
+    app: my-ingress-dashboard-images
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: my-ingress-dashboard-images
+  template:
+    metadata:
+      labels:
+        app: my-ingress-dashboard-images
+    spec:
+      serviceAccountName: my-ingress-dashboard
+      containers:
+        - name: images
+          image: taemon1337/image-api:0.0.1
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: PORT
+              value: "8080"
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+          resources:
+            limits:
+              cpu: 100m
+              memory: 128Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+---
+# Source: ingress-dashboard/templates/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: my-ingress-dashboard-ingress
+  annotations:
+    "dashboard-host": "Dashboard"
+    "dashboard-href": "/"
+spec:
+  rules:
+  - http:
+      paths:
+      - path: /img/
+        pathType: Prefix
+        backend:
+          service:
+            name: images
+            port:
+              number: 8080
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: my-ingress-dashboard
+            port:
+              number: 8080
+---
+# Source: ingress-dashboard/templates/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: images-ingress
+  annotations:
+    "dashboard-title": "Image Search"
+spec:
+  rules:
+  - host: images
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: images
+            port:
+              number: 8080

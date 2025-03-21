@@ -1,0 +1,102 @@
+---
+# Source: hapi-fhir/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-hapi-fhir
+  labels:
+    helm.sh/chart: hapi-fhir-0.1.0
+    app.kubernetes.io/name: hapi-fhir
+    app.kubernetes.io/instance: my-hapi-fhir
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: hapi-fhir/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-hapi-fhir
+  labels:
+    helm.sh/chart: hapi-fhir-0.1.0
+    app.kubernetes.io/name: hapi-fhir
+    app.kubernetes.io/instance: my-hapi-fhir
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: LoadBalancer
+  ports:
+    - port: 8080
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: hapi-fhir
+    app.kubernetes.io/instance: my-hapi-fhir
+---
+# Source: hapi-fhir/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-hapi-fhir
+  labels:
+    helm.sh/chart: hapi-fhir-0.1.0
+    app.kubernetes.io/name: hapi-fhir
+    app.kubernetes.io/instance: my-hapi-fhir
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: hapi-fhir
+      app.kubernetes.io/instance: my-hapi-fhir
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: hapi-fhir
+        app.kubernetes.io/instance: my-hapi-fhir
+    spec:
+      serviceAccountName: my-hapi-fhir
+      securityContext:
+        {}
+      containers:
+        - name: hapi-fhir
+          securityContext:
+            {}
+          image: "polyakov/hapi-fhir-jpaserver-example:latest"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+            {}
+---
+# Source: hapi-fhir/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-hapi-fhir-test-connection"
+  labels:
+    helm.sh/chart: hapi-fhir-0.1.0
+    app.kubernetes.io/name: hapi-fhir
+    app.kubernetes.io/instance: my-hapi-fhir
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-hapi-fhir:8080']
+  restartPolicy: Never

@@ -1,0 +1,516 @@
+---
+# Source: balance-registration/charts/postgresql/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-balance-registration-postgresql
+  labels:
+    app: postgresql
+    chart: postgresql-8.6.4
+    release: "my-balance-registration"
+    heritage: "Helm"
+type: Opaque
+data:
+  postgresql-password: "IUNoYW5nZU1lIQ=="
+---
+# Source: balance-registration/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-balance-registration-balance-registration
+  labels:
+    app.kubernetes.io/name: balance-registration
+    app.kubernetes.io/part-of: balance-registration
+    helm.sh/chart: balance-registration-0.1.0
+    app.kubernetes.io/instance: my-balance-registration
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  
+  database-url: "cGdzcWw6Ly9leGFtcGxlOiFDaGFuZ2VNZSFAbXktYmFsYW5jZS1yZWdpc3RyYXRpb24tcG9zdGdyZXNxbC9hcGk/c2VydmVyVmVyc2lvbj0xMA=="
+  
+  app_application_key: "NDVjMWE0YjYtNTlkMy00YTZlLTg2YmYtODhhODcyZjM1ODQ1"
+---
+# Source: balance-registration/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-balance-registration-balance-registration
+  #namespace: dev
+  labels:
+    app.kubernetes.io/name: balance-registration
+    app.kubernetes.io/part-of: balance-registration
+    helm.sh/chart: balance-registration-0.1.0
+    app.kubernetes.io/instance: my-balance-registration
+    app.kubernetes.io/managed-by: Helm
+data:
+  project_name: "balance-registration"
+  app-name: "balance-registration"
+  app-version: "V1.0"
+  
+  app-repro: "https://github.com/ConductionNL/balance-registration"
+  app-demo: "pc.zaakonline.nl"
+  app-domain: "conduction.nl" 
+  app-description: "Naast deze JSON rest API is er ook een [graphql](/graphql) interface beschikbaar."
+  app-type: "component"
+  app-web: "false"
+  app-subpath-routing: "true"
+  app-subpath: "balance-registration"
+  
+  app-auth: "false"
+  app-audittrail: "false"
+  app-notification: "false"
+  
+  cache: "false"
+  env: "dev"
+  debug: "1"
+  trusted-proxies: 10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
+  trusted-hosts: "^.+$"
+  php-service: balance-registration-dev-php
+---
+# Source: balance-registration/charts/postgresql/templates/svc-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-balance-registration-postgresql-headless
+  labels:
+    app: postgresql
+    chart: postgresql-8.6.4
+    release: "my-balance-registration"
+    heritage: "Helm"
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: tcp-postgresql
+      port: 5432
+      targetPort: tcp-postgresql
+  selector:
+    app: postgresql
+    release: "my-balance-registration"
+---
+# Source: balance-registration/charts/postgresql/templates/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-balance-registration-postgresql
+  labels:
+    app: postgresql
+    chart: postgresql-8.6.4
+    release: "my-balance-registration"
+    heritage: "Helm"
+spec:
+  type: ClusterIP
+  ports:
+    - name: tcp-postgresql
+      port: 5432
+      targetPort: tcp-postgresql
+  selector:
+    app: postgresql
+    release: "my-balance-registration"
+    role: master
+---
+# Source: balance-registration/templates/api-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: balance-registration
+  labels:
+    app.kubernetes.io/name: balance-registration
+    app.kubernetes.io/part-of: balance-registration
+    helm.sh/chart: balance-registration-0.1.0
+    app.kubernetes.io/instance: my-balance-registration
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: NodePort
+  ports:
+    - port: 80
+      targetPort: 80
+      protocol: TCP
+      name: http
+    - port: 443
+      targetPort: 80
+      protocol: TCP
+      name: https
+  selector:
+    app.kubernetes.io/name: balance-registration-nginx
+    app.kubernetes.io/instance: my-balance-registration
+---
+# Source: balance-registration/templates/php-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: balance-registration-php
+  labels:
+    app.kubernetes.io/name: balance-registration-php
+    app.kubernetes.io/part-of: balance-registration
+    helm.sh/chart: balance-registration-0.1.0
+    app.kubernetes.io/instance: my-balance-registration
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9000
+  selector:
+    app.kubernetes.io/name: balance-registration-php
+    app.kubernetes.io/instance: my-balance-registration
+---
+# Source: balance-registration/templates/varnish-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: balance-registration-varnish
+  labels:
+    app.kubernetes.io/name: balance-registration-varnish
+    app.kubernetes.io/part-of: balance-registration
+    helm.sh/chart: balance-registration-0.1.0
+    app.kubernetes.io/instance: my-balance-registration
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: NodePort
+  ports:
+    - port: 80
+      targetPort: 80
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: balance-registration-varnish
+    app.kubernetes.io/instance: my-balance-registration
+---
+# Source: balance-registration/templates/api-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: balance-registration-nginx
+  labels:
+    app.kubernetes.io/name: balance-registration-nginx
+    app.kubernetes.io/part-of: balance-registration
+    helm.sh/chart: balance-registration-0.1.0
+    app.kubernetes.io/instance: my-balance-registration
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+      matchLabels:
+          app.kubernetes.io/name: balance-registration-nginx
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: balance-registration-nginx
+        app.kubernetes.io/part-of: balance-registration
+        helm.sh/chart: balance-registration-0.1.0
+        app.kubernetes.io/instance: my-balance-registration
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      containers:
+        - name: balance-registration-nginx
+        
+          image: "docker.io/conduction/balance-registration-nginx:dev"
+        
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+          env:
+            - name: PHP_SERVICE
+              value: balance-registration-php
+            - name: NGINX_HOST
+              value: balance-registration-php
+            - name: BACKENDS
+              value: balance-registration-php
+          resources:
+            {}
+---
+# Source: balance-registration/templates/php-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: balance-registration-php
+  labels:
+    app.kubernetes.io/name: balance-registration-php
+    app.kubernetes.io/part-of: balance-registration
+    helm.sh/chart: balance-registration-0.1.0
+    app.kubernetes.io/instance: my-balance-registration
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: balance-registration-php
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: balance-registration-php
+        app.kubernetes.io/part-of: balance-registration
+        helm.sh/chart: balance-registration-0.1.0
+        app.kubernetes.io/instance: my-balance-registration
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      containers:
+        - name: balance-registration-php
+        
+          image: "docker.io/conduction/balance-registration-php:dev"
+        
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 9000
+          env:
+            - name: JWT_SECRET_KEY
+              value: '%kernel.project_dir%/config/jwt/private.pem'
+            - name: JWT_PUBLIC_KEY
+              value: '%kernel.project_dir%/config/jwt/public.pem'
+            - name: JWT_PASSPHRASE
+              value: 'bafe1dc254b45471754c221081f874aa' #@todo this should be a variable
+            - name: TRUSTED_HOSTS
+              valueFrom:
+                configMapKeyRef:
+                  name: my-balance-registration-balance-registration
+                  key: trusted-hosts
+            - name: TRUSTED_PROXIES
+              valueFrom:
+                configMapKeyRef:
+                  name: my-balance-registration-balance-registration
+                  key: trusted-proxies
+            - name: APP_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: my-balance-registration-balance-registration
+                  key: app-name
+            - name: APP_DESCRIPTION
+              valueFrom:
+                configMapKeyRef:
+                  name: my-balance-registration-balance-registration
+                  key: app-description
+            - name: APP_VERSION
+              valueFrom:
+                configMapKeyRef:
+                  name: my-balance-registration-balance-registration
+                  key: app-version
+            - name: APP_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: my-balance-registration-balance-registration
+                  key: env
+            - name: APP_DEBUG
+              valueFrom:
+                configMapKeyRef:
+                  name: my-balance-registration-balance-registration
+                  key: debug
+            - name: APP_TYPE
+              valueFrom:
+                  configMapKeyRef:
+                      name: my-balance-registration-balance-registration
+                      key: app-type
+            
+            - name: APP_DEMO
+              valueFrom:
+                configMapKeyRef:
+                  name: my-balance-registration-balance-registration
+                  key: app-demo
+
+            - name: APP_REPRO
+              valueFrom:
+                  configMapKeyRef:
+                      name: my-balance-registration-balance-registration
+                      key: app-repro
+            - name: APP_DOMAIN
+              valueFrom:
+                  configMapKeyRef:
+                      name: my-balance-registration-balance-registration
+                      key: app-domain
+            - name: APP_CACHE
+              valueFrom:
+                  configMapKeyRef:
+                      name: my-balance-registration-balance-registration
+                      key: cache      
+            # config
+            - name: AUTH_ENABLED
+              valueFrom:
+                configMapKeyRef:
+                  name: my-balance-registration-balance-registration
+                  key: app-auth
+            - name: AUDITTRAIL_ENABLED
+              valueFrom:
+                configMapKeyRef:
+                  name: my-balance-registration-balance-registration
+                  key: app-audittrail
+            - name: NOTIFICATION_ENABLED
+              valueFrom:
+                configMapKeyRef:
+                  name: my-balance-registration-balance-registration
+                  key: app-notification
+            - name: APP_WEB
+              valueFrom:
+                configMapKeyRef:
+                  name: my-balance-registration-balance-registration
+                  key: app-web
+            - name: APP_SUBPATH_ROUTING
+              valueFrom:
+                configMapKeyRef:
+                  name: my-balance-registration-balance-registration
+                  key: app-subpath-routing
+            - name: APP_SUBPATH
+              valueFrom:
+                configMapKeyRef:
+                  name: my-balance-registration-balance-registration
+                  key: app-subpath
+            
+            # bla bla      
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: my-balance-registration-balance-registration
+                  key: database-url
+            - name: APP_APPLICATION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: my-balance-registration-balance-registration
+                  key: app_application_key
+            - name: APP_URL
+              value: https://dev.conduction.nl/api//balance-registration
+          resources:
+            {}
+---
+# Source: balance-registration/templates/varnish-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: balance-registration-varnish
+  labels:
+    app.kubernetes.io/name: balance-registration-varnish
+    app.kubernetes.io/part-of: balance-registration
+    helm.sh/chart: balance-registration-0.1.0
+    app.kubernetes.io/instance: my-balance-registration
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: balance-registration-varnish
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: balance-registration-varnish
+        helm.sh/chart: balance-registration-0.1.0
+        app.kubernetes.io/instance: my-balance-registration
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      containers:
+        - name: balance-registration-varnish
+        
+          image: "docker.io/conduction/balance-registration-varnish:dev"
+        
+          imagePullPolicy: Always
+          env:
+            - name: BACKENDS
+              value: balance-registration-php
+          #command: ["varnishd"]
+          #args: ["-F", "-f", "/usr/local/etc/varnish/default.vcl", "-p", "http_resp_hdr_len=65536", "-p", "http_resp_size=98304"]
+          ports:
+            - containerPort: 80
+          resources:
+            {}
+---
+# Source: balance-registration/charts/postgresql/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-balance-registration-postgresql
+  labels:
+    app: postgresql
+    chart: postgresql-8.6.4
+    release: "my-balance-registration"
+    heritage: "Helm"
+spec:
+  serviceName: my-balance-registration-postgresql-headless
+  replicas: 1
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: postgresql
+      release: "my-balance-registration"
+      role: master
+  template:
+    metadata:
+      name: my-balance-registration-postgresql
+      labels:
+        app: postgresql
+        chart: postgresql-8.6.4
+        release: "my-balance-registration"
+        heritage: "Helm"
+        role: master
+    spec:      
+      securityContext:
+        fsGroup: 1001
+      initContainers:
+        # - name: do-something
+        #   image: busybox
+        #   command: ['do', 'something']
+        
+      containers:
+        - name: my-balance-registration-postgresql
+          image: docker.io/bitnami/postgresql:11.7.0-debian-10-r9
+          imagePullPolicy: "IfNotPresent"
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+          securityContext:
+            runAsUser: 1001
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: POSTGRESQL_PORT_NUMBER
+              value: "5432"
+            - name: POSTGRESQL_VOLUME_DIR
+              value: "/bitnami/postgresql"
+            - name: PGDATA
+              value: "/bitnami/postgresql/data"
+            - name: POSTGRES_USER
+              value: "example"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-balance-registration-postgresql
+                  key: postgresql-password
+            - name: POSTGRES_DB
+              value: "api"
+            - name: POSTGRESQL_ENABLE_LDAP
+              value: "no"
+          ports:
+            - name: tcp-postgresql
+              containerPort: 5432
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - exec pg_isready -U "example" -d "api" -h 127.0.0.1 -p 5432
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - -e
+                - |
+                  exec pg_isready -U "example" -d "api" -h 127.0.0.1 -p 5432
+                  [ -f /opt/bitnami/postgresql/tmp/.initialized ] || [ -f /bitnami/postgresql/.initialized ]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          volumeMounts:
+            - name: dshm
+              mountPath: /dev/shm
+      volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Gi
+        - name: data
+          emptyDir: {}

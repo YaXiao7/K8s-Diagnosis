@@ -1,0 +1,184 @@
+---
+# Source: frigate/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-frigate
+  namespace: default
+  labels:
+    app.kubernetes.io/name: frigate
+    helm.sh/chart: frigate-7.5.1
+    app.kubernetes.io/instance: my-frigate
+    app.kubernetes.io/managed-by: Helm
+data:
+  config.yml: |
+    mqtt:
+      # Required: host name
+      host: mqtt.server.com
+      # Optional: port (default: shown below)
+      port: 1883
+      # Optional: topic prefix (default: shown below)
+      # WARNING: must be unique if you are running multiple instances
+      topic_prefix: frigate
+      # Optional: client id (default: shown below)
+      # WARNING: must be unique if you are running multiple instances
+      client_id: frigate
+      # Optional: user
+      user: mqtt_user
+      # Optional: password
+      # NOTE: Environment variables that begin with 'FRIGATE_' may be referenced in {}.
+      #       eg. password: '{FRIGATE_MQTT_PASSWORD}'
+      password: password
+      # Optional: interval in seconds for publishing stats (default: shown below)
+      stats_interval: 60
+    
+    detectors:
+      # coral:
+      #   type: edgetpu
+      #   device: usb
+      cpu1:
+        type: cpu
+    
+    # cameras:
+    #   # Name of your camera
+    #   front_door:
+    #     ffmpeg:
+    #       inputs:
+    #         - path: rtsp://{FRIGATE_RSTP_USERNAME}:{FRIGATE_RTSP_PASSWORD}@10.0.10.10:554/cam/realmonitor?channel=1&subtype=2
+    #           roles:
+    #             - detect
+    #             - rtmp
+    #     width: 1280
+    #     height: 720
+    #     fps: 5
+---
+# Source: frigate/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-frigate
+  labels:
+    app.kubernetes.io/name: frigate
+    helm.sh/chart: frigate-7.5.1
+    app.kubernetes.io/instance: my-frigate
+    app.kubernetes.io/version: "0.13.2"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ipFamilyPolicy: SingleStack
+  ports:
+    - name: http
+      port: 5000
+      protocol: TCP
+      targetPort: http
+
+    - name: rtmp
+      port: 1935
+      protocol: TCP
+      targetPort: rtmp
+
+    - name: rtsp
+      port: 8554
+      protocol: TCP
+      targetPort: rtsp
+      
+  selector:
+    app.kubernetes.io/name: frigate
+    app.kubernetes.io/instance: my-frigate
+---
+# Source: frigate/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-frigate
+  labels:
+    app.kubernetes.io/name: frigate
+    helm.sh/chart: frigate-7.5.1
+    app.kubernetes.io/instance: my-frigate
+    app.kubernetes.io/version: "0.13.2"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: frigate
+      app.kubernetes.io/instance: my-frigate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: frigate
+        app.kubernetes.io/instance: my-frigate
+      annotations:
+        checksum/configmap: c808e470820ff85be7c60232abb1cb53c5c8bafec58b49bc6e00e3e66c5c8076
+    spec:
+      containers:
+        - name: frigate
+          image: "ghcr.io/blakeblackshear/frigate:0.13.2"
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            {}
+          ports:
+            - name: http
+              containerPort: 5000
+              protocol: TCP
+            - name: rtmp
+              containerPort: 1935
+              protocol: TCP
+            - name: rtsp
+              containerPort: 8554
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 30
+            failureThreshold: 5
+            timeoutSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 30
+            failureThreshold: 5
+            timeoutSeconds: 10
+          env:
+          envFrom:
+          volumeMounts:
+            - mountPath: /config/config.yml
+              subPath: config.yml
+              name: configmap
+            - mountPath: /config
+              name: config
+            - mountPath: /data
+              name: data
+            - mountPath: /media
+              name: media
+            - name: dshm
+              mountPath: /dev/shm
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            {}
+      volumes:
+        - name: configmap
+          configMap:
+            name: my-frigate
+        - name: config
+          emptyDir: {}
+        - name: data
+          emptyDir: {}
+        - name: media
+          emptyDir: {}
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Gi
+        - name: tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Gi

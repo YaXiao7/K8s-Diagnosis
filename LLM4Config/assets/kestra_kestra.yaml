@@ -1,0 +1,982 @@
+---
+# Source: kestra/charts/minio/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: "minio-sa"
+  namespace: "default"
+---
+# Source: kestra/charts/minio/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-kestra-minio
+  namespace: "default"
+  labels:
+    app: minio
+    chart: minio-4.1.0
+    release: my-kestra
+    heritage: Helm
+type: Opaque
+data:
+  rootUser: "cGxlYXNlLWNoYW5nZS1tZQ=="
+  rootPassword: "aXRzLW5vdC1hLXNlY3JldA=="
+---
+# Source: kestra/charts/postgresql/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-kestra-postgresql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: postgresql
+    helm.sh/chart: postgresql-12.2.8
+    app.kubernetes.io/instance: my-kestra
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  postgres-password: "M2oxMEUxSGdtRA=="
+  password: "a2VzdHJh"
+  # We don't auto-generate LDAP password when it's not provided as we do for other passwords
+---
+# Source: kestra/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-kestra-secret
+  labels:
+    app.kubernetes.io/name: kestra
+    app.kubernetes.io/component: secret
+    app.kubernetes.io/instance: my-kestra
+    app.kubernetes.io/version: "0.18.0"
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: kestra-0.18.0
+type: Opaque
+data:
+  application-k8s.yml: "CmRhdGFzb3VyY2VzOgogIHBvc3RncmVzOgogICAgdXJsOiBqZGJjOnBvc3RncmVzcWw6Ly9teS1rZXN0cmEtcG9zdGdyZXNxbDo1NDMyL2tlc3RyYQogICAgZHJpdmVyQ2xhc3NOYW1lOiBvcmcucG9zdGdyZXNxbC5Ecml2ZXIKICAgIHVzZXJuYW1lOiBrZXN0cmEKICAgIHBhc3N3b3JkOiBrZXN0cmEKa2VzdHJhOgogIHF1ZXVlOgogICAgdHlwZTogcG9zdGdyZXMKICByZXBvc2l0b3J5OgogICAgdHlwZTogcG9zdGdyZXMKICBzdG9yYWdlOgogICAgdHlwZTogbWluaW8KICAgIG1pbmlvOgogICAgICBlbmRwb2ludDogbXkta2VzdHJhLW1pbmlvCiAgICAgIHBvcnQ6IDkwMDAKICAgICAgYWNjZXNzLWtleTogcGxlYXNlLWNoYW5nZS1tZQogICAgICBzZWNyZXQta2V5OiBpdHMtbm90LWEtc2VjcmV0CiAgICAgIHNlY3VyZTogZmFsc2UKICAgICAgYnVja2V0OiBrZXN0cmE="
+---
+# Source: kestra/charts/minio/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-kestra-minio
+  namespace: "default"
+  labels:
+    app: minio
+    chart: minio-4.1.0
+    release: my-kestra
+    heritage: Helm
+data:
+  initialize: |-
+    #!/bin/sh
+    set -e ; # Have script exit in the event of a failed command.
+    MC_CONFIG_DIR="/etc/minio/mc/"
+    MC="/usr/bin/mc --insecure --config-dir ${MC_CONFIG_DIR}"
+    
+    # connectToMinio
+    # Use a check-sleep-check loop to wait for MinIO service to be available
+    connectToMinio() {
+      SCHEME=$1
+      ATTEMPTS=0 ; LIMIT=29 ; # Allow 30 attempts
+      set -e ; # fail if we can't read the keys.
+      ACCESS=$(cat /config/rootUser) ; SECRET=$(cat /config/rootPassword) ;
+      set +e ; # The connections to minio are allowed to fail.
+      echo "Connecting to MinIO server: $SCHEME://$MINIO_ENDPOINT:$MINIO_PORT" ;
+      MC_COMMAND="${MC} alias set myminio $SCHEME://$MINIO_ENDPOINT:$MINIO_PORT $ACCESS $SECRET" ;
+      $MC_COMMAND ;
+      STATUS=$? ;
+      until [ $STATUS = 0 ]
+      do
+        ATTEMPTS=`expr $ATTEMPTS + 1` ;
+        echo \"Failed attempts: $ATTEMPTS\" ;
+        if [ $ATTEMPTS -gt $LIMIT ]; then
+          exit 1 ;
+        fi ;
+        sleep 2 ; # 1 second intervals between attempts
+        $MC_COMMAND ;
+        STATUS=$? ;
+      done ;
+      set -e ; # reset `e` as active
+      return 0
+    }
+    
+    # checkBucketExists ($bucket)
+    # Check if the bucket exists, by using the exit code of `mc ls`
+    checkBucketExists() {
+      BUCKET=$1
+      CMD=$(${MC} ls myminio/$BUCKET > /dev/null 2>&1)
+      return $?
+    }
+    
+    # createBucket ($bucket, $policy, $purge)
+    # Ensure bucket exists, purging if asked to
+    createBucket() {
+      BUCKET=$1
+      POLICY=$2
+      PURGE=$3
+      VERSIONING=$4
+      OBJECTLOCKING=$5
+    
+      # Purge the bucket, if set & exists
+      # Since PURGE is user input, check explicitly for `true`
+      if [ $PURGE = true ]; then
+        if checkBucketExists $BUCKET ; then
+          echo "Purging bucket '$BUCKET'."
+          set +e ; # don't exit if this fails
+          ${MC} rm -r --force myminio/$BUCKET
+          set -e ; # reset `e` as active
+        else
+          echo "Bucket '$BUCKET' does not exist, skipping purge."
+        fi
+      fi
+    
+    # Create the bucket if it does not exist and set objectlocking if enabled (NOTE: versioning will be not changed if OBJECTLOCKING is set because it enables versioning to the Buckets created)
+    if ! checkBucketExists $BUCKET ; then
+        if [ ! -z $OBJECTLOCKING ] ; then
+          if [ $OBJECTLOCKING = true ] ; then
+              echo "Creating bucket with OBJECTLOCKING '$BUCKET'"
+              ${MC} mb --with-lock myminio/$BUCKET
+          elif [ $OBJECTLOCKING = false ] ; then
+                echo "Creating bucket '$BUCKET'"
+                ${MC} mb myminio/$BUCKET
+          fi
+      elif [ -z $OBJECTLOCKING ] ; then
+            echo "Creating bucket '$BUCKET'"
+            ${MC} mb myminio/$BUCKET
+      else
+        echo "Bucket '$BUCKET' already exists."  
+      fi
+      fi
+    
+    
+      # set versioning for bucket if objectlocking is disabled or not set
+      if [ -z $OBJECTLOCKING ] ; then
+      if [ ! -z $VERSIONING ] ; then
+        if [ $VERSIONING = true ] ; then
+            echo "Enabling versioning for '$BUCKET'"
+            ${MC} version enable myminio/$BUCKET
+        elif [ $VERSIONING = false ] ; then
+            echo "Suspending versioning for '$BUCKET'"
+            ${MC} version suspend myminio/$BUCKET
+        fi
+        fi
+      else
+          echo "Bucket '$BUCKET' versioning unchanged."
+      fi
+    
+    
+      # At this point, the bucket should exist, skip checking for existence
+      # Set policy on the bucket
+      echo "Setting policy of bucket '$BUCKET' to '$POLICY'."
+      ${MC} policy set $POLICY myminio/$BUCKET
+    }
+    
+    # Try connecting to MinIO instance
+    scheme=http
+    connectToMinio $scheme
+    
+    
+    
+    # Create the buckets
+    createBucket kestra none false  
+  add-user: |-
+    #!/bin/sh
+    set -e ; # Have script exit in the event of a failed command.
+    MC_CONFIG_DIR="/etc/minio/mc/"
+    MC="/usr/bin/mc --insecure --config-dir ${MC_CONFIG_DIR}"
+    
+    # AccessKey and secretkey credentials file are added to prevent shell execution errors caused by special characters.
+    # Special characters for example : ',",<,>,{,}
+    MINIO_ACCESSKEY_SECRETKEY_TMP="/tmp/accessKey_and_secretKey_tmp"
+    
+    # connectToMinio
+    # Use a check-sleep-check loop to wait for MinIO service to be available
+    connectToMinio() {
+      SCHEME=$1
+      ATTEMPTS=0 ; LIMIT=29 ; # Allow 30 attempts
+      set -e ; # fail if we can't read the keys.
+      ACCESS=$(cat /config/rootUser) ; SECRET=$(cat /config/rootPassword) ;
+      set +e ; # The connections to minio are allowed to fail.
+      echo "Connecting to MinIO server: $SCHEME://$MINIO_ENDPOINT:$MINIO_PORT" ;
+      MC_COMMAND="${MC} alias set myminio $SCHEME://$MINIO_ENDPOINT:$MINIO_PORT $ACCESS $SECRET" ;
+      $MC_COMMAND ;
+      STATUS=$? ;
+      until [ $STATUS = 0 ]
+      do
+        ATTEMPTS=`expr $ATTEMPTS + 1` ;
+        echo \"Failed attempts: $ATTEMPTS\" ;
+        if [ $ATTEMPTS -gt $LIMIT ]; then
+          exit 1 ;
+        fi ;
+        sleep 2 ; # 1 second intervals between attempts
+        $MC_COMMAND ;
+        STATUS=$? ;
+      done ;
+      set -e ; # reset `e` as active
+      return 0
+    }
+    
+    # checkUserExists ()
+    # Check if the user exists, by using the exit code of `mc admin user info`
+    checkUserExists() {
+      CMD=$(${MC} admin user info myminio $(head -1 $MINIO_ACCESSKEY_SECRETKEY_TMP) > /dev/null 2>&1)
+      return $?
+    }
+    
+    # createUser ($policy)
+    createUser() {
+      POLICY=$1
+      #check accessKey_and_secretKey_tmp file
+      if [[ ! -f $MINIO_ACCESSKEY_SECRETKEY_TMP ]];then
+        echo "credentials file does not exist"
+        return 1
+      fi
+      if [[ $(cat $MINIO_ACCESSKEY_SECRETKEY_TMP|wc -l) -ne 2 ]];then
+        echo "credentials file is invalid"
+        rm -f $MINIO_ACCESSKEY_SECRETKEY_TMP
+        return 1
+      fi
+      USER=$(head -1 $MINIO_ACCESSKEY_SECRETKEY_TMP)
+      # Create the user if it does not exist
+      if ! checkUserExists ; then
+        echo "Creating user '$USER'"
+        cat $MINIO_ACCESSKEY_SECRETKEY_TMP | ${MC} admin user add myminio
+      else
+        echo "User '$USER' already exists."
+      fi
+      #clean up credentials files.
+      rm -f $MINIO_ACCESSKEY_SECRETKEY_TMP
+    
+      # set policy for user
+      if [ ! -z $POLICY -a $POLICY != " " ] ; then
+          echo "Adding policy '$POLICY' for '$USER'"
+          ${MC} admin policy set myminio $POLICY user=$USER
+      else
+          echo "User '$USER' has no policy attached."
+      fi
+    }
+    
+    # Try connecting to MinIO instance
+    scheme=http
+    connectToMinio $scheme
+    
+    
+    
+    # Create the users
+    echo console > $MINIO_ACCESSKEY_SECRETKEY_TMP
+    echo console123 >> $MINIO_ACCESSKEY_SECRETKEY_TMP
+    createUser consoleAdmin
+    
+  add-policy: |-
+    #!/bin/sh
+    set -e ; # Have script exit in the event of a failed command.
+    MC_CONFIG_DIR="/etc/minio/mc/"
+    MC="/usr/bin/mc --insecure --config-dir ${MC_CONFIG_DIR}"
+    
+    # connectToMinio
+    # Use a check-sleep-check loop to wait for MinIO service to be available
+    connectToMinio() {
+      SCHEME=$1
+      ATTEMPTS=0 ; LIMIT=29 ; # Allow 30 attempts
+      set -e ; # fail if we can't read the keys.
+      ACCESS=$(cat /config/rootUser) ; SECRET=$(cat /config/rootPassword) ;
+      set +e ; # The connections to minio are allowed to fail.
+      echo "Connecting to MinIO server: $SCHEME://$MINIO_ENDPOINT:$MINIO_PORT" ;
+      MC_COMMAND="${MC} alias set myminio $SCHEME://$MINIO_ENDPOINT:$MINIO_PORT $ACCESS $SECRET" ;
+      $MC_COMMAND ;
+      STATUS=$? ;
+      until [ $STATUS = 0 ]
+      do
+        ATTEMPTS=`expr $ATTEMPTS + 1` ;
+        echo \"Failed attempts: $ATTEMPTS\" ;
+        if [ $ATTEMPTS -gt $LIMIT ]; then
+          exit 1 ;
+        fi ;
+        sleep 2 ; # 1 second intervals between attempts
+        $MC_COMMAND ;
+        STATUS=$? ;
+      done ;
+      set -e ; # reset `e` as active
+      return 0
+    }
+    
+    # checkPolicyExists ($policy)
+    # Check if the policy exists, by using the exit code of `mc admin policy info`
+    checkPolicyExists() {
+      POLICY=$1
+      CMD=$(${MC} admin policy info myminio $POLICY > /dev/null 2>&1)
+      return $?
+    }
+    
+    # createPolicy($name, $filename)
+    createPolicy () {
+      NAME=$1
+      FILENAME=$2
+    
+      # Create the name if it does not exist
+      echo "Checking policy: $NAME (in /config/$FILENAME.json)"
+      if ! checkPolicyExists $NAME ; then
+        echo "Creating policy '$NAME'"
+      else
+        echo "Policy '$NAME' already exists."
+      fi
+      ${MC} admin policy add myminio $NAME /config/$FILENAME.json
+    
+    }
+    
+    # Try connecting to MinIO instance
+    scheme=http
+    connectToMinio $scheme
+    
+    
+  custom-command: |-
+    #!/bin/sh
+    set -e ; # Have script exit in the event of a failed command.
+    MC_CONFIG_DIR="/etc/minio/mc/"
+    MC="/usr/bin/mc --insecure --config-dir ${MC_CONFIG_DIR}"
+    
+    # connectToMinio
+    # Use a check-sleep-check loop to wait for MinIO service to be available
+    connectToMinio() {
+      SCHEME=$1
+      ATTEMPTS=0 ; LIMIT=29 ; # Allow 30 attempts
+      set -e ; # fail if we can't read the keys.
+      ACCESS=$(cat /config/rootUser) ; SECRET=$(cat /config/rootPassword) ;
+      set +e ; # The connections to minio are allowed to fail.
+      echo "Connecting to MinIO server: $SCHEME://$MINIO_ENDPOINT:$MINIO_PORT" ;
+      MC_COMMAND="${MC} alias set myminio $SCHEME://$MINIO_ENDPOINT:$MINIO_PORT $ACCESS $SECRET" ;
+      $MC_COMMAND ;
+      STATUS=$? ;
+      until [ $STATUS = 0 ]
+      do
+        ATTEMPTS=`expr $ATTEMPTS + 1` ;
+        echo \"Failed attempts: $ATTEMPTS\" ;
+        if [ $ATTEMPTS -gt $LIMIT ]; then
+          exit 1 ;
+        fi ;
+        sleep 2 ; # 1 second intervals between attempts
+        $MC_COMMAND ;
+        STATUS=$? ;
+      done ;
+      set -e ; # reset `e` as active
+      return 0
+    }
+    
+    # runCommand ($@)
+    # Run custom mc command
+    runCommand() {
+      ${MC} "$@"
+      return $?
+    }
+    
+    # Try connecting to MinIO instance
+    scheme=http
+    connectToMinio $scheme
+---
+# Source: kestra/charts/minio/templates/pvc.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: my-kestra-minio
+  namespace: "default"
+  labels:
+    app: minio
+    chart: minio-4.1.0
+    release: my-kestra
+    heritage: Helm
+spec:
+  accessModes:
+    - "ReadWriteOnce"
+  resources:
+    requests:
+      storage: "8Gi"
+---
+# Source: kestra/charts/minio/templates/console-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-kestra-minio-console
+  namespace: "default"
+  labels:
+    app: minio
+    chart: minio-4.1.0
+    release: my-kestra
+    heritage: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 9001
+      protocol: TCP
+      targetPort: 9001
+  selector:
+    app: minio
+    release: my-kestra
+---
+# Source: kestra/charts/minio/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-kestra-minio
+  namespace: "default"
+  labels:
+    app: minio
+    chart: minio-4.1.0
+    release: my-kestra
+    heritage: Helm
+    monitoring: "true"
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 9000
+      protocol: TCP
+      targetPort: 9000
+  selector:
+    app: minio
+    release: my-kestra
+---
+# Source: kestra/charts/postgresql/templates/primary/svc-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-kestra-postgresql-hl
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: postgresql
+    helm.sh/chart: postgresql-12.2.8
+    app.kubernetes.io/instance: my-kestra
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: primary
+    # Use this annotation in addition to the actual publishNotReadyAddresses
+    # field below because the annotation will stop being respected soon but the
+    # field is broken in some versions of Kubernetes:
+    # https://github.com/kubernetes/kubernetes/issues/58662
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+spec:
+  type: ClusterIP
+  clusterIP: None
+  # We want all pods in the StatefulSet to have their addresses published for
+  # the sake of the other Postgresql pods even before they're ready, since they
+  # have to be able to talk to each other in order to become ready.
+  publishNotReadyAddresses: true
+  ports:
+    - name: tcp-postgresql
+      port: 5432
+      targetPort: tcp-postgresql
+  selector:
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/instance: my-kestra
+    app.kubernetes.io/component: primary
+---
+# Source: kestra/charts/postgresql/templates/primary/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-kestra-postgresql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: postgresql
+    helm.sh/chart: postgresql-12.2.8
+    app.kubernetes.io/instance: my-kestra
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: primary
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+    - name: tcp-postgresql
+      port: 5432
+      targetPort: tcp-postgresql
+      nodePort: null
+  selector:
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/instance: my-kestra
+    app.kubernetes.io/component: primary
+---
+# Source: kestra/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-kestra-service
+  labels:
+    app.kubernetes.io/name: kestra
+    app.kubernetes.io/component: service
+    app.kubernetes.io/instance: my-kestra
+    app.kubernetes.io/version: "0.18.0"
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: kestra-0.18.0
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+      app.kubernetes.io/name: kestra
+      app.kubernetes.io/component: standalone
+      app.kubernetes.io/instance: my-kestra
+---
+# Source: kestra/charts/minio/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-kestra-minio
+  namespace: "default"
+  labels:
+    app: minio
+    chart: minio-4.1.0
+    release: my-kestra
+    heritage: Helm
+spec:
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 100%
+      maxUnavailable: 0
+  replicas: 1
+  selector:
+    matchLabels:
+      app: minio
+      release: my-kestra
+  template:
+    metadata:
+      name: my-kestra-minio
+      labels:
+        app: minio
+        release: my-kestra
+      annotations:
+        checksum/secrets: f7b7520fc302552ca9d40a823557c4f62f6402c0510ef18e566c58714b3ac75c
+        checksum/config: c16a9a533e2c9aa679a512594158463c78107ab153f3f4da19d015a0c36aa082
+    spec:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+
+      serviceAccountName: minio-sa
+      containers:
+        - name: minio
+          image: "quay.io/minio/minio:RELEASE.2022-10-24T18-35-07Z"
+          imagePullPolicy: IfNotPresent
+          command:
+            - "/bin/sh"
+            - "-ce"
+            - "/usr/bin/docker-entrypoint.sh minio server /export -S /etc/minio/certs/ --address :9000 --console-address :9001"
+          volumeMounts:
+            - name: minio-user
+              mountPath: "/tmp/credentials"
+              readOnly: true
+            - name: export
+              mountPath: /export            
+          ports:
+            - name: http
+              containerPort: 9000
+            - name: http-console
+              containerPort: 9001
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: my-kestra-minio
+                  key: rootUser
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-kestra-minio
+                  key: rootPassword
+            - name: MINIO_PROMETHEUS_AUTH_TYPE
+              value: "public"
+          resources:
+            requests:
+              memory: 512Mi      
+      volumes:
+        - name: export
+          persistentVolumeClaim:
+            claimName: my-kestra-minio
+        - name: minio-user
+          secret:
+            secretName: my-kestra-minio
+---
+# Source: kestra/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-kestra-standalone
+  labels:
+    app.kubernetes.io/name: kestra
+    app.kubernetes.io/component: standalone
+    app.kubernetes.io/instance: my-kestra
+    app.kubernetes.io/version: "0.18.0"
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: kestra-0.18.0
+  annotations:
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kestra
+      app.kubernetes.io/component: standalone
+      app.kubernetes.io/instance: my-kestra
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kestra
+        app.kubernetes.io/component: standalone
+        app.kubernetes.io/instance: my-kestra
+
+      annotations:
+        checksum/secrets: 2f6967024b59293d436d6ac022c7c4dcd67febe407d8ab1211d974aa63baa8cb
+        checksum/config: 01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b
+    spec:
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        {}
+      containers:
+        - name: kestra-standalone
+          securityContext:
+            runAsGroup: 1000
+            runAsUser: 1000
+          image: "kestra/kestra:latest"
+          imagePullPolicy: Always
+          command:
+            - sh
+            - -c
+            - "exec /app/kestra server standalone --worker-thread=128"
+          env:
+            - name: MICRONAUT_CONFIG_FILES
+              value: /app/secrets/application-k8s.yml
+          volumeMounts:
+            - name: secrets
+              mountPath: /app/secrets/
+            - name: docker-dind-socket
+              mountPath: /dind
+            - name: docker-tmp
+              mountPath: /tmp/
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: management
+              containerPort: 8081
+              protocol: TCP
+          startupProbe:
+            httpGet:
+              path: /health
+              port: management
+            initialDelaySeconds: 1
+            periodSeconds: 1
+            timeoutSeconds: 1
+            successThreshold: 1
+            failureThreshold: 120
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: management
+            initialDelaySeconds: 0
+            periodSeconds: 5
+            timeoutSeconds: 3
+            successThreshold: 1
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: management
+            initialDelaySeconds: 0
+            periodSeconds: 5
+            timeoutSeconds: 3
+            successThreshold: 1
+            failureThreshold: 3
+          resources:
+            {}
+        - name: kestra-standalone-docker-dind
+          image: "docker:dind-rootless"
+          imagePullPolicy: IfNotPresent
+          args:
+            - --log-level=fatal
+            - --group=1000
+          env:
+            - name: DOCKER_HOST
+              value: unix:///dind//docker.sock
+          securityContext:
+            privileged: true
+            runAsGroup: 1000
+            runAsUser: 1000
+          volumeMounts:
+            - name: docker-dind-socket
+              mountPath: /dind/
+            - name: docker-tmp
+              mountPath: /tmp/
+          resources:
+            {}
+      volumes:
+        - name: secrets
+          secret:
+            secretName: my-kestra-secret
+            items:
+              - key: application-k8s.yml
+                path: application-k8s.yml
+        - name: docker-dind-socket
+          emptyDir: {}
+        - name: docker-tmp
+          emptyDir: {}
+---
+# Source: kestra/charts/postgresql/templates/primary/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-kestra-postgresql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: postgresql
+    helm.sh/chart: postgresql-12.2.8
+    app.kubernetes.io/instance: my-kestra
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: primary
+spec:
+  replicas: 1
+  serviceName: my-kestra-postgresql-hl
+  updateStrategy:
+    rollingUpdate: {}
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgresql
+      app.kubernetes.io/instance: my-kestra
+      app.kubernetes.io/component: primary
+  template:
+    metadata:
+      name: my-kestra-postgresql
+      labels:
+        app.kubernetes.io/name: postgresql
+        helm.sh/chart: postgresql-12.2.8
+        app.kubernetes.io/instance: my-kestra
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/component: primary
+    spec:
+      serviceAccountName: default
+      
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: postgresql
+                    app.kubernetes.io/instance: my-kestra
+                    app.kubernetes.io/component: primary
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+      hostNetwork: false
+      hostIPC: false
+      containers:
+        - name: postgresql
+          image: docker.io/bitnami/postgresql:15.2.0-debian-11-r21
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            runAsUser: 1001
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: POSTGRESQL_PORT_NUMBER
+              value: "5432"
+            - name: POSTGRESQL_VOLUME_DIR
+              value: "/bitnami/postgresql"
+            - name: PGDATA
+              value: "/bitnami/postgresql/data"
+            # Authentication
+            - name: POSTGRES_USER
+              value: "kestra"
+            - name: POSTGRES_POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-kestra-postgresql
+                  key: postgres-password
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-kestra-postgresql
+                  key: password
+            - name: POSTGRES_DB
+              value: "kestra"
+            # Replication
+            # Initdb
+            # Standby
+            # LDAP
+            - name: POSTGRESQL_ENABLE_LDAP
+              value: "no"
+            # TLS
+            - name: POSTGRESQL_ENABLE_TLS
+              value: "no"
+            # Audit
+            - name: POSTGRESQL_LOG_HOSTNAME
+              value: "false"
+            - name: POSTGRESQL_LOG_CONNECTIONS
+              value: "false"
+            - name: POSTGRESQL_LOG_DISCONNECTIONS
+              value: "false"
+            - name: POSTGRESQL_PGAUDIT_LOG_CATALOG
+              value: "off"
+            # Others
+            - name: POSTGRESQL_CLIENT_MIN_MESSAGES
+              value: "error"
+            - name: POSTGRESQL_SHARED_PRELOAD_LIBRARIES
+              value: "pgaudit"
+          ports:
+            - name: tcp-postgresql
+              containerPort: 5432
+          livenessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - exec pg_isready -U "kestra" -d "dbname=kestra" -h 127.0.0.1 -p 5432
+          readinessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - -e
+                
+                - |
+                  exec pg_isready -U "kestra" -d "dbname=kestra" -h 127.0.0.1 -p 5432
+                  [ -f /opt/bitnami/postgresql/tmp/.initialized ] || [ -f /bitnami/postgresql/.initialized ]
+          resources:
+            limits: {}
+            requests:
+              cpu: 250m
+              memory: 256Mi
+          volumeMounts:
+            - name: dshm
+              mountPath: /dev/shm
+            - name: data
+              mountPath: /bitnami/postgresql
+      volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "8Gi"
+---
+# Source: kestra/charts/minio/templates/post-install-create-bucket-job.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: my-kestra-minio-make-bucket-job
+  namespace: "default"
+  labels:
+    app: minio-make-bucket-job
+    chart: minio-4.1.0
+    release: my-kestra
+    heritage: Helm
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
+spec:
+  template:
+    metadata:
+      labels:
+        app: minio-job
+        release: my-kestra
+    spec:
+      restartPolicy: OnFailure      
+      volumes:
+        - name: minio-configuration
+          projected:
+            sources:
+            - configMap:
+                name: my-kestra-minio
+            - secret:
+                name: my-kestra-minio
+
+      serviceAccountName: minio-sa
+      containers:
+      - name: minio-mc
+        image: "quay.io/minio/mc:RELEASE.2022-10-20T23-26-33Z"
+        imagePullPolicy: IfNotPresent
+        command: ["/bin/sh", "/config/initialize"]
+        env:
+          - name: MINIO_ENDPOINT
+            value: my-kestra-minio
+          - name: MINIO_PORT
+            value: "9000"
+        volumeMounts:
+          - name: minio-configuration
+            mountPath: /config
+        resources:
+          requests:
+            memory: 128Mi
+---
+# Source: kestra/charts/minio/templates/post-install-create-user-job.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: my-kestra-minio-make-user-job
+  namespace: "default"
+  labels:
+    app: minio-make-user-job
+    chart: minio-4.1.0
+    release: my-kestra
+    heritage: Helm
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
+spec:
+  template:
+    metadata:
+      labels:
+        app: minio-job
+        release: my-kestra
+    spec:
+      restartPolicy: OnFailure      
+      volumes:
+        - name: minio-configuration
+          projected:
+            sources:
+            - configMap:
+                name: my-kestra-minio
+            - secret:
+                name: my-kestra-minio
+
+      serviceAccountName: minio-sa
+      containers:
+      - name: minio-mc
+        image: "quay.io/minio/mc:RELEASE.2022-10-20T23-26-33Z"
+        imagePullPolicy: IfNotPresent
+        command: ["/bin/sh", "/config/add-user"]
+        env:
+          - name: MINIO_ENDPOINT
+            value: my-kestra-minio
+          - name: MINIO_PORT
+            value: "9000"
+        volumeMounts:
+          - name: minio-configuration
+            mountPath: /config
+        resources:
+          requests:
+            memory: 128Mi

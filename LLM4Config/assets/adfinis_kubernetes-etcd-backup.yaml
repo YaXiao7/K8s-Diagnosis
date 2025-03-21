@@ -1,0 +1,65 @@
+---
+# Source: kubernetes-etcd-backup/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-kubernetes-etcd-backup
+  labels:
+    helm.sh/chart: kubernetes-etcd-backup-1.3.0
+    app.kubernetes.io/name: kubernetes-etcd-backup
+    app.kubernetes.io/instance: my-kubernetes-etcd-backup
+    app.kubernetes.io/version: "v1.0.6"
+    app.kubernetes.io/managed-by: Helm
+data:
+  ETCD_BACKUP_SUBDIR: "/"
+  ETCD_BACKUP_DIRNAME: "+etcd-backup-%FT%T%:z"
+  ETCD_BACKUP_EXPIRE_TYPE: "days"
+  ETCD_BACKUP_KEEP_DAYS: "30"
+  ETCD_BACKUP_KEEP_COUNT: "10"
+  ETCD_BACKUP_UMASK: "0027"
+  ENDPOINT: "changeme"
+---
+# Source: kubernetes-etcd-backup/templates/cronjob.yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: my-kubernetes-etcd-backup
+spec:
+  startingDeadlineSeconds: 600
+  schedule: "0 0 * * *"
+  jobTemplate:
+    spec:
+      # Retrying this job is not considered safe, because of that we fail the
+      # job immediately if the first execution fails.
+      backoffLimit: 0
+      template:
+        spec:
+          securityContext:
+              runAsUser: 1000
+              fsGroup: 1000
+          containers:
+          - command:
+            - /bin/sh
+            - /usr/local/bin/backup.sh
+            image: "ghcr.io/adfinis/kubernetes-etcd-backup:latest"
+            imagePullPolicy: Always
+            name: kubernetes-etcd-backup
+            envFrom:
+            - configMapRef:
+                name: my-kubernetes-etcd-backup
+            resources:
+              null
+            volumeMounts:
+            - name: etcd-peer-tls
+              mountPath: /etc/kubernetes/pki/etcd-peer
+            - name: etcd-server-ca
+              mountPath: /etc/kubernetes/pki/etcd-ca
+          restartPolicy: Never
+          volumes:
+          - name: etcd-peer-tls
+            secret:
+              secretName: changeme
+          - name: etcd-server-ca
+            secret:
+              secretName: changeme
+          - name: volume-backup

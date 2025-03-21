@@ -1,0 +1,159 @@
+---
+# Source: webhooks/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-webhooks
+  labels:
+    helm.sh/chart: webhooks-0.1.5
+    app.kubernetes.io/name: webhooks
+    app.kubernetes.io/instance: my-webhooks
+    app.kubernetes.io/version: "2.8.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: webhooks/templates/configmap.yaml
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: my-webhooks
+  labels:
+    helm.sh/chart: webhooks-0.1.5
+    app.kubernetes.io/name: webhooks
+    app.kubernetes.io/instance: my-webhooks
+    app.kubernetes.io/version: "2.8.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+  hooks.yaml: |
+---
+# Source: webhooks/templates/serviceaccount.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: "my-webhooks"
+rules:
+---
+# Source: webhooks/templates/serviceaccount.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+# This role binding allows "jane" to read pods in the "default" namespace.
+# You need to already have a Role named "pod-reader" in that namespace.
+kind: RoleBinding
+metadata:
+  name: "my-webhooks"
+subjects:
+- kind: ServiceAccount
+  name: "my-webhooks"
+roleRef:
+  # "roleRef" specifies the binding to a Role / ClusterRole
+  kind: Role #this must be Role or ClusterRole
+  name: "my-webhooks"
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: webhooks/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-webhooks
+  labels:
+    helm.sh/chart: webhooks-0.1.5
+    app.kubernetes.io/name: webhooks
+    app.kubernetes.io/instance: my-webhooks
+    app.kubernetes.io/version: "2.8.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9000
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: webhooks
+    app.kubernetes.io/instance: my-webhooks
+---
+# Source: webhooks/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-webhooks
+  labels:
+    helm.sh/chart: webhooks-0.1.5
+    app.kubernetes.io/name: webhooks
+    app.kubernetes.io/instance: my-webhooks
+    app.kubernetes.io/version: "2.8.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: webhooks
+      app.kubernetes.io/instance: my-webhooks
+  template:
+    metadata:
+      annotations:
+        checksum/config: c47d88edd33096c4b416df8d350bf13e63f54699024f8bfabe58663e466d6a8f
+      labels:
+        app.kubernetes.io/name: webhooks
+        app.kubernetes.io/instance: my-webhooks
+    spec:
+      serviceAccountName: my-webhooks
+      securityContext:
+        {}
+      containers:
+        - name: webhooks
+          securityContext:
+            {}
+          image: "ghcr.io/thecatlady/webhook:2.8.0"
+          imagePullPolicy: IfNotPresent
+          command: 
+            - /bin/sh
+            - -c
+            - |
+              cd /config
+              #### BEGIN STARTUP
+              #### STARTING WEBHOOKS
+              TINI_SUBREAPER=true /sbin/tini -- /usr/local/bin/webhook -verbose -hotreload -template -hooks=hooks.yaml
+          env:
+          ports:
+            - name: http
+              containerPort: 9000
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+            {}
+          volumeMounts:
+            - name: configs
+              mountPath: "/config/hooks.yaml"
+              subPath: "hooks.yaml"
+      volumes:
+        - name: configs
+          configMap:
+            name: my-webhooks
+            defaultMode: 0755
+---
+# Source: webhooks/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-webhooks-test-connection"
+  labels:
+    helm.sh/chart: webhooks-0.1.5
+    app.kubernetes.io/name: webhooks
+    app.kubernetes.io/instance: my-webhooks
+    app.kubernetes.io/version: "2.8.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-webhooks:9000']
+  restartPolicy: Never

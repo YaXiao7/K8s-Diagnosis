@@ -1,0 +1,76 @@
+---
+# Source: community-solid-server/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-community-solid-server
+  labels:
+    helm.sh/chart: community-solid-server-3.0.0
+    app.kubernetes.io/name: community-solid-server
+    app.kubernetes.io/instance: my-community-solid-server
+    app.kubernetes.io/version: "6.0.2"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: community-solid-server
+    app.kubernetes.io/instance: my-community-solid-server
+---
+# Source: community-solid-server/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-community-solid-server
+  labels:
+    helm.sh/chart: community-solid-server-3.0.0
+    app.kubernetes.io/name: community-solid-server
+    app.kubernetes.io/instance: my-community-solid-server
+    app.kubernetes.io/version: "6.0.2"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: community-solid-server
+      app.kubernetes.io/instance: my-community-solid-server
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: community-solid-server
+        app.kubernetes.io/instance: my-community-solid-server
+    spec:
+      enableServiceLinks: false
+      securityContext:
+        {}
+      containers:
+        - name: community-solid-server
+          securityContext:
+            {}
+          image: "docker.io/solidproject/community-server:6.0.2"
+          args:
+            - "-l"
+            - "info"
+            - "-b"
+            - "http://my-community-solid-server.default/"
+            - "-c"
+            - "config/default.json"
+          env:
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          resources:
+            limits: {}
+            requests: {}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          emptyDir: {}

@@ -1,0 +1,106 @@
+---
+# Source: syncserver/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-syncserver
+  labels:
+    helm.sh/chart: syncserver-1.0.3
+    app.kubernetes.io/name: syncserver
+    app.kubernetes.io/instance: my-syncserver
+    app.kubernetes.io/version: "latest"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: syncserver/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-syncserver
+data:
+  syncserver-secret: c3VwZXItc3Ryb25nLXNlY3JldA==
+---
+# Source: syncserver/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-syncserver
+  labels:
+    helm.sh/chart: syncserver-1.0.3
+    app.kubernetes.io/name: syncserver
+    app.kubernetes.io/instance: my-syncserver
+    app.kubernetes.io/version: "latest"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5000
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: syncserver
+    app.kubernetes.io/instance: my-syncserver
+---
+# Source: syncserver/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-syncserver
+  labels:
+    helm.sh/chart: syncserver-1.0.3
+    app.kubernetes.io/name: syncserver
+    app.kubernetes.io/instance: my-syncserver
+    app.kubernetes.io/version: "latest"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: syncserver
+      app.kubernetes.io/instance: my-syncserver
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: syncserver
+        app.kubernetes.io/instance: my-syncserver
+    spec:
+      serviceAccountName: my-syncserver
+      containers:
+        - name: syncserver
+          image: "mozilla/syncserver:latest"
+          imagePullPolicy: Always
+          env:
+            - name: HTTPS_METHOD
+              value: "noredirect"
+            - name: PORT
+              value: "5000"
+            - name: SYNCSERVER_ALLOW_NEW_USER
+              value: "false"
+            - name: SYNCSERVER_BATCH_UPLOAD_ENABLED
+              value: "true"
+            - name: SYNCSERVER_DEBUG_ENABLED
+              value: "false"
+            - name: SYNCSERVER_FORCE_WSGI_ENVIRON
+              value: "true"
+            - name: SYNCSERVER_PUBLIC_URL
+              value: "http://localhost:5000"
+            - name: SYNCSERVER_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: my-syncserver
+                  key: syncserver-secret
+            - name: SYNCSERVER_SQLURI
+              value: sqlite:////data/syncserver.db
+          ports:
+            - name: http
+              containerPort: 5000
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http

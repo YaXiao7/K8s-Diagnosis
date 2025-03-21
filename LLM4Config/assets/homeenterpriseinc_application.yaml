@@ -1,0 +1,71 @@
+---
+# Source: application/templates/denyEgressNetworkPolicy.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: application-egress
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: "application"
+      app.kubernetes.io/version: "v0.107.0-b.5"
+  policyTypes:
+    - Egress
+  egress:
+  - to:
+      - ipBlock:
+          cidr: 10.43.0.0/24
+      - ipBlock:
+          cidr: 10.42.0.0/24
+---
+# Source: application/templates/denyIngressNetworkPolicy.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: application-ingress
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: "application"
+      app.kubernetes.io/version: "v0.107.0-b.5"
+  policyTypes:
+    - Ingress
+  ingress:
+  - from:
+      - ipBlock:
+          cidr: 10.43.0.0/24
+      - ipBlock:
+          cidr: 10.42.0.0/24
+---
+# Source: application/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: application
+  labels:
+    helm.sh/chart: "application-0.1.27"
+    app.kubernetes.io/name: "application"
+    app.kubernetes.io/version: "v0.107.0-b.5"
+    app.kubernetes.io/component: "dns-server"
+    hostNetwork: "false"
+    internal-service: "true"
+    app.kubernetes.io/managed-by: "chynten"
+    tags.datadoghq.com/env: prod
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: "application"
+      app.kubernetes.io/version: "v0.107.0-b.5"
+  template:
+    metadata:
+      annotations:
+        checksum/config: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+        checksum/secret: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+      labels:
+        app.kubernetes.io/name: "application"
+        app.kubernetes.io/version: "v0.107.0-b.5"
+    spec:
+
+      containers:
+      volumes:

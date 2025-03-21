@@ -1,0 +1,166 @@
+---
+# Source: statsd-exporter/templates/networkpolicy.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:  
+  name: statsd-exporter-my-statsd-exporter
+  labels:
+    app: statsd-exporter
+    chart: statsd-exporter-0.0.11
+    release: my-statsd-exporter
+    heritage: Helm
+spec:
+  podSelector:
+    matchLabels:
+      app: statsd-exporter
+      release: my-statsd-exporter
+  policyTypes:
+    - Ingress
+  ingress:
+    # Allow prometheus to scrape the statsd-exporter
+    - ports:
+      - port: 9102
+        protocol: TCP
+    # Allow other pods to send statsd metrics via udp
+    - ports:
+      - port: 9125
+        protocol: UDP
+    - ports:
+      - port: 9125
+        protocol: TCP
+---
+# Source: statsd-exporter/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:  
+  name: statsd-exporter-my-statsd-exporter-statsd-configmap
+  labels:
+    app: statsd-exporter
+    chart: statsd-exporter-0.0.11
+    release: my-statsd-exporter
+    heritage: Helm
+data:
+  prometheus-statsd.conf: |-
+    defaults:
+      timer_type: histogram
+      buckets:
+      - 0.005
+      - 0.01
+      - 0.025
+      - 0.05
+      - 0.1
+      - 0.25
+      - 0.5
+      - 1
+      - 2.5
+      - 5
+      - 10
+      - 30
+      - 60
+      quantiles:
+      - quantile: 0.99
+        error: 0.001
+      - quantile: 0.95
+        error: 0.001
+      - quantile: 0.75
+        error: 0.001
+      - quantile: 0.5
+        error: 0.005
+    mappings: []
+---
+# Source: statsd-exporter/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:  
+  name: statsd-exporter-my-statsd-exporter
+  labels:
+    app: statsd-exporter
+    chart: statsd-exporter-0.0.11
+    release: my-statsd-exporter
+    heritage: Helm
+spec:
+  type: ClusterIP
+  # contrary to what we do usually, here we also specify the release name
+  # in the selector, because we might want to have multiple releases
+  # in the same namespace
+  selector:
+    app: statsd-exporter
+    release: my-statsd-exporter
+  ports:
+  - name: statsd
+    protocol: UDP
+    port: 9125
+    targetPort: 9125
+  - name: statsd-tcp
+    protocol: TCP
+    port: 9125
+    targetPort: 9125
+---
+# Source: statsd-exporter/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:  
+  name: statsd-exporter-my-statsd-exporter
+  labels:
+    app: statsd-exporter
+    chart: statsd-exporter-0.0.11
+    release: my-statsd-exporter
+    heritage: Helm
+spec:
+  selector:    
+    matchLabels:
+      app: statsd-exporter
+      release: my-statsd-exporter
+  replicas: 1
+  template:
+    metadata:
+      labels:        
+        app: statsd-exporter
+        release: my-statsd-exporter
+        routed_via: my-statsd-exporter
+      annotations:        
+        checksum/secrets: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+        prometheus.io/scrape_by_name: "true"        
+        checksum/prometheus-statsd: 97c47b7aa5971ed2fec44cfed72bb9dcbb1836d3af13f09feaf80eccd6919b0e
+    spec:
+      # TODO: add affinity rules to ensure even distribution across rows
+      containers:        
+        - name: statsd-exporter
+          image: docker-registry.wikimedia.org/prometheus-statsd-exporter:latest
+          imagePullPolicy: IfNotPresent
+          args: ['--statsd.listen-udp=0.0.0.0:9125', '--statsd.listen-tcp=0.0.0.0:9125', '--log.level=warn', '--statsd.mapping-config=/etc/monitoring/prometheus-statsd.conf']
+          resources:
+            requests:
+              cpu: 100m
+              memory: 200Mi
+            limits:
+              cpu: 200m
+              memory: 400Mi
+          volumeMounts:
+            - name: statsd-config
+              mountPath: /etc/monitoring
+              readOnly: true
+          ports:
+          - name: statsd-metrics
+            containerPort: 9102
+          - name: statsd-udp
+            containerPort: 9125
+            protocol: UDP
+          - name: statsd-tcp
+            containerPort: 9125
+            protocol: TCP
+          livenessProbe:
+            tcpSocket:
+              port: statsd-metrics  
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+               drop:
+               - ALL
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+      volumes:        
+        - name: statsd-config
+          configMap:
+            name: statsd-exporter-my-statsd-exporter-statsd-configmap

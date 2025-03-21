@@ -1,0 +1,71 @@
+---
+# Source: static/templates/common.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-static
+  labels:
+    helm.sh/chart: static-1.0.0
+    app.kubernetes.io/name: static
+    app.kubernetes.io/instance: my-static
+    app.kubernetes.io/version: "ee8a20c"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8000
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: static
+    app.kubernetes.io/instance: my-static
+---
+# Source: static/templates/common.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-static
+  labels:
+    helm.sh/chart: static-1.0.0
+    app.kubernetes.io/name: static
+    app.kubernetes.io/instance: my-static
+    app.kubernetes.io/version: "ee8a20c"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: static
+      app.kubernetes.io/instance: my-static
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: static
+        app.kubernetes.io/instance: my-static
+    spec:
+      serviceAccountName: default
+      dnsPolicy: ClusterFirst
+      containers:
+      - name: my-static
+        image: "ghcr.io/nicholaswilde/static:version-ee8a20c"
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 8000
+          protocol: TCP
+        volumeMounts:
+        livenessProbe:
+          tcpSocket:
+            port: http
+          initialDelaySeconds: 30
+          failureThreshold: 5
+          timeoutSeconds: 10
+        readinessProbe:
+          tcpSocket:
+            port: http
+          initialDelaySeconds: 30
+          failureThreshold: 5
+          timeoutSeconds: 10

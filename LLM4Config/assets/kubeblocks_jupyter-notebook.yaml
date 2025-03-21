@@ -1,0 +1,92 @@
+---
+# Source: jupyter-notebook/templates/jupyterPVC.yaml
+# persistentvolumeclaim.yaml
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: my-jupyter-notebook-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+# Source: jupyter-notebook/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: jupyter-notebook
+  labels:
+    helm.sh/chart: jupyter-notebook-0.7.5
+    app.kubernetes.io/name: jupyter-notebook
+    app.kubernetes.io/instance: my-jupyter-notebook
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8888
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: jupyter-notebook
+    app.kubernetes.io/instance: my-jupyter-notebook
+---
+# Source: jupyter-notebook/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-jupyter-notebook
+  labels:
+    helm.sh/chart: jupyter-notebook-0.7.5
+    app.kubernetes.io/name: jupyter-notebook
+    app.kubernetes.io/instance: my-jupyter-notebook
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: jupyter-notebook
+      app.kubernetes.io/instance: my-jupyter-notebook
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: jupyter-notebook
+        app.kubernetes.io/instance: my-jupyter-notebook
+    spec:
+      initContainers:
+        - name: init-container
+          image: infracreate-registry.cn-zhangjiakou.cr.aliyuncs.com/apecloud/jupyter-notebook-llm:beta2
+          command:
+            - /bin/sh
+            - -c
+            - |
+              cp /tmp/docs-QA-assistantor.ipynb /home/jovyan/work
+              chmod 777 /home/jovyan/work/docs-QA-assistantor.ipynb
+          volumeMounts:
+            - name: data-volume
+              mountPath: /home/jovyan/work
+      containers:
+        - name: jupyter-notebook
+          image: infracreate-registry.cn-zhangjiakou.cr.aliyuncs.com/apecloud/jupyter-notebook-llm:beta2
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8888
+              protocol: TCP
+          resources:
+            {}
+          volumeMounts:
+            - name: data-volume
+              mountPath: /home/jovyan/work
+          env:
+            - name: JUPYTER_PORT
+              value: "8888"
+            - name: NOTEBOOK_ARGS
+              value: "--NotebookApp.token='' "
+      volumes:
+        - name: data-volume
+          persistentVolumeClaim:
+            claimName: my-jupyter-notebook-pvc

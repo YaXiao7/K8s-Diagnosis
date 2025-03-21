@@ -1,0 +1,240 @@
+---
+# Source: daml-http-json/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-daml-http-json
+  labels:
+    app.kubernetes.io/component: http-json
+    app.kubernetes.io/instance: my-daml-http-json
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: daml-http-json
+    app.kubernetes.io/part-of: daml
+    app.kubernetes.io/version: 2.8.1
+    helm.sh/chart: daml-http-json-0.6.1
+automountServiceAccountToken: false
+secrets:
+---
+# Source: daml-http-json/templates/configmap-env.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-daml-http-json-envmap
+  labels:
+    app.kubernetes.io/component: http-json
+    app.kubernetes.io/instance: my-daml-http-json
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: daml-http-json
+    app.kubernetes.io/part-of: daml
+    app.kubernetes.io/version: 2.8.1
+    helm.sh/chart: daml-http-json-0.6.1
+data:
+  JDK_JAVA_OPTIONS: "-XX:+ExitOnOutOfMemoryError -XX:InitialRAMPercentage=70 -XX:MaxRAMPercentage=70"
+---
+# Source: daml-http-json/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-daml-http-json
+  labels:
+    app.kubernetes.io/component: http-json
+    app.kubernetes.io/instance: my-daml-http-json
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: daml-http-json
+    app.kubernetes.io/part-of: daml
+    app.kubernetes.io/version: 2.8.1
+    helm.sh/chart: daml-http-json-0.6.1
+data:
+  http-json.conf: |
+    {
+      server {
+        address = "0.0.0.0"
+        port = 3000
+      }
+
+      ledger-api {
+        address = "participant"
+        port = 4001
+      }
+      query-store {
+        base-config {
+          user = "json"
+          password = ${?PGPASSWORD}
+          driver = "org.postgresql.Driver"
+          url = "jdbc:postgresql://postgres:5432/json?ssl=true&sslmode=require"
+          pool-size = 10
+          min-idle = 4
+          idle-timeout = "10s"
+          connection-timeout = "60s"
+        }
+
+        start-mode = "create-and-start"
+      }
+
+      package-reload-interval = "5s"
+      max-inbound-message-size = 4194304
+      package-max-inbound-message-size = 4194304
+      max-template-id-cache-entries = 1000
+      health-timeout-seconds = 5
+
+      
+      websocket-config {
+        max-duration = "120m"
+        heartbeat-period = "5s"
+        mode = "shaping"
+      }
+      
+    }
+---
+# Source: daml-http-json/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: my-daml-http-json
+  namespace: "default"
+  labels:
+    app.kubernetes.io/component: http-json
+    app.kubernetes.io/instance: my-daml-http-json
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: daml-http-json
+    app.kubernetes.io/part-of: daml
+    app.kubernetes.io/version: 2.8.1
+    helm.sh/chart: daml-http-json-0.6.1
+---
+# Source: daml-http-json/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: my-daml-http-json
+  namespace: "default"
+  labels:
+    app.kubernetes.io/component: http-json
+    app.kubernetes.io/instance: my-daml-http-json
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: daml-http-json
+    app.kubernetes.io/part-of: daml
+    app.kubernetes.io/version: 2.8.1
+    helm.sh/chart: daml-http-json-0.6.1
+roleRef:
+  kind: Role
+  name: my-daml-http-json
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+  - kind: ServiceAccount
+    name: my-daml-http-json
+    namespace: "default"
+---
+# Source: daml-http-json/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-daml-http-json
+  labels:
+    app.kubernetes.io/component: http-json
+    app.kubernetes.io/instance: my-daml-http-json
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: daml-http-json
+    app.kubernetes.io/part-of: daml
+    app.kubernetes.io/version: 2.8.1
+    helm.sh/chart: daml-http-json-0.6.1
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      protocol: TCP
+      port: 7575
+      targetPort: http
+  selector:
+    app.kubernetes.io/instance: my-daml-http-json
+    app.kubernetes.io/name: daml-http-json
+---
+# Source: daml-http-json/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-daml-http-json
+  labels:
+    app.kubernetes.io/component: http-json
+    app.kubernetes.io/instance: my-daml-http-json
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: daml-http-json
+    app.kubernetes.io/part-of: daml
+    app.kubernetes.io/version: 2.8.1
+    helm.sh/chart: daml-http-json-0.6.1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: my-daml-http-json
+      app.kubernetes.io/name: daml-http-json
+  template:
+    metadata:
+      annotations:
+        "checksum/config": "96fc9ebcd6831b090ef705026094d4407ea5996c3e1cad9d2b5a5b2b1810003e"
+        "checksum/env": "47df34ca28f38fbb4164195b15cb6a291dd594754f68402ffd63caa034fbd699"
+        "checksum/secret": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+      labels:
+        app.kubernetes.io/component: http-json
+        app.kubernetes.io/instance: my-daml-http-json
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: daml-http-json
+        app.kubernetes.io/part-of: daml
+        app.kubernetes.io/version: 2.8.1
+        helm.sh/chart: daml-http-json-0.6.1
+    spec:
+      serviceAccountName: my-daml-http-json
+      securityContext:
+        fsGroup: 65532
+        fsGroupChangePolicy: Always
+        sysctls: []
+      containers:
+        - name: http-json
+          image: "digitalasset-docker.jfrog.io/http-json:2.8.1"
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            readOnlyRootFilesystem: true
+            runAsGroup: 65532
+            runAsNonRoot: true
+            runAsUser: 65532
+          args:
+            - "--log-level=INFO"
+            - "--log-encoder=plain"
+            - "--config=/etc/http-json/http-json.conf"
+          envFrom:
+            - configMapRef:
+                name: my-daml-http-json-envmap
+          ports:
+            - name: http
+              containerPort: 3000
+          resources:
+            limits:
+              cpu: 1
+              memory: 1Gi
+            requests:
+              cpu: 200m
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: http
+            timeoutSeconds: 1
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            timeoutSeconds: 1
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+          volumeMounts:
+            - name: config
+              mountPath: /etc/http-json
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: my-daml-http-json

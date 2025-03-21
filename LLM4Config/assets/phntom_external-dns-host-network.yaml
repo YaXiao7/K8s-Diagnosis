@@ -1,0 +1,139 @@
+---
+# Source: external-dns-host-network/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-external-dns-host-network
+  labels:
+    helm.sh/chart: external-dns-host-network-0.0.12
+    app.kubernetes.io/name: external-dns-host-network
+    app.kubernetes.io/instance: my-external-dns-host-network
+    app.kubernetes.io/version: "0.0.12"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: external-dns-host-network/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: "my-external-dns-host-network"
+  labels:
+    helm.sh/chart: external-dns-host-network-0.0.12
+    app.kubernetes.io/name: external-dns-host-network
+    app.kubernetes.io/instance: my-external-dns-host-network
+    app.kubernetes.io/version: "0.0.12"
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  LINODE_CLI_TOKEN: "eHh4"
+  CLOUDFLARE_TOKEN: "eHh4"
+---
+# Source: external-dns-host-network/templates/clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-external-dns-host-network
+  namespace: default
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - nodes
+      - pods
+    verbs:
+      - get
+      - list
+---
+# Source: external-dns-host-network/templates/clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-external-dns-host-network
+  namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-external-dns-host-network
+subjects:
+  - kind: ServiceAccount
+    name: my-external-dns-host-network
+    namespace: default
+---
+# Source: external-dns-host-network/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-external-dns-host-network
+  labels:
+    helm.sh/chart: external-dns-host-network-0.0.12
+    app.kubernetes.io/name: external-dns-host-network
+    app.kubernetes.io/instance: my-external-dns-host-network
+    app.kubernetes.io/version: "0.0.12"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: external-dns-host-network
+      app.kubernetes.io/instance: my-external-dns-host-network
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: external-dns-host-network
+        app.kubernetes.io/instance: my-external-dns-host-network
+    spec:
+      serviceAccountName: my-external-dns-host-network
+      securityContext:
+        {}
+      containers:
+        - name: external-dns-host-network
+          securityContext:
+            {}
+          image: "phntom/external-dns-host-network:0.0.12@sha256:3adadbac84432f603e3457ca4e663fbd448a439afba4eef8a2c55cc3d03739e2"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          livenessProbe:
+            exec:
+              command:
+                - find
+                - /tmp
+                - -name
+                - healthy
+                - -mtime
+                - "-0.001"
+          readinessProbe:
+            exec:
+              command:
+                - find
+                - /tmp
+                - -name
+                - healthy
+                - -mtime
+                - "-0.001"
+          resources:
+            {}
+          env:
+            - name: LINODE_CLI_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: my-external-dns-host-network
+                  key: LINODE_CLI_TOKEN
+            - name: LINODE_TAG
+              value: "test_linode_tag"
+            - name: SPECIAL_DOMAIN
+              value: "1337"
+            - name: SPECIAL_TARGET
+              value: "test_linode_target"
+            - name: CLOUDFLARE_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: my-external-dns-host-network
+                  key: CLOUDFLARE_TOKEN
+            - name: CLOUDFLARE_ZONE
+              value: "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+            - name: CLOUDFLARE_NAME
+              value: "test-cf.example.com"
+            - name: CLOUDFLARE_TTL
+              value: "60"

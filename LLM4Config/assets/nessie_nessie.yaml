@@ -1,0 +1,196 @@
+---
+# Source: nessie/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-nessie
+  labels:
+    helm.sh/chart: nessie-0.96.1
+    app.kubernetes.io/name: nessie
+    app.kubernetes.io/instance: my-nessie
+    app.kubernetes.io/version: "0.96.1"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: nessie/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-nessie
+  labels:
+    helm.sh/chart: nessie-0.96.1
+    app.kubernetes.io/name: nessie
+    app.kubernetes.io/instance: my-nessie
+    app.kubernetes.io/version: "0.96.1"
+    app.kubernetes.io/managed-by: Helm
+data:
+  application.properties: |-
+    nessie.version.store.persist.cache-invalidations.service-names=my-nessie-mgmt
+    nessie.version.store.persist.cache-invalidations.valid-tokens=f23b93744a15d9a8db22544c31881dfd9d0b7863
+    nessie.version.store.type=IN_MEMORY
+    quarkus.http.port=19120
+    quarkus.log.console.level=INFO
+    quarkus.log.file.level=INFO
+    quarkus.management.port=9000
+    quarkus.oidc.tenant-enabled=false
+    quarkus.otel.sdk.disabled=true
+---
+# Source: nessie/templates/management-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: "my-nessie-mgmt"
+  labels:
+    helm.sh/chart: nessie-0.96.1
+    app.kubernetes.io/name: nessie
+    app.kubernetes.io/instance: my-nessie
+    app.kubernetes.io/version: "0.96.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+    app.kubernetes.io/name: nessie
+    app.kubernetes.io/instance: my-nessie
+  ports:
+    - port: 9000
+      targetPort: 9000
+      protocol: TCP
+      name: nessie-mgmt
+  publishNotReadyAddresses: true
+  clusterIP: None
+---
+# Source: nessie/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-nessie
+  labels:
+    helm.sh/chart: nessie-0.96.1
+    app.kubernetes.io/name: nessie
+    app.kubernetes.io/instance: my-nessie
+    app.kubernetes.io/version: "0.96.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: nessie
+    app.kubernetes.io/instance: my-nessie
+  ports:
+    - port: 19120
+      targetPort: 19120
+      protocol: TCP
+      name: nessie-server
+  sessionAffinity: None
+---
+# Source: nessie/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-nessie
+  labels:
+    helm.sh/chart: nessie-0.96.1
+    app.kubernetes.io/name: nessie
+    app.kubernetes.io/instance: my-nessie
+    app.kubernetes.io/version: "0.96.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: nessie
+      app.kubernetes.io/instance: my-nessie
+  template:
+    metadata:
+      annotations:
+        projectnessie.org/config-checksum: f822359ba34bd758afbc7cb30ceeac58a4d56e75e10eaa69c4c0e236df3aeb08
+      labels:
+        app.kubernetes.io/name: nessie
+        app.kubernetes.io/instance: my-nessie
+    spec:
+      serviceAccountName: my-nessie
+      securityContext:
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: nessie
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsGroup: 10001
+            runAsNonRoot: true
+            runAsUser: 10000
+          image: "ghcr.io/projectnessie/nessie:0.96.1"
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - name: nessie-config
+              mountPath: /deployments/config/application.properties
+              subPath: application.properties
+              readOnly: true
+            - name: temp-dir
+              mountPath: /tmp
+          env:
+          ports:
+            - name: nessie-mgmt
+              containerPort: 9000
+              protocol: TCP
+            - name: nessie-server
+              containerPort: 19120
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /q/health/live
+              port: "nessie-mgmt"
+              scheme: HTTP
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+            timeoutSeconds: 10
+            terminationGracePeriodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /q/health/ready
+              port: "nessie-mgmt"
+              scheme: HTTP
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+            timeoutSeconds: 10
+
+          resources:
+            {}
+      volumes:
+        - name: nessie-config
+          configMap:
+            name: my-nessie
+        - name: temp-dir
+          emptyDir: {}
+---
+# Source: nessie/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-nessie-test-connection"
+  labels:
+    helm.sh/chart: nessie-0.96.1
+    app.kubernetes.io/name: nessie
+    app.kubernetes.io/instance: my-nessie
+    app.kubernetes.io/version: "0.96.1"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-nessie:19120']
+  initContainers:
+    - name: sleep
+      image: busybox
+      command: [ 'sleep', '10' ]
+  restartPolicy: Never

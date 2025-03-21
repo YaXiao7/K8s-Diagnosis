@@ -1,0 +1,197 @@
+---
+# Source: commonground-gateway-frontend/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-commonground-gateway-frontend
+  labels:
+    helm.sh/chart: commonground-gateway-frontend-0.1.0
+    app.kubernetes.io/name: commonground-gateway-frontend
+    app.kubernetes.io/instance: my-commonground-gateway-frontend
+    app.kubernetes.io/part-of: commonground-gateway-frontend
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+---
+# Source: commonground-gateway-frontend/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-commonground-gateway-frontend
+  labels:
+    helm.sh/chart: commonground-gateway-frontend-0.1.0
+    app.kubernetes.io/name: commonground-gateway-frontend
+    app.kubernetes.io/instance: my-commonground-gateway-frontend
+    app.kubernetes.io/part-of: commonground-gateway-frontend
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+  gateway-location: example
+  properties: |-
+      window.GATSBY_API_URL= "https://backend-bisc-dev.commonground.nu/api"
+      window.GATSBY_ADMIN_URL= "https://backend-bisc-dev.commonground.nu/admin"
+      window.GATSBY_ME_URL= "https://backend-bisc-dev.commonground.nu/api/users/me"
+      window.GATSBY_BASE_URL= "https://backend-bisc-dev.commonground.nu"
+      window.GATSBY_FRONTEND_URL= "https://admin-bisc-dev.commonground.nu"
+      window.GATSBY_ORGANIZATION= ""
+      window.GATSBY_LOGIN_REDIRECT= "vault"
+---
+# Source: commonground-gateway-frontend/templates/pwa-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-commonground-gateway-frontend
+  labels:
+    helm.sh/chart: commonground-gateway-frontend-0.1.0
+    app.kubernetes.io/name: commonground-gateway-frontend-pwa
+    app.kubernetes.io/instance: my-commonground-gateway-frontend
+    app.kubernetes.io/part-of: commonground-gateway-frontend
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  ports:
+    - port: 80
+      targetPort: 80
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: commonground-gateway-frontend-pwa
+    app.kubernetes.io/instance: my-commonground-gateway-frontend
+    app.kubernetes.io/part-of: commonground-gateway-frontend
+---
+# Source: commonground-gateway-frontend/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-commonground-gateway-frontend
+  labels:
+    helm.sh/chart: commonground-gateway-frontend-0.1.0
+    app.kubernetes.io/name: commonground-gateway-frontend-pwa
+    app.kubernetes.io/instance: my-commonground-gateway-frontend
+    app.kubernetes.io/part-of: commonground-gateway-frontend
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: commonground-gateway-frontend-pwa
+      app.kubernetes.io/instance: my-commonground-gateway-frontend
+      app.kubernetes.io/part-of: commonground-gateway-frontend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: commonground-gateway-frontend-pwa
+        app.kubernetes.io/instance: my-commonground-gateway-frontend
+        app.kubernetes.io/part-of: commonground-gateway-frontend
+    spec:
+      securityContext:
+        {}
+      volumes:
+          - name: env
+            configMap:
+                name: my-commonground-gateway-frontend
+                items:
+                    - key: "properties"
+                      path: "env.js"
+      containers:
+        - name: commonground-gateway-frontend-pwa
+          securityContext:
+            {}
+          image: "ghcr.io/conductionnl/commonground-gateway-frontend:dev"
+          imagePullPolicy: Always
+          volumeMounts:
+              -   name: env
+                  mountPath: "/usr/share/nginx/html/env.js"
+                  subPath: "env.js"
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+            {}
+---
+# Source: commonground-gateway-frontend/templates/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: my-commonground-gateway-frontend
+  labels:
+    helm.sh/chart: commonground-gateway-frontend-0.1.0
+    app.kubernetes.io/name: commonground-gateway-frontend
+    app.kubernetes.io/instance: my-commonground-gateway-frontend
+    app.kubernetes.io/part-of: commonground-gateway-frontend
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: admin-bisc-dev.commonground.nu
+      http:
+        paths:
+          - path: /api
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: my-commonground-gateway-frontend-commonground-gateway
+                port:
+                  number: 80
+          - path: /digid
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: my-commonground-gateway-frontend-commonground-gateway
+                port:
+                  number: 80
+          - path: /saml
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: my-commonground-gateway-frontend-commonground-gateway
+                port:
+                  number: 80
+          - path: /login
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: my-commonground-gateway-frontend-commonground-gateway
+                port:
+                  number: 80
+          - path: /
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: my-commonground-gateway-frontend
+                port:
+                  number: 80
+---
+# Source: commonground-gateway-frontend/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-commonground-gateway-frontend-test-connection"
+  labels:
+    helm.sh/chart: commonground-gateway-frontend-0.1.0
+    app.kubernetes.io/name: commonground-gateway-frontend
+    app.kubernetes.io/instance: my-commonground-gateway-frontend
+    app.kubernetes.io/part-of: commonground-gateway-frontend
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-commonground-gateway-frontend:80']
+  restartPolicy: Never

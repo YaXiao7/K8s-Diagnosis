@@ -1,0 +1,2411 @@
+---
+# Source: maesh/charts/metrics/templates/grafana-pdb.yaml
+apiVersion: policy/v1beta1
+kind: PodDisruptionBudget
+metadata:
+  name: grafana
+  labels:
+    app: "my-maesh"
+    chart: "metrics-0.1.0"
+    release: "my-maesh"
+    heritage: "Helm"
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: grafana
+      component: core
+---
+# Source: maesh/charts/metrics/templates/prometheus-pdb.yaml
+apiVersion: policy/v1beta1
+kind: PodDisruptionBudget
+metadata:
+  name: prometheus
+  labels:
+    app: "my-maesh"
+    chart: "metrics-0.1.0"
+    release: "my-maesh"
+    heritage: "Helm"
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: prometheus
+      component: core
+---
+# Source: maesh/charts/tracing/templates/jaeger-pdb.yaml
+apiVersion: policy/v1beta1
+kind: PodDisruptionBudget
+metadata:
+  name: jaeger
+  labels:
+    app: "my-maesh"
+    chart: "tracing-0.0.3"
+    release: "my-maesh"
+    heritage: "Helm"
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: jaeger
+      app.kubernetes.io/name: jaeger
+      app.kubernetes.io/component: all-in-one
+---
+# Source: maesh/templates/controller/controller-pdb.yaml
+apiVersion: policy/v1beta1
+kind: PodDisruptionBudget
+metadata:
+  name: maesh-controller
+  namespace: default
+  labels:
+    app: "my-maesh"
+    chart: "maesh-2.1.2"
+    release: "my-maesh"
+    heritage: "Helm"
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: "my-maesh"
+      component: controller
+      release: "my-maesh"
+---
+# Source: maesh/templates/mesh/mesh-pdb.yaml
+apiVersion: policy/v1beta1
+kind: PodDisruptionBudget
+metadata:
+  name: maesh-mesh
+  namespace: default
+  labels:
+    app: "my-maesh"
+    chart: "maesh-2.1.2"
+    release: "my-maesh"
+    heritage: "Helm"
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: "my-maesh"
+      component: maesh-mesh
+      release: "my-maesh"
+---
+# Source: maesh/charts/metrics/templates/rbac.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus-k8s
+  namespace: default
+  labels:
+    chart: "metrics-0.1.0"
+    release: "my-maesh"
+    heritage: "Helm"
+---
+# Source: maesh/charts/metrics/templates/rbac.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: grafana-k8s
+  namespace: default
+  labels:
+    chart: "metrics-0.1.0"
+    release: "my-maesh"
+    heritage: "Helm"
+---
+# Source: maesh/charts/tracing/templates/jaeger-sa.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: jaeger
+  namespace: default
+  labels:
+    app: "my-maesh"
+    chart: "tracing-0.0.3"
+    release: "my-maesh"
+    heritage: "Helm"
+automountServiceAccountToken: false
+---
+# Source: maesh/templates/controller/controller-sa.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: maesh-controller
+  namespace: default
+  labels:
+    app: "my-maesh"
+    chart: "maesh-2.1.2"
+    release: "my-maesh"
+    heritage: "Helm"
+---
+# Source: maesh/templates/mesh/mesh-sa.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: maesh-mesh
+  namespace: default
+  labels:
+    app: "my-maesh"
+    chart: "maesh-2.1.2"
+    release: "my-maesh"
+    heritage: "Helm"
+---
+# Source: maesh/charts/metrics/templates/grafana.yaml
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: grafana-config
+  namespace: default
+  labels:
+    app: "my-maesh"
+    chart: "metrics-0.1.0"
+    release: "my-maesh"
+    heritage: "Helm"
+    component: grafana
+data:
+  grafana.ini: |-
+    instance_name = containous-grafana
+
+    [auth]
+    disable_login_form = true
+
+    [auth.anonymous]
+    enabled = true
+    org_role = Admin
+
+    [auth.basic]
+    enabled = false
+
+    [analytics]
+    check_for_updates = false
+  datasources.yaml: |-
+    apiVersion: 1
+    datasources:
+    - name: prometheus
+      type: prometheus
+      orgId: 1
+      url: http://prometheus.default.svc.cluster.local:9090
+      isDefault: true
+      access: proxy
+      jsonData:
+        timeInterval: "5s"
+      version: 1
+      editable: true
+
+  dashboards.yaml: |-
+    apiVersion: 1
+    providers:
+    - name: 'default'
+      orgId: 1
+      folder: ''
+      type: file
+      disableDeletion: true
+      editable: true
+      options:
+        path: /var/lib/grafana/dashboards
+        homeDashboardId: maesh
+---
+# Source: maesh/charts/metrics/templates/grafana.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-traefik
+  namespace: default
+  labels:
+    component: grafana
+data:
+  traefik.json: '{
+  "__inputs": [
+    {
+      "name": "prometheus",
+      "label": "prometheus",
+      "description": "",
+      "type": "datasource",
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
+    }
+  ],
+  "__requires": [
+    {
+      "type": "grafana",
+      "id": "grafana",
+      "name": "Grafana",
+      "version": "5.1.1"
+    },
+    {
+      "type": "panel",
+      "id": "graph",
+      "name": "Graph",
+      "version": "5.0.0"
+    },
+    {
+      "type": "datasource",
+      "id": "prometheus",
+      "name": "Prometheus",
+      "version": "5.0.0"
+    }
+  ],
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "Traefik dashboard prometheus",
+  "editable": true,
+  "gnetId": 4475,
+  "graphTooltip": 1,
+  "id": null,
+  "iteration": 1527284418552,
+  "links": [],
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 21,
+      "panels": [],
+      "title": "General",
+      "type": "row"
+    },
+    {
+      "aliasColors": {
+        "Latency over 1 min": "rgb(9, 116, 190)",
+        "Latency over 5 min": "#bf1b00"
+      },
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": "prometheus",
+      "fill": 2,
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 1
+      },
+      "id": 11,
+      "legend": {
+        "avg": true,
+        "current": false,
+        "max": true,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 2,
+      "links": [],
+      "nullPointMode": "null as zero",
+      "percentage": false,
+      "pointradius": 5,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [
+        {
+          "alias": "Latency over 5 min",
+          "yaxis": 1
+        }
+      ],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.$percentiles, sum(rate(traefik_entrypoint_request_duration_seconds_bucket{code=\"200\",method=\"GET\"}[5m])) by (le))",
+          "format": "time_series",
+          "hide": false,
+          "intervalFactor": 1,
+          "legendFormat": "Latency over 1 min",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "Global latency $percentiles th perc over 5 min",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "s",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": "0",
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": false
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": "prometheus",
+      "fill": 1,
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 8
+      },
+      "id": 29,
+      "legend": {
+        "alignAsTable": true,
+        "avg": true,
+        "current": false,
+        "max": true,
+        "min": false,
+        "rightSide": true,
+        "show": true,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null",
+      "percentage": false,
+      "pointradius": 5,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.$percentiles, rate(traefik_entrypoint_request_duration_seconds_bucket{code=\"200\",method=\"GET\"}[5m]))",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "{{ instance }}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "Per node latency $percentiles th perc over 5 min",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "s",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": "0",
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": false
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 15
+      },
+      "id": 17,
+      "panels": [
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": null,
+          "fill": 7,
+          "gridPos": {
+            "h": 7,
+            "w": 12,
+            "x": 0,
+            "y": 2
+          },
+          "id": 19,
+          "legend": {
+            "alignAsTable": true,
+            "avg": true,
+            "current": true,
+            "max": true,
+            "min": false,
+            "rightSide": true,
+            "show": true,
+            "sort": "avg",
+            "sortDesc": true,
+            "total": false,
+            "values": true
+          },
+          "lines": true,
+          "linewidth": 1,
+          "links": [],
+          "nullPointMode": "null",
+          "percentage": false,
+          "pointradius": 5,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": true,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "sum(traefik_entrypoint_open_connections) by (method)",
+              "format": "time_series",
+              "intervalFactor": 1,
+              "legendFormat": "{{ method }}",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "Open Connections",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": false
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": null,
+          "fill": 1,
+          "gridPos": {
+            "h": 7,
+            "w": 12,
+            "x": 12,
+            "y": 2
+          },
+          "id": 22,
+          "legend": {
+            "alignAsTable": true,
+            "avg": true,
+            "current": true,
+            "max": true,
+            "min": false,
+            "rightSide": true,
+            "show": true,
+            "total": false,
+            "values": true
+          },
+          "lines": true,
+          "linewidth": 1,
+          "links": [],
+          "nullPointMode": "null",
+          "percentage": false,
+          "pointradius": 5,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "sum(rate(traefik_entrypoint_request_duration_seconds_bucket{le=\"0.1\",code=\"200\"}[5m])) by (job) / sum(rate(traefik_entrypoint_request_duration_seconds_count{code=\"200\"}[5m])) by (job)",
+              "format": "time_series",
+              "intervalFactor": 1,
+              "legendFormat": "Code 200",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "Apdex score (over 5 min)",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": false
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        }
+      ],
+      "title": "Frontends (entrypoints)",
+      "type": "row"
+    },
+    {
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 16
+      },
+      "id": 24,
+      "panels": [
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": null,
+          "fill": 7,
+          "gridPos": {
+            "h": 7,
+            "w": 12,
+            "x": 0,
+            "y": 3
+          },
+          "id": 25,
+          "legend": {
+            "alignAsTable": true,
+            "avg": true,
+            "current": true,
+            "max": true,
+            "min": false,
+            "rightSide": true,
+            "show": true,
+            "sort": "avg",
+            "sortDesc": true,
+            "total": false,
+            "values": true
+          },
+          "lines": true,
+          "linewidth": 1,
+          "links": [],
+          "nullPointMode": "null",
+          "percentage": false,
+          "pointradius": 5,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": true,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "sum(traefik_service_open_connections) by (method)",
+              "format": "time_series",
+              "intervalFactor": 1,
+              "legendFormat": "{{ method }}",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "Open Connections",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": false
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": null,
+          "fill": 1,
+          "gridPos": {
+            "h": 7,
+            "w": 12,
+            "x": 12,
+            "y": 3
+          },
+          "id": 26,
+          "legend": {
+            "alignAsTable": true,
+            "avg": true,
+            "current": true,
+            "max": true,
+            "min": false,
+            "rightSide": true,
+            "show": true,
+            "total": false,
+            "values": true
+          },
+          "lines": true,
+          "linewidth": 1,
+          "links": [],
+          "nullPointMode": "null",
+          "percentage": false,
+          "pointradius": 5,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "sum(rate(traefik_service_request_duration_seconds_bucket{le=\"0.1\",code=\"200\"}[5m])) by (job) / sum(rate(traefik_service_request_duration_seconds_count{code=\"200\"}[5m])) by (job)",
+              "format": "time_series",
+              "intervalFactor": 1,
+              "legendFormat": "Code 200",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "Apdex score (over 5 min)",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": false
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        }
+      ],
+      "title": "Services",
+      "type": "row"
+    },
+    {
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 17
+      },
+      "id": 15,
+      "panels": [
+        {
+          "aliasColors": {},
+          "bars": true,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "prometheus",
+          "fill": 1,
+          "gridPos": {
+            "h": 9,
+            "w": 12,
+            "x": 0,
+            "y": 4
+          },
+          "id": 5,
+          "legend": {
+            "alignAsTable": true,
+            "avg": true,
+            "current": true,
+            "max": true,
+            "min": false,
+            "rightSide": true,
+            "show": true,
+            "sort": "avg",
+            "sortDesc": true,
+            "total": false,
+            "values": true
+          },
+          "lines": false,
+          "linewidth": 1,
+          "links": [],
+          "nullPointMode": "null",
+          "percentage": false,
+          "pointradius": 5,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": true,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "sum(rate(traefik_service_requests_total{code=~\"2..\"}[5m])) by (method, code)",
+              "format": "time_series",
+              "intervalFactor": 2,
+              "legendFormat": "{{method}} : {{code}}",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "Status code 2xx over 5min",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": true,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "prometheus",
+          "fill": 1,
+          "gridPos": {
+            "h": 9,
+            "w": 12,
+            "x": 12,
+            "y": 4
+          },
+          "id": 27,
+          "legend": {
+            "alignAsTable": true,
+            "avg": false,
+            "current": true,
+            "max": true,
+            "min": true,
+            "rightSide": true,
+            "show": true,
+            "total": false,
+            "values": true
+          },
+          "lines": false,
+          "linewidth": 1,
+          "links": [],
+          "nullPointMode": "null",
+          "percentage": false,
+          "pointradius": 5,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": true,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "sum(rate(traefik_service_requests_total{code=~\"5..\"}[5m])) by (method, code)",
+              "format": "time_series",
+              "intervalFactor": 2,
+              "legendFormat": "{{method}} : {{code}}",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "Status code 5xx over 5min",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": false
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": true,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "prometheus",
+          "fill": 1,
+          "gridPos": {
+            "h": 9,
+            "w": 12,
+            "x": 0,
+            "y": 13
+          },
+          "id": 3,
+          "legend": {
+            "alignAsTable": true,
+            "avg": true,
+            "current": true,
+            "max": true,
+            "min": false,
+            "rightSide": true,
+            "show": true,
+            "sort": "avg",
+            "sortDesc": true,
+            "total": false,
+            "values": true
+          },
+          "lines": false,
+          "linewidth": 1,
+          "links": [],
+          "nullPointMode": "null",
+          "percentage": false,
+          "pointradius": 5,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "sum(rate(traefik_service_requests_total[1m])) by (service)",
+              "format": "time_series",
+              "intervalFactor": 2,
+              "legendFormat": "{{ service }}",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "Service total requests over 1min per service",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": true,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "prometheus",
+          "fill": 1,
+          "gridPos": {
+            "h": 9,
+            "w": 12,
+            "x": 12,
+            "y": 13
+          },
+          "id": 6,
+          "legend": {
+            "alignAsTable": true,
+            "avg": false,
+            "current": true,
+            "max": true,
+            "min": true,
+            "rightSide": true,
+            "show": true,
+            "sortDesc": false,
+            "total": false,
+            "values": true
+          },
+          "lines": false,
+          "linewidth": 1,
+          "links": [],
+          "nullPointMode": "null",
+          "percentage": false,
+          "pointradius": 5,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": true,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "sum(rate(traefik_service_requests_total{code!~\"2..|5..\"}[5m])) by (method, code)",
+              "format": "time_series",
+              "intervalFactor": 2,
+              "legendFormat": "{{ method }} : {{code}}",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "Others status code over 5min",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        }
+      ],
+      "title": "HTTP Codes  stats",
+      "type": "row"
+    }
+  ],
+  "schemaVersion": 16,
+  "style": "dark",
+  "tags": [
+    "traefik"
+  ],
+  "templating": {
+    "list": [
+      {
+        "allValue": null,
+        "current": {
+          "selected": true,
+          "tags": [],
+          "text": "99",
+          "value": "99"
+        },
+        "hide": 0,
+        "includeAll": false,
+        "label": null,
+        "multi": false,
+        "name": "percentiles",
+        "options": [
+          {
+            "selected": false,
+            "text": "95",
+            "value": "95"
+          },
+          {
+            "selected": true,
+            "text": "99",
+            "value": "99"
+          }
+        ],
+        "query": "95,99",
+        "type": "custom"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "timepicker": {
+    "refresh_intervals": [
+      "5s",
+      "10s",
+      "30s",
+      "1m",
+      "5m",
+      "15m",
+      "30m",
+      "1h",
+      "2h",
+      "1d"
+    ],
+    "time_options": [
+      "5m",
+      "15m",
+      "1h",
+      "6h",
+      "12h",
+      "24h",
+      "2d",
+      "7d",
+      "30d"
+    ]
+  },
+  "timezone": "",
+  "title": "Traefik",
+  "uid": "traefik",
+  "version": 1
+}
+'
+---
+# Source: maesh/charts/metrics/templates/prometheus.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  creationTimestamp: null
+  name: prometheus-rules
+  namespace: default
+  labels:
+    app: "my-maesh"
+    chart: "metrics-0.1.0"
+    release: "my-maesh"
+    heritage: "Helm"
+    component: prometheus
+data:
+  general.yaml: |
+    groups:
+      - name: general
+        rules:
+          - record: job:http_duration_seconds:p99:5m
+            expr: histogram_quantile(0.99, sum(rate(http_duration_seconds_bucket[5m])) by (job, le))
+          - record: job:http_duration_seconds:p90:5m
+            expr: histogram_quantile(0.90, sum(rate(http_duration_seconds_bucket[5m])) by (job, le))
+          - record: job:http_duration_seconds:p50:5m
+            expr: histogram_quantile(0.50, sum(rate(http_duration_seconds_bucket[5m])) by (job, le))
+---
+# Source: maesh/charts/metrics/templates/prometheus.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-core
+  namespace: default
+  labels:
+    app: "my-maesh"
+    chart: "metrics-0.1.0"
+    release: "my-maesh"
+    heritage: "Helm"
+    component: prometheus
+data:
+  prometheus.yaml: |
+    global:
+      scrape_interval: 10s
+      scrape_timeout: 10s
+      evaluation_interval: 10s
+    rule_files:
+      - "/prometheus/rules/*.yaml"
+
+    scrape_configs:
+      - job_name: 'maesh'
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: true
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+            # Add the version label extracted from the pod label version.
+          - source_labels: [__meta_kubernetes_pod_label_version]
+            action: replace
+            replacement: $1
+            target_label: version
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names:
+                - default
+---
+# Source: maesh/charts/metrics/templates/storage.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: metrics-storage
+  namespace: default
+  labels:
+    chart: "metrics-0.1.0"
+    release: "my-maesh"
+    heritage: "Helm"
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+---
+# Source: maesh/charts/metrics/templates/storage.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prometheus-storage
+  namespace: default
+  labels:
+    chart: "metrics-0.1.0"
+    release: "my-maesh"
+    heritage: "Helm"
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+---
+# Source: maesh/charts/metrics/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRole
+metadata:
+  name: prometheus
+  labels:
+    chart: "metrics-0.1.0"
+    release: "my-maesh"
+    heritage: "Helm"
+rules:
+- apiGroups: [""]
+  resources:
+  - nodes
+  - services
+  - endpoints
+  - pods
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources:
+  - configmaps
+  verbs: ["get"]
+- nonResourceURLs: ["/metrics"]
+  verbs: ["get"]
+- apiGroups: ["extensions"]
+  resources:
+    - ingresses
+  verbs: ["get", "list", "watch"]
+---
+# Source: maesh/templates/controller/controller-rbac.yaml
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: maesh-controller-role
+  namespace: default
+  labels:
+    app: "my-maesh"
+    chart: "maesh-2.1.2"
+    release: "my-maesh"
+    heritage: "Helm"
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+      - endpoints
+    verbs:
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - namespaces
+    verbs:
+      - get
+      - create
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+    verbs:
+      - get
+      - create
+      - update
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - services
+    verbs:
+      - get
+      - list
+      - watch
+      - delete
+      - create
+      - update
+  - apiGroups:
+      - apps
+    resources:
+      - deployments
+    verbs:
+      - get
+      - update
+      - create
+  - apiGroups:
+      - access.smi-spec.io
+      - specs.smi-spec.io
+      - split.smi-spec.io
+    resources:
+      - traffictargets
+      - tcproutes
+      - httproutegroups
+      - trafficsplits
+      - events
+    verbs:
+      - get
+      - list
+      - watch
+---
+# Source: maesh/templates/mesh/mesh-rbac.yaml
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: maesh-mesh-role
+  namespace: default
+  labels:
+    app: "my-maesh"
+    chart: "maesh-2.1.2"
+    release: "my-maesh"
+    heritage: "Helm"
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+      - services
+    verbs:
+      - list
+---
+# Source: maesh/charts/metrics/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus
+  labels:
+    chart: "metrics-0.1.0"
+    release: "my-maesh"
+    heritage: "Helm"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus
+subjects:
+- kind: ServiceAccount
+  name: prometheus-k8s
+  namespace: default
+---
+# Source: maesh/templates/controller/controller-rbac.yaml
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: maesh-controller
+  namespace: default
+  labels:
+    app: "my-maesh"
+    chart: "maesh-2.1.2"
+    release: "my-maesh"
+    heritage: "Helm"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: maesh-controller-role
+subjects:
+- kind: ServiceAccount
+  name: maesh-controller
+  namespace: default
+---
+# Source: maesh/templates/mesh/mesh-rbac.yaml
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: maesh-mesh
+  namespace: default
+  labels:
+    app: "my-maesh"
+    chart: "maesh-2.1.2"
+    release: "my-maesh"
+    heritage: "Helm"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: maesh-mesh-role
+subjects:
+  - kind: ServiceAccount
+    name: maesh-mesh
+    namespace: default
+---
+# Source: maesh/charts/metrics/templates/grafana.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: default
+  labels:
+    app: "my-maesh"
+    chart: "metrics-0.1.0"
+    release: "my-maesh"
+    heritage: "Helm"
+    component: grafana
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3000
+      targetPort: web
+  selector:
+    app: grafana
+    component: core
+---
+# Source: maesh/charts/metrics/templates/prometheus.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: default
+  labels:
+    app: "my-maesh"
+    chart: "metrics-0.1.0"
+    release: "my-maesh"
+    heritage: "Helm"
+    component: prometheus
+  annotations:
+    prometheus.io/scrape: 'true'
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9090
+      targetPort: webui
+      protocol: TCP
+      name: webui
+  selector:
+    app: prometheus
+    component: core
+---
+# Source: maesh/charts/tracing/templates/jaeger-services.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: jaeger-query
+  namespace: default
+  labels:
+    app: jaeger
+    app.kubernetes.io/name: jaeger
+    app.kubernetes.io/component: query
+spec:
+  ports:
+    - name: query-http
+      protocol: TCP
+      port: 16686
+      targetPort: serve-frontend
+  selector:
+    app.kubernetes.io/name: jaeger
+    app.kubernetes.io/component: all-in-one
+  type: ClusterIP
+---
+# Source: maesh/charts/tracing/templates/jaeger-services.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: jaeger-collector
+  namespace: default
+  labels:
+    app: jaeger
+    app.kubernetes.io/name: jaeger
+    app.kubernetes.io/component: collector
+spec:
+  ports:
+    - name: jaeger-collector-tchannel
+      port: 14267
+      protocol: TCP
+      targetPort: collector-tch
+    - name: jaeger-collector-http
+      port: 14268
+      protocol: TCP
+      targetPort: collector-http
+    - name: jaeger-collector-zipkin
+      port: 9411
+      protocol: TCP
+      targetPort: collector-zip
+  selector:
+    app.kubernetes.io/name: jaeger
+    app.kubernetes.io/component: all-in-one
+  type: ClusterIP
+---
+# Source: maesh/charts/tracing/templates/jaeger-services.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: jaeger-agent
+  namespace: default
+  labels:
+    app: jaeger
+    app.kubernetes.io/name: jaeger
+    app.kubernetes.io/component: agent
+spec:
+  ports:
+    - name: agent-zipkin-thrift
+      port: 5775
+      protocol: UDP
+      targetPort: thrift-legacy
+    - name: agent-compact
+      port: 6831
+      protocol: UDP
+      targetPort: compact-thrift
+    - name: agent-binary
+      port: 6832
+      protocol: UDP
+      targetPort: binary-thrift
+    - name: agent-configs
+      port: 5778
+      protocol: TCP
+      targetPort: serve-configs
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: jaeger
+    app.kubernetes.io/component: all-in-one
+---
+# Source: maesh/charts/tracing/templates/jaeger-services.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: zipkin
+  namespace: default
+  labels:
+    app: jaeger
+    app.kubernetes.io/name: jaeger
+    app.kubernetes.io/component: zipkin
+spec:
+  ports:
+    - name: jaeger-collector-zipkin
+      port: 9411
+      protocol: TCP
+      targetPort: collector-zip
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: jaeger
+    app.kubernetes.io/component: all-in-one
+---
+# Source: maesh/templates/controller/controller-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: maesh-controller
+  namespace: default
+  labels:
+    app: maesh
+    component: controller
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9000
+      name: mesh-controller-api
+      targetPort: api
+  selector:
+    component: controller
+---
+# Source: maesh/templates/mesh/mesh-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: maesh-mesh-api
+  namespace: default
+  labels:
+    app: maesh
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      name: mesh-api
+      targetPort: api
+  selector:
+    component: maesh-mesh
+---
+# Source: maesh/templates/mesh/mesh-daemonset.yaml
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: maesh-mesh
+  namespace: default
+  labels:
+    app: "my-maesh"
+    chart: "maesh-2.1.2"
+    release: "my-maesh"
+    heritage: "Helm"
+spec:
+  selector:
+    matchLabels:
+      app: "my-maesh"
+      component: maesh-mesh
+      release: "my-maesh"
+  template:
+    metadata:
+      labels:
+        app: "my-maesh"
+        component: maesh-mesh
+        release: "my-maesh"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+    spec:
+      serviceAccountName: maesh-mesh
+      automountServiceAccountToken: true
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+      terminationGracePeriodSeconds: 30
+      initContainers:
+        - name: wait-for-jaeger-init
+          image: "groundnuty/k8s-wait-for:v1.3"
+          imagePullPolicy: IfNotPresent
+          args:
+            - "service"
+            - "-lapp.kubernetes.io/name=jaeger,app.kubernetes.io/component=agent"
+          resources:
+            requests:
+              memory: "10Mi"
+              cpu: "50m"
+            limits:
+              memory: "20Mi"
+              cpu: "100m"
+      containers:
+        - name: maesh-mesh
+          image: "containous/maesh:v1.3.2"
+          imagePullPolicy: IfNotPresent
+          args:
+            - "proxy"
+            - "--entryPoints.readiness.address=:1081"
+            - "--entryPoints.liveness.address=:1082"
+            - "--entryPoints.http-5000.address=:5000"
+            - "--entryPoints.http-5000.forwardedHeaders.insecure=true"
+            - "--entryPoints.http-5001.address=:5001"
+            - "--entryPoints.http-5001.forwardedHeaders.insecure=true"
+            - "--entryPoints.http-5002.address=:5002"
+            - "--entryPoints.http-5002.forwardedHeaders.insecure=true"
+            - "--entryPoints.http-5003.address=:5003"
+            - "--entryPoints.http-5003.forwardedHeaders.insecure=true"
+            - "--entryPoints.http-5004.address=:5004"
+            - "--entryPoints.http-5004.forwardedHeaders.insecure=true"
+            - "--entryPoints.http-5005.address=:5005"
+            - "--entryPoints.http-5005.forwardedHeaders.insecure=true"
+            - "--entryPoints.http-5006.address=:5006"
+            - "--entryPoints.http-5006.forwardedHeaders.insecure=true"
+            - "--entryPoints.http-5007.address=:5007"
+            - "--entryPoints.http-5007.forwardedHeaders.insecure=true"
+            - "--entryPoints.http-5008.address=:5008"
+            - "--entryPoints.http-5008.forwardedHeaders.insecure=true"
+            - "--entryPoints.http-5009.address=:5009"
+            - "--entryPoints.http-5009.forwardedHeaders.insecure=true"
+            - "--entryPoints.tcp-10000.address=:10000"
+            - "--entryPoints.tcp-10000.forwardedHeaders.insecure=true"
+            - "--entryPoints.tcp-10001.address=:10001"
+            - "--entryPoints.tcp-10001.forwardedHeaders.insecure=true"
+            - "--entryPoints.tcp-10002.address=:10002"
+            - "--entryPoints.tcp-10002.forwardedHeaders.insecure=true"
+            - "--entryPoints.tcp-10003.address=:10003"
+            - "--entryPoints.tcp-10003.forwardedHeaders.insecure=true"
+            - "--entryPoints.tcp-10004.address=:10004"
+            - "--entryPoints.tcp-10004.forwardedHeaders.insecure=true"
+            - "--entryPoints.tcp-10005.address=:10005"
+            - "--entryPoints.tcp-10005.forwardedHeaders.insecure=true"
+            - "--entryPoints.tcp-10006.address=:10006"
+            - "--entryPoints.tcp-10006.forwardedHeaders.insecure=true"
+            - "--entryPoints.tcp-10007.address=:10007"
+            - "--entryPoints.tcp-10007.forwardedHeaders.insecure=true"
+            - "--entryPoints.tcp-10008.address=:10008"
+            - "--entryPoints.tcp-10008.forwardedHeaders.insecure=true"
+            - "--entryPoints.tcp-10009.address=:10009"
+            - "--entryPoints.tcp-10009.forwardedHeaders.insecure=true"
+            - "--entryPoints.tcp-10010.address=:10010"
+            - "--entryPoints.tcp-10010.forwardedHeaders.insecure=true"
+            - "--entryPoints.tcp-10011.address=:10011"
+            - "--entryPoints.tcp-10011.forwardedHeaders.insecure=true"
+            - "--entryPoints.tcp-10012.address=:10012"
+            - "--entryPoints.tcp-10012.forwardedHeaders.insecure=true"
+            - "--entryPoints.tcp-10013.address=:10013"
+            - "--entryPoints.tcp-10013.forwardedHeaders.insecure=true"
+            - "--entryPoints.tcp-10014.address=:10014"
+            - "--entryPoints.tcp-10014.forwardedHeaders.insecure=true"
+            - "--entryPoints.tcp-10015.address=:10015"
+            - "--entryPoints.tcp-10015.forwardedHeaders.insecure=true"
+            - "--entryPoints.tcp-10016.address=:10016"
+            - "--entryPoints.tcp-10016.forwardedHeaders.insecure=true"
+            - "--entryPoints.tcp-10017.address=:10017"
+            - "--entryPoints.tcp-10017.forwardedHeaders.insecure=true"
+            - "--entryPoints.tcp-10018.address=:10018"
+            - "--entryPoints.tcp-10018.forwardedHeaders.insecure=true"
+            - "--entryPoints.tcp-10019.address=:10019"
+            - "--entryPoints.tcp-10019.forwardedHeaders.insecure=true"
+            - "--entryPoints.tcp-10020.address=:10020"
+            - "--entryPoints.tcp-10020.forwardedHeaders.insecure=true"
+            - "--entryPoints.tcp-10021.address=:10021"
+            - "--entryPoints.tcp-10021.forwardedHeaders.insecure=true"
+            - "--entryPoints.tcp-10022.address=:10022"
+            - "--entryPoints.tcp-10022.forwardedHeaders.insecure=true"
+            - "--entryPoints.tcp-10023.address=:10023"
+            - "--entryPoints.tcp-10023.forwardedHeaders.insecure=true"
+            - "--entryPoints.tcp-10024.address=:10024"
+            - "--entryPoints.tcp-10024.forwardedHeaders.insecure=true"
+            - "--entryPoints.udp-15000.address=:15000/udp"
+            - "--entryPoints.udp-15001.address=:15001/udp"
+            - "--entryPoints.udp-15002.address=:15002/udp"
+            - "--entryPoints.udp-15003.address=:15003/udp"
+            - "--entryPoints.udp-15004.address=:15004/udp"
+            - "--entryPoints.udp-15005.address=:15005/udp"
+            - "--entryPoints.udp-15006.address=:15006/udp"
+            - "--entryPoints.udp-15007.address=:15007/udp"
+            - "--entryPoints.udp-15008.address=:15008/udp"
+            - "--entryPoints.udp-15009.address=:15009/udp"
+            - "--entryPoints.udp-15010.address=:15010/udp"
+            - "--entryPoints.udp-15011.address=:15011/udp"
+            - "--entryPoints.udp-15012.address=:15012/udp"
+            - "--entryPoints.udp-15013.address=:15013/udp"
+            - "--entryPoints.udp-15014.address=:15014/udp"
+            - "--entryPoints.udp-15015.address=:15015/udp"
+            - "--entryPoints.udp-15016.address=:15016/udp"
+            - "--entryPoints.udp-15017.address=:15017/udp"
+            - "--entryPoints.udp-15018.address=:15018/udp"
+            - "--entryPoints.udp-15019.address=:15019/udp"
+            - "--entryPoints.udp-15020.address=:15020/udp"
+            - "--entryPoints.udp-15021.address=:15021/udp"
+            - "--entryPoints.udp-15022.address=:15022/udp"
+            - "--entryPoints.udp-15023.address=:15023/udp"
+            - "--entryPoints.udp-15024.address=:15024/udp"
+            - "--endpoint=http://maesh-controller.default.svc.cluster.local:9000/api/configuration/current"
+            - "--tracing.jaeger.localagenthostport=jaeger-agent.default.svc.cluster.local:6831"
+            - "--tracing.jaeger.samplingserverurl=http://jaeger-agent.default.svc.cluster.local:5778/sampling"
+            - "--api.dashboard=false"
+            - "--api.insecure"
+            - "--ping"
+            - "--metrics.prometheus"
+          ports:
+            - name: readiness
+              containerPort: 1081
+            - name: liveness
+              containerPort: 1082
+            - name: api
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: readiness
+            initialDelaySeconds: 3
+            periodSeconds: 1
+          livenessProbe:
+            tcpSocket:
+              port: liveness
+            initialDelaySeconds: 3
+            periodSeconds: 1
+          resources:
+            requests:
+              memory: 50Mi
+              cpu: 100m
+            limits:
+              memory: 100Mi
+              cpu: 200m
+---
+# Source: maesh/charts/metrics/templates/grafana.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana-core
+  namespace: default
+  labels:
+    app: "my-maesh"
+    chart: "metrics-0.1.0"
+    release: "my-maesh"
+    heritage: "Helm"
+    component: grafana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+      component: core
+  template:
+    metadata:
+      labels:
+        app: grafana
+        component: core
+    spec:
+      serviceAccountName: grafana-k8s
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 472
+        fsGroup: 472
+      containers:
+      - image: "grafana/grafana:6.2.5"
+        name: grafana-core
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: web
+          containerPort: 3000
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: web
+          initialDelaySeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: web
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        volumeMounts:
+        - name: metrics-storage
+          mountPath: /var/lib/grafana
+        - name: dashboards-grafana-traefik
+          mountPath: "/var/lib/grafana/dashboards/traefik.json"
+          subPath: traefik.json
+          readOnly: false
+        - name: grafana-config
+          mountPath: /etc/grafana
+          readOnly: true
+      initContainers:
+      - name: metrics-storage-permission-fix
+        image: busybox
+        command: ["chown", "-R", "472:472", "/var/lib/grafana"]
+        securityContext:
+          runAsNonRoot: false
+          runAsUser: 0
+        volumeMounts:
+        - name: metrics-storage
+          mountPath: /var/lib/grafana
+      volumes:
+      - name: metrics-storage
+        persistentVolumeClaim:
+          claimName: metrics-storage
+      - name: dashboards-grafana-traefik
+        configMap:
+          name:  grafana-dashboard-traefik
+      - name: grafana-config
+        configMap:
+          name: grafana-config
+          items:
+          - key: grafana.ini
+            path: grafana.ini
+          - key: datasources.yaml
+            path: provisioning/datasources/datasources.yaml
+          - key: dashboards.yaml
+            path: provisioning/dashboards/dashboards.yaml
+---
+# Source: maesh/charts/metrics/templates/prometheus.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus-core
+  namespace: default
+  labels:
+    app: "my-maesh"
+    chart: "metrics-0.1.0"
+    release: "my-maesh"
+    heritage: "Helm"
+    component: prometheus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+      component: core
+  template:
+    metadata:
+      name: prometheus-main
+      labels:
+        app: prometheus
+        component: core
+    spec:
+      serviceAccountName: prometheus-k8s
+      automountServiceAccountToken: true
+      securityContext:
+        fsGroup: 2000
+        runAsUser: 1000
+        runAsNonRoot: true
+      containers:
+      - name: prometheus
+        image: "prom/prometheus:v2.11.1"
+        args:
+          - '--storage.tsdb.retention=60d'
+          - '--storage.tsdb.path="/prometheus/data/"'
+          - '--web.enable-lifecycle'
+          - '--config.file=/prometheus/config/prometheus.yaml'
+        ports:
+        - name: webui
+          containerPort: 9090
+        readinessProbe:
+          httpGet:
+            path: "/-/ready"
+            port: webui
+          initialDelaySeconds: 5
+        livenessProbe:
+          httpGet:
+            path: "/-/healthy"
+            port: webui
+          initialDelaySeconds: 5
+        volumeMounts:
+        - name: config-volume
+          mountPath: /prometheus/config
+        - name: rules-volume
+          mountPath: /prometheus/rules
+        - name: prometheus-storage
+          mountPath: /prometheus
+      - name: configmap-reload
+        image: "jimmidyson/configmap-reload:v0.2.2"
+        imagePullPolicy: IfNotPresent
+        args:
+          - --volume-dir=/etc/config
+          - --volume-dir=/etc/rules
+          - --webhook-url=http://localhost:9090/-/reload
+        volumeMounts:
+          - name: config-volume
+            mountPath: /etc/config
+            readOnly: true
+          - name: rules-volume
+            mountPath: /etc/rules
+            readOnly: true
+        resources:
+          limits:
+            cpu: 10m
+            memory: 15Mi
+          requests:
+            cpu: 10m
+            memory: 10Mi
+      initContainers:
+      - name: prometheus-storage-permission-fix
+        image: busybox
+        command: ["/bin/chown", "-R", "1000:2000", "/prometheus"]
+        securityContext:
+          runAsNonRoot: false
+          runAsUser: 0
+        volumeMounts:
+        - name: prometheus-storage
+          mountPath: /prometheus
+      volumes:
+      - name: prometheus-storage
+        persistentVolumeClaim:
+          claimName: prometheus-storage
+      - name: config-volume
+        configMap:
+          name: prometheus-core
+      - name: rules-volume
+        configMap:
+          name: prometheus-rules
+---
+# Source: maesh/charts/tracing/templates/jaeger-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jaeger
+  namespace: default
+  labels:
+    app: jaeger
+    app.kubernetes.io/name: jaeger
+    app.kubernetes.io/component: all-in-one
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jaeger
+      app.kubernetes.io/name: jaeger
+      app.kubernetes.io/component: all-in-one
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: jaeger
+        app.kubernetes.io/name: jaeger
+        app.kubernetes.io/component: all-in-one
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "16686"
+    spec:
+      serviceAccountName: jaeger
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+      containers:
+        -   env:
+              - name: COLLECTOR_ZIPKIN_HTTP_PORT
+                value: "9411"
+            image: "jaegertracing/all-in-one:1.13"
+            name: jaeger
+            ports:
+              - containerPort: 5775
+                protocol: UDP
+                name: thrift-legacy
+              - containerPort: 6831
+                protocol: UDP
+                name: compact-thrift
+              - containerPort: 6832
+                protocol: UDP
+                name: binary-thrift
+              - containerPort: 5778
+                protocol: TCP
+                name: serve-configs
+              - containerPort: 9411
+                protocol: TCP
+                name: collector-zip
+              - containerPort: 14267
+                protocol: TCP
+                name: collector-tch
+              - containerPort: 14268
+                protocol: TCP
+                name: collector-http
+              - containerPort: 14269
+                protocol: TCP
+                name: readiness
+              - containerPort: 16686
+                protocol: TCP
+                name: serve-frontend
+            readinessProbe:
+              httpGet:
+                path: "/"
+                port: readiness
+              initialDelaySeconds: 5
+            livenessProbe:
+              tcpSocket:
+                port: readiness
+              initialDelaySeconds: 5
+            resources:
+              requests:
+                memory: "50Mi"
+                cpu: "100m"
+              limits:
+                memory: "100Mi"
+                cpu: "200m"
+---
+# Source: maesh/templates/controller/controller-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: maesh-controller
+  namespace: default
+  labels:
+    app: "my-maesh"
+    chart: "maesh-2.1.2"
+    release: "my-maesh"
+    heritage: "Helm"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: "my-maesh"
+      component: controller
+      release: "my-maesh"
+  template:
+    metadata:
+      labels:
+        app: "my-maesh"
+        component: controller
+        release: "my-maesh"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "4646"
+    spec:
+      serviceAccountName: maesh-controller
+      automountServiceAccountToken: true
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: component
+                      operator: In
+                      values:
+                        - controller
+                topologyKey: "kubernetes.io/hostname"
+      containers:
+        - name: maesh-controller
+          image: "containous/maesh:v1.3.2"
+          imagePullPolicy: IfNotPresent
+          args:
+            - "--namespace=default"
+            - "--limitHTTPPort=10"
+            - "--limitTCPPort=25"
+            - "--limitUDPPort=25"
+          resources:
+            requests:
+              memory: 50Mi
+              cpu: 100m
+            limits:
+              memory: 100Mi
+              cpu: 200m
+          ports:
+            - name: api
+              containerPort: 9000
+          readinessProbe:
+            httpGet:
+              path: /api/status/readiness
+              port: api
+            initialDelaySeconds: 3
+            periodSeconds: 1
+      initContainers:
+        - name: maesh-prepare
+          image: "containous/maesh:v1.3.2"
+          imagePullPolicy: IfNotPresent
+          args:
+            - "prepare"
+            - "--clusterdomain"
+            - "cluster.local"
+            - "--namespace=default"
+          securityContext:
+            capabilities:
+              drop:
+                - ALL
+              add:
+                - NET_BIND_SERVICE
+---
+# Source: maesh/charts/tracing/templates/jaeger-deployment.yaml
+#
+# Copyright 2017-2019 The Jaeger Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+# in compliance with the License. You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software distributed under the License
+# is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+# or implied. See the License for the specific language governing permissions and limitations under
+# the License.
+#
+---
+# Source: maesh/templates/controller/hooks/cleanup-hook.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: maesh-cleanup
+  namespace: default
+  labels:
+    app: "my-maesh"
+    chart: "maesh-2.1.2"
+    release: "my-maesh"
+    heritage: "Helm"
+  annotations:
+    "helm.sh/hook": "post-delete"
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": "hook-succeeded,before-hook-creation"
+---
+# Source: maesh/templates/controller/hooks/cleanup-hook.yaml
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: maesh-cleanup-role
+  namespace: default
+  labels:
+    app: "my-maesh"
+    chart: "maesh-2.1.2"
+    release: "my-maesh"
+    heritage: "Helm"
+  annotations:
+    "helm.sh/hook": "post-delete"
+    "helm.sh/hook-weight": "10"
+    "helm.sh/hook-delete-policy": "hook-succeeded,before-hook-creation"
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - services
+    verbs:
+      - get
+      - list
+      - watch
+      - delete
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+    verbs:
+      - get
+      - update
+  - apiGroups:
+      - apps
+    resources:
+      - deployments
+    verbs:
+      - get
+      - update
+---
+# Source: maesh/templates/controller/hooks/cleanup-hook.yaml
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: maesh-cleanup
+  namespace: default
+  labels:
+    app: "my-maesh"
+    chart: "maesh-2.1.2"
+    release: "my-maesh"
+    heritage: "Helm"
+  annotations:
+    "helm.sh/hook": "post-delete"
+    "helm.sh/hook-weight": "15"
+    "helm.sh/hook-delete-policy": "hook-succeeded,before-hook-creation"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: maesh-cleanup-role
+subjects:
+- kind: ServiceAccount
+  name: maesh-cleanup
+  namespace: default
+---
+# Source: maesh/templates/controller/hooks/cleanup-hook.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: maesh-cleanup
+  namespace: default
+  labels:
+    app: "my-maesh"
+    chart: "maesh-2.1.2"
+    release: "my-maesh"
+    heritage: "Helm"
+  annotations:
+    "helm.sh/hook": "post-delete"
+    "helm.sh/hook-weight": "20"
+    "helm.sh/hook-delete-policy": "hook-succeeded,before-hook-creation"
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 30
+  template:
+    metadata:
+      labels:
+        app: "my-maesh"
+        component: cleanup
+        release: "my-maesh"
+    spec:
+      serviceAccountName: maesh-cleanup
+      restartPolicy: Never
+      containers:
+        - name: maesh-cleanup
+          image: "containous/maesh:v1.3.2"
+          imagePullPolicy: IfNotPresent
+          args:
+            - "cleanup"
+            - "--namespace=default"
+          securityContext:
+            capabilities:
+              drop:
+                - ALL
+              add:
+                - NET_BIND_SERVICE

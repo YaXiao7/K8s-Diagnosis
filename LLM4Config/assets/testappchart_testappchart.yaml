@@ -1,0 +1,102 @@
+---
+# Source: skymindchart/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-testappchart-skymindchart
+  labels:
+    helm.sh/chart: skymindchart-0.1.0
+    app.kubernetes.io/name: skymindchart
+    app.kubernetes.io/instance: my-testappchart
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: skymindchart/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-testappchart-skymindchart
+  labels:
+    helm.sh/chart: skymindchart-0.1.0
+    app.kubernetes.io/name: skymindchart
+    app.kubernetes.io/instance: my-testappchart
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9090
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: skymindchart
+    app.kubernetes.io/instance: my-testappchart
+---
+# Source: skymindchart/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-testappchart-skymindchart
+  labels:
+    helm.sh/chart: skymindchart-0.1.0
+    app.kubernetes.io/name: skymindchart
+    app.kubernetes.io/instance: my-testappchart
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: skymindchart
+      app.kubernetes.io/instance: my-testappchart
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: skymindchart
+        app.kubernetes.io/instance: my-testappchart
+    spec:
+      serviceAccountName: my-testappchart-skymindchart
+      securityContext:
+        {}
+      containers:
+        - name: skymindchart
+          securityContext:
+            {}
+          image: "registry.gitlab.com/syahmiahmad/devops_test/springboot-demo:latest"
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 9090
+              protocol: TCP
+          #livenessProbe:
+            #httpGet:
+              #path: /
+              #port: http
+          #readinessProbe:
+            #httpGet:
+              #path: /
+              #port: http
+          resources:
+            {}
+---
+# Source: skymindchart/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-testappchart-skymindchart-test-connection"
+  labels:
+    helm.sh/chart: skymindchart-0.1.0
+    app.kubernetes.io/name: skymindchart
+    app.kubernetes.io/instance: my-testappchart
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-testappchart-skymindchart:9090']
+  restartPolicy: Never

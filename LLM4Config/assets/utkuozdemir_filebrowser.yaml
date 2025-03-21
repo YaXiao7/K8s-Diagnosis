@@ -1,0 +1,184 @@
+---
+# Source: filebrowser/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-filebrowser
+  labels:
+    helm.sh/chart: filebrowser-1.0.0
+    app.kubernetes.io/name: filebrowser
+    app.kubernetes.io/instance: my-filebrowser
+    app.kubernetes.io/version: "v2.23.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: filebrowser/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-filebrowser
+  labels:
+    helm.sh/chart: filebrowser-1.0.0
+    app.kubernetes.io/name: filebrowser
+    app.kubernetes.io/instance: my-filebrowser
+    app.kubernetes.io/version: "v2.23.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+  .filebrowser.json: |
+    {
+      "address": "",
+      "baseURL": "",
+      "database": "/db/database.db",
+      "log": "stdout",
+      "port": 8080,
+      "root": "/rootdir"
+    }
+---
+# Source: filebrowser/templates/pvc-db.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: my-filebrowser-db
+  labels:
+    helm.sh/chart: filebrowser-1.0.0
+    app.kubernetes.io/name: filebrowser
+    app.kubernetes.io/instance: my-filebrowser
+    app.kubernetes.io/version: "v2.23.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  accessModes:
+    - "ReadWriteOnce"
+  resources:
+    requests:
+      storage: "256Mi"
+---
+# Source: filebrowser/templates/pvc-rootdir.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: my-filebrowser-rootdir
+  labels:
+    helm.sh/chart: filebrowser-1.0.0
+    app.kubernetes.io/name: filebrowser
+    app.kubernetes.io/instance: my-filebrowser
+    app.kubernetes.io/version: "v2.23.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  accessModes:
+    - "ReadWriteOnce"
+  resources:
+    requests:
+      storage: "2Gi"
+---
+# Source: filebrowser/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-filebrowser
+  labels:
+    helm.sh/chart: filebrowser-1.0.0
+    app.kubernetes.io/name: filebrowser
+    app.kubernetes.io/instance: my-filebrowser
+    app.kubernetes.io/version: "v2.23.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: filebrowser
+    app.kubernetes.io/instance: my-filebrowser
+---
+# Source: filebrowser/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-filebrowser
+  labels:
+    helm.sh/chart: filebrowser-1.0.0
+    app.kubernetes.io/name: filebrowser
+    app.kubernetes.io/instance: my-filebrowser
+    app.kubernetes.io/version: "v2.23.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: filebrowser
+      app.kubernetes.io/instance: my-filebrowser
+  template:
+    metadata:
+      annotations:
+        checksum/config: 72c7330878e89ec3c800a922661dfddc937a46dfd0f60714f83b23ddb9c3457e
+      labels:
+        app.kubernetes.io/name: filebrowser
+        app.kubernetes.io/instance: my-filebrowser
+    spec:
+      serviceAccountName: my-filebrowser
+      securityContext:
+        {}
+      containers:
+        - name: filebrowser
+          securityContext:
+            {}
+          image: "docker.io/filebrowser/filebrowser:v2.23.0"
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - mountPath: /.filebrowser.json
+              name: config
+              subPath: .filebrowser.json
+            - mountPath: /db
+              name: db
+            - mountPath: /rootdir
+              name: rootdir
+              readOnly: false
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+          resources:
+            {}
+      volumes:
+        - name: config
+          configMap:
+            name: my-filebrowser
+        - name: db
+          persistentVolumeClaim:
+            claimName: my-filebrowser-db
+        - name: rootdir
+          persistentVolumeClaim:
+            claimName: my-filebrowser-rootdir
+            readOnly: false
+---
+# Source: filebrowser/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-filebrowser-test-connection"
+  labels:
+    helm.sh/chart: filebrowser-1.0.0
+    app.kubernetes.io/name: filebrowser
+    app.kubernetes.io/instance: my-filebrowser
+    app.kubernetes.io/version: "v2.23.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox:stable
+      command:
+        - wget
+      args:
+        - -O
+        - /dev/null
+        - my-filebrowser:80
+  restartPolicy: Never

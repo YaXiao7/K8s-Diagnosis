@@ -1,0 +1,103 @@
+---
+# Source: pingdom-operator/templates/deploy.yaml.tpl
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-pingdom-operator
+---
+# Source: pingdom-operator/templates/deploy.yaml.tpl
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-pingdom-operator-integrations
+data:
+  integrations: |
+        {}
+---
+# Source: pingdom-operator/templates/deploy.yaml.tpl
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: default-my-pingdom-operator
+rules:
+  - verbs:
+      - get
+      - watch
+      - list
+    apiGroups:
+      - networking.k8s.io
+    resources:
+      - ingresses
+  - verbs:
+      - get
+      - watch
+      - list
+    apiGroups:
+      - apiextensions.k8s.io
+    resources:
+      - customresourcedefinitions
+  - verbs:
+      - get
+      - list
+      - watch
+    apiGroups:
+      - ''
+    resources:
+      - namespaces
+  - verbs:
+      - get
+      - list
+      - watch
+    apiGroups:
+      - 'projectcontour.io'
+    resources:
+      - httpproxies
+---
+# Source: pingdom-operator/templates/deploy.yaml.tpl
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: default-my-pingdom-operator
+subjects:
+- kind: ServiceAccount
+  name: my-pingdom-operator
+  apiGroup: ""
+  namespace: default
+roleRef:
+  kind: ClusterRole
+  name: default-my-pingdom-operator
+  apiGroup: ""
+---
+# Source: pingdom-operator/templates/deploy.yaml.tpl
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: my-pingdom-operator
+spec:
+  selector:
+    matchLabels:
+      app: my-pingdom-operator
+  template:
+    metadata:
+      labels:
+        app: my-pingdom-operator
+    spec:
+      serviceAccountName: my-pingdom-operator
+      serviceAccount: my-pingdom-operator
+      containers:
+        - name: my-pingdom-operator
+          image: "ghcr.io/nefelim4ag/pingdom-operator:0.0.15"
+          imagePullPolicy: IfNotPresent
+          env:
+          - name: BEARER_TOKEN
+            value: ""
+          - name: CLUSTER_NAME
+            value: default-cluster
+          - name: DRY_RUN
+            value: "False"
+          - name: INTEGRATIONS_MAPPING
+            valueFrom:
+              configMapKeyRef:
+                key: integrations
+                name: 'my-pingdom-operator-integrations'
+          resources: {"requests":{"cpu":"10m","memory":"32Mi"}}

@@ -1,0 +1,286 @@
+---
+# Source: notebook-controller/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-notebook-controller
+  labels:
+    helm.sh/chart: notebook-controller-1.1.2
+    app.kubernetes.io/name: notebook-controller
+    app.kubernetes.io/instance: my-notebook-controller
+    app.kubernetes.io/version: "1.4.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: notebook-controller/templates/clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-notebook-controller
+  labels:
+    helm.sh/chart: notebook-controller-1.1.2
+    app.kubernetes.io/name: notebook-controller
+    app.kubernetes.io/instance: my-notebook-controller
+    app.kubernetes.io/version: "1.4.0"
+    app.kubernetes.io/managed-by: Helm
+rules:
+  - apiGroups:
+      - apps
+    resources:
+      - statefulsets
+    verbs:
+      - "*"
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - create
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - services
+    verbs:
+      - "*"
+  - apiGroups:
+      - kubeflow.org
+    resources:
+      - notebooks
+      - notebooks/finalizers
+      - notebooks/status
+    verbs:
+      - "*"
+  - apiGroups:
+      - networking.istio.io
+    resources:
+      - virtualservices
+    verbs:
+      - "*"
+---
+# Source: notebook-controller/templates/clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-notebook-controller
+  labels:
+    helm.sh/chart: notebook-controller-1.1.2
+    app.kubernetes.io/name: notebook-controller
+    app.kubernetes.io/instance: my-notebook-controller
+    app.kubernetes.io/version: "1.4.0"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-notebook-controller
+subjects:
+  - kind: ServiceAccount
+    name: my-notebook-controller
+    namespace: default
+---
+# Source: notebook-controller/templates/role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: my-notebook-controller
+  labels:
+    helm.sh/chart: notebook-controller-1.1.2
+    app.kubernetes.io/name: notebook-controller
+    app.kubernetes.io/instance: my-notebook-controller
+    app.kubernetes.io/version: "1.4.0"
+    app.kubernetes.io/managed-by: Helm
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps/status
+    verbs:
+      - get
+      - update
+      - patch
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - create
+---
+# Source: notebook-controller/templates/rolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: my-notebook-controller
+  labels:
+    helm.sh/chart: notebook-controller-1.1.2
+    app.kubernetes.io/name: notebook-controller
+    app.kubernetes.io/instance: my-notebook-controller
+    app.kubernetes.io/version: "1.4.0"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: my-notebook-controller
+subjects:
+  - kind: ServiceAccount
+    name: my-notebook-controller
+    namespace: default
+---
+# Source: notebook-controller/templates/metrics-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-notebook-controller-metrics
+  labels:
+    helm.sh/chart: notebook-controller-1.1.2
+    app.kubernetes.io/name: notebook-controller
+    app.kubernetes.io/instance: my-notebook-controller
+    app.kubernetes.io/version: "1.4.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: http-metrics
+      protocol: TCP
+      name: http-metrics
+  selector:
+    app.kubernetes.io/name: notebook-controller
+    app.kubernetes.io/instance: my-notebook-controller
+---
+# Source: notebook-controller/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-notebook-controller
+  labels:
+    helm.sh/chart: notebook-controller-1.1.2
+    app.kubernetes.io/name: notebook-controller
+    app.kubernetes.io/instance: my-notebook-controller
+    app.kubernetes.io/version: "1.4.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: notebook-controller
+      app.kubernetes.io/instance: my-notebook-controller
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: notebook-controller
+        app.kubernetes.io/instance: my-notebook-controller
+    spec:
+      serviceAccountName: my-notebook-controller
+      securityContext:
+        {}
+      containers:
+        - name: notebook-controller
+          securityContext:
+            {}
+          image: "public.ecr.aws/j1r0q0g6/notebooks/notebook-controller:v1.4"
+          imagePullPolicy: IfNotPresent
+          command:
+            - /manager
+          args:
+            - -enable-leader-election
+          ports:
+            - name: http-metrics
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: http-metrics
+            initialDelaySeconds: 0
+            periodSeconds: 10
+            timeoutSeconds: 1
+            failureThreshold: 3
+            successThreshold: 1
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: http-metrics
+            initialDelaySeconds: 0
+            periodSeconds: 10
+            timeoutSeconds: 1
+            failureThreshold: 3
+            successThreshold: 1
+          resources:
+            {}
+---
+# Source: notebook-controller/templates/tests/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-notebook-controller-tests
+  labels:
+    helm.sh/chart: notebook-controller-1.1.2
+    app.kubernetes.io/name: notebook-controller
+    app.kubernetes.io/instance: my-notebook-controller
+    app.kubernetes.io/version: "1.4.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: tests
+  annotations:
+    helm.sh/hook: test
+data:
+  test_all.py: |
+    import requests
+
+
+    def test_metrics_service_connection():
+        url = "http://my-notebook-controller-metrics:8080/metrics"
+
+        response = requests.get(url)
+
+        assert response.status_code == 200
+---
+# Source: notebook-controller/templates/tests/pod.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-notebook-controller-tests
+  labels:
+    helm.sh/chart: notebook-controller-1.1.2
+    app.kubernetes.io/name: notebook-controller
+    app.kubernetes.io/instance: my-notebook-controller
+    app.kubernetes.io/version: "1.4.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: tests
+  annotations:
+    helm.sh/hook: test
+spec:
+  containers:
+    - name: tests
+      image: "ghcr.io/cowboysysop/pytest:1.0.35"
+      imagePullPolicy: IfNotPresent
+      volumeMounts:
+        - name: tests
+          mountPath: /tests
+          readOnly: true
+      workingDir: /tests
+  restartPolicy: Never
+  volumes:
+    - name: tests
+      configMap:
+        name: my-notebook-controller-tests

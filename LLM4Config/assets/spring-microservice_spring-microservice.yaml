@@ -1,0 +1,264 @@
+---
+# Source: spring-microservice/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-spring-microservice-categories-service
+  namespace: abdomokh38-dev
+  labels:
+    helm.sh/chart: spring-microservice-0.1.0
+    app.kubernetes.io/name: categories-service
+    app.kubernetes.io/instance: my-spring-microservice
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+automountServiceAccountToken:
+---
+# Source: spring-microservice/templates/docker-secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: categories-service-docker-secret
+  namespace: abdomokh38-dev
+type: kubernetes.io/dockerconfigjson
+data:
+  .dockerconfigjson: "eyJhdXRocyI6eyJodHRwczovL2luZGV4LmRvY2tlci5pby92MS8iOnsidXNlcm5hbWUiOiJhYmRvbW9raCIsInBhc3N3b3JkIjoiZGNrcl9wYXRfU0E4NVhrRTNXY0hvZ1U2MHhXalhFUF94ek1rIiwiZW1haWwiOiJhYmRvbW9raDM4QGdtYWlsLmNvbSIsImF1dGgiOiJZV0prYjIxdmEyZzZaR05yY2w5d1lYUmZVMEU0TlZoclJUTlhZMGh2WjFVMk1IaFhhbGhGVUY5NGVrMXIifX19"
+---
+# Source: spring-microservice/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-spring-microservice-categories-service
+  namespace: abdomokh38-dev
+type: Opaque
+data:
+  username: "YzJFPQ=="
+  password: ""
+---
+# Source: spring-microservice/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-spring-microservice-categories-service
+  namespace: abdomokh38-dev
+  labels:
+    helm.sh/chart: spring-microservice-0.1.0
+    app.kubernetes.io/name: categories-service
+    app.kubernetes.io/instance: my-spring-microservice
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+  logging.yaml: >-
+    Configuration:
+      Appenders:
+        Console:
+          name: Console
+          target: SYSTEM_OUT
+          JsonLayout:
+            compact: true
+            eventEol: true
+            includeTimeMillis: true
+      Loggers:
+        Root:
+          level: INFO
+          AppenderRef:
+            - ref: Console
+  application.yaml: >-
+    spring:
+      datasource:
+        url: jdbc:h2:mem:users-db
+        username: sa
+        password: password
+    server:
+      port: 8080
+    management:
+      server:
+        port: 9090
+  username: "YzJFPQ=="
+  password: ""
+---
+# Source: spring-microservice/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-spring-microservice-categories-service
+  labels:
+    helm.sh/chart: spring-microservice-0.1.0
+    app.kubernetes.io/name: categories-service
+    app.kubernetes.io/instance: my-spring-microservice
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+    app: spring-microservice
+    prometheus.io/target: spring-boot-actuator-instance
+  namespace: abdomokh38-dev
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+    - port: 9090
+      targetPort: http-management
+      protocol: TCP
+      name: http-management
+  selector:
+    app.kubernetes.io/name: categories-service
+    app.kubernetes.io/instance: my-spring-microservice
+---
+# Source: spring-microservice/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-spring-microservice-categories-service
+  namespace: abdomokh38-dev
+  labels:
+    helm.sh/chart: spring-microservice-0.1.0
+    app.kubernetes.io/name: categories-service
+    app.kubernetes.io/instance: my-spring-microservice
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+    app: spring-microservice
+  annotations:
+    prometheus.io/scrape: "true"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: categories-service
+      app.kubernetes.io/instance: my-spring-microservice
+  template:
+    metadata:
+      annotations:
+        checksum/config: cbd27107934fca400ed0369305bef08be6d295d6313632860bd1d1ea71e48ceb
+        sidecar.istio.io/inject: "true"
+      labels:
+        app.kubernetes.io/name: categories-service
+        app.kubernetes.io/instance: my-spring-microservice
+        app: spring-microservice
+    spec:
+      restartPolicy: Always
+      imagePullSecrets:
+        - name: categories-service-docker-secret
+      serviceAccountName: my-spring-microservice-categories-service
+      securityContext:
+        capabilities:
+          drop:
+          - ALL
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: spring-microservice
+          securityContext:
+            fsGroup: 2000
+          image: "abdomokh/categories-service:latest"
+          imagePullPolicy: Always
+
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: http-management
+              containerPort: 9090
+              protocol: TCP
+
+          livenessProbe:
+            failureThreshold: 10
+            httpGet:
+              path: /actuator/health/liveness
+              port: 9090
+            periodSeconds: 10
+
+          readinessProbe:
+            failureThreshold: 10
+            httpGet:
+              path: /actuator/health/readiness
+              port: 9090
+            periodSeconds: 60
+
+          startupProbe:
+            failureThreshold: 10
+            httpGet:
+              path: /actuator/health/readiness
+              port: 9090
+            initialDelaySeconds: 60
+            periodSeconds: 60
+
+          resources:
+            limits:
+              cpu: 200m
+              memory: 512Mi
+            requests:
+              cpu: 100m
+              memory: 256Mi
+
+          env:
+            - name: LOG4J_CONFIGURATION_FILE
+              value: /etc/config/app/logging.yaml
+            - name: JAVA_TOOL_OPTIONS
+              value: -XX:+UseContainerSupport -XX:MaxRAMPercentage=80.0 -Djava.net.preferIPv4Stack=true -Djava.awt.headless=true -Dspring.config.additional-location=/etc/config/app/application.yaml
+
+          envFrom:
+            - configMapRef:
+                name: my-spring-microservice-categories-service
+            - secretRef:
+                name: my-spring-microservice-categories-service
+
+          volumeMounts:
+            - name: logging
+              mountPath: /etc/config/app/logging.yaml
+              readOnly: true
+              subPath: logging.yaml
+            - name: application
+              mountPath: /etc/config/app/application.yaml
+              readOnly: true
+              subPath: application.yaml
+      volumes:
+        - name: logging
+          configMap:
+            name: my-spring-microservice-categories-service
+            items:
+              - key: "logging.yaml"
+                path: logging.yaml
+        - name: application
+          configMap:
+            name: my-spring-microservice-categories-service
+            items:
+              - key: "application.yaml"
+                path: application.yaml
+      affinity:
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - spring-microservice
+            topologyKey: kubernetes.io/hostname
+      tolerations:
+        - effect: NoSchedule
+          key: key
+          operator: Equal
+          value: value
+---
+# Source: spring-microservice/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-spring-microservice-categories-service-test-connection"
+  labels:
+    helm.sh/chart: spring-microservice-0.1.0
+    app.kubernetes.io/name: categories-service
+    app.kubernetes.io/instance: my-spring-microservice
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-spring-microservice-categories-service:']
+  restartPolicy: Never

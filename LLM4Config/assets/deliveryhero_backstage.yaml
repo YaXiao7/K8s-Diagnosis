@@ -1,0 +1,428 @@
+---
+# Source: backstage/templates/backend-secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-backstage-backend
+  labels:
+    app.kubernetes.io/name: backstage-backend
+    helm.sh/chart: backstage-0.1.13
+    app.kubernetes.io/instance: my-backstage
+    app.kubernetes.io/version: "v0.1.1-alpha.23"
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+stringData:
+  AUTH_GOOGLE_CLIENT_SECRET: a
+  AUTH_GITHUB_CLIENT_SECRET: c
+  AUTH_GITLAB_CLIENT_SECRET: b
+  AUTH_OKTA_CLIENT_SECRET: b
+  AUTH_OAUTH2_CLIENT_SECRET: b
+  AUTH_AUTH0_CLIENT_SECRET: b
+  AUTH_MICROSOFT_CLIENT_SECRET: f
+  SENTRY_TOKEN: e
+  ROLLBAR_ACCOUNT_TOKEN: f
+  CIRCLECI_AUTH_TOKEN: r
+  GITHUB_TOKEN: g
+  GITHUB_PRIVATE_TOKEN: g
+  GITLAB_TOKEN: g
+  AZURE_TOKEN: h
+  NEW_RELIC_REST_API_KEY: r
+  TRAVISCI_AUTH_TOKEN: fake-travis-ci-auth-token
+  PAGERDUTY_TOKEN: h
+---
+# Source: backstage/templates/backstage-app-config.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-backstage-app-config
+  labels:
+    app.kubernetes.io/name: backstage
+    helm.sh/chart: backstage-0.1.13
+    app.kubernetes.io/instance: my-backstage
+    app.kubernetes.io/version: "v0.1.1-alpha.23"
+    app.kubernetes.io/managed-by: Helm
+data:
+  app-config.development.yaml: |
+    backend:
+      lighthouseHostname: "my-backstage-lighthouse"
+      listen:
+          port: 7000
+      database:
+        client: "pg"
+        connection:
+          host: "postgresql"
+          port: "5432\n"
+          user: "pgsql"
+          database: "backstage_plugin_catalog"
+          ssl:
+            rejectUnauthorized: "false"
+            ca: "/etc/postgresql/ca.crt"
+    
+    catalog:
+      locations:
+        # Backstage example components
+        - type: github
+          target: https://github.com/backstage/backstage/blob/master/packages/catalog-model/examples/all-components.yaml
+        # Example component for github-actions
+        - type: github
+          target: https://github.com/backstage/backstage/blob/master/plugins/github-actions/examples/sample.yaml
+        # Example component for techdocs
+        - type: github
+          target: https://github.com/backstage/backstage/blob/master/plugins/techdocs-backend/examples/documented-component/documented-component.yaml
+        # Backstage example APIs
+        - type: github
+          target: https://github.com/backstage/backstage/blob/master/packages/catalog-model/examples/all-apis.yaml
+        # Backstage example templates
+        - type: github
+          target: https://github.com/backstage/backstage/blob/master/plugins/scaffolder-backend/sample-templates/all-templates.yaml
+    
+    auth:
+      providers:
+        microsoft: null
+    
+    scaffolder:
+      azure: null
+    
+    
+    sentry:
+      organization: "example-org-name"
+    
+    techdocs:
+      generators:
+        techdocs: 'local'
+---
+# Source: backstage/templates/backstage-app-config.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-backstage-app-env
+  labels:
+    app.kubernetes.io/name: backstage
+    helm.sh/chart: backstage-0.1.13
+    app.kubernetes.io/instance: my-backstage
+    app.kubernetes.io/version: "v0.1.1-alpha.23"
+    app.kubernetes.io/managed-by: Helm
+data:
+  APP_CONFIG_app_baseUrl: "\"https://demo.example.com\""
+  APP_CONFIG_app_title: "\"Backstage\""
+  APP_CONFIG_app_googleAnalyticsTrackingId: ""
+  APP_CONFIG_backend_baseUrl: "\"https://demo.example.com\""
+  APP_CONFIG_backend_cors_origin: "\"https://demo.example.com\""
+  APP_CONFIG_techdocs_storageUrl: "\"https://demo.example.com/api/techdocs/static/docs\""
+  APP_CONFIG_techdocs_requestUrl: "\"https://demo.example.com/api/techdocs\""
+  APP_CONFIG_lighthouse_baseUrl: "\"https://demo.example.com/lighthouse-api\""
+  APP_CONFIG_backend_database_connection_ssl_rejectUnauthorized: "false"
+  APP_CONFIG_auth_providers_github_development_appOrigin: "\"http://localhost:3000/\""
+  APP_CONFIG_auth_providers_google_development_appOrigin: "\"http://localhost:3000/\""
+  APP_CONFIG_auth_providers_gitlab_development_appOrigin: "\"http://localhost:3000/\""
+  APP_CONFIG_auth_providers_okta_development_appOrigin: "\"http://localhost:3000/\""
+  APP_CONFIG_auth_providers_oauth2_development_appOrigin: "\"http://localhost:3000/\""
+---
+# Source: backstage/templates/backstage-auth-config.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-backstage-auth
+  labels:
+    app.kubernetes.io/name: backstage
+    helm.sh/chart: backstage-0.1.13
+    app.kubernetes.io/instance: my-backstage
+    app.kubernetes.io/version: "v0.1.1-alpha.23"
+    app.kubernetes.io/managed-by: Helm
+data:
+  AUTH_GOOGLE_CLIENT_ID: a
+  AUTH_GITHUB_CLIENT_ID: c
+  AUTH_GITLAB_CLIENT_ID: b
+  # This should not be prefixed with AUTH_. This could be a typo in the Backstage app config.
+  # Regardless, it is not decided by me.
+  GITLAB_BASE_URL: b
+  GITHUB_TOKEN: g
+  AUTH_OKTA_CLIENT_ID: b
+  AUTH_OKTA_AUDIENCE: b
+  AUTH_OAUTH2_CLIENT_ID: b
+  AUTH_OAUTH2_AUTH_URL: b
+  AUTH_OAUTH2_TOKEN_URL: b
+  AUTH_AUTH0_CLIENT_ID: b
+  AUTH_AUTH0_DOMAIN: b
+  AUTH_MICROSOFT_CLIENT_ID: f
+  AUTH_MICROSOFT_TENANT_ID: f
+---
+# Source: backstage/templates/lighthouse-config.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-backstage-lighthouse
+  labels:
+    app.kubernetes.io/name: backstage
+    helm.sh/chart: backstage-0.1.13
+    app.kubernetes.io/instance: my-backstage
+    app.kubernetes.io/version: "v0.1.1-alpha.23"
+    app.kubernetes.io/managed-by: Helm
+data:
+  PGDATABASE: "lighthouse_audit_service"
+  PGUSER: "pgsql"
+  PGPORT: "5432"
+  PGHOST: "postgresql"
+  PGPATH_TO_CA: "/etc/postgresql/ca.crt"
+---
+# Source: backstage/templates/backend-deployment.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-backstage-backend
+  labels:
+    app.kubernetes.io/name: backstage
+    helm.sh/chart: backstage-0.1.13
+    app.kubernetes.io/instance: my-backstage
+    app.kubernetes.io/version: "v0.1.1-alpha.23"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  ports:
+    - port: 80
+      targetPort: 7000
+  selector:
+    app: backstage
+    component: backend
+  type: ClusterIP
+---
+# Source: backstage/templates/frontend-deployment.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-backstage-frontend
+  labels:
+    app.kubernetes.io/name: backstage
+    helm.sh/chart: backstage-0.1.13
+    app.kubernetes.io/instance: my-backstage
+    app.kubernetes.io/version: "v0.1.1-alpha.23"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  ports:
+    - port: 80
+      targetPort: 80
+  selector:
+    app: backstage
+    component: frontend
+  type: ClusterIP
+---
+# Source: backstage/templates/backend-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-backstage-backend
+  labels:
+    app.kubernetes.io/name: backstage-backend
+    helm.sh/chart: backstage-0.1.13
+    app.kubernetes.io/instance: my-backstage
+    app.kubernetes.io/version: "v0.1.1-alpha.23"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backstage
+      component: backend
+      app.kubernetes.io/name: backstage-backend
+      app.kubernetes.io/instance: my-backstage
+  template:
+    metadata:
+      annotations:
+        ad.datadoghq.com/backstage.logs: '[{"source":"backstage","service":"backend"}]'
+      labels:
+        app: backstage
+        component: backend
+        app.kubernetes.io/name: backstage-backend
+        app.kubernetes.io/instance: my-backstage
+    spec:
+      containers:
+        - name: backstage-backend
+          image: martinaif/backstage-k8s-demo-backend:test1
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 7000
+          resources:
+            limits:
+              memory: 1024Mi
+            requests:
+              memory: 1024Mi
+          envFrom:
+            - secretRef:
+                name: my-backstage-backend
+            - configMapRef:
+                name: my-backstage-app-env
+            - configMapRef:
+                name: my-backstage-auth
+          env:
+            - name: NODE_ENV
+              value: development
+            - name: APP_CONFIG_backend_database_connection_password
+              valueFrom:
+                secretKeyRef:
+                  name: my-backstage-backend-postgres
+                  key: postgresql-password
+          volumeMounts:
+            - name: app-config
+              mountPath: /usr/src/app/app-config.development.yaml
+              subPath: app-config.development.yaml
+      volumes:
+        - name: app-config
+          configMap:
+            name: my-backstage-app-config
+---
+# Source: backstage/templates/frontend-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-backstage-frontend
+  labels:
+    app.kubernetes.io/name: backstage
+    helm.sh/chart: backstage-0.1.13
+    app.kubernetes.io/instance: my-backstage
+    app.kubernetes.io/version: "v0.1.1-alpha.23"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backstage
+      component: frontend
+      app.kubernetes.io/name: backstage-app
+      app.kubernetes.io/instance: my-backstage
+  template:
+    metadata:
+      annotations:
+        ad.datadoghq.com/backstage.logs: '[{"source":"backstage","service":"frontend"}]'
+      labels:
+        app: backstage
+        component: frontend
+        app.kubernetes.io/name: backstage-app
+        app.kubernetes.io/instance: my-backstage
+    spec:
+      containers:
+        - name: backstage-frontend
+          image: martinaif/backstage-k8s-demo-frontend:test1
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 80
+          resources:
+            limits:
+              memory: 1024Mi
+            requests:
+              memory: 1024Mi
+          envFrom:
+            - configMapRef:
+                name: my-backstage-app-env
+          volumeMounts:
+            - name: app-config
+              mountPath: /usr/share/nginx/html/static/app-config.development.yaml
+              subPath: app-config.development.yaml
+      volumes:
+        - name: app-config
+          configMap:
+            name: my-backstage-app-config
+---
+# Source: backstage/templates/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: my-backstage-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      if ($scheme = https) {
+      add_header  Strict-Transport-Security "max-age=0;";
+      }
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "false"
+spec:
+  ingressClassName: nginx
+  tls:
+    - secretName: my-backstage-tls
+      hosts:
+        - demo.example.com
+        - demo.example.com
+        - demo.example.com
+
+  rules:
+    - host: demo.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: my-backstage-frontend
+                port:
+                  number: 80
+          
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: my-backstage-backend
+                port:
+                  number: 80
+---
+# Source: backstage/templates/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: my-backstage-ingress-lighthouse
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      if ($scheme = https) {
+      add_header  Strict-Transport-Security "max-age=0;";
+      }
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "false"
+spec:
+  tls:
+    - secretName: my-backstage-tls
+      hosts:
+        - demo.example.com
+  rules:
+    - host: demo.example.com
+      http:
+        paths:
+          - path: /lighthouse-api(/|$)(.*)
+            pathType: Prefix
+            backend:
+              service:
+                name: my-backstage-lighthouse
+                port:
+                  number: 80
+---
+# Source: backstage/templates/postgresql-password-secret.yaml
+apiVersion: v1
+kind: Secret
+type: Opaque
+metadata:
+  name: my-backstage-backend-postgres
+  labels:
+    app.kubernetes.io/name: backstage
+    helm.sh/chart: backstage-0.1.13
+    app.kubernetes.io/instance: my-backstage
+    app.kubernetes.io/version: "v0.1.1-alpha.23"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": "pre-install,pre-upgrade"
+    "helm.sh/hook-delete-policy": "before-hook-creation"
+data:
+  postgresql-password: cGFzc3dvcmQ=
+---
+# Source: backstage/templates/postgresql-password-secret.yaml
+apiVersion: v1
+kind: Secret
+type: Opaque
+metadata:
+  name: my-backstage-lighthouse-postgres
+  labels:
+    app.kubernetes.io/name: backstage
+    helm.sh/chart: backstage-0.1.13
+    app.kubernetes.io/instance: my-backstage
+    app.kubernetes.io/version: "v0.1.1-alpha.23"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": "pre-install,pre-upgrade"
+    "helm.sh/hook-delete-policy": "before-hook-creation"
+data:
+  postgresql-password: cGFzc3dvcmQ=

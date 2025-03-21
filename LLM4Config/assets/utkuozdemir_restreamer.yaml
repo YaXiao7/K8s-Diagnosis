@@ -1,0 +1,150 @@
+---
+# Source: restreamer/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-restreamer
+  labels:
+    helm.sh/chart: restreamer-1.1.0
+    app.kubernetes.io/name: restreamer
+    app.kubernetes.io/instance: my-restreamer
+    app.kubernetes.io/version: "0.6.4"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: restreamer/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-restreamer
+  labels:
+    helm.sh/chart: restreamer-1.1.0
+    app.kubernetes.io/name: restreamer
+    app.kubernetes.io/instance: my-restreamer
+    app.kubernetes.io/version: "0.6.4"
+    app.kubernetes.io/managed-by: Helm
+stringData:
+  RS_PASSWORD: "datarhei"
+  RS_USERNAME: "admin"
+---
+# Source: restreamer/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-restreamer
+  labels:
+    helm.sh/chart: restreamer-1.1.0
+    app.kubernetes.io/name: restreamer
+    app.kubernetes.io/instance: my-restreamer
+    app.kubernetes.io/version: "0.6.4"
+    app.kubernetes.io/managed-by: Helm
+data:
+  RS_AUDIO: "auto"
+  RS_LOGLEVEL: "3"
+  RS_NODEJS_ENV: "prod"
+  RS_NODEJS_PORT: "3000"
+  RS_SNAPSHOT_INTERVAL: "1m"
+  RS_TIMEZONE: "Europe/Berlin"
+---
+# Source: restreamer/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-restreamer
+  labels:
+    helm.sh/chart: restreamer-1.1.0
+    app.kubernetes.io/name: restreamer
+    app.kubernetes.io/instance: my-restreamer
+    app.kubernetes.io/version: "0.6.4"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: restreamer
+    app.kubernetes.io/instance: my-restreamer
+---
+# Source: restreamer/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-restreamer
+  labels:
+    helm.sh/chart: restreamer-1.1.0
+    app.kubernetes.io/name: restreamer
+    app.kubernetes.io/instance: my-restreamer
+    app.kubernetes.io/version: "0.6.4"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  serviceName: my-restreamer
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: restreamer
+      app.kubernetes.io/instance: my-restreamer
+  template:
+    metadata:
+      annotations:
+        checksum/configmap: 4f25f3ea62f245c84c66291719685956a7f075e966be30800f21da204c1a99d3
+        checksum/secret: 72f07e66c8145f673f302e3ff9a2c81af7b807af0af7f0b8b4cf0ff4e531815e
+      labels:
+        app.kubernetes.io/name: restreamer
+        app.kubernetes.io/instance: my-restreamer
+    spec:
+      serviceAccountName: my-restreamer
+      securityContext:
+        {}
+      containers:
+        - name: restreamer
+          securityContext:
+            {}
+          image: "datarhei/restreamer:0.6.4"
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: my-restreamer
+            - secretRef:
+                name: my-restreamer
+          volumeMounts:
+            - mountPath: /restreamer/db
+              name: db
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: rtmp
+              containerPort: 1935
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+            {}
+      volumes:
+        - name: db
+          emptyDir: {}
+  volumeClaimTemplates:
+---
+# Source: restreamer/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-restreamer-test-connection"
+  labels:
+    helm.sh/chart: restreamer-1.1.0
+    app.kubernetes.io/name: restreamer
+    app.kubernetes.io/instance: my-restreamer
+    app.kubernetes.io/version: "0.6.4"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-restreamer:80']
+  restartPolicy: Never

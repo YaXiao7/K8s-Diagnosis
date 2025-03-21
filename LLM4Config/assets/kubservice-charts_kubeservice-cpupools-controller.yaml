@@ -1,0 +1,243 @@
+---
+# Source: kubeservice-cpupools-controller/templates/serviceaccountcontroller.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cpusets-controller
+  namespace: "default"
+  labels:
+    helm.sh/chart: kubeservice-cpupools-controller-0.1.1
+    app.kubernetes.io/name: kubeservice-cpupools-controller
+    app.kubernetes.io/instance: my-kubeservice-cpupools-controller
+    app.kubernetes.io/version: "v1.1.1"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: kubeservice-cpupools-controller/templates/serviceaccountdevice.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cpusets-device-plugin
+  namespace: "default"
+  labels:
+    helm.sh/chart: kubeservice-cpupools-controller-0.1.1
+    app.kubernetes.io/name: kubeservice-cpupools-controller
+    app.kubernetes.io/instance: my-kubeservice-cpupools-controller
+    app.kubernetes.io/version: "v1.1.1"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: kubeservice-cpupools-controller/templates/cpuset-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cpusets-configmaps
+  namespace: "default"
+data:
+---
+# Source: kubeservice-cpupools-controller/templates/clusterrolecontroller.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cpusets-controller
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  verbs:
+  - get
+  - list
+---
+# Source: kubeservice-cpupools-controller/templates/clusterroledevice.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cpusets-device-plugin
+rules:
+- apiGroups: [""]
+  resources: ["pods", "nodes"]
+  verbs: ["get", "watch", "list"]
+---
+# Source: kubeservice-cpupools-controller/templates/clusterrolebindingcontroller.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cpusets-controller
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cpusets-controller
+subjects:
+- kind: ServiceAccount
+  name: cpusets-controller
+  namespace: "default"
+---
+# Source: kubeservice-cpupools-controller/templates/clusterrolebindingdevice.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cpusets-device-plugin
+subjects:
+- kind: ServiceAccount
+  name: cpusets-device-plugin
+  namespace: "default"
+roleRef:
+  kind: ClusterRole
+  name: cpusets-device-plugin
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: kubeservice-cpupools-controller/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-kubeservice-cpupools-controller
+  labels:
+    helm.sh/chart: kubeservice-cpupools-controller-0.1.1
+    app.kubernetes.io/name: kubeservice-cpupools-controller
+    app.kubernetes.io/instance: my-kubeservice-cpupools-controller
+    app.kubernetes.io/version: "v1.1.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: kubeservice-cpupools-controller
+    app.kubernetes.io/instance: my-kubeservice-cpupools-controller
+---
+# Source: kubeservice-cpupools-controller/templates/controller.yaml
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  namespace: "default"
+  name: cpusets-controller
+  labels:
+    helm.sh/chart: kubeservice-cpupools-controller-0.1.1
+    app.kubernetes.io/name: kubeservice-cpupools-controller
+    app.kubernetes.io/instance: my-kubeservice-cpupools-controller
+    app.kubernetes.io/version: "v1.1.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+    matchLabels:
+      name: cpusets-controller
+  template:
+    metadata:
+      labels:
+        name: cpusets-controller
+    spec:
+      terminationGracePeriodSeconds: 10
+      containers:
+        - name: cpusets-controller
+          image: "docker.io/dongjiang1989/cpusets-controller:v1.1.1"
+          imagePullPolicy: IfNotPresent
+          ## --cpusetroot needs to be set to the root of the cgroupfs hierarchy used by Kubelet for workloads
+          command: [ "/cpusets-controller", "--poolconfigs=/etc/cpusets-pool", "--cpusetroot=/rootfs/sys/fs/cgroup/cpuset/kubepods/" ]
+          resources:
+            requests:
+              cpu: 64m
+          volumeMounts:
+            - name: time-mount
+              mountPath: /etc/localtime
+              readOnly: true
+            - mountPath: /etc/cpusets-pool
+              name: cpusets-configmaps
+            - mountPath: /rootfs/sys/fs/cgroup/cpuset/kubepods/
+              name: kubepods
+            - mountPath: /var/lib/kubelet/device-plugins/
+              name: checkpointfile
+              readOnly: true
+          env:
+          - name: NODE_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: spec.nodeName
+          - name: FILE_MATCH
+            value: "cpusets-*.yaml"
+          securityContext:
+            {}
+      volumes:
+      - name: time-mount
+        hostPath:
+          path: /etc/localtime
+      ## CPUSetter parses the Kubelet checkpoint file for Device allocations
+      - name: checkpointfile
+        hostPath:
+         path: /var/lib/kubelet/device-plugins/
+      - name: kubepods
+        hostPath:
+         path: /sys/fs/cgroup/cpuset/
+      ## The pool configuration files need to be mounted here
+      - name: cpusets-configmaps
+        configMap:
+          name: cpusets-configmaps
+      serviceAccountName: cpusets-controller
+      securityContext:
+        {}
+---
+# Source: kubeservice-cpupools-controller/templates/deviceplugin.yaml
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  namespace: "default"
+  name: cpusets-device-plugin
+  labels:
+    helm.sh/chart: kubeservice-cpupools-controller-0.1.1
+    app.kubernetes.io/name: kubeservice-cpupools-controller
+    app.kubernetes.io/instance: my-kubeservice-cpupools-controller
+    app.kubernetes.io/version: "v1.1.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+    matchLabels:
+      name: cpusets-device-plugin
+  template:
+    metadata:
+      labels:
+        name: cpusets-device-plugin
+    spec:
+      terminationGracePeriodSeconds: 10
+      containers:
+        - name: cpusets-device-plugin
+          image: "docker.io/dongjiang1989/cpusets-device-plugin:v1.1.1"
+          imagePullPolicy: IfNotPresent
+          command: [ "/cpusets-device-plugin" ]
+          volumeMounts:
+            - mountPath: /etc/cpusets-pool
+              name: cpusets-configmaps
+            - mountPath: /var/lib/kubelet/device-plugins/ 
+              name: devicesock 
+              readOnly: false
+          env:
+          - name: NODE_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: spec.nodeName
+          - name: FILE_MATCH
+            value: "cpusets-*.yaml"
+          resources:
+            
+            requests:
+              cpu: 100m
+              memory: 128Mi
+      volumes:
+      - name: devicesock 
+        hostPath:
+         # directory location on host
+         path: /var/lib/kubelet/device-plugins/
+      - name: cpusets-configmaps
+        configMap:
+          name: cpusets-configmaps
+      serviceAccountName: cpusets-device-plugin
+      securityContext:
+        {}

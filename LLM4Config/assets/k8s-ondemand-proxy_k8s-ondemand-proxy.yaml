@@ -1,0 +1,161 @@
+---
+# Source: k8s-ondemand-proxy/templates/serviceaccount.yaml.tpl
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-k8s-ondemand-proxy
+---
+# Source: k8s-ondemand-proxy/templates/configmap.yaml.tpl
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-k8s-ondemand-proxy
+data:
+  config.yaml: |
+    idle-timeout: 15m
+    namespace: 'default'
+    proxy:
+    - local: :1001
+      remote: app.namespace.svc.cluster.local:1001
+    replicas: 1
+    resource: statefulset/app
+---
+# Source: k8s-ondemand-proxy/templates/rbac.yaml.tpl
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: my-k8s-ondemand-proxy
+rules:
+- apiGroups: ["apps"]
+  resources: ["deployments", "deployments/scale", "replicasets", "replicasets/scale", "statefulsets", "statefulsets/scale"]
+  verbs: ["get", "watch", "list", "update", "patch"]
+---
+# Source: k8s-ondemand-proxy/templates/rbac.yaml.tpl
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: my-k8s-ondemand-proxy
+subjects:
+- kind: ServiceAccount
+  name: my-k8s-ondemand-proxy
+  apiGroup: ""
+  namespace: default
+roleRef:
+  kind: Role
+  name: my-k8s-ondemand-proxy
+  apiGroup: ""
+---
+# Source: k8s-ondemand-proxy/templates/service.yaml.tpl
+kind: Service
+apiVersion: v1
+metadata:
+  name: my-k8s-ondemand-proxy
+  annotations:
+  labels:
+    app: my-k8s-ondemand-proxy
+spec:
+  ports:
+    - name: tcp
+      port: 1001
+      protocol: TCP
+      targetPort: tcp
+  selector:
+    app: my-k8s-ondemand-proxy
+  type: ClusterIP
+---
+# Source: k8s-ondemand-proxy/templates/service.yaml.tpl
+kind: Service
+apiVersion: v1
+metadata:
+  name: my-k8s-ondemand-proxy-headless
+  annotations:
+  labels:
+    app: my-k8s-ondemand-proxy
+spec:
+  ports:
+    - name: tcp
+      port: 1001
+      protocol: TCP
+      targetPort: tcp
+  selector:
+    app: my-k8s-ondemand-proxy
+  clusterIP: None
+  type: ClusterIP
+---
+# Source: k8s-ondemand-proxy/templates/deployment.yaml.tpl
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: my-k8s-ondemand-proxy
+spec:
+  minReadySeconds: 10
+  selector:
+    matchLabels:
+      app: my-k8s-ondemand-proxy
+  template:
+    metadata:
+      labels:
+        app: my-k8s-ondemand-proxy
+    spec:
+      serviceAccountName: my-k8s-ondemand-proxy
+      serviceAccount: my-k8s-ondemand-proxy
+      initContainers: []
+      containers:
+        - name: my-k8s-ondemand-proxy
+          image: "ghcr.io/nefelim4ag/k8s-ondemand-proxy:0.0.2"
+          imagePullPolicy: IfNotPresent
+          env:
+          - name: CONFIGPATH
+            value: /etc/config/config.yaml
+          - name: GOMAXPROCS
+            value: "2"
+          - name: NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          - name: POD_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+          lifecycle: {"preStop":{"exec":{"command":["sh","-c","sleep 15; kill 1"]}}}
+          readinessProbe: null
+          startupProbe: null
+          resources: {"requests":{"cpu":0.005,"memory":"16Mi"}}
+          ports: [{"containerPort":1001,"name":"tcp"}]
+          livenessProbe: null
+          volumeMounts: [{"mountPath":"/etc/config/","name":"config"}]
+      volumes:
+      - configMap:
+          defaultMode: 420
+          name: 'my-k8s-ondemand-proxy'
+        name: config
+      hostNetwork: false
+      terminationGracePeriodSeconds: 30
+      imagePullSecrets: []
+      topologySpreadConstraints:
+        - labelSelector:
+            matchLabels:
+              app: 'my-k8s-ondemand-proxy'
+          maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+        - labelSelector:
+            matchLabels:
+              app: 'my-k8s-ondemand-proxy'
+          maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - preference:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - 'my-k8s-ondemand-proxy'
+            weight: 1
+      tolerations:
+        - key: 'my-k8s-ondemand-proxy'
+          operator: Exists
+  strategy: {"rollingUpdate":{"maxSurge":"5%","maxUnavailable":"10%"},"type":"RollingUpdate"}

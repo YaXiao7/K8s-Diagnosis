@@ -1,0 +1,115 @@
+---
+# Source: prometheus-couchdb-exporter/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-prometheus-couchdb-exporter
+  labels:
+    app: prometheus-couchdb-exporter
+    chart: prometheus-couchdb-exporter-1.0.0
+    release: "my-prometheus-couchdb-exporter"
+    heritage: "Helm"
+---
+# Source: prometheus-couchdb-exporter/templates/role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: my-prometheus-couchdb-exporter
+  labels:
+    app: prometheus-couchdb-exporter
+    chart: prometheus-couchdb-exporter-1.0.0
+    heritage: Helm
+    release: my-prometheus-couchdb-exporter
+rules:
+- apiGroups:      ['extensions']
+  resources:      ['podsecuritypolicies']
+  verbs:          ['use']
+  resourceNames:  [my-prometheus-couchdb-exporter]
+---
+# Source: prometheus-couchdb-exporter/templates/rolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: my-prometheus-couchdb-exporter
+  labels:
+    app: prometheus-couchdb-exporter
+    chart: prometheus-couchdb-exporter-1.0.0
+    heritage: Helm
+    release: my-prometheus-couchdb-exporter
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: my-prometheus-couchdb-exporter
+subjects:
+- kind: ServiceAccount
+  name: my-prometheus-couchdb-exporter
+---
+# Source: prometheus-couchdb-exporter/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-prometheus-couchdb-exporter
+  labels:
+    app: prometheus-couchdb-exporter
+    chart: prometheus-couchdb-exporter-1.0.0
+    release: my-prometheus-couchdb-exporter
+    heritage: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9984
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app: prometheus-couchdb-exporter
+    release: my-prometheus-couchdb-exporter
+---
+# Source: prometheus-couchdb-exporter/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-prometheus-couchdb-exporter
+  labels:
+    app: prometheus-couchdb-exporter
+    chart: prometheus-couchdb-exporter-1.0.0
+    release: my-prometheus-couchdb-exporter
+    heritage: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus-couchdb-exporter
+      release: my-prometheus-couchdb-exporter
+  template:
+    metadata:
+      labels:
+        app: prometheus-couchdb-exporter
+        release: my-prometheus-couchdb-exporter
+    spec:
+      serviceAccountName: my-prometheus-couchdb-exporter
+      containers:
+        - name: prometheus-couchdb-exporter
+          image: "gesellix/couchdb-prometheus-exporter:16"
+          imagePullPolicy: IfNotPresent
+          command:
+            - "/couchdb-prometheus-exporter"
+            - "-telemetry.address=0.0.0.0:9984"
+            - "-logtostderr"
+            - "-couchdb.uri=http://couchdb.default.svc:5984"
+            - "-databases=_all_dbs"
+          ports:
+            - name: http
+              containerPort: 9984
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 60
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 60
+          resources:
+            {}

@@ -1,0 +1,134 @@
+---
+# Source: appcatalog/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-appcatalog
+  namespace: default
+  labels:
+    helm.sh/chart: appcatalog-v2023.03.23
+    app.kubernetes.io/name: appcatalog
+    app.kubernetes.io/instance: my-appcatalog
+    app.kubernetes.io/version: "v0.0.1"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: appcatalog/templates/cluster-role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-appcatalog
+  labels:
+    helm.sh/chart: appcatalog-v2023.03.23
+    app.kubernetes.io/name: appcatalog
+    app.kubernetes.io/instance: my-appcatalog
+    app.kubernetes.io/version: "v0.0.1"
+    app.kubernetes.io/managed-by: Helm
+rules:
+- apiGroups:
+  - appcatalog.appscode.com
+  resources: ["*"]
+  verbs: ["*"]
+- apiGroups:
+  - kubedb.com
+  resources: ["*"]
+  verbs: ["get", "list", "watch"]
+- apiGroups:
+  - kubevault.com
+  resources: ["*"]
+  verbs: ["get", "list", "watch"]
+---
+# Source: appcatalog/templates/cluster-role-binding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-appcatalog
+  labels:
+    helm.sh/chart: appcatalog-v2023.03.23
+    app.kubernetes.io/name: appcatalog
+    app.kubernetes.io/instance: my-appcatalog
+    app.kubernetes.io/version: "v0.0.1"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-appcatalog
+subjects:
+- kind: ServiceAccount
+  name: my-appcatalog
+  namespace: default
+---
+# Source: appcatalog/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-appcatalog
+  namespace: default
+  labels:
+    helm.sh/chart: appcatalog-v2023.03.23
+    app.kubernetes.io/name: appcatalog
+    app.kubernetes.io/instance: my-appcatalog
+    app.kubernetes.io/version: "v0.0.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  ports:
+  # Port used to expose admission webhook apiserver
+  - name: api
+    port: 443
+    targetPort: 8443
+  selector:
+    app.kubernetes.io/name: appcatalog
+    app.kubernetes.io/instance: my-appcatalog
+---
+# Source: appcatalog/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-appcatalog
+  namespace: default
+  labels:
+    helm.sh/chart: appcatalog-v2023.03.23
+    app.kubernetes.io/name: appcatalog
+    app.kubernetes.io/instance: my-appcatalog
+    app.kubernetes.io/version: "v0.0.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: appcatalog
+      app.kubernetes.io/instance: my-appcatalog
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: appcatalog
+        app.kubernetes.io/instance: my-appcatalog
+    spec:
+      
+      serviceAccountName: my-appcatalog
+      securityContext:
+        {}
+      containers:
+        - name: appcatalog
+          securityContext:
+            {}
+          image: ghcr.io/appscode/appcatalog:v0.0.1
+          imagePullPolicy: Always
+          args:
+            - run
+          ports:
+            - name: metrics
+              containerPort: 8080
+              protocol: TCP
+            - name: http
+              containerPort: 8081
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+          resources:
+            {}

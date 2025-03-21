@@ -1,0 +1,255 @@
+---
+# Source: tensorflow-resnet/templates/networkpolicy.yaml
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: my-tensorflow-resnet
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-tensorflow-resnet
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: tensorflow-resnet
+    app.kubernetes.io/version: 2.17.0
+    helm.sh/chart: tensorflow-resnet-4.2.11
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: my-tensorflow-resnet
+      app.kubernetes.io/name: tensorflow-resnet
+  policyTypes:
+    - Ingress
+    - Egress
+  egress:
+    - {}
+  ingress:
+    - ports:
+        - port: 8500
+        - port: 8501
+        - port: 8500
+        - port: 8501
+---
+# Source: tensorflow-resnet/templates/pdb.yaml
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: my-tensorflow-resnet
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-tensorflow-resnet
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: tensorflow-resnet
+    app.kubernetes.io/version: 2.17.0
+    helm.sh/chart: tensorflow-resnet-4.2.11
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: my-tensorflow-resnet
+      app.kubernetes.io/name: tensorflow-resnet
+---
+# Source: tensorflow-resnet/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-tensorflow-resnet
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-tensorflow-resnet
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: tensorflow-resnet
+    app.kubernetes.io/version: 2.17.0
+    helm.sh/chart: tensorflow-resnet-4.2.11
+automountServiceAccountToken: false
+---
+# Source: tensorflow-resnet/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-tensorflow-resnet
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-tensorflow-resnet
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: tensorflow-resnet
+    app.kubernetes.io/version: 2.17.0
+    helm.sh/chart: tensorflow-resnet-4.2.11
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: "Cluster"
+  sessionAffinity: None
+  ports:
+    - name: tf-serving
+      port: 8500
+      targetPort: tf-serving
+    - name: tf-serving-api
+      port: 8501
+      targetPort: tf-serving-api
+  selector:
+    app.kubernetes.io/instance: my-tensorflow-resnet
+    app.kubernetes.io/name: tensorflow-resnet
+---
+# Source: tensorflow-resnet/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-tensorflow-resnet
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-tensorflow-resnet
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: tensorflow-resnet
+    app.kubernetes.io/version: 2.17.0
+    helm.sh/chart: tensorflow-resnet-4.2.11
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: my-tensorflow-resnet
+      app.kubernetes.io/name: tensorflow-resnet
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: my-tensorflow-resnet
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: tensorflow-resnet
+        app.kubernetes.io/version: 2.17.0
+        helm.sh/chart: tensorflow-resnet-4.2.11
+    spec:
+      
+      serviceAccountName: my-tensorflow-resnet
+      automountServiceAccountToken: false
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/instance: my-tensorflow-resnet
+                    app.kubernetes.io/name: tensorflow-resnet
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+        fsGroupChangePolicy: Always
+        supplementalGroups: []
+        sysctls: []
+      initContainers:
+        - name: seed
+          image: docker.io/bitnami/tensorflow-resnet:2.17.0-debian-12-r5
+          imagePullPolicy: "IfNotPresent"
+          command:
+            - "/bin/sh"
+            - "-c"
+            - |
+              if [ -f /seed/.initialized ]; then
+                echo "Already initialized. Skipping"
+              else
+                curl -o /seed/resnet_50_classification_1.tar.gz https://storage.googleapis.com/tfhub-modules/tensorflow/resnet_50/classification/1.tar.gz
+                cd /seed/ && mkdir 1 && tar -xzf resnet_50_classification_1.tar.gz -C 1
+                rm resnet_50_classification_1.tar.gz
+                touch /seed/.initialized
+              fi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsGroup: 1001
+            runAsNonRoot: true
+            runAsUser: 1001
+            seLinuxOptions: null
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: empty-dir
+              mountPath: /tmp
+              subPath: tmp-dir
+            - name: empty-dir
+              mountPath: /seed
+              subPath: app-data-dir
+      containers:
+        - name: tensorflow-serving
+          image: docker.io/bitnami/tensorflow-serving:2.17.0-debian-12-r4
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsGroup: 1001
+            runAsNonRoot: true
+            runAsUser: 1001
+            seLinuxOptions: null
+            seccompProfile:
+              type: RuntimeDefault
+          imagePullPolicy: "IfNotPresent"
+          env:
+            - name: TENSORFLOW_SERVING_MODEL_NAME
+              value: "resnet"
+            - name: TENSORFLOW_SERVING_PORT_NUMBER
+              value: ""
+            - name: TENSORFLOW_SERVING_REST_API_PORT_NUMBER
+              value: ""
+            - name: TENSORFLOW_SERVING_ENABLE_MONITORING
+              value: "no"
+          envFrom:
+          ports:
+            - name: tf-serving
+              containerPort: 8500
+            - name: tf-serving-api
+              containerPort: 8501
+          livenessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 30
+            periodSeconds: 5
+            successThreshold: 1
+            timeoutSeconds: 5
+            exec:
+              command:
+                - pgrep
+                - tensorflow
+          readinessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 15
+            periodSeconds: 5
+            successThreshold: 1
+            timeoutSeconds: 5
+            tcpSocket:
+              port: tf-serving
+          resources:
+            limits:
+              cpu: 375m
+              ephemeral-storage: 2Gi
+              memory: 384Mi
+            requests:
+              cpu: 250m
+              ephemeral-storage: 50Mi
+              memory: 256Mi
+          volumeMounts:
+            - name: empty-dir
+              mountPath: /tmp
+              subPath: tmp-dir
+            - name: empty-dir
+              mountPath: /bitnami/model-data
+              subPath: app-data-dir
+            - name: empty-dir
+              mountPath: /opt/bitnami/tensorflow-serving/conf
+              subPath: app-conf-dir
+            - name: empty-dir
+              mountPath: /opt/bitnami/tensorflow-serving/tmp
+              subPath: app-tmp-dir
+            - name: empty-dir
+              mountPath: /opt/bitnami/tensorflow-serving/logs
+              subPath: app-logs-dir
+      volumes:
+        - name: empty-dir
+          emptyDir: {}

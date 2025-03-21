@@ -1,0 +1,93 @@
+---
+# Source: metrics-exporter/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-metrics-exporter
+  labels:
+    app: metrics-exporter
+    chart: metrics-exporter-1.2.0
+    release: my-metrics-exporter
+    heritage: Helm
+data:
+---
+# Source: metrics-exporter/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-metrics-exporter
+  labels:
+    app: metrics-exporter
+    chart: metrics-exporter-1.2.0
+    release: my-metrics-exporter
+    heritage: Helm
+spec:
+  ports:
+    - name: http
+      port: 80
+      protocol: TCP
+      targetPort: 9399
+  selector:
+    app.kubernetes.io/name: metrics-exporter
+    app.kubernetes.io/instance: my-metrics-exporter
+  sessionAffinity: None
+  type: ClusterIP
+---
+# Source: metrics-exporter/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-metrics-exporter
+  labels:
+    helm.sh/chart: metrics-exporter-1.2.0
+    app.kubernetes.io/name: metrics-exporter
+    app.kubernetes.io/instance: my-metrics-exporter
+    app.kubernetes.io/version: "0.5"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: metrics-exporter
+      app.kubernetes.io/instance: my-metrics-exporter
+  template:
+    metadata:
+      annotations:
+        checksum/config: 1eefd0aa5d6042941706d36170b877f1147f6bd375d94d8c2279fb8d1c2e842e
+        prometheus.io/port: "9399"
+        prometheus.io/scrape: "true"
+      labels:
+        app.kubernetes.io/name: metrics-exporter
+        app.kubernetes.io/instance: my-metrics-exporter
+    spec:
+      securityContext:
+        {}
+      volumes:
+        - name: config
+          configMap:
+            name: my-metrics-exporter
+            items:
+              - key: "sql_exporter.yaml"
+                path: "sql_exporter.yaml"
+      containers:
+        - name: metrics-exporter
+          securityContext:
+            {}
+          image: "githubfree/sql_exporter:0.5"
+          imagePullPolicy: IfNotPresent
+          args:
+            - -config.file=/config/sql_exporter.yaml
+          ports:
+            - name: metrics
+              containerPort: 9399
+              protocol: TCP
+          resources:
+            limits:
+              memory: 128Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+          volumeMounts:
+            - name: config
+              mountPath: /config/sql_exporter.yaml
+              subPath: sql_exporter.yaml
+              readOnly: true

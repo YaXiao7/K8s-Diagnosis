@@ -1,0 +1,78 @@
+---
+# Source: airports-api/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: sa-airports-api
+  namespace: default
+type: kubernetes.io/basic-auth
+stringData:
+  url: jdbc:postgresql://postgres:5432/db_airports
+  username: postgres
+  password: postgres
+---
+# Source: airports-api/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: airports-api
+  namespace: default
+  labels:
+    app: airports-api
+spec:
+  ports:
+    - name: client
+      port: 8080
+      targetPort: 8080
+  selector:
+    app: airports-api
+---
+# Source: airports-api/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: airports-api
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: airports-api
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: airports-api
+    spec:
+      containers:
+        - name: airports-api
+          image: dina1993/airports-api
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            initialDelaySeconds: 3
+            periodSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8080
+            initialDelaySeconds: 3
+            periodSeconds: 3
+          ports:
+            - containerPort: 8080
+          env:
+            - name: SPRING_DATASOURCE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: sa-airports-api
+                  key: url
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: sa-airports-api
+                  key: username
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: sa-airports-api
+                  key: password

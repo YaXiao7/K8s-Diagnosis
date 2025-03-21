@@ -1,0 +1,122 @@
+---
+# Source: screensnap/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-screensnap
+  labels:
+
+    helm.sh/chart: screensnap-1.1.0
+    app.kubernetes.io/name: screensnap
+    app.kubernetes.io/instance: my-screensnap
+    app.kubernetes.io/version: "1.1.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: screensnap/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-screensnap
+  labels:
+    helm.sh/chart: screensnap-1.1.0
+    app.kubernetes.io/name: screensnap
+    app.kubernetes.io/instance: my-screensnap
+    app.kubernetes.io/version: "1.1.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: screensnap
+    app.kubernetes.io/instance: my-screensnap
+---
+# Source: screensnap/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-screensnap
+  labels:
+    helm.sh/chart: screensnap-1.1.0
+    app.kubernetes.io/name: screensnap
+    app.kubernetes.io/instance: my-screensnap
+    app.kubernetes.io/version: "1.1.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: screensnap
+      app.kubernetes.io/instance: my-screensnap
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: screensnap
+        app.kubernetes.io/instance: my-screensnap
+      annotations:
+        instrumentation.opentelemetry.io/inject-sdk: "true"
+    spec:
+      serviceAccountName: my-screensnap
+      securityContext:
+        {}
+      containers:
+        - name: screensnap
+          securityContext:
+            {}
+          image: "harbor.ntppool.org/ntppool/screensnap:1.1.0"
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+            - name: metrics
+              containerPort: 8001
+              protocol: TCP
+            - name: health
+              containerPort: 8002
+              protocol: TCP
+          livenessProbe:
+            periodSeconds: 45
+            httpGet:
+              path: /__health
+              port: health
+          readinessProbe:
+            periodSeconds: 20
+            httpGet:
+              path: /__health
+              port: health
+          env:
+            - name: upstream_base
+              value: 
+          resources:
+            limits:
+              cpu: 500m
+              memory: 1Gi
+            requests:
+              cpu: 10m
+              memory: 256Mi
+---
+# Source: screensnap/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-screensnap-test-connection"
+  labels:
+
+    helm.sh/chart: screensnap-1.1.0
+    app.kubernetes.io/name: screensnap
+    app.kubernetes.io/instance: my-screensnap
+    app.kubernetes.io/version: "1.1.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args:  ['my-screensnap:80']
+  restartPolicy: Never

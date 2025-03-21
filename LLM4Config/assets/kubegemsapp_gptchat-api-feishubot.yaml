@@ -1,0 +1,266 @@
+---
+# Source: gptchat-api-feishubot/templates/gptchat-api-manifests.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: chatgpt-api-cfg
+type: Opaque
+data:
+  .env: T1BFTl9BSV9FTUFJTD10ZXN0QHRlc3QuY29tCk9QRU5fQUlfUEFTU1dPUkQ9cGFzcw==
+---
+# Source: gptchat-api-feishubot/templates/proxy-manifests.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  labels:
+    app: chat-proxy-cache
+  name: chat-proxy-cache
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+# Source: gptchat-api-feishubot/templates/proxy-manifests.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: proxy-watcher-role
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  - endpoints
+  verbs:
+  - get
+  - watch
+  - list
+---
+# Source: gptchat-api-feishubot/templates/proxy-manifests.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: proxy-watcher-role
+subjects:
+- kind: ServiceAccount
+  name: default
+---
+# Source: gptchat-api-feishubot/templates/feishubot-manifets.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: feishubot
+spec:
+  selector:
+    app: feishubot
+  type: ClusterIP
+  ports:
+  - name: http
+    protocol: TCP
+    port: 9000
+    targetPort: 9000
+---
+# Source: gptchat-api-feishubot/templates/gptchat-api-manifests.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: chatgpt-api
+spec:
+  ports:
+  - name: http
+    port: 3000
+    protocol: TCP
+    targetPort: 3000
+  - name: vnc
+    port: 5900
+    protocol: TCP
+    targetPort: 5900
+  selector:
+    app: chatgpt-api
+  sessionAffinity: None
+  type: ClusterIP
+---
+# Source: gptchat-api-feishubot/templates/proxy-manifests.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: chat-proxy
+spec:
+  selector:
+    app: chat-proxy
+  type: ClusterIP
+  ports:
+  - name: http
+    protocol: TCP
+    port: 9000
+    targetPort: 9000
+---
+# Source: gptchat-api-feishubot/templates/feishubot-manifets.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: feishubot
+  labels:
+    app: feishubot
+spec:
+  selector:
+    matchLabels:
+      app: feishubot
+  replicas: 1
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: feishubot
+    spec:
+      containers:
+      - name: feishubot
+        image: kubegems/chatgpt-api-feishubot:latest
+        imagePullPolicy: Always
+        resources:
+          requests:
+            cpu: 100m
+            memory: 100Mi
+          limits:
+            cpu: 500m
+            memory: 500Mi
+        env:
+        - name: ChatGPTHost
+          value: http://chat-proxy:9000
+        - name: FeishuBotName
+          value: 
+        - name: FeishuAppID
+          value: cli_xxxx
+        - name: FeishuAppSecret
+          value: xxxx
+        - name: FeishuVerificationToken
+          value: verifytoken
+        - name: ConversationExpireSeconds
+          value: "3600"
+        ports:
+        - containerPort: 9000
+          name: http
+---
+# Source: gptchat-api-feishubot/templates/proxy-manifests.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chat-proxy
+  labels:
+    app: chat-proxy
+spec:
+  selector:
+    matchLabels:
+      app: chat-proxy
+  replicas: 1
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: chat-proxy
+    spec:
+      volumes:
+        - name: chat-proxy-cache
+          persistentVolumeClaim:
+            claimName: chat-proxy-cache
+      containers:
+      - name: chat-proxy
+        image: kubegems/chatgpt-api-proxy:latest
+        imagePullPolicy: Always
+        resources:
+          requests:
+            cpu: 100m
+            memory: 100Mi
+          limits:
+            cpu: 100m
+            memory: 100Mi
+        env:
+        - name: CHATAPI_SVC
+          value: chatgpt-api
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+        ports:
+        - containerPort: 9000
+          name: http
+        volumeMounts:
+        - mountPath: /cache
+          name: chat-proxy-cache
+---
+# Source: gptchat-api-feishubot/templates/gptchat-api-manifests.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: chatgpt-api
+spec:
+  updateStrategy:
+    rollingUpdate:
+      partition: 1
+    type: RollingUpdate
+  podManagementPolicy: Parallel
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: chatgpt-api
+  serviceName: chatgpt-api
+  template:
+    metadata:
+      labels:
+        app: chatgpt-api
+    spec:
+      containers:
+      - name: chatgpt-api
+        env:
+        - name: PROXY_SERVER
+          value: 1.2.3.4:5678
+        - name: NOPECHA_KEY
+          value: abcdefg
+        image: kubegems/chatgpt-api:latest
+        imagePullPolicy: Always
+        resources: {}
+        ports:
+        - containerPort: 3000
+          name: http
+          protocol: TCP
+        - containerPort: 5900
+          name: vnc
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /ready
+            port: 3000
+            scheme: HTTP
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 1
+        volumeMounts:
+        - mountPath: /home/pptruser/chat/.env
+          name: config
+          subPath: .env
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      volumes:
+      - name: config
+        secret:
+          defaultMode: 420
+          secretName: chatgpt-api-cfg

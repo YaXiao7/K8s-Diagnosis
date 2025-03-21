@@ -1,0 +1,337 @@
+---
+# Source: netbird/templates/management-serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-netbird-management
+  labels:
+    helm.sh/chart: netbird-0.14.2
+    app.kubernetes.io/name: netbird-management
+    app.kubernetes.io/instance: my-netbird
+    app.kubernetes.io/version: "0.26.3"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: netbird/templates/signal-serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-netbird-signal
+  labels:
+    helm.sh/chart: netbird-0.14.2
+    app.kubernetes.io/name: netbird-signal
+    app.kubernetes.io/instance: my-netbird
+    app.kubernetes.io/version: "0.26.3"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: netbird/templates/management-cm.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-netbird-management
+  labels:
+    helm.sh/chart: netbird-0.14.2
+    app.kubernetes.io/name: netbird-management
+    app.kubernetes.io/instance: my-netbird
+    app.kubernetes.io/version: "0.26.3"
+    app.kubernetes.io/managed-by: Helm
+data:
+  management.tmpl.json: |-
+    {
+        "Stuns": [
+            {
+                "Proto": "udp",
+                "URI": "${NETBIRD_STUN_URI}",
+                "Username": "",
+                "Password": null
+            }
+        ],
+        "TURNConfig": {
+            "Turns": [
+                {
+                    "Proto": "udp",
+                    "URI": "${NETBIRD_TURN_URI}",
+                    "Username": "${NETBIRD_TURN_USER}",
+                    "Password": "${NETBIRD_TURN_PASSWORD}"
+                }
+            ],
+            "CredentialsTTL": "12h",
+            "Secret": "secret",
+            "TimeBasedCredentials": false
+        },
+        "Signal": {
+            "Proto": "${NETBIRD_SIGNAL_PROTOCOL}",
+            "URI": "${NETBIRD_SIGNAL_URI}",
+            "Username": "",
+            "Password": null
+        },
+        "Datadir": "",
+        "HttpConfig": {
+            "Address": "0.0.0.0:80",
+            "AuthAudience": "${NETBIRD_AUTH_AUDIENCE}",
+            "AuthUserIDClaim": "${NETBIRD_AUTH_USER_ID_CLAIM:-sub}",
+            "CertFile": "${NETBIRD_MGMT_API_CERT_FILE}",
+            "CertKey": "${NETBIRD_MGMT_API_CERT_KEY_FILE}",
+            "OIDCConfigEndpoint": "${NETBIRD_AUTH_OIDC_CONFIGURATION_ENDPOINT}"
+        },
+        "IdpManagerConfig": {
+            "ManagerType": "${NETBIRD_IDP_MANAGER_TYPE}",
+            "${NETBIRD_IDP_MANAGER_TYPE^}ClientCredentials": {
+                "ClientID": "${NETBIRD_IDP_CLIENT_ID}",
+                "ClientSecret": "${NETBIRD_IDP_CLIENT_SECRET}",
+                "GrantType": "${NETBIRD_IDP_GRANT_TYPE}",
+                "Audience": "${NETBIRD_IDP_AUTH0_AUDIENCE}",
+                "AuthIssuer": "${NETBIRD_IDP_AUTH0_AUTH_ISSUER}",
+                "AdminEndpoint": "${NETBIRD_IDP_KEYCLOAK_ADMIN_ENDPOINT}",
+                "TokenEndpoint": "${NETBIRD_IDP_KEYCLOAK_TOKEN_ENDPOINT}"
+            }
+        },
+        "DeviceAuthorizationFlow": {
+            "Provider": "${NETBIRD_AUTH_DEVICE_AUTH_PROVIDER}",
+            "ProviderConfig": {
+                "Audience": "${NETBIRD_AUTH_DEVICE_AUTH_AUDIENCE}",
+                "ClientID": "${NETBIRD_AUTH_DEVICE_AUTH_CLIENT_ID}",
+                "DeviceAuthEndpoint": "${NETBIRD_AUTH_DEVICE_AUTH_DEVICE_AUTHORIZATION_ENDPOINT}",
+                "Domain": "${NETBIRD_AUTH_DEVICE_AUTH_AUTHORITY}",
+                "TokenEndpoint": "${NETBIRD_AUTH_DEVICE_AUTH_TOKEN_ENDPOINT}",
+                "Scope": "${NETBIRD_AUTH_DEVICE_AUTH_SCOPE}",
+                "UseIDToken": ${NETBIRD_AUTH_DEVICE_AUTH_USE_ID_TOKEN:-false}
+            }
+        }
+    }
+---
+# Source: netbird/templates/management-pvc.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: my-netbird-management
+  labels:
+    helm.sh/chart: netbird-0.14.2
+    app.kubernetes.io/name: netbird-management
+    app.kubernetes.io/instance: my-netbird
+    app.kubernetes.io/version: "0.26.3"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: "100Mi"
+---
+# Source: netbird/templates/signal-pvc.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: my-netbird-signal
+  labels:
+    helm.sh/chart: netbird-0.14.2
+    app.kubernetes.io/name: netbird-signal
+    app.kubernetes.io/instance: my-netbird
+    app.kubernetes.io/version: "0.26.3"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: "100Mi"
+---
+# Source: netbird/templates/management-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-netbird-management
+  labels:
+    helm.sh/chart: netbird-0.14.2
+    app.kubernetes.io/name: netbird-management
+    app.kubernetes.io/instance: my-netbird
+    app.kubernetes.io/version: "0.26.3"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: netbird-management
+    app.kubernetes.io/instance: my-netbird
+---
+# Source: netbird/templates/signal-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-netbird-signal
+  labels:
+    helm.sh/chart: netbird-0.14.2
+    app.kubernetes.io/name: netbird-signal
+    app.kubernetes.io/instance: my-netbird
+    app.kubernetes.io/version: "0.26.3"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: https
+      protocol: TCP
+      name: https
+  selector:
+    app.kubernetes.io/name: netbird-signal
+    app.kubernetes.io/instance: my-netbird
+---
+# Source: netbird/templates/management-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-netbird-management
+  labels:
+    helm.sh/chart: netbird-0.14.2
+    app.kubernetes.io/name: netbird-management
+    app.kubernetes.io/instance: my-netbird
+    app.kubernetes.io/version: "0.26.3"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: netbird-management
+      app.kubernetes.io/instance: my-netbird
+  template:
+    metadata:
+      annotations:
+        checksum/config: 65503a0ecdb2de3a37862f98f70ed52efca61995daae519e91a80713fd89dc4d
+      labels:
+        app.kubernetes.io/name: netbird-management
+        app.kubernetes.io/instance: my-netbird
+    spec:
+      serviceAccountName: my-netbird-management
+      securityContext:
+        {}
+      initContainers:
+        - name: configure
+          image: golang:latest
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c"]
+          args:
+            - >
+              go install github.com/drone/envsubst/cmd/envsubst@latest &&
+              envsubst < /tmp/netbird/management.tmpl.json > /etc/netbird/management.json &&
+              cat /etc/netbird/management.json
+          env:
+            - name: NETBIRD_SIGNAL_URI
+              value: example.com:10000
+            - name: NETBIRD_SIGNAL_PROTOCOL
+              value: https
+            - name: NETBIRD_STUN_URI
+              value: stun:example.com:3478
+            - name: NETBIRD_TURN_URI
+              value: turn:example.com:3478
+            - name: NETBIRD_AUTH_OIDC_CONFIGURATION_ENDPOINT
+              value: "http://keycloak.localtest.me:9000/realms/helm-charts/.well-known/openid-configuration"
+            - name: NETBIRD_MGMT_API_CERT_FILE
+              value: ""
+            - name: NETBIRD_MGMT_API_CERT_KEY_FILE
+              value: ""
+            - name: NETBIRD_AUTH_AUDIENCE
+              value: account
+            - name: NETBIRD_AUTH_USER_ID_CLAIM
+              value: 
+
+            # Device auth configuration.
+
+            # IDP configuration.
+            - name: NETBIRD_IDP_MANAGER_TYPE
+              value: "none"
+
+          volumeMounts:
+            - mountPath: /etc/netbird
+              name: config
+            - mountPath: /tmp/netbird
+              name: config-template
+      containers:
+        - name: netbird-management
+          securityContext:
+            {}
+          image: "netbirdio/management:0.26.3"
+          imagePullPolicy: IfNotPresent
+          args:
+            - --log-level
+            - info
+            - --log-file
+            - console
+            - --dns-domain
+            - netbird.selfhosted
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          resources:
+            {}
+          volumeMounts:
+            - mountPath: /etc/netbird
+              name: config
+            - mountPath: /var/lib/netbird
+              name: management
+      volumes:
+        - name: config
+          emptyDir:
+            medium: Memory
+        - name: config-template
+          configMap:
+            name: my-netbird-management
+        - name: management
+          persistentVolumeClaim:
+            claimName: my-netbird-management
+---
+# Source: netbird/templates/signal-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-netbird-signal
+  labels:
+    helm.sh/chart: netbird-0.14.2
+    app.kubernetes.io/name: netbird-signal
+    app.kubernetes.io/instance: my-netbird
+    app.kubernetes.io/version: "0.26.3"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: netbird-signal
+      app.kubernetes.io/instance: my-netbird
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: netbird-signal
+        app.kubernetes.io/instance: my-netbird
+    spec:
+      serviceAccountName: my-netbird-signal
+      securityContext:
+        null
+      containers:
+        - name: netbird-signal
+          securityContext:
+            null
+          image: "netbirdio/signal:0.26.3"
+          imagePullPolicy: IfNotPresent
+          args: ["--port", "80", "--log-level", "info", "--log-file", "console"]
+          ports:
+            - name: https
+              containerPort: 80
+              protocol: TCP
+          livenessProbe:
+            tcpSocket:
+              port: https
+          readinessProbe:
+            tcpSocket:
+              port: https
+          resources:
+            {}
+          volumeMounts:
+            - mountPath: /var/lib/netbird
+              name: signal
+      volumes:
+        - name: signal
+          persistentVolumeClaim:
+            claimName: my-netbird-signal

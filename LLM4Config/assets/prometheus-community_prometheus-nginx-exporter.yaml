@@ -1,0 +1,126 @@
+---
+# Source: prometheus-nginx-exporter/templates/role.yaml
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-prometheus-nginx-exporter
+  namespace: default
+  labels:    
+    helm.sh/chart: prometheus-nginx-exporter-0.2.2
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: metrics
+    app.kubernetes.io/part-of: prometheus-nginx-exporter
+    app.kubernetes.io/name: prometheus-nginx-exporter
+    app.kubernetes.io/instance: my-prometheus-nginx-exporter
+    app.kubernetes.io/version: "0.11.0"
+rules:
+- apiGroups: [""]
+  resources: ["endpoints"]
+  verbs: ["get"]
+---
+# Source: prometheus-nginx-exporter/templates/rolebinding.yaml
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-prometheus-nginx-exporter
+  namespace: default
+  labels:    
+    helm.sh/chart: prometheus-nginx-exporter-0.2.2
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: metrics
+    app.kubernetes.io/part-of: prometheus-nginx-exporter
+    app.kubernetes.io/name: prometheus-nginx-exporter
+    app.kubernetes.io/instance: my-prometheus-nginx-exporter
+    app.kubernetes.io/version: "0.11.0"
+subjects:
+- kind: ServiceAccount
+  name: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: my-prometheus-nginx-exporter
+---
+# Source: prometheus-nginx-exporter/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-prometheus-nginx-exporter
+  namespace: default
+  labels:    
+    helm.sh/chart: prometheus-nginx-exporter-0.2.2
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: metrics
+    app.kubernetes.io/part-of: prometheus-nginx-exporter
+    app.kubernetes.io/name: prometheus-nginx-exporter
+    app.kubernetes.io/instance: my-prometheus-nginx-exporter
+    app.kubernetes.io/version: "0.11.0"
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9113
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:    
+    app.kubernetes.io/name: prometheus-nginx-exporter
+    app.kubernetes.io/instance: my-prometheus-nginx-exporter
+---
+# Source: prometheus-nginx-exporter/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-prometheus-nginx-exporter
+  namespace: default
+  labels:    
+    helm.sh/chart: prometheus-nginx-exporter-0.2.2
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: metrics
+    app.kubernetes.io/part-of: prometheus-nginx-exporter
+    app.kubernetes.io/name: prometheus-nginx-exporter
+    app.kubernetes.io/instance: my-prometheus-nginx-exporter
+    app.kubernetes.io/version: "0.11.0"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:      
+      app.kubernetes.io/name: prometheus-nginx-exporter
+      app.kubernetes.io/instance: my-prometheus-nginx-exporter
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:        
+        helm.sh/chart: prometheus-nginx-exporter-0.2.2
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/component: metrics
+        app.kubernetes.io/part-of: prometheus-nginx-exporter
+        app.kubernetes.io/name: prometheus-nginx-exporter
+        app.kubernetes.io/instance: my-prometheus-nginx-exporter
+        app.kubernetes.io/version: "0.11.0"
+    spec:
+      serviceAccountName: default
+      containers:
+        - name: prometheus-nginx-exporter
+          image: "nginx/nginx-prometheus-exporter:0.11.0"
+          imagePullPolicy: IfNotPresent
+          args:
+            - "-nginx.scrape-uri=http://my-prometheus-nginx-exporter.default.svc.cluster.local:8080/stub_status"
+          ports:
+            - name: http
+              containerPort: 9113
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 30
+            timeoutSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 30
+            timeoutSeconds: 10

@@ -1,0 +1,180 @@
+---
+# Source: kdi-web/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kdi-web
+  labels:
+    helm.sh/chart: kdi-web-0.1.0
+    app.kubernetes.io/name: kdi-web
+    app.kubernetes.io/instance: my-kdi-web
+    tier: web
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+automountServiceAccountToken: true
+---
+# Source: kdi-web/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+    name: my-kdi-web
+type: Opaque
+data:
+    KDI_MSAL_CLIENT_ID: "MzMyYmFmZTQtNjVhZi00YjAxLWJkMzUtOGEzZGRhY2I2MDBl"
+    KDI_MSAL_OIDC_METADATA_URL: "aHR0cHM6Ly9sb2dpbi5taWNyb3NvZnRvbmxpbmUuY29tLyVzL3YyLjAvLndlbGwta25vd24vb3BlbmlkLWNvbmZpZ3VyYXRpb24="
+    KDI_MSAL_TENANT_ID: "MGRlMWZhOGYtYThjZi00NmE5LWI1YWEtNzgwMTkyYmI0ZmQw"
+    KDI_JWT_SUB_FOR_K8S_API: "a2RpLXdlYg=="
+    KDI_JWT_SECRET_KEY: "ODd6cmdyZ3p6NmM3YWUxZmFkOGYxODA4ZGViZGVlOTgxNmE0ZmQ0YjNmNDIwZTUwYjJkZDVlY2VmMTlkMjVlMjZmMmU5YTI3Mjc5MjBjYjVlZDBkMTgzMWU0YThmY2U5NjcwN2JmYTYwYmY3YzUxNjQ5MTc1MjM3Y2dyemdyZWd6YTA5NzY2ZTZkYWIzNzk="
+    KDI_JWT_ISSUER: "a2Rp"
+    KDI_MONGO_DB_URI: "bW9uZ29kYitzcnY6Ly9rZGk6cm5GaUphR1pUSHdLdzhrMEBrZGktY2x1c3Rlci5tbnBpczh3Lm1vbmdvZGIubmV0Lz9yZXRyeVdyaXRlcz10cnVlJnc9bWFqb3JpdHkmYXBwTmFtZT1rZGktY2x1c3RlciZ0bHM9dHJ1ZQ=="
+    KDI_MONGO_DB_NAME: "a2Rp"
+---
+# Source: kdi-web/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-kdi-web
+data:
+  KDI_K8S_API_ENDPOINT: "http://kdi-k8s.kuro08-dev.svc.cluster.local:8090/api/v1"
+  KDI_WEBAPP_ENDPOINT: "https://kdi-webapp-kuro08-dev.apps.sandbox-m3.1530.p1.openshiftapps.com"
+---
+# Source: kdi-web/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-kdi-web
+  labels:
+    helm.sh/chart: kdi-web-0.1.0
+    app.kubernetes.io/name: kdi-web
+    app.kubernetes.io/instance: my-kdi-web
+    tier: web
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: NodePort
+  ports:
+    - port: 8070
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: kdi-web
+    app.kubernetes.io/instance: my-kdi-web
+    tier: web
+---
+# Source: kdi-web/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-kdi-web
+  labels:
+    helm.sh/chart: kdi-web-0.1.0
+    app.kubernetes.io/name: kdi-web
+    app.kubernetes.io/instance: my-kdi-web
+    tier: web
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kdi-web
+      app.kubernetes.io/instance: my-kdi-web
+      tier: web
+  template:
+    metadata:
+      labels:
+        helm.sh/chart: kdi-web-0.1.0
+        app.kubernetes.io/name: kdi-web
+        app.kubernetes.io/instance: my-kdi-web
+        tier: web
+        app.kubernetes.io/version: "1.16.0"
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      serviceAccountName: kdi-web
+      securityContext:
+        {}
+      containers:
+        - name: kdi-web
+          securityContext:
+            {}
+          image: "kuro08/kdi-web:latest"
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8070
+              protocol: TCP
+
+          env:
+            - name: KDI_WEB_API_PORT
+              value: "8070"
+            - name: KDI_K8S_API_ENDPOINT
+              valueFrom:
+                configMapKeyRef:
+                  name: my-kdi-web
+                  key: KDI_K8S_API_ENDPOINT
+            - name: KDI_WEBAPP_ENDPOINT
+              valueFrom:
+                configMapKeyRef:
+                  name: my-kdi-web
+                  key: KDI_WEBAPP_ENDPOINT
+            - name: KDI_MSAL_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: my-kdi-web
+                  key: KDI_MSAL_CLIENT_ID
+            - name: KDI_MSAL_OIDC_METADATA_URL
+              valueFrom:
+                secretKeyRef:
+                  name: my-kdi-web
+                  key: KDI_MSAL_OIDC_METADATA_URL
+            - name: KDI_MSAL_TENANT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: my-kdi-web
+                  key: KDI_MSAL_TENANT_ID
+            - name: KDI_JWT_SUB_FOR_K8S_API
+              valueFrom:
+                secretKeyRef:
+                  name: my-kdi-web
+                  key: KDI_JWT_SUB_FOR_K8S_API
+            - name: KDI_JWT_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: my-kdi-web
+                  key: KDI_JWT_SECRET_KEY
+            - name: KDI_JWT_ISSUER
+              valueFrom:
+                secretKeyRef:
+                  name: my-kdi-web
+                  key: KDI_JWT_ISSUER
+            - name: KDI_MONGO_DB_URI
+              valueFrom:
+                secretKeyRef:
+                  name: my-kdi-web
+                  key: KDI_MONGO_DB_URI               
+            - name: KDI_MONGO_DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: my-kdi-web
+                  key: KDI_MONGO_DB_NAME
+---
+# Source: kdi-web/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-kdi-web-test-connection"
+  labels:
+    helm.sh/chart: kdi-web-0.1.0
+    app.kubernetes.io/name: kdi-web
+    app.kubernetes.io/instance: my-kdi-web
+    tier: web
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-kdi-web:8070']
+  restartPolicy: Never

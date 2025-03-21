@@ -1,0 +1,160 @@
+---
+# Source: sshpiper/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-sshpiper-reader
+  labels:
+    helm.sh/chart: sshpiper-0.4.3
+    app.kubernetes.io/name: sshpiper
+    app.kubernetes.io/instance: my-sshpiper
+    app.kubernetes.io/version: "v1.3.1"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: sshpiper/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-sshpiper-server-key
+  labels:
+    helm.sh/chart: sshpiper-0.4.3
+    app.kubernetes.io/name: sshpiper
+    app.kubernetes.io/instance: my-sshpiper
+    app.kubernetes.io/version: "v1.3.1"
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  server_key: "LS0tLS1CRUdJTiBFQyBQUklWQVRFIEtFWS0tLS0tCk1IY0NBUUVFSUhoN2kwM0xQb2xkTWErcllpcHVHUEpod0l3RmdrZFQ5cVIveENnRjNWeDVvQW9HQ0NxR1NNNDkKQXdFSG9VUURRZ0FFYUtqWFByR3YrSFpta1RaL0pIVFBZaFM4eld2UklhbWU5S3ZTcld5TmRrRlAxVTlmSW8xegpQaHhKakRaUC9ta1k1QkRQcmZvZXVwNjd1czBraHBGdWtRPT0KLS0tLS1FTkQgRUMgUFJJVkFURSBLRVktLS0tLQo="
+---
+# Source: sshpiper/templates/role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: my-sshpiper
+  labels:
+    helm.sh/chart: sshpiper-0.4.3
+    app.kubernetes.io/name: sshpiper
+    app.kubernetes.io/instance: my-sshpiper
+    app.kubernetes.io/version: "v1.3.1"
+    app.kubernetes.io/managed-by: Helm
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - get
+- apiGroups:
+  - sshpiper.com
+  resources:
+  - pipes
+  verbs:
+  - get
+  - list
+  - watch
+---
+# Source: sshpiper/templates/rolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: my-sshpiper
+  labels:
+    helm.sh/chart: sshpiper-0.4.3
+    app.kubernetes.io/name: sshpiper
+    app.kubernetes.io/instance: my-sshpiper
+    app.kubernetes.io/version: "v1.3.1"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: my-sshpiper
+subjects:
+  - kind: ServiceAccount
+    name: my-sshpiper-reader
+    namespace: "default"
+---
+# Source: sshpiper/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-sshpiper
+  labels:
+    helm.sh/chart: sshpiper-0.4.3
+    app.kubernetes.io/name: sshpiper
+    app.kubernetes.io/instance: my-sshpiper
+    app.kubernetes.io/version: "v1.3.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 2222
+      targetPort: 2222
+      protocol: TCP
+      name: sshpiper
+  selector:
+    app.kubernetes.io/name: sshpiper
+    app.kubernetes.io/instance: my-sshpiper
+---
+# Source: sshpiper/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-sshpiper
+  labels:
+    helm.sh/chart: sshpiper-0.4.3
+    app.kubernetes.io/name: sshpiper
+    app.kubernetes.io/instance: my-sshpiper
+    app.kubernetes.io/version: "v1.3.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sshpiper
+      app.kubernetes.io/instance: my-sshpiper
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: sshpiper
+        app.kubernetes.io/instance: my-sshpiper
+    spec:
+      serviceAccountName: my-sshpiper-reader
+      securityContext:
+        {}
+      containers:
+      - name: sshpiper
+        image: "farmer1992/sshpiperd:v1.3.1"
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          runAsGroup: 65534
+          runAsNonRoot: true
+          runAsUser: 65534
+        ports:
+          - containerPort: 2222
+        env:
+        - name: SSHPIPERD_SERVER_KEY
+          value: "/serverkey/ssh_host_key"
+        - name: SSHPIPERD_LOG_LEVEL
+          value: "info"
+        - name: SSHPIPERD_LOGIN_GRACE_TIME
+          value: "30s"
+        args:
+          
+          - /sshpiperd/plugins/kubernetes
+        volumeMounts:
+        - name: sshpiper-server-key
+          mountPath: "/serverkey/"
+          readOnly: true
+        resources:
+          {}
+      volumes:
+      - name: sshpiper-server-key
+        secret:
+          secretName: my-sshpiper-server-key
+          items:
+          - key: server_key
+            path: ssh_host_key

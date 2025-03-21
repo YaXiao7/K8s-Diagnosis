@@ -1,0 +1,71 @@
+---
+# Source: doublecommander/templates/common.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-doublecommander
+  labels:
+    helm.sh/chart: doublecommander-1.0.2
+    app.kubernetes.io/name: doublecommander
+    app.kubernetes.io/instance: my-doublecommander
+    app.kubernetes.io/version: "0.8.2-1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3000
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: doublecommander
+    app.kubernetes.io/instance: my-doublecommander
+---
+# Source: doublecommander/templates/common.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-doublecommander
+  labels:
+    helm.sh/chart: doublecommander-1.0.2
+    app.kubernetes.io/name: doublecommander
+    app.kubernetes.io/instance: my-doublecommander
+    app.kubernetes.io/version: "0.8.2-1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: doublecommander
+      app.kubernetes.io/instance: my-doublecommander
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: doublecommander
+        app.kubernetes.io/instance: my-doublecommander
+    spec:
+      serviceAccountName: default
+      dnsPolicy: ClusterFirst
+      containers:
+      - name: my-doublecommander
+        image: "ghcr.io/linuxserver/doublecommander:version-0.8.2-1"
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 3000
+          protocol: TCP
+        volumeMounts:
+        livenessProbe:
+          tcpSocket:
+            port: http
+          initialDelaySeconds: 30
+          failureThreshold: 5
+          timeoutSeconds: 10
+        readinessProbe:
+          tcpSocket:
+            port: http
+          initialDelaySeconds: 30
+          failureThreshold: 5
+          timeoutSeconds: 10

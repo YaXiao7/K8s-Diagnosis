@@ -1,0 +1,149 @@
+---
+# Source: jasper-ui/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-jasper-ui
+  labels:
+    helm.sh/chart: jasper-ui-1.0.23
+    app.kubernetes.io/name: jasper-ui
+    app.kubernetes.io/instance: my-jasper-ui
+    app.kubernetes.io/version: "v1.2.1196"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: jasper-ui/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-jasper-ui
+  labels:
+    helm.sh/chart: jasper-ui-1.0.23
+    app.kubernetes.io/name: jasper-ui
+    app.kubernetes.io/instance: my-jasper-ui
+    app.kubernetes.io/version: "v1.2.1196"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: jasper-ui
+    app.kubernetes.io/instance: my-jasper-ui
+---
+# Source: jasper-ui/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-jasper-ui
+  labels:
+    helm.sh/chart: jasper-ui-1.0.23
+    app.kubernetes.io/name: jasper-ui
+    app.kubernetes.io/instance: my-jasper-ui
+    app.kubernetes.io/version: "v1.2.1196"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: jasper-ui
+      app.kubernetes.io/instance: my-jasper-ui
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: jasper-ui
+        app.kubernetes.io/instance: my-jasper-ui
+    spec:
+      serviceAccountName: my-jasper-ui
+      securityContext:
+        {}
+      containers:
+        - name: jasper-ui
+          securityContext:
+            {}
+          image: "ghcr.io/cjmalloy/jasper-ui:v1.2.1196"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          env:
+            - name: BASE_HREF
+              value: /
+            - name: JASPER_VERSION
+              value: v1.2.1196
+            - name: JASPER_TITLE
+              value: "Jasper"
+            - name: JASPER_API
+              value: /
+            - name: JASPER_LOGOUT
+              value: ""
+            - name: JASPER_LOGIN
+              value: ""
+            - name: JASPER_SIGNUP
+              value: ""
+            - name: JASPER_SCIM
+              value: "false"
+            - name: JASPER_ALLOWED_SCHEMES
+              value: "[\"http:\",\"https:\",\"ftp:\",\"tel:\",\"mailto:\",\"magnet:\"]"
+            - name: JASPER_MAX_PLUGINS
+              value: "1000"
+            - name: JASPER_MAX_TEMPLATES
+              value: "1000"
+            - name: JASPER_MAX_ORIGINS
+              value: "1000"
+            - name: JASPER_FETCH_BATCH
+              value: "50"
+            - name: JASPER_CODE_FLOW
+              value: "false"
+            - name: JASPER_IMPLICIT_FLOW
+              value: "false"
+            - name: JASPER_ISSUER
+              value: ""
+            - name: JASPER_CLIENT_ID
+              value: ""
+            - name: JASPER_SCOPE
+              value: "openid email"
+            - name: JASPER_PREFETCH
+              value: "false"
+            - name: CSP_DEFAULT_SRC
+              value: ""
+            - name: CSP_SCRIPT_SRC
+              value: ""
+            - name: CSP_STYLE_SRC
+              value: ""
+            - name: CSP_CONNECT_SRC
+              value: ""
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+            {}
+---
+# Source: jasper-ui/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-jasper-ui-test-connection"
+  labels:
+    helm.sh/chart: jasper-ui-1.0.23
+    app.kubernetes.io/name: jasper-ui
+    app.kubernetes.io/instance: my-jasper-ui
+    app.kubernetes.io/version: "v1.2.1196"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-jasper-ui:80']
+  restartPolicy: Never

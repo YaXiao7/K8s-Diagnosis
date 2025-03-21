@@ -1,0 +1,138 @@
+---
+# Source: mailpit/templates/http-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-mailpit-http
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-mailpit
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: mailpit
+    app.kubernetes.io/version: v1.20.4
+    helm.sh/chart: mailpit-0.18.3
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+  selector:
+    app.kubernetes.io/instance: my-mailpit
+    app.kubernetes.io/name: mailpit
+---
+# Source: mailpit/templates/smtp-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-mailpit-smtp
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-mailpit
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: mailpit
+    app.kubernetes.io/version: v1.20.4
+    helm.sh/chart: mailpit-0.18.3
+spec:
+  type: ClusterIP
+  ports:
+    - name: smtp
+      port: 25
+      targetPort: smtp
+  selector:
+    app.kubernetes.io/instance: my-mailpit
+    app.kubernetes.io/name: mailpit
+---
+# Source: mailpit/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-mailpit
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-mailpit
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: mailpit
+    app.kubernetes.io/version: v1.20.4
+    helm.sh/chart: mailpit-0.18.3
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: my-mailpit
+      app.kubernetes.io/name: mailpit
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: my-mailpit
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: mailpit
+        app.kubernetes.io/version: v1.20.4
+        helm.sh/chart: mailpit
+    spec:
+      automountServiceAccountToken: false
+      
+      securityContext:
+        fsGroup: 1001
+      containers:
+        - name: mailpit
+          image: docker.io/axllent/mailpit:v1.20.4
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+            runAsGroup: 1001
+            runAsNonRoot: true
+            runAsUser: 1001
+            seccompProfile:
+              type: RuntimeDefault
+          args:
+          - --db-file
+          - /var/lib/mailpit/mailpit.db
+          - --webroot
+          - /
+          resources:
+            limits:
+              cpu: 150m
+              ephemeral-storage: 2Gi
+              memory: 192Mi
+            requests:
+              cpu: 100m
+              ephemeral-storage: 50Mi
+              memory: 128Mi
+          ports:
+            - name: http
+              containerPort: 8025
+            - name: smtp
+              containerPort: 1025
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: 8025
+              scheme: HTTP
+            failureThreshold: 5
+            initialDelaySeconds: 2
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8025
+              scheme: HTTP
+            failureThreshold: 5
+            initialDelaySeconds: 2
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+          volumeMounts:
+          - name: data
+            mountPath: /var/lib/mailpit
+      volumes:
+        - name: data
+          emptyDir: {}

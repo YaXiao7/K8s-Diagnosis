@@ -1,0 +1,132 @@
+---
+# Source: spring-rest/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name:  my-spring-rest
+data:
+  management.metrics.export.wavefront.api-token: YThlYzY3MGUtNjc1OS00YWUzLWE0MzUtOTNjY2Y2ODNlZTIy
+  spring.datasource.username: cm9vdA==
+  spring.datasource.password: cGFzc2Vy
+  spring.redis.password: cGFzc2Vy
+type: Opaque
+---
+# Source: spring-rest/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-spring-rest
+data:
+  management.metrics.export.wavefront.uri: https://wavefront.surf
+  spring.datasource.url: jdbc:mysql://mysql/spring_training?enabledTLSProtocols=TLSv1.2
+  spring.jpa.database-platform: org.hibernate.dialect.MySQL5InnoDBDialect
+  spring.security.oauth2.resourceserver.jwt.jwk-set-uri: http://keycloak/auth/realms/training/protocol/openid-connect/certs
+  spring.redis.host: redis-master
+  spring.redis.port: "6379"
+  spring.cache.redis.cache-null-values: "false"
+  spring.cache.redis.time-to-live: "40000"
+  spring.cache.type: redis
+  management.health.probes.enabled: "true"
+  management.health.redis.enabled: "true"
+---
+# Source: spring-rest/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-spring-rest
+  labels:
+    helm.sh/chart: spring-rest-0.1.0
+    app.kubernetes.io/name: spring-rest
+    app.kubernetes.io/instance: my-spring-rest
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9090
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: spring-rest
+    app.kubernetes.io/instance: my-spring-rest
+---
+# Source: spring-rest/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-spring-rest
+  labels:
+    helm.sh/chart: spring-rest-0.1.0
+    app.kubernetes.io/name: spring-rest
+    app.kubernetes.io/instance: my-spring-rest
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: spring-rest
+      app.kubernetes.io/instance: my-spring-rest
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: spring-rest
+        app.kubernetes.io/instance: my-spring-rest
+    spec:
+      serviceAccountName: default
+      securityContext:
+        {}
+      containers:
+        - name: spring-rest
+          securityContext:
+            {}
+          image: "laminba2003/spring-rest:0.0.1-SNAPSHOT"
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 9090
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /v1/actuator/health/liveness
+              port: 9090
+            initialDelaySeconds: 120
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /v1/actuator/health/readiness
+              port: 9090
+            initialDelaySeconds: 120
+            periodSeconds: 15
+          env:
+            - name: JAVA_TOOL_OPTIONS
+              value: -Xms256M -Xmx256M -Xss256K -XX:ReservedCodeCacheSize=64M
+          envFrom:
+            - configMapRef:
+                name: my-spring-rest
+            - secretRef:
+                name: my-spring-rest
+          resources:
+            {}
+---
+# Source: spring-rest/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-spring-rest-test-connection"
+  labels:
+    helm.sh/chart: spring-rest-0.1.0
+    app.kubernetes.io/name: spring-rest
+    app.kubernetes.io/instance: my-spring-rest
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-spring-rest:9090']
+  restartPolicy: Never

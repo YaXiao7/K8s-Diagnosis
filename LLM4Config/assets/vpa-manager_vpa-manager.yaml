@@ -1,0 +1,129 @@
+---
+# Source: vpa-manager/templates/service-account.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-vpa-manager
+  namespace: default
+  labels:    
+    app.kubernetes.io/name: vpa-manager
+    helm.sh/chart: vpa-manager-0.3.9
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/instance: my-vpa-manager
+    app.kubernetes.io/version: 0.6.0
+    app.kubernetes.io/component: controller
+---
+# Source: vpa-manager/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-vpa-manager
+  namespace: default
+  labels:    
+    app.kubernetes.io/name: vpa-manager
+    helm.sh/chart: vpa-manager-0.3.9
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/instance: my-vpa-manager
+    app.kubernetes.io/version: 0.6.0
+    app.kubernetes.io/component: controller
+data:
+  ENABLE_CRONJOBS: "True"
+  ENABLE_DEPLOYMENTS: "True"
+  ENABLE_JOBS: "True"
+  ENABLE_PODS: "True"
+  UPDATE_MODE: 'Off'
+  WATCHED_NAMESPACES: ''
+---
+# Source: vpa-manager/templates/cluster-role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-vpa-manager
+  labels:    
+    app.kubernetes.io/name: vpa-manager
+    helm.sh/chart: vpa-manager-0.3.9
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/instance: my-vpa-manager
+    app.kubernetes.io/version: 0.6.0
+    app.kubernetes.io/component: controller
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list",  "watch"]
+  - apiGroups: ["batch"]
+    resources: ["cronjobs", "jobs"]
+    verbs: ["get", "list",  "watch"]
+  - apiGroups: [""]
+    resources: ["namespaces", "pods"]
+    verbs: ["get", "list",  "watch"]
+  - apiGroups: ["autoscaling.k8s.io"]
+    resources: ["verticalpodautoscalers"]
+    verbs: ["create", "delete", "get", "list"]
+---
+# Source: vpa-manager/templates/cluster-role-binding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-vpa-manager
+  labels:    
+    app.kubernetes.io/name: vpa-manager
+    helm.sh/chart: vpa-manager-0.3.9
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/instance: my-vpa-manager
+    app.kubernetes.io/version: 0.6.0
+    app.kubernetes.io/component: controller
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: vpa-manager
+subjects:
+  - kind: ServiceAccount
+    name: my-vpa-manager
+    namespace: default
+---
+# Source: vpa-manager/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-vpa-manager
+  namespace: default
+  labels:    
+    app.kubernetes.io/name: vpa-manager
+    helm.sh/chart: vpa-manager-0.3.9
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/instance: my-vpa-manager
+    app.kubernetes.io/version: 0.6.0
+    app.kubernetes.io/component: controller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:      
+      app.kubernetes.io/name: vpa-manager
+      helm.sh/chart: vpa-manager-0.3.9
+      app.kubernetes.io/managed-by: Helm
+      app.kubernetes.io/instance: my-vpa-manager
+      app.kubernetes.io/version: 0.6.0
+      app.kubernetes.io/component: controller 
+  revisionHistoryLimit: 10
+  template:
+    metadata:
+      labels:        
+        app.kubernetes.io/name: vpa-manager
+        helm.sh/chart: vpa-manager-0.3.9
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/instance: my-vpa-manager
+        app.kubernetes.io/version: 0.6.0
+        app.kubernetes.io/component: controller
+      annotations:
+        checksum/config: 42fad7c7f4a22c684ef5b5e6fb9d47302daf1203ff7fecdbdca157abcbe31093
+    spec:
+      containers:
+        - name: vpa-manager
+          imagePullPolicy: IfNotPresent
+          image: quay.io/jcluppnow/vpa-manager:0.6.0
+          envFrom:
+            - configMapRef:
+                name: my-vpa-manager
+          resources:
+            {}
+      serviceAccountName: my-vpa-manager

@@ -1,0 +1,90 @@
+---
+# Source: vault-raft-snapshot-agent/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-vault-raft-snapshot-agent
+  labels:
+    helm.sh/chart: vault-raft-snapshot-agent-0.4.21
+    app.kubernetes.io/name: vault-raft-snapshot-agent
+    app.kubernetes.io/instance: my-vault-raft-snapshot-agent
+    app.kubernetes.io/managed-by: Helm
+    component: snapshot-agent
+---
+# Source: vault-raft-snapshot-agent/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-vault-raft-snapshot-agent
+  namespace: default
+  labels:
+    helm.sh/chart: vault-raft-snapshot-agent-0.4.21
+    app.kubernetes.io/name: vault-raft-snapshot-agent
+    app.kubernetes.io/instance: my-vault-raft-snapshot-agent
+    app.kubernetes.io/managed-by: Helm
+    component: snapshot-agent
+data:
+  snapshots.yaml: |-
+    snapshots:
+      frequency: 1h
+      retain: 72
+      storages:
+        local:
+          path: /vault/snapshots
+    vault:
+      auth:
+        kubernetes:
+          role: vault-raft-snapshot-agent
+      url: http://127.0.0.1:8200
+---
+# Source: vault-raft-snapshot-agent/templates/deployment.yaml
+apiVersion: "apps/v1"
+kind: Deployment
+metadata:
+  name: my-vault-raft-snapshot-agent
+  namespace: default
+  labels:
+    helm.sh/chart: vault-raft-snapshot-agent-0.4.21
+    app.kubernetes.io/name: vault-raft-snapshot-agent
+    app.kubernetes.io/instance: my-vault-raft-snapshot-agent
+    app.kubernetes.io/managed-by: Helm
+    component: snapshot-agent
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vault-raft-snapshot-agent
+      app.kubernetes.io/instance: my-vault-raft-snapshot-agent
+      component: snapshot-agent
+  replicas: 1
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        helm.sh/chart: vault-raft-snapshot-agent-0.4.21
+        app.kubernetes.io/name: vault-raft-snapshot-agent
+        app.kubernetes.io/instance: my-vault-raft-snapshot-agent
+        app.kubernetes.io/managed-by: Helm
+        component: snapshot-agent
+      annotations:
+        checksum/config: 1eb926af1fa95434538071670e90f61cd9ee264717332ebc5f49720b1c25a016
+    spec:
+      restartPolicy: Always
+      serviceAccountName: my-vault-raft-snapshot-agent
+      containers:
+        - name: vault-raft-snapshot-agent
+          image: ghcr.io/argelbargel/vault-raft-snapshot-agent:v0.10.16
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - mountPath: /etc/vault.d/
+              name: config
+              readOnly: true
+            - mountPath: /vault/snapshots
+              name: snapshots
+      
+      volumes:
+        - name: config
+          configMap:
+            name: my-vault-raft-snapshot-agent
+        - name: snapshots
+          emptyDir: {}

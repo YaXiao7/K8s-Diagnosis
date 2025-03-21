@@ -1,0 +1,113 @@
+---
+# Source: jira-software/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-jira-software
+  namespace: default
+  labels:
+    helm.sh/chart: jira-software-5.12.5
+    app.kubernetes.io/name: jira-software
+    app.kubernetes.io/instance: my-jira-software
+    app.kubernetes.io/version: "9.12.5"
+    app.kubernetes.io/managed-by: Helm
+automountServiceAccountToken: false
+---
+# Source: jira-software/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-jira-software
+  namespace: default
+  labels:
+    helm.sh/chart: jira-software-5.12.5
+    app.kubernetes.io/name: jira-software
+    app.kubernetes.io/instance: my-jira-software
+    app.kubernetes.io/version: "9.12.5"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: jira-software
+    app.kubernetes.io/instance: my-jira-software
+---
+# Source: jira-software/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-jira-software
+  namespace: default
+  labels:
+    helm.sh/chart: jira-software-5.12.5
+    app.kubernetes.io/name: jira-software
+    app.kubernetes.io/instance: my-jira-software
+    app.kubernetes.io/version: "9.12.5"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  serviceName: my-jira-software
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: jira-software
+      app.kubernetes.io/instance: my-jira-software
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: jira-software
+        app.kubernetes.io/instance: my-jira-software
+    spec:
+      serviceAccountName: my-jira-software
+      securityContext:
+        fsGroup: 2001
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: jira
+          image: atlassian/jira-software:9.12.5-jdk11
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: JVM_MINIMUM_MEMORY
+              value: "384M"
+            - name: JVM_MAXIMUM_MEMORY
+              value: "768M"
+            - name: JVM_RESERVED_CODE_CACHE_SIZE
+              value: "512M"
+            - name: JVM_SUPPORT_RECOMMENDED_ARGS
+              value: "-XX:+UseG1GC"
+            - name: ATL_FORCE_CFG_UPDATE
+              value: "false"
+            - name: SET_PERMISSIONS
+              value: "true"
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sh", "-c", "/shutdown-wait.sh"]
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            failureThreshold: 10
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            tcpSocket:
+              port: http
+            timeoutSeconds: 1
+          readinessProbe:
+            failureThreshold: 10
+            httpGet:
+              path: /status
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 1
+          volumeMounts:
+            - mountPath: /var/atlassian/application-data/jira
+              name: my-jira-software-data
+      volumes:
+        - name: my-jira-software-data
+          emptyDir: {}

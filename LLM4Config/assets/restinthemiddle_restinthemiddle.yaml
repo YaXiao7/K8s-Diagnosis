@@ -1,0 +1,108 @@
+---
+# Source: restinthemiddle/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-restinthemiddle
+  namespace: default
+data:
+  config.yaml: |
+    exclude: ""
+    excludePostBody: ""
+    excludeResponseBody: ""
+    headers: {}
+    listenIp: 0.0.0.0
+    listenPort: "8000"
+    logPostBody: true
+    logResponseBody: true
+    loggingEnabled: true
+    setRequestId: false
+    targetHostDsn: https://username:password@example.com:4443/example/path
+---
+# Source: restinthemiddle/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-restinthemiddle
+  labels:
+    helm.sh/chart: restinthemiddle-0.11.0
+    app.kubernetes.io/name: restinthemiddle
+    app.kubernetes.io/instance: my-restinthemiddle
+    app.kubernetes.io/version: "2.0.0-alpha.18"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - appProtocol: http
+      name: listen-port
+      port: 8000
+      targetPort: listen-port
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: restinthemiddle
+    app.kubernetes.io/instance: my-restinthemiddle
+---
+# Source: restinthemiddle/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: default
+  name: my-restinthemiddle
+  labels:
+    helm.sh/chart: restinthemiddle-0.11.0
+    app.kubernetes.io/name: restinthemiddle
+    app.kubernetes.io/instance: my-restinthemiddle
+    app.kubernetes.io/version: "2.0.0-alpha.18"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: restinthemiddle
+      app.kubernetes.io/instance: my-restinthemiddle
+  template:
+    metadata:
+      annotations:
+        checksum/config: d6605ed411be320a8be0c839de7fbe6e7bc76517bb51ce0cedb4b219b9223a5c
+      labels:
+        app.kubernetes.io/name: restinthemiddle
+        app.kubernetes.io/instance: my-restinthemiddle
+    spec:
+      serviceAccountName: default
+      securityContext:
+        fsGroup: 1000
+        runAsGroup: 1000
+        runAsUser: 1000
+      containers:
+        - name: restinthemiddle
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+            runAsGroup: 1000
+            runAsNonRoot: true
+            runAsUser: 1000
+          image: "docker.io/jdschulze/restinthemiddle:2.0.0-alpha.18"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+              protocol: TCP
+              name: listen-port
+#          livenessProbe: {}
+#          readinessProbe: {}
+          resources:
+            limits:
+              cpu: 100m
+              memory: 64Mi
+            requests:
+              cpu: 10m
+              memory: 32Mi
+          volumeMounts:
+            - name: config-volume
+              mountPath: /etc/restinthemiddle
+      volumes:
+        - name: config-volume
+          configMap:
+            name: my-restinthemiddle

@@ -1,0 +1,329 @@
+---
+# Source: cvmfs/templates/configmap-create-mountpoint.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-cvmfs-cfgmap-create-mountpoint
+  labels:
+    helm.sh/chart: cvmfs-0.0.7
+    app.kubernetes.io/name: cvmfs
+    app.kubernetes.io/instance: my-cvmfs
+    app.kubernetes.io/version: "2.10.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+  create_mountpoint.sh: |
+    #!/bin/sh
+    set -x
+
+    REPO=$1
+    if [ x"REPO" == x"" ]; then
+      echo "ERROR: Repository not specified"
+      exit 1
+    fi
+    # Finding cvmfs2 processes will not work as pid namespace is not shared
+    CVMFS_PIDS=$(pidof cvmfs2)
+    if [ x"$CVMFS_PIDS" == x"" ]; then
+      IS_RUNNING=1
+    else
+      IS_RUNNING=$(ps --no-heading -o command -p $CVMFS_PIDS | grep -q $REPO; echo $?)
+    fi
+
+    IS_MOUNTED=$(findmnt --source cvmfs2 -o target --noheadings | grep -q $REPO; echo $?)
+
+    if [ $IS_MOUNTED -eq 1 ]; then
+      if [ $IS_RUNNING -eq 1 ]; then
+        echo "$REPO: Not mounted and cvmfs2 client not running. Ready to mount."
+      else
+        echo "$REPO: Not mounted, but cvmfs2 client running (another mount elsewhere?). Continuing..."
+      fi
+    elif [ $IS_MOUNTED -eq 0 ]; then
+      if [ $IS_RUNNING -eq 0 ]; then
+        echo "$REPO: cvmfs2 client running and mounted (existing deployment?). Continuing..."
+      else
+         echo "$REPO: Stale mount! Repo is mounted but no cvmfs2 client running."
+         umount /cvmfs/$REPO
+      fi
+    else
+        echo "$REPO: Unable to infer mount state. Continuing..."
+    fi
+
+    mkdir -p /cvmfs/$REPO
+    chown cvmfs:cvmfs /cvmfs/$REPO
+---
+# Source: cvmfs/templates/configmap-cvmfs.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-cvmfs-cfgmap-default-local
+  labels:
+    helm.sh/chart: cvmfs-0.0.7
+    app.kubernetes.io/name: cvmfs
+    app.kubernetes.io/instance: my-cvmfs
+    app.kubernetes.io/version: "2.10.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+  default.local: |
+    CVMFS_CACHE_BASE='/var/lib/cvmfs'
+    CVMFS_DNS_MIN_TTL='300'
+    CVMFS_HTTP_PROXY='DIRECT'
+    CVMFS_PROXY_SHARD='false'
+    CVMFS_QUOTA_LIMIT='20000'
+    CVMFS_REPOSITORIES='cvmfs-config.cern.ch,sft.cern.ch,sft-nightlies.cern.ch'
+---
+# Source: cvmfs/templates/configmap-cvmfs.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-cvmfs-cfgmap-config-d
+  labels:
+    helm.sh/chart: cvmfs-0.0.7
+    app.kubernetes.io/name: cvmfs
+    app.kubernetes.io/instance: my-cvmfs
+    app.kubernetes.io/version: "2.10.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+---
+# Source: cvmfs/templates/configmap-supervisord.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-cvmfs-cfgmap-supervisord-conf
+  labels:
+    helm.sh/chart: cvmfs-0.0.7
+    app.kubernetes.io/name: cvmfs
+    app.kubernetes.io/instance: my-cvmfs
+    app.kubernetes.io/version: "2.10.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+  supervisord.conf: |
+    ; Directives for supervisord
+    [supervisord]
+    ;logfile=/var/log/supervisor/supervisord.log ; (main log file;default $CWD/supervisord.log)
+    ;logfile_maxbytes=50MB                       ; (max main logfile bytes b4 rotation;default 50MB)
+    ;logfile_backups=10                          ; (num of main logfile rotation backups;default 10)
+    ;loglevel=info                               ; (log level;default info; others: debug,warn,trace)
+    pidfile=/var/run/supervisord.pid             ; (supervisord pidfile;default supervisord.pid)
+    nodaemon=true                                ; (start in foreground if true;default false)
+    minfds=1024                                  ; (min. avail startup file descriptors;default 1024)
+    minprocs=200                                 ; (min. avail process descriptors;default 200)
+    ;umask=022                                   ; (process file creation umask;default 022)
+    user=root                                    ; (default is current user, required if root)
+    ;identifier=supervisor                       ; (supervisord identifier, default is 'supervisor')
+    ;directory=/tmp                              ; (default is not to cd during start)
+    ;nocleanup=true                              ; (don't clean up tempfiles at start;default false)
+    ;childlogdir=/tmp                            ; ('AUTO' child log dir, default $TEMP)
+    ;environment=KEY=value                       ; (key value pairs to add to environment)
+    ;strip_ansi=false                            ; (strip ansi escape codes in logs; def. false)
+
+    ; Allow using supervisorctl to interact with supervisord
+    [unix_http_server]
+    file=/var/run/supervisor/supervisor.sock     ; (the path to the socket file)
+    ;chmod=0700                                  ; sockef file mode (default 0700)
+    ;chown=nobody:nogroup                        ; socket file uid:gid owner
+    username=admin                               ; (default is no username (open server))
+    password=admin                               ; (default is no password (open server))
+    [rpcinterface:supervisor]
+    supervisor.rpcinterface_factory=supervisor.rpcinterface:make_main_rpcinterface
+    [supervisorctl]
+    serverurl=unix:///var/run/supervisor/supervisor.sock ; use a unix:// URL  for a unix socket
+    username=admin                                       ; should be same as http_username if set
+    password=admin                                       ; should be same as http_password if set
+    ;prompt=mysupervisor                                 ; cmd line prompt (default "supervisor")
+    ;history_file=~/.sc_history                          ; use readline history if available
+
+    ; Load additional configuration files
+    [include]
+    files = /etc/supervisord.d/*.ini
+
+    ; Quit supervisord if one of the processes enters a failed state
+    ; i.e., supervisord tried to revive it startretries times unsuccessfully
+    [eventlistener:watch_processes]
+    command=bash -c "printf 'READY\n' && while read line; do kill -SIGQUIT $PPID; done < /dev/stdin"
+    events=PROCESS_STATE_FATAL
+---
+# Source: cvmfs/templates/configmap-supervisord.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-cvmfs-cfgmap-supervisord-procs
+  labels:
+    helm.sh/chart: cvmfs-0.0.7
+    app.kubernetes.io/name: cvmfs
+    app.kubernetes.io/instance: my-cvmfs
+    app.kubernetes.io/version: "2.10.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+
+  mount-cvmfs-config.cern.ch.ini: |
+    [program:cvmfs-cvmfs-config.cern.ch]
+    command=/bin/bash -c "/usr/bin/umount /cvmfs/cvmfs-config.cern.ch; /usr/bin/cvmfs2 -o rw,nodev,_netdev,fsname=cvmfs2,system_mount,allow_other,foreground,uid=998,gid=996 cvmfs-config.cern.ch /cvmfs/cvmfs-config.cern.ch"
+    startsecs=30
+    startretries=5
+    autorestart=unexpected
+    ;exitcodes=0,2
+    ;stopsignal=QUIT
+    ;stopwaitsecs=10
+    ;user=cvmfs
+    redirect_stderr=true
+    ;stdout_logfile=/var/log/supervisor/cvmfs-cvmfs-config.cern.ch.log
+    ;stdout_logfile_maxbytes=10MB
+    ;stdout_logfile_backups=10
+    stdout_logfile=/dev/fd/1
+    stdout_logfile_maxbytes=0
+    ;environment=A=1,B=2
+
+  mount-sft.cern.ch.ini: |
+    [program:cvmfs-sft.cern.ch]
+    command=/bin/bash -c "/usr/bin/umount /cvmfs/sft.cern.ch; /usr/bin/cvmfs2 -o rw,nodev,_netdev,fsname=cvmfs2,system_mount,allow_other,foreground,uid=998,gid=996 sft.cern.ch /cvmfs/sft.cern.ch"
+    startsecs=30
+    startretries=5
+    autorestart=unexpected
+    ;exitcodes=0,2
+    ;stopsignal=QUIT
+    ;stopwaitsecs=10
+    ;user=cvmfs
+    redirect_stderr=true
+    ;stdout_logfile=/var/log/supervisor/cvmfs-sft.cern.ch.log
+    ;stdout_logfile_maxbytes=10MB
+    ;stdout_logfile_backups=10
+    stdout_logfile=/dev/fd/1
+    stdout_logfile_maxbytes=0
+    ;environment=A=1,B=2
+
+  mount-sft-nightlies.cern.ch.ini: |
+    [program:cvmfs-sft-nightlies.cern.ch]
+    command=/bin/bash -c "/usr/bin/umount /cvmfs/sft-nightlies.cern.ch; /usr/bin/cvmfs2 -o rw,nodev,_netdev,fsname=cvmfs2,system_mount,allow_other,foreground,uid=998,gid=996 sft-nightlies.cern.ch /cvmfs/sft-nightlies.cern.ch"
+    startsecs=30
+    startretries=5
+    autorestart=unexpected
+    ;exitcodes=0,2
+    ;stopsignal=QUIT
+    ;stopwaitsecs=10
+    ;user=cvmfs
+    redirect_stderr=true
+    ;stdout_logfile=/var/log/supervisor/cvmfs-sft-nightlies.cern.ch.log
+    ;stdout_logfile_maxbytes=10MB
+    ;stdout_logfile_backups=10
+    stdout_logfile=/dev/fd/1
+    stdout_logfile_maxbytes=0
+    ;environment=A=1,B=2
+---
+# Source: cvmfs/templates/daemonset.yaml
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: my-cvmfs
+  labels:
+    helm.sh/chart: cvmfs-0.0.7
+    app.kubernetes.io/name: cvmfs
+    app.kubernetes.io/instance: my-cvmfs
+    app.kubernetes.io/version: "2.10.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cvmfs
+      app.kubernetes.io/instance: my-cvmfs
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: cvmfs
+        app.kubernetes.io/instance: my-cvmfs
+        component: swan-users
+        service: swan
+    spec:
+      #hostPID: true
+      terminationGracePeriodSeconds: 60
+      initContainers:
+        - name: cvmfs-init0-create-varruncvmfs
+          image: "gitlab-registry.cern.ch/sciencebox/docker-images/cvmfs:2.10.0"
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c"]
+          args: ["mkdir -p /var/run/cvmfs; chown cvmfs:cvmfs /var/run/cvmfs"]
+          volumeMounts:
+            - name: cvmfs-run-sockets
+              mountPath: /var/run/cvmfs
+        - name: cvmfs-init1-create-mountpoints
+          image: "gitlab-registry.cern.ch/sciencebox/docker-images/cvmfs:2.10.0"
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            privileged: true
+            capabilities:
+              add: ["SYS_ADMIN"]
+          command: ["/bin/sh", "-c"]
+          args: ["for repo in $CVMFS_REPOSITORIES; do /root/create_mountpoint.sh $repo; done"]
+          env:
+            - name: CVMFS_REPOSITORIES
+              value: cvmfs-config.cern.ch sft.cern.ch sft-nightlies.cern.ch
+          volumeMounts:
+            - name: cvmfs-cfgmap-create-mountpoint
+              mountPath: /root/create_mountpoint.sh
+              subPath: create_mountpoint.sh
+            - name: cvmfs-export
+              mountPath: /cvmfs
+              mountPropagation: Bidirectional
+      containers:
+        - name: cvmfs
+          image: "gitlab-registry.cern.ch/sciencebox/docker-images/cvmfs:2.10.0"
+          imagePullPolicy: IfNotPresent
+          command: ["/usr/bin/supervisord", "-c", "/etc/supervisord.conf"]
+          securityContext:
+            privileged: true
+            capabilities:
+              add: ["SYS_ADMIN"]
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/usr/bin/supervisorctl", "shutdown"]
+          resources: 
+            limits: {}
+            requests: {}
+          volumeMounts:
+            - name: cvmfs-dev-fuse
+              mountPath: /dev/fuse
+            - name: cvmfs-run-sockets
+              mountPath: /var/run/cvmfs
+            - name: cvmfs-cfgmap-supervisord-conf
+              mountPath: /etc/supervisord.conf
+              subPath: supervisord.conf
+            - name: cvmfs-cfgmap-supervisord-procs 
+              mountPath: /etc/supervisord.d
+            - name: cvmfs-cfgmap-default-local
+              mountPath: /etc/cvmfs/default.local
+              subPath: default.local
+            - name: cvmfs-cfgmap-config-d
+              mountPath: /etc/cvmfs/config.d
+            - name: cvmfs-export
+              mountPath: /cvmfs
+              mountPropagation: Bidirectional
+      volumes:
+        - name: cvmfs-dev-fuse
+          hostPath:
+            path: /dev/fuse
+            type: CharDevice
+        - name: cvmfs-run-sockets
+          emptyDir:
+            medium: Memory
+        - name: cvmfs-cfgmap-create-mountpoint
+          configMap:
+            name: my-cvmfs-cfgmap-create-mountpoint
+            defaultMode: 0755
+        - name: cvmfs-cfgmap-supervisord-conf
+          configMap:
+            name: my-cvmfs-cfgmap-supervisord-conf
+        - name: cvmfs-cfgmap-supervisord-procs
+          configMap:
+            name: my-cvmfs-cfgmap-supervisord-procs
+        - name: cvmfs-cfgmap-default-local
+          configMap:
+            name: my-cvmfs-cfgmap-default-local
+        - name: cvmfs-cfgmap-config-d
+          configMap:
+            name: my-cvmfs-cfgmap-config-d
+        - name: cvmfs-prefetcher-crontab
+          configMap:
+            name: my-cvmfs-prefetcher-crontab
+        - name: cvmfs-export
+          hostPath:
+            path: /cvmfs
+            type: DirectoryOrCreate

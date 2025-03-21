@@ -1,0 +1,107 @@
+---
+# Source: s3-proxy/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-s3-proxy
+  labels:
+    app.kubernetes.io/name: s3-proxy
+    helm.sh/chart: s3-proxy-2.21.0
+    app.kubernetes.io/instance: my-s3-proxy
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: s3-proxy/templates/config.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-s3-proxy-config
+  labels:
+    app.kubernetes.io/name: s3-proxy
+    helm.sh/chart: s3-proxy-2.21.0
+    app.kubernetes.io/instance: my-s3-proxy
+    app.kubernetes.io/managed-by: Helm
+data:
+    config.yaml: "log:\n  format: text\n  level: info\ntargets: {}"
+---
+# Source: s3-proxy/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-s3-proxy
+  labels:
+    app.kubernetes.io/name: s3-proxy
+    helm.sh/chart: s3-proxy-2.21.0
+    app.kubernetes.io/instance: my-s3-proxy
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+    - port: 9090
+      targetPort: internal
+      protocol: TCP
+      name: metrics
+  selector:
+    app.kubernetes.io/name: s3-proxy
+    app.kubernetes.io/instance: my-s3-proxy
+---
+# Source: s3-proxy/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-s3-proxy
+  labels:
+    app.kubernetes.io/name: s3-proxy
+    helm.sh/chart: s3-proxy-2.21.0
+    app.kubernetes.io/instance: my-s3-proxy
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: s3-proxy
+      app.kubernetes.io/instance: my-s3-proxy
+  template:
+    metadata:
+      annotations:
+        checksum/config: 1eff96719411ab5d8530fa72cd45e04a56f380183130f4ef7d5e40133171f26e
+      labels:
+        app.kubernetes.io/name: s3-proxy
+        app.kubernetes.io/instance: my-s3-proxy
+    spec:
+      serviceAccountName: my-s3-proxy
+      containers:
+        - name: s3-proxy
+          image: "oxynozeta/s3-proxy:4.16.0"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: internal
+              containerPort: 9090
+              protocol: TCP
+          
+          
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: internal
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: internal
+          resources:
+            {}
+          volumeMounts:
+          - name: config-volume
+            mountPath: /proxy/conf
+      securityContext: 
+        fsGroup: 1000
+      volumes:
+        - name: config-volume
+          configMap:
+            name: my-s3-proxy-config

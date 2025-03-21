@@ -1,0 +1,160 @@
+---
+# Source: godbox/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-godbox
+  labels:
+    helm.sh/chart: godbox-0.2.0
+    app.kubernetes.io/name: godbox
+    app.kubernetes.io/instance: my-godbox
+    app.kubernetes.io/version: "2"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: godbox/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-godbox
+  labels:
+    helm.sh/chart: godbox-0.2.0
+    app.kubernetes.io/name: godbox
+    app.kubernetes.io/instance: my-godbox
+    app.kubernetes.io/version: "2"
+    app.kubernetes.io/managed-by: Helm
+data:
+  API_MAX_PAYLOAD_SIZE: "32768"
+  ALLOW_PROFILING: "true"
+  MAX_RUN_TIME_LIMIT: "-1"
+  MAX_EXTRA_TIME_LIMIT: "-1"
+  MAX_WALL_TIME_LIMIT: "-1"
+  MAX_STACK_SIZE_LIMIT: "-1"
+  MAX_PROCESS_COUNT_LIMIT: "-1"
+  MAX_MEMORY_LIMIT: "-1"
+  MAX_STORAGE_LIMIT: "-1"
+---
+# Source: godbox/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-godbox
+  labels:
+    helm.sh/chart: godbox-0.2.0
+    app.kubernetes.io/name: godbox
+    app.kubernetes.io/instance: my-godbox
+    app.kubernetes.io/version: "2"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: godbox
+    app.kubernetes.io/instance: my-godbox
+---
+# Source: godbox/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-godbox
+  labels:
+    helm.sh/chart: godbox-0.2.0
+    app.kubernetes.io/name: godbox
+    app.kubernetes.io/instance: my-godbox
+    app.kubernetes.io/version: "2"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: godbox
+      app.kubernetes.io/instance: my-godbox
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: godbox
+        app.kubernetes.io/instance: my-godbox
+    spec:
+      serviceAccountName: my-godbox
+      securityContext:
+        {}
+      containers:
+        - name: godbox
+          securityContext:
+            privileged: true
+          image: "quantumsheep/godbox:2"
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+          resources:
+            {}
+          env:
+            - name: API_MAX_PAYLOAD_SIZE
+              valueFrom:
+                configMapKeyRef:
+                  key: API_MAX_PAYLOAD_SIZE
+                  name: my-godbox
+            - name: ALLOW_PROFILING
+              valueFrom:
+                configMapKeyRef:
+                  key: ALLOW_PROFILING
+                  name: my-godbox
+            - name: MAX_RUN_TIME_LIMIT
+              valueFrom:
+                configMapKeyRef:
+                  key: MAX_RUN_TIME_LIMIT
+                  name: my-godbox
+            - name: MAX_EXTRA_TIME_LIMIT
+              valueFrom:
+                configMapKeyRef:
+                  key: MAX_EXTRA_TIME_LIMIT
+                  name: my-godbox
+            - name: MAX_WALL_TIME_LIMIT
+              valueFrom:
+                configMapKeyRef:
+                  key: MAX_WALL_TIME_LIMIT
+                  name: my-godbox
+            - name: MAX_STACK_SIZE_LIMIT
+              valueFrom:
+                configMapKeyRef:
+                  key: MAX_STACK_SIZE_LIMIT
+                  name: my-godbox
+            - name: MAX_PROCESS_COUNT_LIMIT
+              valueFrom:
+                configMapKeyRef:
+                  key: MAX_PROCESS_COUNT_LIMIT
+                  name: my-godbox
+            - name: MAX_MEMORY_LIMIT
+              valueFrom:
+                configMapKeyRef:
+                  key: MAX_MEMORY_LIMIT
+                  name: my-godbox
+            - name: MAX_STORAGE_LIMIT
+              valueFrom:
+                configMapKeyRef:
+                  key: MAX_STORAGE_LIMIT
+                  name: my-godbox
+---
+# Source: godbox/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-godbox-test-connection"
+  labels:
+    helm.sh/chart: godbox-0.2.0
+    app.kubernetes.io/name: godbox
+    app.kubernetes.io/instance: my-godbox
+    app.kubernetes.io/version: "2"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-godbox:8080']
+  restartPolicy: Never

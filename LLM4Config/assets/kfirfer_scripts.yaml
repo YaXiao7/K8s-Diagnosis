@@ -1,0 +1,127 @@
+---
+# Source: scripts/templates/secret-env.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-scripts-secret-env
+  labels:
+    app: my-scripts
+    helm.sh/chart: scripts-0.1.36
+    app.kubernetes.io/name: my-scripts
+    app.kubernetes.io/instance: my-scripts
+    namespace: "default"
+    app.kubernetes.io/version: "0.0.24"
+    app.kubernetes.io/managed-by: Helm
+stringData:
+  {}
+---
+# Source: scripts/templates/configmap-env.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-scripts-env
+  labels:
+    app: my-scripts
+    helm.sh/chart: scripts-0.1.36
+    app.kubernetes.io/name: my-scripts
+    app.kubernetes.io/instance: my-scripts
+    namespace: "default"
+    app.kubernetes.io/version: "0.0.24"
+    app.kubernetes.io/managed-by: Helm
+data:
+  {}
+---
+# Source: scripts/templates/role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: my-scripts
+rules:
+- resources:
+  - '*'
+  apiGroups:
+  - '*'
+  verbs:
+  - '*'
+---
+# Source: scripts/templates/rolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: my-scripts
+roleRef:
+  name: my-scripts
+  kind: Role
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+- name: default
+  namespace: default
+  kind: ServiceAccount
+---
+# Source: scripts/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-scripts
+  labels:
+    app: my-scripts
+    helm.sh/chart: scripts-0.1.36
+    app.kubernetes.io/name: my-scripts
+    app.kubernetes.io/instance: my-scripts
+    namespace: "default"
+    app.kubernetes.io/version: "0.0.24"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    sidecar.jaegertracing.io/inject: "false"
+spec:
+  replicas: 1
+  strategy:
+    rollingUpdate:
+      maxSurge: 100%
+      maxUnavailable: 100%
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: my-scripts
+      app.kubernetes.io/instance: my-scripts
+      namespace: "default"
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: my-scripts
+        app.kubernetes.io/instance: my-scripts
+        namespace: "default"
+        version: "0.0.24"
+    spec:
+      automountServiceAccountToken: true
+      terminationGracePeriodSeconds: 0
+      serviceAccountName: default
+      securityContext:
+        fsGroup: 2000
+      containers:
+        - name: scripts
+          command:
+                - /the_script.sh
+          securityContext:
+            readOnlyRootFilesystem: false
+            runAsNonRoot: false
+            runAsUser: 0
+          image: "docker.io/kfirfer/scripts:0.0.24"
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: my-scripts-env
+            - secretRef:
+                name: my-scripts-secret-env
+          env:
+            - name: APPLICATION_NAME
+              value: "my-scripts"
+            - name: NAMESPACE_NAME
+              value: "default"
+          resources:
+            limits:
+              cpu: 2000m
+              memory: 2000Mi
+            requests:
+              cpu: 10m
+              memory: 10Mi
+      dnsPolicy: ClusterFirst

@@ -1,0 +1,108 @@
+---
+# Source: rego/templates/deployment.yml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-rego-account
+  labels:
+    helm.sh/chart: rego-0.1.3
+    app.kubernetes.io/name: rego
+    app.kubernetes.io/instance: my-rego
+    app.kubernetes.io/version: "0.1.3"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: rego/templates/deployment.yml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: my-rego-manager
+  labels:
+    helm.sh/chart: rego-0.1.3
+    app.kubernetes.io/name: rego
+    app.kubernetes.io/instance: my-rego
+    app.kubernetes.io/version: "0.1.3"
+    app.kubernetes.io/managed-by: Helm
+rules:
+- apiGroups: ["*"]
+  resources: ["jobs", "pods", "configmaps", "secrets"]
+  verbs: ["*"]
+---
+# Source: rego/templates/deployment.yml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: my-rego-ole-rego
+  labels:
+    helm.sh/chart: rego-0.1.3
+    app.kubernetes.io/name: rego
+    app.kubernetes.io/instance: my-rego
+    app.kubernetes.io/version: "0.1.3"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: 'my-rego-manager'
+subjects:
+- kind: ServiceAccount
+  name: 'my-rego-account'
+  namespace: 'default'
+---
+# Source: rego/templates/deployment.yml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-rego
+  labels:
+    app: rego
+    helm.sh/chart: rego-0.1.3
+    app.kubernetes.io/name: rego
+    app.kubernetes.io/instance: my-rego
+    app.kubernetes.io/version: "0.1.3"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  selector:
+    app: rego
+    app.kubernetes.io/name: rego
+    app.kubernetes.io/instance: my-rego
+  ports:
+  - port: 4004
+    protocol: TCP
+    targetPort: 4004
+---
+# Source: rego/templates/deployment.yml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-rego
+  labels:
+    app: rego
+    helm.sh/chart: rego-0.1.3
+    app.kubernetes.io/name: rego
+    app.kubernetes.io/instance: my-rego
+    app.kubernetes.io/version: "0.1.3"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rego
+      app.kubernetes.io/name: rego
+      app.kubernetes.io/instance: my-rego
+  template:
+    metadata:
+      labels:
+        app: rego
+        app.kubernetes.io/name: rego
+        app.kubernetes.io/instance: my-rego
+    spec:
+      containers:
+      - env:
+        - name: KUBERNETES_CLUSTER_DOMAIN
+          value: "cluster.local"
+        image: drorivry4/rego:latest
+        name: rego
+        ports:
+        - containerPort: 4004
+        resources: {}
+      serviceAccount:  my-rego-account

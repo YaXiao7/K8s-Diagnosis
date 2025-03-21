@@ -1,0 +1,93 @@
+---
+# Source: kwatch/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-kwatch
+  namespace: default
+---
+# Source: kwatch/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-kwatch
+  namespace: default
+data:
+  config.yaml: |
+    {}
+---
+# Source: kwatch/templates/rbac.yaml
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-kwatch
+rules:
+- apiGroups: [""]
+  resources: ["pods", "pods/log", "events", "nodes"]
+  verbs: ["get", "watch", "list"]
+---
+# Source: kwatch/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-kwatch
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-kwatch
+subjects:
+  - kind: ServiceAccount
+    name: my-kwatch
+    namespace: default
+---
+# Source: kwatch/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-kwatch
+  namespace: default
+  labels:
+    helm.sh/chart: kwatch-0.10.0
+    app.kubernetes.io/name: kwatch
+    app.kubernetes.io/instance: my-kwatch
+    app.kubernetes.io/version: "v0.10.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kwatch
+      app.kubernetes.io/instance: my-kwatch
+  template:
+    metadata:
+      annotations:
+        checksum/config: f9b295a6f8b143e56c38e4b80e290f32cff26c2e0fde9abf71c90505cde664da
+      labels:
+        app.kubernetes.io/name: kwatch
+        app.kubernetes.io/instance: my-kwatch
+    spec:
+      restartPolicy: Always
+      serviceAccountName:  my-kwatch
+      containers:
+        - name: kwatch
+          securityContext:
+            readOnlyRootFilesystem: true
+            runAsGroup: 101
+            runAsNonRoot: true
+            runAsUser: 101
+          image: "ghcr.io/abahmed/kwatch:v0.10.0"
+          imagePullPolicy: Always
+          volumeMounts:
+          - name: config-volume
+            mountPath: /config
+          env:
+            - name: CONFIG_FILE
+              value: "/config/config.yaml"
+          resources:
+            limits:
+              cpu: 100m
+              memory: 128Mi
+      volumes:
+        - name: config-volume
+          configMap:
+            name: my-kwatch

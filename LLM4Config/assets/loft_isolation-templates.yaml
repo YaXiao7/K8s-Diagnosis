@@ -1,0 +1,124 @@
+---
+# Source: isolation-templates/templates/network/allow-dns.yaml
+apiVersion: config.kiosk.sh/v1alpha1
+kind: Template
+metadata:
+  name: allow-dns
+resources:
+  manifests:
+    - apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        name: allow-dns
+      spec:
+        podSelector: {}
+        egress:
+        - to:
+          ports:
+          - protocol: TCP
+            port: 53
+          - protocol: UDP
+            port: 53
+        policyTypes:
+          - Ingress
+          - Egress
+---
+# Source: isolation-templates/templates/network/allow-internet.yaml
+apiVersion: config.kiosk.sh/v1alpha1
+kind: Template
+metadata:
+  name: allow-internet
+resources:
+  manifests:
+    - apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        name: allow-access-to-internet
+      spec:
+        podSelector: {}
+        egress:
+        - to:
+          - ipBlock:
+              cidr: 0.0.0.0/0
+              except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+        policyTypes:
+        - Egress
+    - apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        name: allow-access-from-internet-via-label
+      spec:
+        podSelector:
+          matchLabels:
+            loft.sh/allow-access-from-internet: "true"
+        ingress:
+        - {}
+        policyTypes:
+        - Ingress
+---
+# Source: isolation-templates/templates/network/allow-same-namespace.yaml
+apiVersion: config.kiosk.sh/v1alpha1
+kind: Template
+metadata:
+  name: network-allow-same-namespace
+resources:
+  manifests:
+    - apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        name: allow-same-namespace
+      spec:
+        podSelector: {}
+        ingress:
+          - from:
+            - podSelector: {}
+        egress:
+          - to:
+            - podSelector: {}
+        policyTypes:
+          - Ingress
+          - Egress
+---
+# Source: isolation-templates/templates/network/deny-default.yaml
+apiVersion: config.kiosk.sh/v1alpha1
+kind: Template
+metadata:
+  name: network-deny-default
+resources:
+  manifests:
+    - apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        name: deny-default
+      spec:
+        podSelector: {}
+        policyTypes:
+          - Ingress
+          - Egress
+---
+# Source: isolation-templates/templates/resources/memory.yaml
+apiVersion: config.kiosk.sh/v1alpha1
+kind: Template
+metadata:
+  name: container-default-resources
+resources:
+  manifests:
+    - apiVersion: v1
+      kind: LimitRange
+      metadata:
+        name: memory-limit-1gi
+      spec:
+        limits:
+        - type: Container
+          default:
+            memory: 256Mi
+            cpu: 200m
+          defaultRequest:
+            memory: 64Mi
+            cpu: 20m
+          min:
+            memory: 64Mi
+            cpu: 20m

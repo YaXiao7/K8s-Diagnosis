@@ -1,0 +1,245 @@
+---
+# Source: dask/templates/dask-jupyter-serviceaccount.yaml
+kind: ServiceAccount
+apiVersion: v1
+metadata:
+  name: dask-jupyter
+  namespace: default
+  labels:
+    app: dask
+    release: "my-dask"
+    component: jupyter
+---
+# Source: dask/templates/dask-jupyter-config.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-dask-jupyter-config
+  labels:
+    app: dask
+    heritage: "Helm"
+    release: "my-dask"
+    chart: dask-2024.1.1
+    component: jupyter
+data:
+  jupyter_notebook_config.py: |
+    c = get_config()
+    c.NotebookApp.password = 'sha1:aae8550c0a44:9507d45e087d5ee481a5ce9f4f16f37a0867318c'
+
+    # jupyter.extraConfig follows below
+    # Extra Jupyter config goes here
+    # E.g
+    # c.NotebookApp.port = 8888
+---
+# Source: dask/templates/dask-jupyter-serviceaccount.yaml
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: dask-jupyter
+  namespace: default
+  labels:
+    app: dask
+    release: "my-dask"
+    component: jupyter
+rules:
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "list", "watch", "update", "patch"]
+- apiGroups: [""] # "" indicates the core API group
+  resources: ["pods"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""] # "" indicates the core API group
+  resources: ["pods/log"]
+  verbs: ["get", "list"]
+---
+# Source: dask/templates/dask-jupyter-serviceaccount.yaml
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: dask-jupyter
+  namespace: default
+  labels:
+    app: dask
+    release: "my-dask"
+    component: jupyter
+subjects:
+- kind: ServiceAccount
+  name: dask-jupyter
+roleRef:
+  kind: Role
+  name: dask-jupyter
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: dask/templates/dask-jupyter-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-dask-jupyter
+  labels:
+    app: dask
+    heritage: "Helm"
+    release: "my-dask"
+    chart: dask-2024.1.1
+    component: jupyter
+spec:
+  ports:
+    - name: my-dask-jupyter
+      port: 80
+      targetPort: 8888
+  selector:
+    app: dask
+    release: "my-dask"
+    component: jupyter
+  type: ClusterIP
+---
+# Source: dask/templates/dask-scheduler-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-dask-scheduler
+  labels:
+    app: dask
+    heritage: "Helm"
+    release: "my-dask"
+    chart: dask-2024.1.1
+    component: scheduler
+spec:
+  ports:
+    - name: my-dask-scheduler
+      port: 8786
+      targetPort: 8786
+    - name: my-dask-webui
+      port: 80
+      targetPort: 8787
+  selector:
+    app: dask
+    release: "my-dask"
+    component: scheduler
+  type: ClusterIP
+---
+# Source: dask/templates/dask-jupyter-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-dask-jupyter
+  labels:
+    app: dask
+    heritage: "Helm"
+    release: "my-dask"
+    chart: dask-2024.1.1
+    component: jupyter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dask
+      release: "my-dask"
+      component: jupyter
+  strategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: dask
+        release: "my-dask"
+        component: jupyter
+    spec:
+      containers:
+        - name: my-dask-jupyter
+          image: "ghcr.io/dask/dask-notebook:2024.1.0"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8888
+          resources:
+            {}
+          volumeMounts:
+            - name: config-volume
+              mountPath: /usr/local/etc/jupyter
+          env:
+            - name: DASK_SCHEDULER_ADDRESS
+              value: my-dask-scheduler:8786
+      volumes:
+        - name: config-volume
+          configMap:
+            name: my-dask-jupyter-config
+      serviceAccountName: "dask-jupyter"
+---
+# Source: dask/templates/dask-scheduler-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-dask-scheduler
+  labels:
+    app: dask
+    heritage: "Helm"
+    release: "my-dask"
+    chart: dask-2024.1.1
+    component: scheduler
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dask
+      release: "my-dask"
+      component: scheduler
+  strategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: dask
+        release: "my-dask"
+        component: scheduler
+    spec:
+      containers:
+        - name: my-dask-scheduler
+          image: "ghcr.io/dask/dask:2024.1.0"
+          imagePullPolicy: IfNotPresent
+          args:
+            - dask-scheduler
+            - --port=8786
+            - --dashboard-address=:8787
+          ports:
+            - containerPort: 8786
+            - containerPort: 8787
+---
+# Source: dask/templates/dask-worker-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-dask-worker
+  labels:
+    app: dask
+    heritage: "Helm"
+    release: "my-dask"
+    chart: dask-2024.1.1
+    component: worker
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: dask
+      release: "my-dask"
+      component: worker
+  strategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: dask
+        release: "my-dask"
+        component: worker
+    spec:
+      containers:
+        - name: my-dask-worker
+          image: "ghcr.io/dask/dask:2024.1.0"
+          imagePullPolicy: IfNotPresent
+          args:
+            - dask-worker
+            - my-dask-scheduler:8786
+            - --no-dashboard
+            - --dashboard-address
+            - "8790"
+          ports:
+            - containerPort: 8790
+              name: dashboard

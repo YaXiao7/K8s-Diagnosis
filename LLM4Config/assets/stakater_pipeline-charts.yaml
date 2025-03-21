@@ -1,0 +1,84 @@
+---
+# Source: pipeline-charts/templates/eventlistener.yaml
+apiVersion: triggers.tekton.dev/v1alpha1
+kind: EventListener
+metadata:
+  name: pipeline-charts
+  namespace: default
+spec:
+  serviceAccountName: stakater-tekton-builder
+---
+# Source: pipeline-charts/templates/pipeline.yaml
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: pipeline-charts
+  namespace: default
+spec:
+  params:
+    - name: gitrepositoryurl
+      type: string
+    - name: gitrevision
+      type: string
+  tasks: 
+    - name: git-clone
+      taskRef:
+          name: git-clone
+          kind: ClusterTask
+      params:
+      - name: url
+        value: "$(params.gitrepositoryurl)"
+      - name: revision
+        value: "$(params.gitrevision)"
+      - name: depth
+        value: "0"
+      workspaces:
+      - name: output
+        workspace: source
+---
+# Source: pipeline-charts/templates/route.yaml
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: pipeline-charts
+  namespace: default
+  labels:
+    category: route
+    router: default
+spec:
+  port:
+    targetPort: http-listener
+  to:
+    kind: Service
+    name: el-pipeline-charts
+    weight: 100
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+---
+# Source: pipeline-charts/templates/triggertemplate.yaml
+apiVersion: triggers.tekton.dev/v1alpha1
+kind: TriggerTemplate
+metadata:
+  name: pipeline-charts
+  namespace: default
+spec:
+  params:
+    - name: gitrepositoryurl
+    - name: gitrevision
+    - default: main
+      name: prnumberBranch
+  resourcetemplates:
+    - apiVersion: tekton.dev/v1beta1
+      kind: PipelineRun
+      metadata:
+        generateName: $(tt.params.repoName)-$(tt.params.prnumberBranch)-
+      spec:
+        serviceAccountName: stakater-tekton-builder
+        params:
+          - name: gitrepositoryurl
+            value: $(tt.params.gitrepositoryurl)
+          - name: gitrevision
+            value: $(tt.params.gitrevision)
+        pipelineRef:
+          name: pipeline-charts

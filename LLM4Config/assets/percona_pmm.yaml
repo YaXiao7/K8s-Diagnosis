@@ -1,0 +1,256 @@
+---
+# Source: pmm/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pmm-service-account
+  labels:
+    helm.sh/chart: pmm-1.3.14
+    app.kubernetes.io/name: pmm
+    app.kubernetes.io/instance: my-pmm
+    app.kubernetes.io/component: pmm-server
+    app.kubernetes.io/part-of: percona-platform
+    app.kubernetes.io/version: "2.42.0"
+    app.kubernetes.io/managed-by: Helm
+secrets:
+  - name: pmm-service-account-token
+---
+# Source: pmm/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: pmm-secret
+  labels:
+    helm.sh/chart: pmm-1.3.14
+    app.kubernetes.io/name: pmm
+    app.kubernetes.io/instance: my-pmm
+    app.kubernetes.io/component: pmm-server
+    app.kubernetes.io/part-of: percona-platform
+    app.kubernetes.io/version: "2.42.0"
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+# base64 encoded password
+# encode some password: `echo -n "admin" | base64`
+# to get the password on deployed cluster: `kubectl get secret pmm-secret -o jsonpath='{.data.PMM_ADMIN_PASSWORD}' | base64 --decode`
+  PMM_ADMIN_PASSWORD: "SExQe21XLDx7MzZDR1R3VQ=="
+---
+# Source: pmm/templates/serviceaccount.yaml
+apiVersion: v1
+kind: Secret
+type: kubernetes.io/service-account-token
+metadata:
+  name: pmm-service-account-token
+  annotations:
+    kubernetes.io/service-account.name: pmm-service-account
+---
+# Source: pmm/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-pmm
+  labels:
+    helm.sh/chart: pmm-1.3.14
+    app.kubernetes.io/name: pmm
+    app.kubernetes.io/instance: my-pmm
+    app.kubernetes.io/component: pmm-server
+    app.kubernetes.io/part-of: percona-platform
+    app.kubernetes.io/version: "2.42.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+# environment passed to the PMM
+      DISABLE_UPDATES: "1"
+---
+# Source: pmm/templates/clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-pmm
+  labels:
+    helm.sh/chart: pmm-1.3.14
+    app.kubernetes.io/name: pmm
+    app.kubernetes.io/instance: my-pmm
+    app.kubernetes.io/component: pmm-server
+    app.kubernetes.io/part-of: percona-platform
+    app.kubernetes.io/version: "2.42.0"
+    app.kubernetes.io/managed-by: Helm
+rules:
+# standard RBAC
+- apiGroups: [""] # "" indicates the core API group
+  resources:
+  - namespaces
+  - endpoints
+  - services
+  - nodes
+  - pods
+  - secrets
+  - serviceaccounts
+  verbs:
+  - get
+  - watch
+  - list
+- nonResourceURLs:
+  - /metrics
+  - /metrics/resources
+  verbs:
+  - get
+---
+# Source: pmm/templates/clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-pmm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-pmm
+subjects:
+- kind: ServiceAccount
+  name: pmm-service-account
+  namespace: default
+---
+# Source: pmm/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: monitoring-service
+  labels:
+    helm.sh/chart: pmm-1.3.14
+    app.kubernetes.io/name: pmm
+    app.kubernetes.io/instance: my-pmm
+    app.kubernetes.io/component: pmm-server
+    app.kubernetes.io/part-of: percona-platform
+    app.kubernetes.io/version: "2.42.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: NodePort
+  ports:
+        - name: https
+          port: 443
+          protocol: TCP
+          targetPort: https
+        - name: http
+          port: 80
+          protocol: TCP
+          targetPort: http
+  selector:
+    app.kubernetes.io/name: pmm
+    app.kubernetes.io/instance: my-pmm
+    app.kubernetes.io/component: pmm-server
+    app.kubernetes.io/part-of: percona-platform
+---
+# Source: pmm/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-pmm
+  labels:
+    helm.sh/chart: pmm-1.3.14
+    app.kubernetes.io/name: pmm
+    app.kubernetes.io/instance: my-pmm
+    app.kubernetes.io/component: pmm-server
+    app.kubernetes.io/part-of: percona-platform
+    app.kubernetes.io/version: "2.42.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  serviceName: monitoring-service
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pmm
+      app.kubernetes.io/instance: my-pmm
+      app.kubernetes.io/component: pmm-server
+      app.kubernetes.io/part-of: percona-platform
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations:
+        app.kubernetes.io/managed-by: Helm
+        helm.sh/chart: pmm-1.3.14
+        checksum/config: 71990f9bb376a475c06f31093a7444b4068f88564a1c7449eaa36231a3c5d658
+      labels:
+        app.kubernetes.io/name: pmm
+        app.kubernetes.io/instance: my-pmm
+        app.kubernetes.io/component: pmm-server
+        app.kubernetes.io/part-of: percona-platform
+    spec:
+      serviceAccountName: pmm-service-account
+      securityContext:
+        {}
+      containers:
+        - name: pmm
+          
+          image: "percona/pmm-server:2.42.0"
+          imagePullPolicy: IfNotPresent
+
+          securityContext:
+            {}
+
+          # environment passed to PMM, defined in configMap
+          envFrom:
+            - configMapRef:
+                name: my-pmm
+                optional: true
+
+          # additional secrets that could be used for Grafana iDP 
+          env:
+            - name: GF_AUTH_GENERIC_OAUTH_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: pmm-secret
+                  key: GF_AUTH_GENERIC_OAUTH_CLIENT_ID
+                  optional: true
+            - name: GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: pmm-secret
+                  key: GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET
+                  optional: true
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: pmm-secret
+                  key: PMM_ADMIN_PASSWORD
+                  optional: true
+            - name: PMM_INSTALL_METHOD
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.annotations['app.kubernetes.io/managed-by']
+          ports:
+            - name: http
+              containerPort: 80
+            - name: https
+              containerPort: 443
+          readinessProbe:
+            httpGet:
+              path: /v1/readyz
+              port: http
+            failureThreshold: 6
+            initialDelaySeconds: 1
+            periodSeconds: 5
+          volumeMounts:
+            - name: pmm-storage
+              mountPath: /srv
+            - name: annotations
+              mountPath: "/var/run/pmm/annotations"
+              readOnly: true
+      volumes:
+        - name: annotations
+          projected:
+            sources:
+            - downwardAPI:
+                items:
+                  - path: "annotations"
+                    fieldRef:
+                      fieldPath: metadata.annotations
+  volumeClaimTemplates:
+    - metadata:
+        name: pmm-storage
+      spec:
+        
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 10Gi

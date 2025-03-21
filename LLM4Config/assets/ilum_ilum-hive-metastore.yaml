@@ -1,0 +1,296 @@
+---
+# Source: ilum-hive-metastore/templates/hms-cm.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ilum-hive-metastore
+  labels:
+    app: ilum-hive-metastore
+data:
+  hive-site.xml: |
+    <?xml version="1.0"?>
+    <?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+    <configuration>
+        <property>
+          <name>metastore.expression.proxy</name>
+          <value>org.apache.hadoop.hive.metastore.DefaultPartitionExpressionProxy</value>
+        </property>
+        <property>
+          <name>metastore.task.threads.always</name>
+          <value>org.apache.hadoop.hive.metastore.events.EventCleanerTask</value>
+        </property>
+
+        <property>
+          <name>hive.metastore.warehouse.dir</name>
+          <value>s3a://ilum-data/</value>
+        </property>
+
+        <!--Postgres connection properties -->
+        <property>
+          <name>javax.jdo.option.ConnectionURL</name>
+          <value>jdbc:postgresql://postgresql:5432/metastore</value>
+        </property>
+        <property>
+          <name>javax.jdo.option.ConnectionDriverName</name>
+          <value>org.postgresql.Driver</value>
+        </property>
+        <property>
+          <name>javax.jdo.option.ConnectionUserName</name>
+          <value>ilum</value>
+        </property>
+        <property>
+          <name>javax.jdo.option.ConnectionPassword</name>
+          <value>CHANGEMEPLEASE</value>
+        </property>
+        <property>
+          <name>datanucleus.autoCreateSchema</name>
+          <value>true</value>
+        </property>
+    
+        <!-- Hive metastore uri assurance -->
+    
+        <property>
+          <name>hive.server2.transport.mode</name>
+          <value>http</value>
+        </property>
+
+        <property>
+          <name>hive.server2.thrift.http.port</name>
+          <value>9083</value>
+        </property>
+
+        <property>
+          <name>hive.server2.thrift.http.path</name>
+          <value>cliservice</value>
+        </property>
+
+        <property>
+          <name>hive.server2.authentication</name>
+          <value>NOSASL</value>
+        </property>
+        <property>
+          <name>hive.metastore.sasl.enabled</name>
+          <value>false</value>
+        </property>
+
+        <!-- Storage Connection Info -->
+        <property>
+          <name>fs.s3a.connection.ssl.enabled</name>
+          <value>false</value>
+        </property>
+        <property>
+          <name>fs.s3a.endpoint</name>
+          <value>s3:7000</value>
+        </property>
+        <property>
+          <name>fs.s3a.access.key</name>
+          <value></value>
+        </property>
+        <property>
+          <name>fs.s3a.secret.key</name>
+          <value></value>
+        </property>
+        <property>
+          <name>fs.s3a.path.style.access</name>
+          <value>true</value>
+        </property>
+        <property>
+          <name>fs.s3a.fast.upload</name>
+          <value>true</value>
+        </property>
+        <property>
+          <name>fs.s3a.aws.credentials.provider</name>
+          <value>org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider</value>
+        </property>
+        <property>
+          <name>fs.s3a.impl</name>
+          <value>org.apache.hadoop.fs.s3a.S3AFileSystem</value>
+        </property>
+
+        <!-- Extra Hive config -->
+        <property>
+          <name>hive.metastore.uris</name>
+          <value>thrift://ilum-hive-metastore:9083</value>
+        </property>
+    </configuration>
+  hive-log4j2.properties: |
+    name = metastore
+
+    appenders = console
+    
+    appender.console.type = Console
+    appender.console.name = consoleLogger
+    appender.console.layout.type = PatternLayout
+    appender.console.layout.pattern = %d{MM/dd/yy HH:mm:ss} %p %c: %m%n
+    
+    loggers = meta
+    
+    logger.meta.name = org.apache.hadoop.hive.metastore
+    logger.meta.level = debug
+    
+    logger.meta.name = org.apache.hadoop.fs.s3a
+    logger.meta.level = debug
+
+    logger.hive.name = org.apache.hive
+    logger.hive.level = info
+    
+    logger.datanucleusorg.name = org.datanucleus
+    logger.datanucleusorg.level = info
+    
+    logger.datanucleus.name = DataNucleus
+    logger.datanucleus.level = info
+    
+    rootLogger.level = info
+    rootLogger.appenderRefs = console
+    rootLogger.appenderRef.console.ref = consoleLogger
+---
+# Source: ilum-hive-metastore/templates/hms-svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: ilum-hive-metastore
+  labels:
+    app: ilum-hive-metastore
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 9083
+      targetPort: 9083
+  selector:
+    app: ilum-hive-metastore
+---
+# Source: ilum-hive-metastore/templates/hms-sset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: ilum-hive-metastore
+  labels:
+    app: ilum-hive-metastore
+spec:
+  selector:
+    matchLabels:
+      app: ilum-hive-metastore
+  serviceName: ilum-hive-metastore
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: ilum-hive-metastore
+      annotations:
+        checksum/config: 244617dad0c168358f892882a20a94fb6a8dd2b1cdb2504b01916233a9122d58
+        checksum/hdfs-config: 01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b
+    spec:
+      initContainers:
+        - name: wait-for-db
+          image: bitnami/postgresql:16
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/bash
+          args:
+            - -ec
+            - until pg_isready -h ${POSTGRES_HOST} -p ${POSTGRES_PORT} -U ${POSTGRES_USER} -d ${POSTGRES_DB}; do echo waiting for database; sleep 2; done;
+          env:
+            - name: POSTGRES_HOST
+              value: "postgresql"
+            - name: POSTGRES_PORT
+              value: "5432"
+            - name: POSTGRES_USER
+              value: "ilum"
+            - name: POSTGRES_DB
+              value: "metastore"
+      containers:
+        - name: metastore
+          image: ilum/hive:3.1.3
+          imagePullPolicy: "IfNotPresent"
+          command:
+            - "/bin/sh"
+            - "-c"
+            - "hive --service metastore"
+          resources:
+            
+            limits:
+              memory: 1Gi
+            requests:
+              memory: 1Gi
+          volumeMounts:
+            - name: hive-config
+              mountPath: /opt/hive/conf
+            - name: warehouse-dir
+              mountPath: /opt/hive/warehouse
+      volumes:
+        - name: hive-config
+          projected:
+            sources:
+              - configMap:
+                  name: ilum-hive-metastore
+              
+        - name: warehouse-dir
+          emptyDir: {}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
+---
+# Source: ilum-hive-metastore/templates/hms-init-schema.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ilum-hms-db-init-schema
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: wait-for-db
+          image: bitnami/postgresql:16
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/bash
+          args:
+            - -ec
+            - until pg_isready -h ${POSTGRES_HOST} -p ${POSTGRES_PORT} -U ${POSTGRES_USER} -d ${POSTGRES_DB}; do echo waiting for database; sleep 2; done;
+          env:
+            - name: POSTGRES_HOST
+              value: "postgresql"
+            - name: POSTGRES_PORT
+              value: "5432"
+            - name: POSTGRES_USER
+              value: "ilum"
+            - name: POSTGRES_DB
+              value: "metastore"
+      containers:
+        - name: hive-metastore
+          image: ilum/hive:3.1.3
+          imagePullPolicy: "IfNotPresent"
+          command: ["/bin/sh", "-c"]
+          args:
+            - schematool
+              --verbose
+              -initSchema
+              -dbType postgres
+              -userName "ilum"
+              -passWord "CHANGEMEPLEASE"
+              -url "jdbc:postgresql://postgresql:5432/metastore"
+          volumeMounts:
+            - name: hive-config
+              mountPath: /opt/hive-metastore/conf
+      volumes:
+        - name: hive-config
+          configMap:
+            name: ilum-hive-metastore
+      restartPolicy: Never
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
+  backoffLimit: 8

@@ -1,0 +1,184 @@
+---
+# Source: flink-app/templates/networkpolicy.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:  
+  name: flink-app-my-flink-app
+  labels:
+    app: flink-app
+    chart: flink-app-0.4.17
+    release: my-flink-app
+    heritage: Helm
+spec:
+  podSelector:
+    matchLabels:
+      # NOTE: flink-kubernetes-operator overrides the app label and will
+      # always set it to the <chart>-<release>.  We need select based on this,
+      # instead of WMF's usual convention of app==<chart>.
+      # See: https://lists.apache.org/thread/dont796lp84vfqnovolryw0y0470mqsv
+      # for more context.
+      app: flink-app-my-flink-app
+      release: my-flink-app
+  policyTypes:
+    - Ingress
+  ingress:
+    - ports:      
+      - port: 8081
+        protocol: TCP
+      
+      # Prometheus port. Must match value of metrics.reporter.prometheus.port in flink-conf.yaml.
+      - port: 9999
+        protocol: TCP
+
+    # Allow ingress to Jobmanager and TaskManager on these Flink Ports
+    - from:
+        - podSelector:
+            matchExpressions:
+              # component label is added by Flink Kubernetes Operator
+              - key: component
+                operator: In
+                values: [jobmanager, taskmanager]
+      ports:
+        # Flink jobmanager.rpc.port
+        - port: 6123
+          protocol: TCP
+        # Flink blob.server.port
+        - port: 6130
+          protocol: TCP
+        # Flink taskmanager.rpc.port
+        - port: 6122
+          protocol: TCP
+        # Flink taskmanager.data.port
+        - port: 6121
+          protocol: TCP
+
+# use the newer calico-based network policies, see https://wikitech.wikimedia.org/wiki/Kubernetes/Deployment_Charts
+## Enabling_egress_to_services_external_to_Kubernetes
+---
+# Source: flink-app/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:  
+  name: flink-app-my-flink-app-secret-config
+  labels:
+    app: flink-app
+    chart: flink-app-0.4.17
+    release: my-flink-app
+    heritage: Helm
+type: Opaque
+---
+# Source: flink-app/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: flink-app-my-flink-app-flink-app-config
+  labels:
+    app: flink-app
+    chart: flink-app-0.4.17
+    release: my-flink-app
+    heritage: Helm
+data:
+  python.log.config.yaml: |- 
+    log_config:
+      formatters:
+        ecsStdLibFormatter:
+          class: ecs_logging.StdlibFormatter
+      handlers:
+        consoleHandler:
+          class: logging.StreamHandler
+          formatter: ecsStdLibFormatter
+          stream: ext://sys.stdout
+      root:
+        handlers:
+        - consoleHandler
+        level: INFO
+---
+# Source: flink-app/templates/flinkdeployment.yaml
+apiVersion: flink.apache.org/v1beta1
+kind: FlinkDeployment
+metadata:  
+  name: flink-app-my-flink-app
+  labels:
+    app: flink-app
+    chart: flink-app-0.4.17
+    release: my-flink-app
+    heritage: Helm
+
+spec:
+  image: :latest
+  imagePullPolicy: IfNotPresent
+  flinkVersion: v1_16
+  mode: native
+  serviceAccount: flink
+  restartNonce: 1
+
+  job:
+    args: []
+
+  flinkConfiguration:
+    ### Default configuration
+    rest.port: "8081"
+    # Expose a ClusterIP Service for the  Flink REST UI.
+    # This can be accessed by kubectl port-forward.
+    # See https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/resource-providers/native_kubernetes/#accessing-flinks-web-ui
+    # and also this chart's NOTES.txt.
+    kubernetes.rest-service.exposed.type: ClusterIP
+    metrics.reporters: prometheus
+    metrics.reporter.prometheus.factory.class: org.apache.flink.metrics.prometheus.PrometheusReporterFactory
+    metrics.reporter.prometheus.port: "9999"
+    ### User provided configuration
+    # flinkConfiguration must be map of str: str.
+    # Iterate through and quote the values, in case they look like integers.
+    blob.server.port: "6130"
+    jobmanager.rpc.port: "6123"
+    taskmanager.data.port: "6121"
+    taskmanager.rpc.port: "6122"
+
+  # Use podTemplate to add WMF labels and annotations to all pods.
+  # https://nightlies.apache.org/flink/flink-kubernetes-operator-docs-main/docs/custom-resource/pod-template/
+  podTemplate:
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      labels:        
+        app: flink-app
+        release: my-flink-app
+        routed_via: my-flink-app
+      annotations:        
+        checksum/secrets: cccb1338f1361c46222abd2da0042bf3d1136ad0e7d7e03e91ff98b9caa41f38
+        prometheus.io/scrape: "true"        
+        prometheus.io/port: "9999"
+        checksum/config_files:  624eebe27496db6f5a3b32a8dd99745c1a1619a116fc49b0cc990b78249d7668
+    spec:
+      containers:
+        - name: flink-main-container # end env
+          volumeMounts:
+          - name: flink-app-config-volume
+            mountPath: /srv/app/conf # end volumeMounts          
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+               drop:
+               - ALL
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault # end flink-main-container # end .Values.debug.enabled        
+      volumes:        
+        - name: flink-app-config-volume
+          configMap:
+            name: flink-app-my-flink-app-flink-app-config
+            items:
+              - key: python.log.config.yaml
+                path: python.log.config.yaml # end volumes # end spec
+
+  jobManager:
+    replicas: 1
+    resource:
+      cpu: 1
+      memory: 2048m
+
+  taskManager:
+    replicas: 1
+    resource:
+      cpu: 1
+      memory: 2048m

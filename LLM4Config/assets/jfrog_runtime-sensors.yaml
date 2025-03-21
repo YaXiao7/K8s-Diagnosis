@@ -1,0 +1,129 @@
+---
+# Source: runtime-sensors/templates/rbac-configurations.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: runtimesa
+  namespace: default
+---
+# Source: runtime-sensors/templates/rbac-configurations.yaml
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: runtime-view
+rules:
+  - apiGroups: ["", "extensions", "v1", "apps", "pods", "deployments", "nodes"]
+    resources: ["pods", "replicationcontrollers", "deployments", "nodes", "configmaps"]
+    verbs: ["get", "watch", "list", "update"]
+---
+# Source: runtime-sensors/templates/rbac-configurations.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: "runtime-view-rolebinding-default"
+  namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: runtime-view 
+subjects:
+  - kind: ServiceAccount
+    name: runtimesa
+    namespace: default
+---
+# Source: runtime-sensors/templates/rbac-configurations.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: configmap-creator
+  namespace: default
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["create", "update"]
+---
+# Source: runtime-sensors/templates/rbac-configurations.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: configmap-creator-binding
+  namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: configmap-creator
+subjects:
+  - kind: ServiceAccount
+    name: runtimesa
+    namespace: default
+---
+# Source: runtime-sensors/templates/kube-auditor-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jfs-runtime-controller
+  namespace: default
+  labels:
+    controller-only: "true"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: runtime-sensors
+      app.kubernetes.io/instance: my-runtime-sensors
+  template:
+    metadata:
+      labels:
+        controller-only: "true"
+        app.kubernetes.io/name: runtime-sensors
+        app.kubernetes.io/instance: my-runtime-sensors
+    spec:
+      imagePullSecrets:
+        - name: docker-jfrog-io-pull-secret
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: disable_jfrog_runtime
+                operator: DoesNotExist
+      serviceAccountName: runtimesa
+      containers:
+        - name: jfs-runtime-controller
+          image: "releases-docker.jfrog.io/jfrog/runtime-k8s-controller:1.0.0" 
+          resources:
+            limits:
+              cpu: 500m
+              memory: 500Mi
+            requests:
+              cpu: 200m
+              memory: 250Mi        
+          command: ["kube-auditor", "--log-level", "debug"]
+          imagePullPolicy: Always
+          env:
+            - name: JF_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: JF_CLUSTER
+              value: ""
+            - name: JF_SERVER
+              value: "runtime-service:443"
+            - name: JF_PERIODICAL
+              value: "30"
+            - name: JF_REGISTRATION_TOKEN
+              value: ""
+            - name: JF_CONFIG_NAMESPACE
+              value: default
+            - name: JF_CLUSTER_ID
+              value: ""
+            - name: JF_SECURED
+              value:  "true"
+            - name: JF_TLS_INSECURE_SKIP_VERIFY
+              value: "false"
+            - name: JF_CONTROLLER_ONLY
+              value: "true"
+            - name: JF_POD_MEMORY_LIMIT
+              valueFrom:
+                resourceFieldRef:
+                  resource: limits.memory

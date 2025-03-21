@@ -1,0 +1,129 @@
+---
+# Source: transmission-openvpn/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-transmission-openvpn
+  labels:
+    helm.sh/chart: transmission-openvpn-2.5.0
+    app.kubernetes.io/name: transmission-openvpn
+    app.kubernetes.io/instance: my-transmission-openvpn
+    app.kubernetes.io/version: "4.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: transmission-openvpn/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-transmission-openvpn
+  labels:
+    helm.sh/chart: transmission-openvpn-2.5.0
+    app.kubernetes.io/name: transmission-openvpn
+    app.kubernetes.io/instance: my-transmission-openvpn
+    app.kubernetes.io/version: "4.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+---
+# Source: transmission-openvpn/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-transmission-openvpn
+  labels:
+    helm.sh/chart: transmission-openvpn-2.5.0
+    app.kubernetes.io/name: transmission-openvpn
+    app.kubernetes.io/instance: my-transmission-openvpn
+    app.kubernetes.io/version: "4.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+  {}
+---
+# Source: transmission-openvpn/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-transmission-openvpn
+  labels:
+    helm.sh/chart: transmission-openvpn-2.5.0
+    app.kubernetes.io/name: transmission-openvpn
+    app.kubernetes.io/instance: my-transmission-openvpn
+    app.kubernetes.io/version: "4.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: transmission-openvpn
+    app.kubernetes.io/instance: my-transmission-openvpn
+---
+# Source: transmission-openvpn/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-transmission-openvpn
+  labels:
+    helm.sh/chart: transmission-openvpn-2.5.0
+    app.kubernetes.io/name: transmission-openvpn
+    app.kubernetes.io/instance: my-transmission-openvpn
+    app.kubernetes.io/version: "4.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  strategy:
+    type: Recreate
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: transmission-openvpn
+      app.kubernetes.io/instance: my-transmission-openvpn
+  template:
+    metadata:
+      annotations:
+        checksum/configmap: e77e30282419a9f378cd4313952869444ea77cf9a5e5209d40e08996c6ed6276
+        checksum/secret: d4b40f4d71fd9f3a8b3f77c74f7f1e2e8fd89e56c590fd32a00bd005add8d39c
+      labels:
+        app.kubernetes.io/name: transmission-openvpn
+        app.kubernetes.io/instance: my-transmission-openvpn
+    spec:
+      hostNetwork: false
+      serviceAccountName: my-transmission-openvpn
+      securityContext:
+        {}
+      dnsPolicy: ClusterFirst
+      containers:
+        - name: transmission-openvpn
+          securityContext:
+            capabilities:
+              add:
+              - NET_ADMIN
+          image: "haugene/transmission-openvpn:4.0"
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - mountPath: /dev/net/tun
+              name: dev-net-tun
+            - mountPath: /data
+              name: data
+          envFrom:
+            - configMapRef:
+                name: my-transmission-openvpn
+            - secretRef:
+                name: my-transmission-openvpn
+          ports:
+            - name: http
+              containerPort: 9091
+              protocol: TCP
+          readinessProbe:
+            tcpSocket:
+              port: http
+          resources:
+            {}
+      volumes:
+        - name: dev-net-tun
+          hostPath:
+            path: /dev/net/tun
+            type: CharDevice
+        - name: data
+          emptyDir: {}

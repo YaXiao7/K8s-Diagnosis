@@ -1,0 +1,46 @@
+---
+# Source: nginx-servicemonitor/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-nginx-servicemonitor
+  labels:
+    app: nginx-servicemonitor
+    chart: "nginx-servicemonitor-1.0.0"
+    release: my-nginx-servicemonitor
+    heritage: Helm
+  namespace: monitoring
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9113
+      targetPort: 9113
+      protocol: TCP
+      name: "metrics"
+---
+# Source: nginx-servicemonitor/templates/servicemonitor.yaml
+#apiVersion: monitoring.coreos.com/v1
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  labels:
+    app: nginx-servicemonitor
+    chart: "nginx-servicemonitor-1.0.0"
+    heritage: "Helm"
+    release: "my-nginx-servicemonitor"
+    prometheus: my-nginx-servicemonitor
+    release: prometheus-operator    
+  name: my-nginx-servicemonitor
+spec:
+  selector:
+    matchLabels:
+      app: nginx-servicemonitor
+      chart: "nginx-servicemonitor-1.0.0"
+      release: my-nginx-servicemonitor
+  namespaceSelector:
+    matchNames:
+      - monitoring
+  endpoints:
+  - port: "metrics"
+    interval: 15s
+    #bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token

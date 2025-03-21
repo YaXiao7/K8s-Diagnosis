@@ -1,0 +1,94 @@
+---
+# Source: kafka-ui/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-kafka-ui
+  namespace: default
+  labels:
+    helm.sh/chart: kafka-ui-1.4.4
+    app.kubernetes.io/name: kafka-ui
+    app.kubernetes.io/instance: my-kafka-ui
+    app.kubernetes.io/version: "v1.0.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: kafka-ui/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-kafka-ui
+  namespace: default
+  labels:
+    helm.sh/chart: kafka-ui-1.4.4
+    app.kubernetes.io/name: kafka-ui
+    app.kubernetes.io/instance: my-kafka-ui
+    app.kubernetes.io/version: "v1.0.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: kafka-ui
+    app.kubernetes.io/instance: my-kafka-ui
+---
+# Source: kafka-ui/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-kafka-ui
+  namespace: default
+  labels:
+    helm.sh/chart: kafka-ui-1.4.4
+    app.kubernetes.io/name: kafka-ui
+    app.kubernetes.io/instance: my-kafka-ui
+    app.kubernetes.io/version: "v1.0.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kafka-ui
+      app.kubernetes.io/instance: my-kafka-ui
+  template:
+    metadata:
+      annotations:
+        checksum/config: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+        checksum/configFromValues: 01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b
+        checksum/secret: 01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b
+      labels:
+        app.kubernetes.io/name: kafka-ui
+        app.kubernetes.io/instance: my-kafka-ui
+    spec:
+      serviceAccountName: my-kafka-ui
+      securityContext:
+        {}
+      containers:
+        - name: kafka-ui
+          securityContext:
+            {}
+          image: ghcr.io/kafbat/kafka-ui:v1.0.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+          resources:
+            {}

@@ -1,0 +1,1476 @@
+---
+# Source: timesketch/charts/postgresql/templates/primary/networkpolicy.yaml
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: my-timesketch-postgresql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-timesketch
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/version: 16.3.0
+    helm.sh/chart: postgresql-15.3.2
+    app.kubernetes.io/component: primary
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: my-timesketch
+      app.kubernetes.io/name: postgresql
+      app.kubernetes.io/component: primary
+  policyTypes:
+    - Ingress
+    - Egress
+  egress:
+    - {}
+  ingress:
+    - ports:
+        - port: 5432
+---
+# Source: timesketch/charts/redis/templates/networkpolicy.yaml
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: my-timesketch-redis
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-timesketch
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/version: 7.2.4
+    helm.sh/chart: redis-19.3.2
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: my-timesketch
+      app.kubernetes.io/name: redis
+  policyTypes:
+    - Ingress
+    - Egress
+  egress:
+    - {}
+  ingress:
+    # Allow inbound connections
+    - ports:
+        - port: 6379
+---
+# Source: timesketch/charts/opensearch/templates/poddisruptionbudget.yaml
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: "opensearch-cluster-master-pdb"
+  labels:
+    helm.sh/chart: opensearch-2.20.0
+    app.kubernetes.io/name: opensearch
+    app.kubernetes.io/instance: my-timesketch
+    app.kubernetes.io/version: "2.14.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: opensearch-cluster-master
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: opensearch
+      app.kubernetes.io/instance: my-timesketch
+---
+# Source: timesketch/charts/postgresql/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-timesketch-postgresql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-timesketch
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/version: 16.3.0
+    helm.sh/chart: postgresql-15.3.2
+automountServiceAccountToken: false
+---
+# Source: timesketch/charts/redis/templates/master/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+automountServiceAccountToken: false
+metadata:
+  name: my-timesketch-redis-master
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-timesketch
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/version: 7.2.4
+    helm.sh/chart: redis-19.3.2
+---
+# Source: timesketch/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: timesketch
+  labels:
+    helm.sh/chart: timesketch-1.0.6
+    app.kubernetes.io/name: timesketch
+    app.kubernetes.io/instance: my-timesketch
+    app.kubernetes.io/version: "latest"
+    app.kubernetes.io/managed-by: Helm
+    date: "2024-09-16"
+---
+# Source: timesketch/charts/postgresql/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-timesketch-postgresql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-timesketch
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/version: 16.3.0
+    helm.sh/chart: postgresql-15.3.2
+type: Opaque
+data:
+  postgres-password: "d24ybm14NXcwcw=="
+  # We don't auto-generate LDAP password when it's not provided as we do for other passwords
+---
+# Source: timesketch/charts/redis/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-timesketch-redis
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-timesketch
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/version: 7.2.4
+    helm.sh/chart: redis-19.3.2
+type: Opaque
+data:
+  redis-password: "clZ1cWVrSkJWUg=="
+---
+# Source: timesketch/templates/secret-oidc-allowed-users.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-timesketch-access-list
+  namespace: "default"
+  labels:
+    helm.sh/chart: timesketch-1.0.6
+    app.kubernetes.io/name: timesketch
+    app.kubernetes.io/instance: my-timesketch
+    app.kubernetes.io/version: "latest"
+    app.kubernetes.io/managed-by: Helm
+    date: "2024-09-16"
+type: Opaque
+data:
+  authenticated-emails-list: ""
+---
+# Source: timesketch/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-timesketch-secret
+  namespace: "default"
+  labels:
+    helm.sh/chart: timesketch-1.0.6
+    app.kubernetes.io/name: timesketch
+    app.kubernetes.io/instance: my-timesketch
+    app.kubernetes.io/version: "latest"
+    app.kubernetes.io/managed-by: Helm
+    date: "2024-09-16"
+data:
+  timesketch-secret: "dWozSWM2bXdYam9EbXBreWdlWFRtSE55MWVUMlpVWUo="
+  timesketch-user: "SXBnRkpLdkdIV0ZqalM0Mw=="
+---
+# Source: timesketch/charts/opensearch/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: opensearch-cluster-master-config
+  labels:
+    helm.sh/chart: opensearch-2.20.0
+    app.kubernetes.io/name: opensearch
+    app.kubernetes.io/instance: my-timesketch
+    app.kubernetes.io/version: "2.14.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: opensearch-cluster-master
+data:
+  opensearch.yml: |
+    plugins:
+      security:
+        allow_unsafe_democertificates: false
+---
+# Source: timesketch/charts/redis/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-timesketch-redis-configuration
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-timesketch
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/version: 7.2.4
+    helm.sh/chart: redis-19.3.2
+data:
+  redis.conf: |-
+    # User-supplied common configuration:
+    # Enable AOF https://redis.io/topics/persistence#append-only-file
+    appendonly yes
+    # Disable RDB persistence, AOF persistence already enabled.
+    save ""
+    # End of common configuration
+  master.conf: |-
+    dir /data
+    # User-supplied master configuration:
+    rename-command FLUSHDB ""
+    rename-command FLUSHALL ""
+    # End of master configuration
+  replica.conf: |-
+    dir /data
+    # User-supplied replica configuration:
+    rename-command FLUSHDB ""
+    rename-command FLUSHALL ""
+    # End of replica configuration
+---
+# Source: timesketch/charts/redis/templates/health-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-timesketch-redis-health
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-timesketch
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/version: 7.2.4
+    helm.sh/chart: redis-19.3.2
+data:
+  ping_readiness_local.sh: |-
+    #!/bin/bash
+
+    [[ -f $REDIS_PASSWORD_FILE ]] && export REDIS_PASSWORD="$(< "${REDIS_PASSWORD_FILE}")"
+    [[ -n "$REDIS_PASSWORD" ]] && export REDISCLI_AUTH="$REDIS_PASSWORD"
+    response=$(
+      timeout -s 15 $1 \
+      redis-cli \
+        -h localhost \
+        -p $REDIS_PORT \
+        ping
+    )
+    if [ "$?" -eq "124" ]; then
+      echo "Timed out"
+      exit 1
+    fi
+    if [ "$response" != "PONG" ]; then
+      echo "$response"
+      exit 1
+    fi
+  ping_liveness_local.sh: |-
+    #!/bin/bash
+
+    [[ -f $REDIS_PASSWORD_FILE ]] && export REDIS_PASSWORD="$(< "${REDIS_PASSWORD_FILE}")"
+    [[ -n "$REDIS_PASSWORD" ]] && export REDISCLI_AUTH="$REDIS_PASSWORD"
+    response=$(
+      timeout -s 15 $1 \
+      redis-cli \
+        -h localhost \
+        -p $REDIS_PORT \
+        ping
+    )
+    if [ "$?" -eq "124" ]; then
+      echo "Timed out"
+      exit 1
+    fi
+    responseFirstWord=$(echo $response | head -n1 | awk '{print $1;}')
+    if [ "$response" != "PONG" ] && [ "$responseFirstWord" != "LOADING" ] && [ "$responseFirstWord" != "MASTERDOWN" ]; then
+      echo "$response"
+      exit 1
+    fi
+  ping_readiness_master.sh: |-
+    #!/bin/bash
+
+    [[ -f $REDIS_MASTER_PASSWORD_FILE ]] && export REDIS_MASTER_PASSWORD="$(< "${REDIS_MASTER_PASSWORD_FILE}")"
+    [[ -n "$REDIS_MASTER_PASSWORD" ]] && export REDISCLI_AUTH="$REDIS_MASTER_PASSWORD"
+    response=$(
+      timeout -s 15 $1 \
+      redis-cli \
+        -h $REDIS_MASTER_HOST \
+        -p $REDIS_MASTER_PORT_NUMBER \
+        ping
+    )
+    if [ "$?" -eq "124" ]; then
+      echo "Timed out"
+      exit 1
+    fi
+    if [ "$response" != "PONG" ]; then
+      echo "$response"
+      exit 1
+    fi
+  ping_liveness_master.sh: |-
+    #!/bin/bash
+
+    [[ -f $REDIS_MASTER_PASSWORD_FILE ]] && export REDIS_MASTER_PASSWORD="$(< "${REDIS_MASTER_PASSWORD_FILE}")"
+    [[ -n "$REDIS_MASTER_PASSWORD" ]] && export REDISCLI_AUTH="$REDIS_MASTER_PASSWORD"
+    response=$(
+      timeout -s 15 $1 \
+      redis-cli \
+        -h $REDIS_MASTER_HOST \
+        -p $REDIS_MASTER_PORT_NUMBER \
+        ping
+    )
+    if [ "$?" -eq "124" ]; then
+      echo "Timed out"
+      exit 1
+    fi
+    responseFirstWord=$(echo $response | head -n1 | awk '{print $1;}')
+    if [ "$response" != "PONG" ] && [ "$responseFirstWord" != "LOADING" ]; then
+      echo "$response"
+      exit 1
+    fi
+  ping_readiness_local_and_master.sh: |-
+    script_dir="$(dirname "$0")"
+    exit_status=0
+    "$script_dir/ping_readiness_local.sh" $1 || exit_status=$?
+    "$script_dir/ping_readiness_master.sh" $1 || exit_status=$?
+    exit $exit_status
+  ping_liveness_local_and_master.sh: |-
+    script_dir="$(dirname "$0")"
+    exit_status=0
+    "$script_dir/ping_liveness_local.sh" $1 || exit_status=$?
+    "$script_dir/ping_liveness_master.sh" $1 || exit_status=$?
+    exit $exit_status
+---
+# Source: timesketch/charts/redis/templates/scripts-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-timesketch-redis-scripts
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-timesketch
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/version: 7.2.4
+    helm.sh/chart: redis-19.3.2
+data:
+  start-master.sh: |
+    #!/bin/bash
+
+    [[ -f $REDIS_PASSWORD_FILE ]] && export REDIS_PASSWORD="$(< "${REDIS_PASSWORD_FILE}")"
+    if [[ -f /opt/bitnami/redis/mounted-etc/master.conf ]];then
+        cp /opt/bitnami/redis/mounted-etc/master.conf /opt/bitnami/redis/etc/master.conf
+    fi
+    if [[ -f /opt/bitnami/redis/mounted-etc/redis.conf ]];then
+        cp /opt/bitnami/redis/mounted-etc/redis.conf /opt/bitnami/redis/etc/redis.conf
+    fi
+    ARGS=("--port" "${REDIS_PORT}")
+    ARGS+=("--requirepass" "${REDIS_PASSWORD}")
+    ARGS+=("--masterauth" "${REDIS_PASSWORD}")
+    ARGS+=("--include" "/opt/bitnami/redis/etc/redis.conf")
+    ARGS+=("--include" "/opt/bitnami/redis/etc/master.conf")
+    exec redis-server "${ARGS[@]}"
+---
+# Source: timesketch/templates/init-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-timesketch-init-configmap
+  namespace: "default"
+  labels:
+    helm.sh/chart: timesketch-1.0.6
+    app.kubernetes.io/name: timesketch
+    app.kubernetes.io/instance: my-timesketch
+    app.kubernetes.io/version: "latest"
+    app.kubernetes.io/managed-by: Helm
+    date: "2024-09-16"
+data:
+  init-timesketch.sh: |
+    #!/bin/sh
+    set -e
+
+    # Create timesketch config directory
+    mkdir -p /etc/timesketch
+    cd /etc/timesketch
+
+    if [ $(ls /tmp/timesketch/ | wc -l) -gt 0 ]; then
+      echo "Using existing configuration files provided."
+      cp /tmp/timesketch/* /etc/timesketch/
+    else
+      echo -n "* Fetching configuration files.." 
+      GITHUB_BASE_URL="https://raw.githubusercontent.com/google/timesketch/master"
+      # Fetch default Timesketch config files
+      git clone https://github.com/google/timesketch.git
+      cp -r timesketch/data/* /etc/timesketch/
+      rm -rf timesketch
+      echo "OK"
+    fi
+
+    # Set up the Redis connection
+    sed -i 's#^CELERY_BROKER_URL =.*#CELERY_BROKER_URL = "redis://default:'$REDIS_PASSWORD'@my-timesketch-redis-master:6379"#' timesketch.conf
+    sed -i 's#^CELERY_RESULT_BACKEND =.*#CELERY_RESULT_BACKEND = "redis://default:'$REDIS_PASSWORD'@my-timesketch-redis-master:6379"#' timesketch.conf
+
+    # Set up the Postgresql connection
+    sed -i 's#postgresql://<USERNAME>:<PASSWORD>@localhost/timesketch#postgresql://postgres:'$POSTGRES_PASSWORD'@my-timesketch-postgresql:5432/timesketch#' timesketch.conf
+
+    # Set up the Opensearch connection
+    sed -i 's#^OPENSEARCH_HOST =.*#OPENSEARCH_HOST = "opensearch-cluster-master"#' timesketch.conf
+
+    # Set up secret
+    sed -i 's#^SECRET_KEY =.*#SECRET_KEY = "'$TIMESKETCH_SECRET'"#' timesketch.conf
+
+    # Set up upload folder
+    sed -i 's#^UPLOAD_ENABLED = False#UPLOAD_ENABLED = True#' timesketch.conf
+    sed -i 's#^UPLOAD_FOLDER =.*#UPLOAD_FOLDER =  "/mnt/timesketchvolume/upload"#' timesketch.conf
+
+    # Update scenarios paths
+    sed -i 's#^SCENARIOS_PATH =.*#SCENARIOS_PATH = "/etc/timesketch/scenarios.yaml"#' timesketch.conf
+    sed -i 's#^FACETS_PATH =.*#FACETS_PATH = "/etc/timesketch/facets.yaml"#' timesketch.conf
+    sed -i 's#^QUESTIONS_PATH =.*#QUESTIONS_PATH = "/etc/timesketch/questions.yaml"#' timesketch.conf
+
+    # OIDC integration
+
+    # Yeti integration
+---
+# Source: timesketch/templates/pvc.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  annotations: 
+    helm.sh/resource-policy: keep
+  name: timesketchvolume-claim
+  namespace: "default"
+spec:
+  
+  accessModes:
+    - "ReadWriteOnce"
+  resources:
+    requests:
+      storage: "2Gi"
+---
+# Source: timesketch/charts/opensearch/templates/service.yaml
+kind: Service
+apiVersion: v1
+metadata:
+  name: opensearch-cluster-master
+  labels:
+    helm.sh/chart: opensearch-2.20.0
+    app.kubernetes.io/name: opensearch
+    app.kubernetes.io/instance: my-timesketch
+    app.kubernetes.io/version: "2.14.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: opensearch-cluster-master
+  annotations:
+    {}
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: opensearch
+    app.kubernetes.io/instance: my-timesketch
+  ports:
+  - name: http
+    protocol: TCP
+    port: 9200
+  - name: transport
+    protocol: TCP
+    port: 9300
+---
+# Source: timesketch/charts/opensearch/templates/service.yaml
+kind: Service
+apiVersion: v1
+metadata:
+  name: opensearch-cluster-master-headless
+  labels:
+    helm.sh/chart: opensearch-2.20.0
+    app.kubernetes.io/name: opensearch
+    app.kubernetes.io/instance: my-timesketch
+    app.kubernetes.io/version: "2.14.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: opensearch-cluster-master
+  annotations:
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+spec:
+  clusterIP: None # This is needed for statefulset hostnames like opensearch-0 to resolve
+  # Create endpoints also if the related pod isn't ready
+  publishNotReadyAddresses: true
+  selector:
+    app.kubernetes.io/name: opensearch
+    app.kubernetes.io/instance: my-timesketch
+  ports:
+  - name: http
+    port: 9200
+  - name: transport
+    port: 9300
+  - name: metrics
+    port: 9600
+---
+# Source: timesketch/charts/postgresql/templates/primary/svc-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-timesketch-postgresql-hl
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-timesketch
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/version: 16.3.0
+    helm.sh/chart: postgresql-15.3.2
+    app.kubernetes.io/component: primary
+  annotations:
+    # Use this annotation in addition to the actual publishNotReadyAddresses
+    # field below because the annotation will stop being respected soon but the
+    # field is broken in some versions of Kubernetes:
+    # https://github.com/kubernetes/kubernetes/issues/58662
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+spec:
+  type: ClusterIP
+  clusterIP: None
+  # We want all pods in the StatefulSet to have their addresses published for
+  # the sake of the other Postgresql pods even before they're ready, since they
+  # have to be able to talk to each other in order to become ready.
+  publishNotReadyAddresses: true
+  ports:
+    - name: tcp-postgresql
+      port: 5432
+      targetPort: tcp-postgresql
+  selector:
+    app.kubernetes.io/instance: my-timesketch
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/component: primary
+---
+# Source: timesketch/charts/postgresql/templates/primary/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-timesketch-postgresql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-timesketch
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/version: 16.3.0
+    helm.sh/chart: postgresql-15.3.2
+    app.kubernetes.io/component: primary
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+    - name: tcp-postgresql
+      port: 5432
+      targetPort: tcp-postgresql
+      nodePort: null
+  selector:
+    app.kubernetes.io/instance: my-timesketch
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/component: primary
+---
+# Source: timesketch/charts/redis/templates/headless-svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-timesketch-redis-headless
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-timesketch
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/version: 7.2.4
+    helm.sh/chart: redis-19.3.2
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: tcp-redis
+      port: 6379
+      targetPort: redis
+  selector:
+    app.kubernetes.io/instance: my-timesketch
+    app.kubernetes.io/name: redis
+---
+# Source: timesketch/charts/redis/templates/master/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-timesketch-redis-master
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-timesketch
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/version: 7.2.4
+    helm.sh/chart: redis-19.3.2
+    app.kubernetes.io/component: master
+spec:
+  type: ClusterIP
+  internalTrafficPolicy: Cluster
+  sessionAffinity: None
+  ports:
+    - name: tcp-redis
+      port: 6379
+      targetPort: redis
+      nodePort: null
+  selector:
+    app.kubernetes.io/instance: my-timesketch
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/component: master
+---
+# Source: timesketch/templates/metrics/web-metrics-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-timesketch-frontend-metrics
+  labels:
+    helm.sh/chart: timesketch-1.0.6
+    app.kubernetes.io/name: timesketch
+    app.kubernetes.io/instance: my-timesketch
+    app.kubernetes.io/version: "latest"
+    app.kubernetes.io/managed-by: Helm
+    date: "2024-09-16"
+spec:
+  ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/component: frontend
+    app.kubernetes.io/name: timesketch
+    app.kubernetes.io/instance: my-timesketch
+---
+# Source: timesketch/templates/metrics/worker-metrics-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-timesketch-worker-metrics
+  labels:
+    helm.sh/chart: timesketch-1.0.6
+    app.kubernetes.io/name: timesketch
+    app.kubernetes.io/instance: my-timesketch
+    app.kubernetes.io/version: "latest"
+    app.kubernetes.io/managed-by: Helm
+    date: "2024-09-16"
+spec:
+  ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/component: worker
+    app.kubernetes.io/name: timesketch
+    app.kubernetes.io/instance: my-timesketch
+---
+# Source: timesketch/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-timesketch
+  namespace: "default"
+  labels:
+    helm.sh/chart: timesketch-1.0.6
+    app.kubernetes.io/name: timesketch
+    app.kubernetes.io/instance: my-timesketch
+    app.kubernetes.io/version: "latest"
+    app.kubernetes.io/managed-by: Helm
+    date: "2024-09-16"
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5000
+      protocol: TCP
+      targetPort: 5000
+  selector:
+    app.kubernetes.io/component: frontend
+    app.kubernetes.io/name: timesketch
+    app.kubernetes.io/instance: my-timesketch
+---
+# Source: timesketch/templates/web-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name:  my-timesketch
+  namespace: "default"
+  labels:
+    app.kubernetes.io/component: frontend
+    helm.sh/chart: timesketch-1.0.6
+    app.kubernetes.io/name: timesketch
+    app.kubernetes.io/instance: my-timesketch
+    app.kubernetes.io/version: "latest"
+    app.kubernetes.io/managed-by: Helm
+    date: "2024-09-16"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: frontend
+      app.kubernetes.io/name: timesketch
+      app.kubernetes.io/instance: my-timesketch
+  template:
+    metadata:
+      annotations:
+        # Have Deployment restart after each upgrade
+        roll: "1dSLK" 
+        prometheus.io/port: "8080"
+        prometheus.io/scrape: "true"
+      labels:
+        app.kubernetes.io/component: frontend
+        app.kubernetes.io/name: timesketch
+        app.kubernetes.io/instance: my-timesketch
+    spec:
+      serviceAccountName: timesketch
+      securityContext:
+        {}
+      initContainers:
+        - name: init-timesketch
+          image: alpine/git
+          command: ['sh', '-c', '/init/init-timesketch.sh']
+          env:
+            - name: TIMESKETCH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: my-timesketch-secret 
+                  key: timesketch-secret
+            - name: REDIS_PASSWORD
+              valueFrom:
+                # Referencing from charts/redis/templates/_helpers.tpl
+                secretKeyRef:
+                  name: my-timesketch-redis
+                  key: redis-password
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                # Referencing from charts/postgresql/templates/_helpers.tpl
+                secretKeyRef:
+                  name: my-timesketch-postgresql
+                  key: postgres-password
+          volumeMounts:
+            - mountPath: /init
+              name: init-timesketch
+            - mountPath: /etc/timesketch
+              name: timesketch-configs
+            - mountPath: /tmp/timesketch
+              name: uploaded-configs
+            - name: authenticated-emails
+              mountPath: /init/authenticated-emails
+              readOnly: true
+      containers:
+        - name: frontend
+          securityContext:
+            {}
+          image: "us-docker.pkg.dev/osdfir-registry/timesketch/timesketch:latest"
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c", "./docker-entrypoint.sh timesketch-web"]
+          lifecycle:
+            postStart:
+              exec:
+                command: ["/bin/sh", "-c", "tsctl create-user timesketch --password $TIMESKETCH_USER"]
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+                  apiVersion: v1
+            - name: TIMESKETCH_USER
+              valueFrom:
+                secretKeyRef:
+                  name: my-timesketch-secret 
+                  key: timesketch-user
+          volumeMounts:
+            - mountPath: "/mnt/timesketchvolume/upload"
+              name: timesketchvolume
+              subPath: uploads
+            - mountPath: /var/log/timesketch
+              name: timesketchvolume
+              subPathExpr: logs/$(POD_NAME)
+            - mountPath: /etc/timesketch
+              name: timesketch-configs
+          ports:
+            - containerPort: 8080
+            - containerPort: 5000
+          resources:
+            limits: {}
+            requests: {}
+      volumes:
+        - name: timesketchvolume
+          persistentVolumeClaim:
+            claimName: timesketchvolume-claim
+            readOnly: false
+        - name: init-timesketch
+          configMap:
+            name: my-timesketch-init-configmap
+            defaultMode: 0744
+        - name: timesketch-configs
+          emptyDir: {}
+        - name: uploaded-configs
+          configMap:
+            name: my-timesketch-configmap
+            optional: true
+        - name: authenticated-emails
+          secret:
+            items:
+            - key: authenticated-emails-list
+              path: authenticated-emails-list
+            secretName: my-timesketch-access-list
+---
+# Source: timesketch/templates/worker-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name:  my-timesketch-worker
+  namespace: "default"
+  labels:
+    app.kubernetes.io/component: worker
+    helm.sh/chart: timesketch-1.0.6
+    app.kubernetes.io/name: timesketch
+    app.kubernetes.io/instance: my-timesketch
+    app.kubernetes.io/version: "latest"
+    app.kubernetes.io/managed-by: Helm
+    date: "2024-09-16"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: worker
+      app.kubernetes.io/name: timesketch
+      app.kubernetes.io/instance: my-timesketch
+  template:
+    metadata:
+      annotations:
+        # Have Deployment restart after each upgrade
+        roll: "rF0q6" 
+        prometheus.io/port: "8080"
+        prometheus.io/scrape: "true"
+      labels:
+        app.kubernetes.io/component: worker
+        app.kubernetes.io/name: timesketch
+        app.kubernetes.io/instance: my-timesketch
+    spec:
+      serviceAccountName: timesketch
+      securityContext:
+        {}
+      initContainers:
+        - name: init-timesketch
+          image: alpine/git
+          command: ['sh', '-c', '/init/init-timesketch.sh']
+          env:
+            - name: TIMESKETCH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: my-timesketch-secret 
+                  key: timesketch-secret
+            - name: REDIS_PASSWORD
+              valueFrom:
+                # Referencing from charts/redis/templates/_helpers.tpl
+                secretKeyRef:
+                  name: my-timesketch-redis
+                  key: redis-password
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                # Referencing from charts/postgresql/templates/_helpers.tpl
+                secretKeyRef:
+                  name: my-timesketch-postgresql
+                  key: postgres-password
+          volumeMounts:
+            - mountPath: /init
+              name: init-timesketch
+            - mountPath: /etc/timesketch
+              name: timesketch-configs
+            - mountPath: /tmp/timesketch
+              name: uploaded-configs
+            - name: authenticated-emails
+              mountPath: /init/authenticated-emails
+              readOnly: true
+      containers:
+        - name: worker
+          securityContext:
+            {}
+          image: "us-docker.pkg.dev/osdfir-registry/timesketch/timesketch:latest"
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c", "./docker-entrypoint.sh timesketch-worker"]
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+                  apiVersion: v1
+            - name: WORKER_LOG_LEVEL
+              value: "DEBUG"
+          volumeMounts:
+            - mountPath: "/mnt/timesketchvolume/upload"
+              name: timesketchvolume
+              subPath: uploads
+            - mountPath: /var/log/timesketch
+              name: timesketchvolume
+              subPathExpr: logs/$(POD_NAME)
+            - mountPath: /etc/timesketch
+              name: timesketch-configs
+          ports:
+            - containerPort: 8080
+            - containerPort: 5000
+          resources:
+            limits: {}
+            requests:
+              cpu: 250m
+              memory: 256Mi
+      volumes:
+        - name: timesketchvolume
+          persistentVolumeClaim:
+            claimName: timesketchvolume-claim
+            readOnly: false
+        - name: init-timesketch
+          configMap:
+            name: my-timesketch-init-configmap
+            defaultMode: 0744
+        - name: timesketch-configs
+          emptyDir: {}
+        - name: uploaded-configs
+          configMap:
+            name: my-timesketch-configmap
+            optional: true
+        - name: authenticated-emails
+          secret:
+            items:
+            - key: authenticated-emails-list
+              path: authenticated-emails-list
+            secretName: my-timesketch-access-list
+---
+# Source: timesketch/charts/opensearch/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: opensearch-cluster-master
+  labels:
+    helm.sh/chart: opensearch-2.20.0
+    app.kubernetes.io/name: opensearch
+    app.kubernetes.io/instance: my-timesketch
+    app.kubernetes.io/version: "2.14.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: opensearch-cluster-master
+  annotations:
+    majorVersion: "2"
+spec:
+  serviceName: opensearch-cluster-master-headless
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: opensearch
+      app.kubernetes.io/instance: my-timesketch
+  replicas: 1
+  podManagementPolicy: Parallel
+  updateStrategy:
+    type: RollingUpdate
+  volumeClaimTemplates:
+  - metadata:
+      name: opensearch-cluster-master
+    spec:
+      accessModes:
+      - "ReadWriteOnce"
+      resources:
+        requests:
+          storage: "2Gi"
+  template:
+    metadata:
+      name: "opensearch-cluster-master"
+      labels:
+        helm.sh/chart: opensearch-2.20.0
+        app.kubernetes.io/name: opensearch
+        app.kubernetes.io/instance: my-timesketch
+        app.kubernetes.io/version: "2.14.0"
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/component: opensearch-cluster-master
+      annotations:
+        configchecksum: 281cbaf0c9ef3ef2f829c79352193fd584f9cb9709c234c9de523c8b5bc59a6
+    spec:
+      securityContext:
+        fsGroup: 1000
+        runAsUser: 1000
+      automountServiceAccountToken: false
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 1
+            podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchExpressions:
+                - key: app.kubernetes.io/instance
+                  operator: In
+                  values:
+                  - my-timesketch
+                - key: app.kubernetes.io/name
+                  operator: In
+                  values:
+                  - opensearch
+      terminationGracePeriodSeconds: 120
+      volumes:
+      - name: config
+        configMap:
+          name: opensearch-cluster-master-config
+      - emptyDir: {}
+        name: config-emptydir
+      enableServiceLinks: true
+      initContainers:
+      - name: fsgroup-volume
+        image: "busybox:latest"
+        imagePullPolicy: "IfNotPresent"
+        command: ['sh', '-c']
+        args:
+          - 'chown -R 1000:1000 /usr/share/opensearch/data'
+        securityContext:
+          runAsUser: 0
+        resources:
+          {}
+        volumeMounts:
+          - name: "opensearch-cluster-master"
+            mountPath: /usr/share/opensearch/data
+      - name: sysctl
+        image: "busybox:latest"
+        imagePullPolicy: "IfNotPresent"
+        command:
+        - sh
+        - -c
+        - |
+          set -xe
+          DESIRED="262144"
+          CURRENT=$(sysctl -n vm.max_map_count)
+          if [ "$DESIRED" -gt "$CURRENT" ]; then
+            sysctl -w vm.max_map_count=$DESIRED
+          fi
+        securityContext:
+          runAsUser: 0
+          privileged: true
+        resources:
+          {}
+      - name: configfile
+        image: "opensearchproject/opensearch:2.14.0"
+        imagePullPolicy: "IfNotPresent"
+        command:
+        - sh
+        - -c
+        - |
+          #!/usr/bin/env bash
+          cp -r /tmp/configfolder/*  /tmp/config/
+        resources:
+          {}
+        volumeMounts:
+          - mountPath: /tmp/config/
+            name: config-emptydir
+          - name: config
+            mountPath: /tmp/configfolder/opensearch.yml
+            subPath: opensearch.yml
+      containers:
+      - name: "opensearch"
+        securityContext:
+          capabilities:
+            drop:
+            - ALL
+          runAsNonRoot: true
+          runAsUser: 1000
+
+        image: "opensearchproject/opensearch:2.14.0"
+        imagePullPolicy: "IfNotPresent"
+        readinessProbe:
+          failureThreshold: 3
+          periodSeconds: 5
+          tcpSocket:
+            port: 9200
+          timeoutSeconds: 3
+        startupProbe:
+          failureThreshold: 30
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          tcpSocket:
+            port: 9200
+          timeoutSeconds: 3
+        ports:
+        - name: http
+          containerPort: 9200
+        - name: transport
+          containerPort: 9300
+        - name: metrics
+          containerPort: 9600
+        resources:
+          requests:
+            cpu: 250m
+            memory: 512Mi
+        env:
+        - name: node.name
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: cluster.initial_master_nodes
+          value: "opensearch-cluster-master-0,"
+        - name: discovery.seed_hosts
+          value: "opensearch-cluster-master-headless"
+        - name: cluster.name
+          value: "opensearch-cluster"
+        - name: network.host
+          value: "0.0.0.0"
+        - name: OPENSEARCH_JAVA_OPTS
+          value: "-Xmx512M -Xms512M"
+        - name: node.roles
+          value: "master,ingest,data,remote_cluster_client,"
+        - name: DISABLE_INSTALL_DEMO_CONFIG
+          value: "true"
+        - name: DISABLE_SECURITY_PLUGIN
+          value: "true"
+        volumeMounts:
+        - name: "opensearch-cluster-master"
+          mountPath: /usr/share/opensearch/data
+        - name: config-emptydir
+          mountPath: /usr/share/opensearch/config/opensearch.yml
+          subPath: opensearch.yml
+---
+# Source: timesketch/charts/postgresql/templates/primary/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-timesketch-postgresql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-timesketch
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/version: 16.3.0
+    helm.sh/chart: postgresql-15.3.2
+    app.kubernetes.io/component: primary
+spec:
+  replicas: 1
+  serviceName: my-timesketch-postgresql-hl
+  updateStrategy:
+    rollingUpdate: {}
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: my-timesketch
+      app.kubernetes.io/name: postgresql
+      app.kubernetes.io/component: primary
+  template:
+    metadata:
+      name: my-timesketch-postgresql
+      labels:
+        app.kubernetes.io/instance: my-timesketch
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: postgresql
+        app.kubernetes.io/version: 16.3.0
+        helm.sh/chart: postgresql-15.3.2
+        app.kubernetes.io/component: primary
+    spec:
+      serviceAccountName: my-timesketch-postgresql
+      
+      automountServiceAccountToken: false
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/instance: my-timesketch
+                    app.kubernetes.io/name: postgresql
+                    app.kubernetes.io/component: primary
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+        fsGroupChangePolicy: Always
+        supplementalGroups: []
+        sysctls: []
+      hostNetwork: false
+      hostIPC: false
+      containers:
+        - name: postgresql
+          image: docker.io/bitnami/postgresql:16.3.0-debian-12-r6
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsGroup: 1001
+            runAsNonRoot: true
+            runAsUser: 1001
+            seLinuxOptions: {}
+            seccompProfile:
+              type: RuntimeDefault
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: POSTGRESQL_PORT_NUMBER
+              value: "5432"
+            - name: POSTGRESQL_VOLUME_DIR
+              value: "/bitnami/postgresql"
+            - name: PGDATA
+              value: "/bitnami/postgresql/data"
+            # Authentication
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-timesketch-postgresql
+                  key: postgres-password
+            - name: POSTGRES_DATABASE
+              value: "timesketch"
+            # Replication
+            # Initdb
+            # Standby
+            # LDAP
+            - name: POSTGRESQL_ENABLE_LDAP
+              value: "no"
+            # TLS
+            - name: POSTGRESQL_ENABLE_TLS
+              value: "no"
+            # Audit
+            - name: POSTGRESQL_LOG_HOSTNAME
+              value: "false"
+            - name: POSTGRESQL_LOG_CONNECTIONS
+              value: "false"
+            - name: POSTGRESQL_LOG_DISCONNECTIONS
+              value: "false"
+            - name: POSTGRESQL_PGAUDIT_LOG_CATALOG
+              value: "off"
+            # Others
+            - name: POSTGRESQL_CLIENT_MIN_MESSAGES
+              value: "error"
+            - name: POSTGRESQL_SHARED_PRELOAD_LIBRARIES
+              value: "pgaudit"
+          ports:
+            - name: tcp-postgresql
+              containerPort: 5432
+          livenessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - exec pg_isready -U "postgres" -d "dbname=timesketch" -h 127.0.0.1 -p 5432
+          readinessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - -e
+                - |
+                  exec pg_isready -U "postgres" -d "dbname=timesketch" -h 127.0.0.1 -p 5432
+                  [ -f /opt/bitnami/postgresql/tmp/.initialized ] || [ -f /bitnami/postgresql/.initialized ]
+          resources:
+            limits: {}
+            requests:
+              cpu: 250m
+              memory: 256Mi
+          volumeMounts:
+            - name: empty-dir
+              mountPath: /tmp
+              subPath: tmp-dir
+            - name: empty-dir
+              mountPath: /opt/bitnami/postgresql/conf
+              subPath: app-conf-dir
+            - name: empty-dir
+              mountPath: /opt/bitnami/postgresql/tmp
+              subPath: app-tmp-dir
+            - name: dshm
+              mountPath: /dev/shm
+            - name: data
+              mountPath: /bitnami/postgresql
+      volumes:
+        - name: empty-dir
+          emptyDir: {}
+        - name: dshm
+          emptyDir:
+            medium: Memory
+  volumeClaimTemplates:
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: data
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "2Gi"
+---
+# Source: timesketch/charts/redis/templates/master/application.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-timesketch-redis-master
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-timesketch
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/version: 7.2.4
+    helm.sh/chart: redis-19.3.2
+    app.kubernetes.io/component: master
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: my-timesketch
+      app.kubernetes.io/name: redis
+      app.kubernetes.io/component: master
+  serviceName: my-timesketch-redis-headless
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: my-timesketch
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: redis
+        app.kubernetes.io/version: 7.2.4
+        helm.sh/chart: redis-19.3.2
+        app.kubernetes.io/component: master
+      annotations:
+        checksum/configmap: 86bcc953bb473748a3d3dc60b7c11f34e60c93519234d4c37f42e22ada559d47
+        checksum/health: aff24913d801436ea469d8d374b2ddb3ec4c43ee7ab24663d5f8ff1a1b6991a9
+        checksum/scripts: 560c33ff34d845009b51830c332aa05fa211444d1877d3526d3599be7543aaa5
+        checksum/secret: 070c551edc3b4be39a1381f69d83e38406e8da9f0b1b576bd39211c4a24eca88
+    spec:
+      
+      securityContext:
+        fsGroup: 1001
+        fsGroupChangePolicy: Always
+        supplementalGroups: []
+        sysctls: []
+      serviceAccountName: my-timesketch-redis-master
+      automountServiceAccountToken: false
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/instance: my-timesketch
+                    app.kubernetes.io/name: redis
+                    app.kubernetes.io/component: master
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      enableServiceLinks: true
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: redis
+          image: docker.io/bitnami/redis:7.2.4-debian-12-r16
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+            runAsGroup: 1001
+            runAsNonRoot: true
+            runAsUser: 1001
+            seLinuxOptions: {}
+            seccompProfile:
+              type: RuntimeDefault
+          command:
+            - /bin/bash
+          args:
+            - -c
+            - /opt/bitnami/scripts/start-scripts/start-master.sh
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: REDIS_REPLICATION_MODE
+              value: master
+            - name: ALLOW_EMPTY_PASSWORD
+              value: "no"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-timesketch-redis
+                  key: redis-password
+            - name: REDIS_TLS_ENABLED
+              value: "no"
+            - name: REDIS_PORT
+              value: "6379"
+          ports:
+            - name: redis
+              containerPort: 6379
+          livenessProbe:
+            initialDelaySeconds: 20
+            periodSeconds: 5
+            # One second longer than command timeout should prevent generation of zombie processes.
+            timeoutSeconds: 6
+            successThreshold: 1
+            failureThreshold: 5
+            exec:
+              command:
+                - sh
+                - -c
+                - /health/ping_liveness_local.sh 5
+          readinessProbe:
+            initialDelaySeconds: 20
+            periodSeconds: 5
+            timeoutSeconds: 2
+            successThreshold: 1
+            failureThreshold: 5
+            exec:
+              command:
+                - sh
+                - -c
+                - /health/ping_readiness_local.sh 1
+          resources:
+            limits: {}
+            requests: {}
+          volumeMounts:
+            - name: start-scripts
+              mountPath: /opt/bitnami/scripts/start-scripts
+            - name: health
+              mountPath: /health
+            - name: redis-data
+              mountPath: /data
+            - name: config
+              mountPath: /opt/bitnami/redis/mounted-etc
+            - name: empty-dir
+              mountPath: /opt/bitnami/redis/etc/
+              subPath: app-conf-dir
+            - name: empty-dir
+              mountPath: /tmp
+              subPath: tmp-dir
+      volumes:
+        - name: start-scripts
+          configMap:
+            name: my-timesketch-redis-scripts
+            defaultMode: 0755
+        - name: health
+          configMap:
+            name: my-timesketch-redis-health
+            defaultMode: 0755
+        - name: config
+          configMap:
+            name: my-timesketch-redis-configuration
+        - name: empty-dir
+          emptyDir: {}
+  volumeClaimTemplates:
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: redis-data
+        labels:
+          app.kubernetes.io/instance: my-timesketch
+          app.kubernetes.io/name: redis
+          app.kubernetes.io/component: master
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "2Gi"

@@ -1,0 +1,110 @@
+---
+# Source: webencryptor/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-webencryptor
+  labels:
+    helm.sh/chart: webencryptor-1.1.0
+    app.kubernetes.io/name: webencryptor
+    app.kubernetes.io/instance: my-webencryptor
+    app.kubernetes.io/version: "lts"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: webencryptor/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-webencryptor
+  labels:
+    helm.sh/chart: webencryptor-1.1.0
+    app.kubernetes.io/name: webencryptor
+    app.kubernetes.io/instance: my-webencryptor
+    app.kubernetes.io/version: "lts"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: webencryptor
+    app.kubernetes.io/instance: my-webencryptor
+---
+# Source: webencryptor/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-webencryptor
+  labels:
+    helm.sh/chart: webencryptor-1.1.0
+    app.kubernetes.io/name: webencryptor
+    app.kubernetes.io/instance: my-webencryptor
+    app.kubernetes.io/version: "lts"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: webencryptor
+      app.kubernetes.io/instance: my-webencryptor
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: webencryptor
+        app.kubernetes.io/instance: my-webencryptor
+    spec:
+      securityContext:
+        {}
+      containers:
+        - name: webencryptor
+          securityContext:
+            {}
+          image: "beubi/webencryptor:latest"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http-port
+              containerPort: 5000
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http-port
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http-port
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            limits:
+              cpu: 500m
+              memory: 256Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+---
+# Source: webencryptor/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-webencryptor-test-connection"
+  labels:
+    helm.sh/chart: webencryptor-1.1.0
+    app.kubernetes.io/name: webencryptor
+    app.kubernetes.io/instance: my-webencryptor
+    app.kubernetes.io/version: "lts"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-webencryptor:80']
+  restartPolicy: Never

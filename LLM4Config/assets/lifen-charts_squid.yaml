@@ -1,0 +1,171 @@
+---
+# Source: squid/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-squid-conf
+  labels:
+    app: squid
+    chart: squid-0.4.3
+    release: my-squid
+    heritage: Helm
+data:
+  squid.conf: |
+    acl SSL_ports port 443
+    acl Safe_ports port 80		# http
+    acl Safe_ports port 21		# ftp
+    acl Safe_ports port 443		# https
+    acl Safe_ports port 70		# gopher
+    acl Safe_ports port 210		# wais
+    acl Safe_ports port 1025-65535	# unregistered ports
+    acl Safe_ports port 280		# http-mgmt
+    acl Safe_ports port 488		# gss-http
+    acl Safe_ports port 591		# filemaker
+    acl Safe_ports port 777		# multiling http
+    acl CONNECT method CONNECT
+    
+    # Recommended minimum Access Permission configuration:
+    #
+    # Deny requests to certain unsafe ports
+    http_access deny !Safe_ports
+    
+    # Only allow cachemgr access from localhost
+    http_access allow localhost manager
+    http_access deny manager
+    
+    # Squid normally listens to port 3128
+    http_port 3128
+    
+    # Uncomment and adjust the following to add a disk cache directory.
+    #cache_dir ufs /var/cache/squid 100 16 256
+    
+    # Leave coredumps in the first cache dir
+    coredump_dir /var/cache/squid
+    
+    #
+    # Add any of your own refresh_pattern entries above these.
+    #
+    refresh_pattern ^ftp:		1440	20%	10080
+    refresh_pattern ^gopher:	1440	0%	1440
+    refresh_pattern -i (/cgi-bin/|\?) 0	0%	0
+    refresh_pattern .		0	20%	4320
+    
+    # Do not display squid version
+    httpd_suppress_version_string on
+---
+# Source: squid/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-squid
+  labels:
+    app: squid
+    chart: squid-0.4.3
+    release: my-squid
+    heritage: Helm
+spec:
+  type: ClusterIP
+  loadBalancerSourceRanges:
+    null
+  externalTrafficPolicy: ""
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app: squid
+    release: my-squid
+---
+# Source: squid/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-squid
+  labels:
+    app: squid
+    chart: squid-0.4.3
+    release: my-squid
+    heritage: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: squid
+      release: my-squid
+  template:
+    metadata:
+      labels:
+        app: squid
+        release: my-squid
+      annotations:
+        checksum/config: ffbe6bd1448cef0b1c7705f5372ac0a8a1e485291c982418a4072009dcc09e75
+    spec:
+      initContainers:
+        # if there is a line in config map that starts with `cache_dir`
+        # run `squid -z` which will create the cache structure on the filesystem
+        - name: create-cache-dir
+          image: "honestica/squid:4.69"
+          imagePullPolicy: IfNotPresent
+          resources:
+            {}
+          volumeMounts:
+          - name: my-squid-conf
+            mountPath: /etc/squid/squid.conf
+            subPath: squid.conf
+          - name: cache
+            mountPath: /var/cache/squid
+          command:
+            - /bin/sh
+            - -c
+          args:
+            - |
+              set -e
+              chown -R squid.squid /var/cache/squid
+              chmod 770 /var/cache/squid
+              squid -z --foreground 2>&1
+      containers:
+        - name: squid
+          image: "honestica/squid:4.69"
+          imagePullPolicy: IfNotPresent
+          ports:
+          - name: http
+            containerPort: 3128
+            protocol: TCP
+          volumeMounts:
+          - name: my-squid-conf
+            mountPath: /etc/squid/squid.conf
+            subPath: squid.conf
+          - name: cache
+            mountPath: /var/cache/squid
+        # Load the configuration files for nginx
+          livenessProbe:
+            tcpSocket:
+              port: 3128
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            tcpSocket:
+              port: 3128
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            {}
+      volumes:
+      - name: my-squid-conf
+        configMap:
+          name: my-squid-conf
+      - emptyDir: {}
+        name: cache
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchExpressions:
+                - key: release
+                  operator: In
+                  values:
+                  - my-squid

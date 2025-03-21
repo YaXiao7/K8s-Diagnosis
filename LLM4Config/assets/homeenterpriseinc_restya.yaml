@@ -1,0 +1,146 @@
+---
+# Source: restya/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: restya-secret
+  labels:
+    helm.sh/chart: restya-0.8
+    app-name: restya
+    component: "file-server"
+    managed-by: chynten
+    created-by: chynten
+    version: "v1.7"
+type: Opaque
+data:
+  restya-password:  "cmVzdHlhQDEyMw=="
+  restya-admin-password: "YWRtaW5AMTIz"
+---
+# Source: restya/templates/PersistentVolumeClaim.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: restya-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: "15G"
+---
+# Source: restya/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: restya-svc
+  labels:
+    helm.sh/chart: restya-0.8
+    app-name: restya
+    component: "file-server"
+    managed-by: chynten
+    created-by: chynten
+    version: "v1.7"
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 80
+  selector:
+    app-name: restya
+---
+# Source: restya/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: restya-deployment
+  labels:
+    helm.sh/chart: restya-0.8
+    app-name: restya
+    component: "file-server"
+    managed-by: chynten
+    created-by: chynten
+    version: "v1.7"
+spec:
+  replicas: 1
+  revisionHistoryLimit: 
+  selector:
+    matchLabels:
+      app-name: restya
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app-name: restya
+    spec:
+      restartPolicy: Always
+      containers:
+        - name: restya
+          image: "restyaplatform/restyaboard:v1.7"
+          imagePullPolicy: IfNotPresent
+          resources:
+            {}
+          env:
+          - name: POSTGRES_HOST
+            value: postgres-svc
+          - name: POSTGRES_PORT
+            value: "5432"
+          - name: RESTYA_DB_USERNAME
+            value: restya
+          - name: RESTYA_DB_USERPASS
+            valueFrom:
+              secretKeyRef:
+                name: restya-secret
+                key: restya-password
+          - name: POSTGRES_ADMIN_USER
+            value: postgres
+          - name: POSTGRES_ADMIN_PASS
+            valueFrom:
+              secretKeyRef:
+                name: restya-secret
+                key: restya-admin-password
+          volumeMounts:
+          - name: data
+            mountPath: /var/lib/nginx/html/media
+            subPath: restya
+      securityContext:
+        null
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: restya-pvc
+---
+# Source: restya/templates/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: restya-ingress
+  labels:
+    helm.sh/chart: restya-0.8
+    app-name: restya
+    component: "file-server"
+    managed-by: chynten
+    created-by: chynten
+    version: "v1.7"
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+    kubernetes.io/ingress.class: nginx
+spec:
+  tls:
+    - hosts:
+        - "pm.example.com"
+      secretName: restya-letsencrypt-certificate
+  rules:
+    - host: "pm.example.com"
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: restya-svc
+                port:
+                  number: 80

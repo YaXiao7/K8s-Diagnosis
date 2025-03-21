@@ -1,0 +1,90 @@
+---
+# Source: snsping/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-snsping
+data:
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger-collector:14268
+  OTEL_PROPAGATORS: b3multi
+  OTEL_TRACES_EXPORTER: jaeger
+  OTELCONFIG_EXPORTER: jaeger
+  TOPIC_ARN: '["arn:aws:sns:us-east-1:100010001000:topicname"]'
+---
+# Source: snsping/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-snsping
+  labels:
+    helm.sh/chart: snsping-1.2.6
+    app.kubernetes.io/name: snsping
+    app.kubernetes.io/instance: my-snsping
+    app.kubernetes.io/version: "1.2.6"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: snsping
+      app.kubernetes.io/instance: my-snsping
+  template:
+    metadata:
+      annotations:
+        rollme: "05Hlp"
+        sidecar.istio.io/inject: "true"
+      labels:
+        app.kubernetes.io/name: snsping
+        app.kubernetes.io/instance: my-snsping
+        app: snsping
+    spec:
+      serviceAccountName: default
+      securityContext:
+        {}
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      containers:
+        - name: my-snsping
+          securityContext:
+            {}
+          image: "udhos/snsping:1.2.6"
+          imagePullPolicy: IfNotPresent
+          envFrom:
+          - configMapRef:
+              name: my-snsping
+          startupProbe:
+            # must initialize within 3*100=300 seconds
+            httpGet:
+              path: /health
+              port: 8888
+            periodSeconds: 3
+            failureThreshold: 100
+          readinessProbe:
+            # not ready after 10*6=60 seconds without success
+            httpGet:
+              path: /health
+              port: 8888
+              scheme: HTTP
+            periodSeconds: 10
+            failureThreshold: 6
+            successThreshold: 1
+            timeoutSeconds: 5
+          livenessProbe:
+            # kill after 20*6=120 seconds without success
+            httpGet:
+              path: /health
+              port: 8888
+              scheme: HTTP
+            periodSeconds: 20
+            failureThreshold: 6
+            successThreshold: 1
+            timeoutSeconds: 10            
+          resources:
+            limits:
+              cpu: 2000m
+              ephemeral-storage: 200Mi
+              memory: 300Mi
+            requests:
+              cpu: 300m
+              ephemeral-storage: 100Mi
+              memory: 100Mi

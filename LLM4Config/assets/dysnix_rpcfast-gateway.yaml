@@ -1,0 +1,201 @@
+---
+# Source: rpcfast-gateway/templates/all.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-rpcfast-gateway
+  labels:
+    app.kubernetes.io/name: rpcfast-gateway
+    helm.sh/chart: rpcfast-gateway-0.2.2
+    app.kubernetes.io/instance: my-rpcfast-gateway
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: rpcfast-gateway/templates/all.yaml
+apiVersion: v1
+kind: ConfigMap
+immutable: false
+metadata:
+  name: my-rpcfast-gateway
+  labels:
+    app.kubernetes.io/name: rpcfast-gateway
+    helm.sh/chart: rpcfast-gateway-0.2.2
+    app.kubernetes.io/instance: my-rpcfast-gateway
+    app.kubernetes.io/managed-by: Helm
+data:
+  configs.yaml: |
+    WSBackendRPCURL: ""
+    WSServer:
+      host: 0.0.0.0
+      httptransport:
+        maxIdleConnDuration: 15s
+        readTimeout: 7s
+        writeTimeout: 7s
+      keepalive: true
+      port: 8092
+      requestsPause: 0s
+    authWorker:
+      cache:
+        memory:
+          cleanupInterval: 15s
+        ttl: 15s
+      tickInterval: 30s
+    backendAuthUrl: ""
+    backendRpcUrl: ""
+    debugMode: false
+    internalToken: ""
+    monitoring:
+      enabled: true
+    profiling:
+      enabled: false
+    rateLimiter:
+      frequency: 1m
+    remoteClient:
+      maxIdleConnDuration: 0s
+      netTransport:
+        buffer:
+          readBufferSize: 256KiB
+          writeBufferSize: 256KiB
+        dialTimeout: 0s
+        disableCompression: false
+        disableKeepAlives: false
+        expectContinueTimeout: 0s
+        keepAlive: 15s
+        maxResponseHeaderBytes: 0B
+        responseHeaderTimeout: 0s
+        tlsHandshakeTimeout: 0s
+      readTimeout: 7s
+      writeTimeout: 7s
+    rpcObjectKey: method
+    server:
+      host: 0.0.0.0
+      httptransport:
+        maxIdleConnDuration: 15s
+        readTimeout: 7s
+        writeTimeout: 7s
+      keepalive: true
+      port: 8091
+      requestsPause: 0s
+    single:
+      buffer:
+        readBufferSize: 256KiB
+        writeBufferSize: 256KiB
+      concurrency: 100000
+      enabled: true
+      host: 0.0.0.0
+      httptransport:
+        maxIdleConnDuration: 15s
+        readTimeout: 7s
+        writeTimeout: 7s
+      name: pprof/monitoring server
+      port: 8097
+      tcpKeepalive:
+        enabled: true
+        period: 1s
+---
+# Source: rpcfast-gateway/templates/all.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-rpcfast-gateway
+  labels:
+    app.kubernetes.io/name: rpcfast-gateway
+    helm.sh/chart: rpcfast-gateway-0.2.2
+    app.kubernetes.io/instance: my-rpcfast-gateway
+    app.kubernetes.io/managed-by: Helm
+spec:
+  ports:
+    - name: http
+      port: 8091
+      protocol: TCP
+      targetPort: http
+    - name: ws
+      port: 8092
+      protocol: TCP
+      targetPort: ws
+    - name: monitoring
+      port: 8097
+      protocol: TCP
+      targetPort: monitoring
+  selector:
+    app.kubernetes.io/name: rpcfast-gateway
+    app.kubernetes.io/instance: my-rpcfast-gateway
+---
+# Source: rpcfast-gateway/templates/all.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-rpcfast-gateway
+  labels:
+    app.kubernetes.io/name: rpcfast-gateway
+    helm.sh/chart: rpcfast-gateway-0.2.2
+    app.kubernetes.io/instance: my-rpcfast-gateway
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: rpcfast-gateway
+      app.kubernetes.io/instance: my-rpcfast-gateway
+  template:
+    metadata:
+      annotations:
+        checksum/config: '29e3843678da135dff4528d9c3f7541e9c3a2032692af2c570c0b630c38a59ab'
+      labels:
+        app.kubernetes.io/name: rpcfast-gateway
+        app.kubernetes.io/instance: my-rpcfast-gateway
+    spec:      
+      serviceAccountName: my-rpcfast-gateway
+      securityContext: 
+        fsGroup: 1001
+      containers:
+        -
+          name: rpcfast-gateway
+          image: eu.gcr.io/predictkube/rpcfast-gateway:v0.1.0
+          securityContext: 
+            runAsNonRoot: true
+            runAsUser: 1001
+          command:
+            - /app
+          args:
+            - -conf=/etc/gateway/configs/configs.yaml
+          resources:
+            limits: {}
+            requests: {}
+          ports:  
+            - name: http
+              containerPort: 8091
+              protocol: TCP
+            - name: ws
+              containerPort: 8092
+              protocol: TCP
+            - name: monitoring
+              containerPort: 8097
+              protocol: TCP
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /healthz
+              port: 8097
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /readyz
+              port: 8097
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+          volumeMounts:  
+            - mountPath: /etc/gateway/configs
+              name: configs
+              readOnly: true
+      volumes:   
+        - configMap:
+            name: 'my-rpcfast-gateway'
+          name: configs

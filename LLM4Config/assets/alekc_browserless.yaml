@@ -1,0 +1,101 @@
+---
+# Source: browserless/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-browserless
+  labels:
+    helm.sh/chart: browserless-0.1.1
+    app.kubernetes.io/name: browserless
+    app.kubernetes.io/instance: my-browserless
+    app.kubernetes.io/version: "1.53.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: browserless/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-browserless
+  labels:
+    helm.sh/chart: browserless-0.1.1
+    app.kubernetes.io/name: browserless
+    app.kubernetes.io/instance: my-browserless
+    app.kubernetes.io/version: "1.53.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3000
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: browserless
+    app.kubernetes.io/instance: my-browserless
+---
+# Source: browserless/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-browserless
+  labels:
+    helm.sh/chart: browserless-0.1.1
+    app.kubernetes.io/name: browserless
+    app.kubernetes.io/instance: my-browserless
+    app.kubernetes.io/version: "1.53.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: browserless
+      app.kubernetes.io/instance: my-browserless
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: browserless
+        app.kubernetes.io/instance: my-browserless
+    spec:
+      serviceAccountName: my-browserless
+      securityContext:
+        {}
+      containers:
+        - name: browserless
+          securityContext:
+            {}
+          image: "browserless/chrome:1.53.0-chrome-stable"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          livenessProbe:
+            tcpSocket:
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /pressure
+              port: http
+          resources:
+            {}
+---
+# Source: browserless/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-browserless-test-connection"
+  labels:
+    helm.sh/chart: browserless-0.1.1
+    app.kubernetes.io/name: browserless
+    app.kubernetes.io/instance: my-browserless
+    app.kubernetes.io/version: "1.53.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-browserless:3000']
+  restartPolicy: Never

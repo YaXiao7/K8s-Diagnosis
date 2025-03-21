@@ -1,0 +1,706 @@
+---
+# Source: wallarm-node-next/templates/shared-secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: next-credentials
+  annotations:
+    
+  labels:
+    helm.sh/chart: "wallarm-node-next"
+    helm.sh/version: "0.5.1"
+    app.kubernetes.io/managed-by: "Helm"
+    app.kubernetes.io/name: "wallarm-node-next"
+    app.kubernetes.io/instance: "my-wallarm-node-next"
+    app.kubernetes.io/version: "0.4.3"
+type: Opaque
+data:
+  WALLARM_API_TOKEN: ""
+  WALLARM_API_HOST: "YXBpLndhbGxhcm0uY29t"
+  WALLARM_API_PORT: "NDQz"
+  WALLARM_API_USE_SSL: "dHJ1ZQ=="
+---
+# Source: wallarm-node-next/templates/processing-cm-next.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: next-processing-next
+  annotations:
+    
+  labels:
+    helm.sh/chart: "wallarm-node-next"
+    helm.sh/version: "0.5.1"
+    app.kubernetes.io/managed-by: "Helm"
+    app.kubernetes.io/name: "wallarm-node-next"
+    app.kubernetes.io/instance: "my-wallarm-node-next"
+    app.kubernetes.io/version: "0.4.3"
+    app.kubernetes.io/component: "processing"
+data:
+  go-node.yaml: |-
+    version: 2
+    mode: connector-server
+
+    connector:
+      address: ":18443"
+      blocking: true
+
+      allowed_networks:
+        - 0.0.0.0/0
+
+    route_config:
+      
+      {}
+
+    http_inspector:
+      
+      api_firewall_enabled: true
+      wallarm_dir: /opt/wallarm/etc/wallarm
+      workers: auto
+
+    tarantool_exporter:
+      address: "next-aggregation.default.svc:3313"
+
+    health_check:
+      enabled: true
+      listen_address: :18080
+
+    metrics:
+      enabled: true
+      listen_address: :9090
+      legacy_status:
+        listen_address: "127.0.0.1:10246"
+
+    log:
+      pretty: false
+      level: debug
+      log_file: stdout
+---
+# Source: wallarm-node-next/templates/aggregation-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: next-aggregation
+  annotations:
+    
+  labels:
+    helm.sh/chart: "wallarm-node-next"
+    helm.sh/version: "0.5.1"
+    app.kubernetes.io/managed-by: "Helm"
+    app.kubernetes.io/name: "wallarm-node-next"
+    app.kubernetes.io/instance: "my-wallarm-node-next"
+    app.kubernetes.io/version: "0.4.3"
+    app.kubernetes.io/component: "aggregation"
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/component: "aggregation"
+  ports:
+  - name: tarantool
+    port: 3313
+    targetPort: tarantool
+    protocol: TCP
+---
+# Source: wallarm-node-next/templates/processing-service-metrics.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    
+  labels:
+    helm.sh/chart: "wallarm-node-next"
+    helm.sh/version: "0.5.1"
+    app.kubernetes.io/managed-by: "Helm"
+    app.kubernetes.io/name: "wallarm-node-next"
+    app.kubernetes.io/instance: "my-wallarm-node-next"
+    app.kubernetes.io/version: "0.4.3"
+    app.kubernetes.io/component: "processing-metrics"
+  name: next-processing-metrics
+spec:
+  type: ClusterIP
+  ports:
+    - name: metrics
+      port: 9090
+      protocol: TCP
+      targetPort: metrics
+  selector:
+    app.kubernetes.io/component: "processing"
+---
+# Source: wallarm-node-next/templates/processing-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: next-processing
+  annotations:
+    
+  labels:
+    helm.sh/chart: "wallarm-node-next"
+    helm.sh/version: "0.5.1"
+    app.kubernetes.io/managed-by: "Helm"
+    app.kubernetes.io/name: "wallarm-node-next"
+    app.kubernetes.io/instance: "my-wallarm-node-next"
+    app.kubernetes.io/version: "0.4.3"
+    app.kubernetes.io/component: "processing"
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/component: "processing"
+  ports:
+  - name: node
+    port: 5000
+    targetPort: node
+    protocol: TCP
+---
+# Source: wallarm-node-next/templates/aggregation-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: next-aggregation
+  annotations:
+    
+  labels:
+    helm.sh/chart: "wallarm-node-next"
+    helm.sh/version: "0.5.1"
+    app.kubernetes.io/managed-by: "Helm"
+    app.kubernetes.io/name: "wallarm-node-next"
+    app.kubernetes.io/instance: "my-wallarm-node-next"
+    app.kubernetes.io/version: "0.4.3"
+    app.kubernetes.io/component: "aggregation"
+spec:
+  replicas: 1
+  revisionHistoryLimit: 10
+  strategy: 
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: "aggregation"
+  template:
+    metadata:
+      annotations:
+        checksum/credentials: fee161e3c157e9c3d73385b4202a64310b4eaed49654b034fd68d854d7a7f67c
+        
+      labels:
+        helm.sh/chart: "wallarm-node-next"
+        helm.sh/version: "0.5.1"
+        app.kubernetes.io/managed-by: "Helm"
+        app.kubernetes.io/name: "wallarm-node-next"
+        app.kubernetes.io/instance: "my-wallarm-node-next"
+        app.kubernetes.io/version: "0.4.3"
+        app.kubernetes.io/component: "aggregation"
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      nodeSelector: 
+        kubernetes.io/os: linux
+      tolerations:
+      initContainers:
+      - name: init
+        image: docker.io/wallarm/node-helpers:5.0.2-rc1
+        imagePullPolicy: IfNotPresent
+        args: ["register", "post_analytic"]
+        env:
+        - name: WALLARM_API_HOST
+          valueFrom:
+            secretKeyRef:
+              key: WALLARM_API_HOST
+              name: next-credentials
+        - name: WALLARM_API_PORT
+          valueFrom:
+            secretKeyRef:
+              key: WALLARM_API_PORT
+              name: next-credentials
+        - name: WALLARM_API_USE_SSL
+          valueFrom:
+            secretKeyRef:
+              key: WALLARM_API_USE_SSL
+              name: next-credentials
+        - name: WALLARM_API_TOKEN
+          valueFrom:
+            secretKeyRef:
+              key: WALLARM_API_TOKEN
+              name: next-credentials
+        - name: WALLARM_COMPONENT_NAME
+          value: wallarm-node-next
+        - name: WALLARM_COMPONENT_VERSION
+          value: "0.5.1"
+        - name: WALLARM_NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: WALLARM_LABELS
+          value: "group=defaultNodeNextGroup"
+        securityContext:
+        
+          allowPrivilegeEscalation: false
+          privileged: false
+          runAsUser: 101
+          runAsNonRoot: true
+          seccompProfile:
+              type: RuntimeDefault
+          capabilities:
+            drop:
+            - ALL
+        resources: 
+          limits:
+            cpu: 250m
+            memory: 300Mi
+          requests:
+            cpu: 10m
+            memory: 128Mi
+        volumeMounts:
+          - mountPath: /opt/wallarm/etc/wallarm
+            name: wallarm
+          - mountPath: /opt/wallarm/var/lib/wallarm-acl
+            name: wallarm-acl
+      containers:
+      - name: tarantool
+        image: docker.io/wallarm/node-helpers:5.0.2-rc1
+        imagePullPolicy: IfNotPresent
+        args: ["tarantool"]
+        env:
+        - name: SLAB_ALLOC_ARENA
+          value: "1"
+        ports:
+          - name: tarantool
+            containerPort: 3313
+            protocol: TCP
+        livenessProbe: 
+          failureThreshold: 3
+          initialDelaySeconds: 0
+          periodSeconds: 5
+          successThreshold: 1
+          tcpSocket:
+            port: tarantool
+          timeoutSeconds: 3
+        readinessProbe: 
+          failureThreshold: 3
+          initialDelaySeconds: 0
+          periodSeconds: 5
+          successThreshold: 1
+          tcpSocket:
+            port: tarantool
+          timeoutSeconds: 3
+        securityContext:
+        
+          allowPrivilegeEscalation: false
+          privileged: false
+          runAsUser: 101
+          runAsNonRoot: true
+          seccompProfile:
+              type: RuntimeDefault
+          capabilities:
+            drop:
+              - ALL
+            add:
+              - NET_BIND_SERVICE
+        resources: 
+          limits:
+            cpu: 350m
+            memory: 1.5Gi
+          requests:
+            cpu: 100m
+            memory: 1.5Gi
+
+      - name: wcli
+        image: docker.io/wallarm/node-helpers:5.0.2-rc1
+        imagePullPolicy: IfNotPresent
+        args: ["wcli", "run", "-log-level", "warn", "job:bruteDetect", "-log-level", "INFO", "job:detectCredStuffing", "-log-level", "INFO", "job:exportAttacks", "-log-level", "INFO", "job:exportBlockedStat", "-log-level", "INFO", "job:exportCounters", "-log-level", "ERROR", "job:exportEnvironment", "-log-level", "INFO", "job:exportMetrics", "-log-level", "INFO", "job:syncApiSpecs", "-log-level", "INFO", "job:syncIpLists", "-log-level", "INFO", "job:syncIpListsSource", "-log-level", "INFO", "job:syncMarkers", "-log-level", "INFO", "job:syncNode", "-log-level", "INFO", "job:weakJwtDetect", "-log-level", "INFO", ]
+        env:
+        - name: WALLARM_API_HOST
+          valueFrom:
+            secretKeyRef:
+              key: WALLARM_API_HOST
+              name: next-credentials
+        - name: WALLARM_API_PORT
+          valueFrom:
+            secretKeyRef:
+              key: WALLARM_API_PORT
+              name: next-credentials
+        - name: WALLARM_API_USE_SSL
+          valueFrom:
+            secretKeyRef:
+              key: WALLARM_API_USE_SSL
+              name: next-credentials
+        - name: WALLARM_API_TOKEN
+          valueFrom:
+            secretKeyRef:
+              key: WALLARM_API_TOKEN
+              name: next-credentials
+        - name: WALLARM_COMPONENT_NAME
+          value: wallarm-node-next
+        - name: WALLARM_COMPONENT_VERSION
+          value: "0.5.1"
+        - name: WALLARM_NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: WALLARM_LABELS
+          value: "group=defaultNodeNextGroup"
+        securityContext:
+        
+          allowPrivilegeEscalation: false
+          privileged: false
+          runAsUser: 101
+          runAsNonRoot: true
+          seccompProfile:
+              type: RuntimeDefault
+          capabilities:
+            drop:
+            - ALL
+        resources: 
+          limits:
+            cpu: 300m
+            memory: 600Mi
+          requests:
+            cpu: 100m
+            memory: 300Mi
+        volumeMounts:
+          - mountPath: /opt/wallarm/etc/wallarm
+            name: wallarm
+          - mountPath: /opt/wallarm/var/lib/wallarm-acl
+            name: wallarm-acl
+
+      - name: app-structure
+        image: docker.io/wallarm/node-helpers:5.0.2-rc1
+        imagePullPolicy: IfNotPresent
+        args: ["appstructure"]
+        env:
+        securityContext:
+        
+          allowPrivilegeEscalation: false
+          privileged: false
+          runAsUser: 101
+          runAsNonRoot: true
+          seccompProfile:
+              type: RuntimeDefault
+          capabilities:
+            drop:
+            - ALL
+        resources: 
+          limits:
+            cpu: 500m
+            memory: 512Mi
+          requests:
+            cpu: 200m
+            memory: 256Mi
+        volumeMounts:
+          - mountPath: /opt/wallarm/etc/wallarm
+            name: wallarm
+      volumes:
+        - name: wallarm
+          emptyDir: {}
+        - name: wallarm-acl
+          emptyDir: {}
+---
+# Source: wallarm-node-next/templates/processing-next-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: next-processing
+  annotations:
+    
+  labels:
+    helm.sh/chart: "wallarm-node-next"
+    helm.sh/version: "0.5.1"
+    app.kubernetes.io/managed-by: "Helm"
+    app.kubernetes.io/name: "wallarm-node-next"
+    app.kubernetes.io/instance: "my-wallarm-node-next"
+    app.kubernetes.io/version: "0.4.3"
+    app.kubernetes.io/component: "processing"
+spec:
+  revisionHistoryLimit: 10
+  strategy: 
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: "processing"
+  template:
+    metadata:
+      annotations:
+        checksum/config-node-next: 99665639b176c7f5564ff5d9cde296ca9070f32293ea29bf6cd1f1d4d939cade
+        checksum/credentials: fee161e3c157e9c3d73385b4202a64310b4eaed49654b034fd68d854d7a7f67c
+        checksum/certificate: 005d9321a04022fa0c72eb0b637c3c04d0a4fd843552f360c3bd0f7f8fbcab90
+        
+      labels:
+        helm.sh/chart: "wallarm-node-next"
+        helm.sh/version: "0.5.1"
+        app.kubernetes.io/managed-by: "Helm"
+        app.kubernetes.io/name: "wallarm-node-next"
+        app.kubernetes.io/instance: "my-wallarm-node-next"
+        app.kubernetes.io/version: "0.4.3"
+        app.kubernetes.io/component: "processing"
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 90
+      nodeSelector: 
+        kubernetes.io/os: linux
+      tolerations:
+      initContainers:
+      - name: init
+        image: docker.io/wallarm/node-helpers:5.0.2-rc1
+        imagePullPolicy: IfNotPresent
+        args: ["register", "filtering"]
+        env:
+        - name: WALLARM_API_HOST
+          valueFrom:
+            secretKeyRef:
+              key: WALLARM_API_HOST
+              name: next-credentials
+        - name: WALLARM_API_PORT
+          valueFrom:
+            secretKeyRef:
+              key: WALLARM_API_PORT
+              name: next-credentials
+        - name: WALLARM_API_USE_SSL
+          valueFrom:
+            secretKeyRef:
+              key: WALLARM_API_USE_SSL
+              name: next-credentials
+        - name: WALLARM_API_TOKEN
+          valueFrom:
+            secretKeyRef:
+              key: WALLARM_API_TOKEN
+              name: next-credentials
+        - name: WALLARM_COMPONENT_NAME
+          value: wallarm-node-next
+        - name: WALLARM_COMPONENT_VERSION
+          value: "0.5.1"
+        - name: WALLARM_NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: WALLARM_LABELS
+          value: "group=defaultNodeNextGroup"
+        securityContext:
+        
+          allowPrivilegeEscalation: false
+          privileged: false
+          runAsUser: 101
+          runAsNonRoot: true
+          seccompProfile:
+              type: RuntimeDefault
+          capabilities:
+            drop:
+            - ALL
+        resources: 
+          limits:
+            cpu: 250m
+            memory: 512Mi
+          requests:
+            cpu: 10m
+            memory: 128Mi
+        volumeMounts:
+        - mountPath: /opt/wallarm/etc/wallarm
+          name: wallarm
+        - mountPath: /opt/wallarm/var/lib/wallarm-acl
+          name: wallarm-acl
+        - mountPath: /opt/wallarm/var/lib/wallarm-api
+          name: wallarm-apifw
+      containers:
+      - name: node-next
+        image: docker.io/wallarm/node-next:0.4.3
+        imagePullPolicy: IfNotPresent
+        args:
+          - "-config"
+          - "/opt/wallarm/etc/wallarm/go-node.yaml"
+        env:
+          - name: POD_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+        ports:
+        - name: node
+          containerPort: 18443
+          protocol: TCP
+        - name: health
+          containerPort: 18080
+          protocol: TCP
+        - name: metrics
+          containerPort: 9090
+          protocol: TCP
+        livenessProbe: 
+          failureThreshold: 3
+          httpGet:
+            path: /live
+            port: health
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          successThreshold: 1
+          timeoutSeconds: 3
+        readinessProbe: 
+          failureThreshold: 3
+          httpGet:
+            path: /ready
+            port: health
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          successThreshold: 1
+          timeoutSeconds: 3
+        securityContext:
+        
+          allowPrivilegeEscalation: false
+          privileged: false
+          runAsUser: 101
+          runAsNonRoot: true
+          seccompProfile:
+              type: RuntimeDefault
+          capabilities:
+            drop:
+              - ALL
+            add:
+              - NET_BIND_SERVICE
+        resources: 
+          limits:
+            cpu: 3500m
+            memory: 4Gi
+          requests:
+            cpu: 1000m
+            memory: 1Gi
+        volumeMounts:
+        - name: config-go-node
+          mountPath: /opt/wallarm/etc/wallarm/go-node.yaml
+          subPath: go-node.yaml
+          readOnly: true
+        - name: wallarm
+          mountPath: /opt/wallarm/etc/wallarm
+        - name: wallarm-acl
+          mountPath: /opt/wallarm/var/lib/wallarm-acl
+        - name: wallarm-apifw
+          mountPath: /opt/wallarm/var/lib/wallarm-api
+      - name: wcli
+        image: docker.io/wallarm/node-helpers:5.0.2-rc1
+        imagePullPolicy: IfNotPresent
+        args: ["wcli", "run", "-log-level", "warn", "job:bruteDetect", "-log-level", "INFO", "job:detectCredStuffing", "-log-level", "INFO", "job:exportAttacks", "-log-level", "INFO", "job:exportBlockedStat", "-log-level", "INFO", "job:exportCounters", "-log-level", "ERROR", "job:exportEnvironment", "-log-level", "INFO", "job:exportMetrics", "-log-level", "INFO", "job:syncApiSpecs", "-log-level", "INFO", "job:syncIpLists", "-log-level", "INFO", "job:syncIpListsSource", "-log-level", "INFO", "job:syncMarkers", "-log-level", "INFO", "job:syncNode", "-log-level", "INFO", "job:weakJwtDetect", "-log-level", "INFO", ]
+        env:
+        - name: WALLARM_API_HOST
+          valueFrom:
+            secretKeyRef:
+              key: WALLARM_API_HOST
+              name: next-credentials
+        - name: WALLARM_API_PORT
+          valueFrom:
+            secretKeyRef:
+              key: WALLARM_API_PORT
+              name: next-credentials
+        - name: WALLARM_API_USE_SSL
+          valueFrom:
+            secretKeyRef:
+              key: WALLARM_API_USE_SSL
+              name: next-credentials
+        - name: WALLARM_API_TOKEN
+          valueFrom:
+            secretKeyRef:
+              key: WALLARM_API_TOKEN
+              name: next-credentials
+        - name: WALLARM_COMPONENT_NAME
+          value: wallarm-node-next
+        - name: WALLARM_COMPONENT_VERSION
+          value: "0.5.1"
+        - name: WALLARM_NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: WALLARM_LABELS
+          value: "group=defaultNodeNextGroup"
+        securityContext:
+        
+          allowPrivilegeEscalation: false
+          privileged: false
+          runAsUser: 101
+          runAsNonRoot: true
+          seccompProfile:
+              type: RuntimeDefault
+          capabilities:
+            drop:
+            - ALL
+        resources: 
+          limits:
+            cpu: 300m
+            memory: 512Mi
+          requests:
+            cpu: 100m
+            memory: 256Mi
+        volumeMounts:
+        - name: wallarm
+          mountPath: /opt/wallarm/etc/wallarm
+        - name: wallarm-acl
+          mountPath: /opt/wallarm/var/lib/wallarm-acl
+        - name: wallarm-apifw
+          mountPath: /opt/wallarm/var/lib/wallarm-api
+      - name: collectd
+        image: docker.io/wallarm/node-helpers:5.0.2-rc1
+        imagePullPolicy: IfNotPresent
+        args:
+          - "collectd"
+        securityContext:
+        
+          allowPrivilegeEscalation: false
+          privileged: false
+          runAsUser: 101
+          runAsNonRoot: true
+          seccompProfile:
+              type: RuntimeDefault
+          capabilities:
+            drop:
+            - ALL
+        resources: 
+          limits:
+            cpu: 200m
+            memory: 256Mi
+          requests:
+            cpu: 50m
+            memory: 32Mi
+        volumeMounts:
+        - name: wallarm
+          mountPath: /opt/wallarm/etc/wallarm
+      volumes:
+      - name: wallarm
+        emptyDir: {}
+      - name: wallarm-acl
+        emptyDir: {}
+      - name: wallarm-apifw
+        emptyDir: {}
+      - name: config-go-node
+        configMap:
+          name: next-processing-next
+---
+# Source: wallarm-node-next/templates/processing-hpa.yaml
+apiVersion: autoscaling/v2beta1
+kind: HorizontalPodAutoscaler
+metadata:
+  name: next-processing
+  annotations:
+    
+  labels:
+    helm.sh/chart: "wallarm-node-next"
+    helm.sh/version: "0.5.1"
+    app.kubernetes.io/managed-by: "Helm"
+    app.kubernetes.io/name: "wallarm-node-next"
+    app.kubernetes.io/instance: "my-wallarm-node-next"
+    app.kubernetes.io/version: "0.4.3"
+    app.kubernetes.io/component: "processing"
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: next-processing
+  minReplicas: 1
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      targetAverageUtilization: 85
+  - type: Resource
+    resource:
+      name: memory
+      targetAverageUtilization: 90

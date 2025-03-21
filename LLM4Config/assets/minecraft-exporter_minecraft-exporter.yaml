@@ -1,0 +1,129 @@
+---
+# Source: minecraft-exporter/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-minecraft-exporter
+  labels:
+    app: minecraft-exporter
+    chart: minecraft-exporter-0.11.1
+    release: "my-minecraft-exporter"
+    heritage: "Helm"
+---
+# Source: minecraft-exporter/templates/role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: my-minecraft-exporter
+  labels:
+    app: minecraft-exporter
+    chart: minecraft-exporter-0.11.1
+    heritage: Helm
+    release: my-minecraft-exporter
+---
+# Source: minecraft-exporter/templates/rolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: my-minecraft-exporter
+  labels:
+    app: minecraft-exporter
+    chart: minecraft-exporter-0.11.1
+    heritage: Helm
+    release: my-minecraft-exporter
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: my-minecraft-exporter
+subjects:
+- kind: ServiceAccount
+  name: my-minecraft-exporter
+---
+# Source: minecraft-exporter/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-minecraft-exporter
+  labels:
+    app: minecraft-exporter
+    chart: minecraft-exporter-0.11.1
+    release: my-minecraft-exporter
+    heritage: Helm
+  annotations:
+    {}
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9150
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app: minecraft-exporter
+    release: my-minecraft-exporter
+---
+# Source: minecraft-exporter/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-minecraft-exporter
+  labels:
+    app: minecraft-exporter
+    chart: minecraft-exporter-0.11.1
+    release: my-minecraft-exporter
+    heritage: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: minecraft-exporter
+      release: my-minecraft-exporter
+  template:
+    metadata:
+      labels:
+        app: minecraft-exporter
+        release: my-minecraft-exporter
+    spec:
+      serviceAccountName: my-minecraft-exporter
+      containers:
+        - name: minecraft-exporter
+          image: ghcr.io/dirien/minecraft-exporter:0.18.0
+          imagePullPolicy: IfNotPresent
+          args:
+          ports:
+            - name: http
+              containerPort: 9150
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 30
+            timeoutSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 30
+            timeoutSeconds: 10
+          resources:
+            limits:
+              cpu: 500m
+              memory: 5123Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsGroup: 10003
+            runAsNonRoot: true
+            runAsUser: 10003
+            seccompProfile:
+              type: RuntimeDefault
+      securityContext:
+        {}

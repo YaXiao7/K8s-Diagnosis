@@ -1,0 +1,5116 @@
+---
+# Source: fadi/charts/jupyterhub/templates/hub/netpol.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: hub
+  labels:
+    component: hub
+    app: jupyterhub
+    release: my-fadi
+    chart: jupyterhub-0.11.1
+    heritage: Helm
+spec:
+  podSelector:
+    matchLabels:
+      component: hub
+      app: jupyterhub
+      release: my-fadi
+  policyTypes:
+    - Ingress
+    - Egress
+
+  # IMPORTANT:
+  # NetworkPolicy's ingress "from" and egress "to" rule specifications require
+  # great attention to detail. A quick summary is:
+  #
+  # 1. You can provide "from"/"to" rules that provide access either ports or a
+  #    subset of ports.
+  # 2. You can for each "from"/"to" rule provide any number of
+  #    "sources"/"destinations" of four different kinds.
+  #    - podSelector                        - targets pods with a certain label in the same namespace as the NetworkPolicy
+  #    - namespaceSelector                  - targets all pods running in namespaces with a certain label
+  #    - namespaceSelector and podSelector  - targets pods with a certain label running in namespaces with a certain label
+  #    - ipBlock                            - targets network traffic from/to a set of IP address ranges
+  #
+  # Read more at: https://kubernetes.io/docs/concepts/services-networking/network-policies/#behavior-of-to-and-from-selectors
+  #
+  ingress:
+
+    # allowed pods (hub.jupyter.org/network-access-hub) --> hub
+    - ports:
+        - port: http
+      from:
+        # source 1 - labeled pods
+        - podSelector:
+            matchLabels:
+              hub.jupyter.org/network-access-hub: "true"
+
+  egress:
+    # hub --> proxy
+    - ports:
+        - port: 8001
+      to:
+        - podSelector:
+            matchLabels:
+              component: proxy
+              app: jupyterhub
+              release: my-fadi
+    # hub --> singleuser-server
+    - ports:
+        - port: 8888
+      to:
+        - podSelector:
+            matchLabels:
+              component: singleuser-server
+              app: jupyterhub
+              release: my-fadi
+
+    # hub --> Kubernetes internal DNS
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # hub --> depends, but the default is everything
+    - to:
+      - ipBlock:
+          cidr: 0.0.0.0/0
+---
+# Source: fadi/charts/jupyterhub/templates/proxy/netpol.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: proxy
+  labels:
+    component: proxy
+    app: jupyterhub
+    release: my-fadi
+    chart: jupyterhub-0.11.1
+    heritage: Helm
+spec:
+  podSelector:
+    matchLabels:
+      component: proxy
+      app: jupyterhub
+      release: my-fadi
+  policyTypes:
+    - Ingress
+    - Egress
+
+  # IMPORTANT:
+  # NetworkPolicy's ingress "from" and egress "to" rule specifications require
+  # great attention to detail. A quick summary is:
+  #
+  # 1. You can provide "from"/"to" rules that provide access either ports or a
+  #    subset of ports.
+  # 2. You can for each "from"/"to" rule provide any number of
+  #    "sources"/"destinations" of four different kinds.
+  #    - podSelector                        - targets pods with a certain label in the same namespace as the NetworkPolicy
+  #    - namespaceSelector                  - targets all pods running in namespaces with a certain label
+  #    - namespaceSelector and podSelector  - targets pods with a certain label running in namespaces with a certain label
+  #    - ipBlock                            - targets network traffic from/to a set of IP address ranges
+  #
+  # Read more at: https://kubernetes.io/docs/concepts/services-networking/network-policies/#behavior-of-to-and-from-selectors
+  #
+  ingress:
+    # allow incoming traffic to these ports independent of source
+    - ports:
+      - port: http
+      - port: https
+
+    # allowed pods (hub.jupyter.org/network-access-proxy-http) --> proxy (http/https port)
+    - ports:
+        - port: http
+      from:
+        # source 1 - labeled pods
+        - podSelector:
+            matchLabels:
+              hub.jupyter.org/network-access-proxy-http: "true"
+
+    # allowed pods (hub.jupyter.org/network-access-proxy-api) --> proxy (api port)
+    - ports:
+        - port: api
+      from:
+        # source 1 - labeled pods
+        - podSelector:
+            matchLabels:
+              hub.jupyter.org/network-access-proxy-api: "true"
+
+  egress:
+    # proxy --> hub
+    - ports:
+        - port: 8081
+      to:
+        - podSelector:
+            matchLabels:
+              component: hub
+              app: jupyterhub
+              release: my-fadi
+
+    # proxy --> singleuser-server
+    - ports:
+        - port: 8888
+      to:
+        - podSelector:
+            matchLabels:
+              component: singleuser-server
+              app: jupyterhub
+              release: my-fadi
+
+    # proxy --> Kubernetes internal DNS
+    - ports:
+      - protocol: UDP
+        port: 53
+      - protocol: TCP
+        port: 53
+    # proxy --> depends, but the default is everything
+    - to:
+      - ipBlock:
+          cidr: 0.0.0.0/0
+---
+# Source: fadi/charts/jupyterhub/templates/singleuser/netpol.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: singleuser
+  labels:
+    component: singleuser
+    app: jupyterhub
+    release: my-fadi
+    chart: jupyterhub-0.11.1
+    heritage: Helm
+spec:
+  podSelector:
+    matchLabels:
+      component: singleuser-server
+      app: jupyterhub
+      release: my-fadi
+  policyTypes:
+    - Ingress
+    - Egress
+
+  # IMPORTANT:
+  # NetworkPolicy's ingress "from" and egress "to" rule specifications require
+  # great attention to detail. A quick summary is:
+  #
+  # 1. You can provide "from"/"to" rules that provide access either ports or a
+  #    subset of ports.
+  # 2. You can for each "from"/"to" rule provide any number of
+  #    "sources"/"destinations" of four different kinds.
+  #    - podSelector                        - targets pods with a certain label in the same namespace as the NetworkPolicy
+  #    - namespaceSelector                  - targets all pods running in namespaces with a certain label
+  #    - namespaceSelector and podSelector  - targets pods with a certain label running in namespaces with a certain label
+  #    - ipBlock                            - targets network traffic from/to a set of IP address ranges
+  #
+  # Read more at: https://kubernetes.io/docs/concepts/services-networking/network-policies/#behavior-of-to-and-from-selectors
+  #
+  ingress:
+
+    # allowed pods (hub.jupyter.org/network-access-singleuser) --> singleuser-server
+    - ports:
+        - port: notebook-port
+      from:
+        # source 1 - labeled pods
+        - podSelector:
+            matchLabels:
+              hub.jupyter.org/network-access-singleuser: "true"
+
+  egress:
+    # singleuser-server --> hub
+    - ports:
+        - port: 8081
+      to:
+        - podSelector:
+            matchLabels:
+              component: hub
+              app: jupyterhub
+              release: my-fadi
+
+    # singleuser-server --> Kubernetes internal DNS
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # singleuser-server --> depends, but the default is everything
+    - to:
+      - ipBlock:
+          cidr: 0.0.0.0/0
+          except:
+          - 169.254.169.254/32
+---
+# Source: fadi/charts/grafana/templates/podsecuritypolicy.yaml
+apiVersion: policy/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: my-fadi-grafana
+  namespace: default
+  labels:
+    helm.sh/chart: grafana-6.1.17
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: my-fadi
+    app.kubernetes.io/version: "7.3.5"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    seccomp.security.alpha.kubernetes.io/allowedProfileNames: 'docker/default,runtime/default'
+    seccomp.security.alpha.kubernetes.io/defaultProfileName:  'docker/default'
+    apparmor.security.beta.kubernetes.io/allowedProfileNames: 'runtime/default'
+    apparmor.security.beta.kubernetes.io/defaultProfileName:  'runtime/default'
+spec:
+  privileged: false
+  allowPrivilegeEscalation: false
+  requiredDropCapabilities:
+    # Default set from Docker, without DAC_OVERRIDE or CHOWN
+    - FOWNER
+    - FSETID
+    - KILL
+    - SETGID
+    - SETUID
+    - SETPCAP
+    - NET_BIND_SERVICE
+    - NET_RAW
+    - SYS_CHROOT
+    - MKNOD
+    - AUDIT_WRITE
+    - SETFCAP
+  volumes:
+    - 'configMap'
+    - 'emptyDir'
+    - 'projected'
+    - 'csi'
+    - 'secret'
+    - 'downwardAPI'
+    - 'persistentVolumeClaim'
+  hostNetwork: false
+  hostIPC: false
+  hostPID: false
+  runAsUser:
+    rule: 'RunAsAny'
+  seLinux:
+    rule: 'RunAsAny'
+  supplementalGroups:
+    rule: 'RunAsAny'
+  fsGroup:
+    rule: 'RunAsAny'
+  readOnlyRootFilesystem: false
+---
+# Source: fadi/charts/grafana/templates/tests/test-podsecuritypolicy.yaml
+apiVersion: policy/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: my-fadi-grafana-test
+  namespace: default
+  labels:
+    helm.sh/chart: grafana-6.1.17
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: my-fadi
+    app.kubernetes.io/version: "7.3.5"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  allowPrivilegeEscalation: true
+  privileged: false
+  hostNetwork: false
+  hostIPC: false
+  hostPID: false
+  fsGroup:
+    rule: RunAsAny
+  seLinux:
+    rule: RunAsAny
+  supplementalGroups:
+    rule: RunAsAny
+  runAsUser:
+    rule: RunAsAny
+  volumes:
+  - configMap
+  - downwardAPI
+  - emptyDir
+  - projected
+  - csi
+  - secret
+---
+# Source: fadi/charts/jupyterhub/templates/scheduling/user-placeholder/pdb.yaml
+apiVersion: policy/v1beta1
+kind: PodDisruptionBudget
+metadata:
+  name: user-placeholder
+  labels:
+    component: user-placeholder
+    app: jupyterhub
+    release: my-fadi
+    chart: jupyterhub-0.11.1
+    heritage: Helm
+spec:
+  minAvailable: 0
+  selector:
+    matchLabels:
+      component: user-placeholder
+      app: jupyterhub
+      release: my-fadi
+---
+# Source: fadi/charts/jupyterhub/templates/scheduling/user-scheduler/pdb.yaml
+apiVersion: policy/v1beta1
+kind: PodDisruptionBudget
+metadata:
+  name: user-scheduler
+  labels:
+    component: user-scheduler
+    app: jupyterhub
+    release: my-fadi
+    chart: jupyterhub-0.11.1
+    heritage: Helm
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      component: user-scheduler
+      app: jupyterhub
+      release: my-fadi
+---
+# Source: fadi/charts/nifi/charts/zookeeper/templates/poddisruptionbudget.yaml
+apiVersion: policy/v1beta1
+kind: PodDisruptionBudget
+metadata:
+  name: my-fadi-zookeeper
+  namespace: default
+  labels:
+    app.kubernetes.io/name: zookeeper
+    helm.sh/chart: zookeeper-5.23.0
+    app.kubernetes.io/instance: my-fadi
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: zookeeper
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: zookeeper
+      app.kubernetes.io/instance: my-fadi
+      app.kubernetes.io/component: zookeeper
+  maxUnavailable: 1
+---
+# Source: fadi/charts/grafana/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    helm.sh/chart: grafana-6.1.17
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: my-fadi
+    app.kubernetes.io/version: "7.3.5"
+    app.kubernetes.io/managed-by: Helm
+  name: my-fadi-grafana
+  namespace: default
+---
+# Source: fadi/charts/grafana/templates/tests/test-serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    helm.sh/chart: grafana-6.1.17
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: my-fadi
+    app.kubernetes.io/version: "7.3.5"
+    app.kubernetes.io/managed-by: Helm
+  name: my-fadi-grafana-test
+  namespace: default
+---
+# Source: fadi/charts/jupyterhub/templates/hub/rbac.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: hub
+  labels:
+    component: hub
+    app: jupyterhub
+    release: my-fadi
+    chart: jupyterhub-0.11.1
+    heritage: Helm
+---
+# Source: fadi/charts/jupyterhub/templates/scheduling/user-scheduler/rbac.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: user-scheduler
+  labels:
+    component: user-scheduler
+    app: jupyterhub
+    release: my-fadi
+    chart: jupyterhub-0.11.1
+    heritage: Helm
+---
+# Source: fadi/charts/keycloak/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-fadi-keycloak
+  namespace: default
+  labels:
+    app.kubernetes.io/name: keycloak
+    helm.sh/chart: keycloak-2.4.8
+    app.kubernetes.io/instance: my-fadi
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: keycloak
+---
+# Source: fadi/charts/traefik/templates/rbac/serviceaccount.yaml
+kind: ServiceAccount
+apiVersion: v1
+metadata:
+  name: my-fadi-traefik
+  labels:
+    app.kubernetes.io/name: traefik
+    helm.sh/chart: traefik-10.6.2
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/instance: my-fadi
+  annotations:
+---
+# Source: fadi/charts/grafana/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-fadi-grafana
+  namespace: default
+  labels:
+    helm.sh/chart: grafana-6.1.17
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: my-fadi
+    app.kubernetes.io/version: "7.3.5"
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  admin-user: "YWRtaW4="
+  admin-password: "SFJKZ09ucHQzY3FCOHVUaW40WTlrQURmRjROOTlHc3cwYnJockl6VA=="
+  ldap-toml: "dmVyYm9zZV9sb2dnaW5nID0gdHJ1ZQpbW3NlcnZlcnNdXQpob3N0ID0gImZhZGktb3BlbmxkYXAiCnBvcnQgPSAzODkKdXNlX3NzbCA9IGZhbHNlCnN0YXJ0X3RscyA9IGZhbHNlCnNzbF9za2lwX3ZlcmlmeSA9IGZhbHNlCmJpbmRfZG4gPSAiY249YWRtaW4sREM9bGRhcCxEQz1jZXRpYyxEQz1iZSIKYmluZF9wYXNzd29yZCA9ICdwYXNzd29yZDEnCnNlYXJjaF9maWx0ZXIgPSAiKHwoY249JXMpKCYoY249JXMpKG1lbWJlck9mPWNuPWFkbWluLERDPWxkYXAsREM9Y2V0aWMsREM9YmUpKSkiCnNlYXJjaF9iYXNlX2RucyA9IFsiY249YWRtaW4sZGM9bGRhcCxkYz1jZXRpYyxkYz1iZSJdCmdyb3VwX3NlYXJjaF9iYXNlX2RucyA9IFsib3U9R3JvdXBzLGRjPWxkYXAsZGM9Y2V0aWMsZGM9YmUiXQoKW1tzZXJ2ZXJzLmdyb3VwX21hcHBpbmdzXV0KZ3JvdXBfZG4gPSAiKiIKb3JnX3JvbGUgPSAiQWRtaW4iCiMjZ3JhZmFuYV9hZG1pbiA9IHRydWUKCiNncm91cF9kbiA9ICJjbj1hbWVuLERDPWxkYXAsREM9Y2V0aWMsREM9YmUiCiNvcmdfcm9sZSA9ICJWaWV3ZXIiCgpbc2VydmVycy5hdHRyaWJ1dGVzXQpuYW1lID0gImdpdmVuTmFtZSIKc3VybmFtZSA9ICJzbiIKdXNlcm5hbWUgPSAiY24iCm1lbWJlcl9vZiA9ICJtZW1iZXJPZiIKZW1haWwgPSAgImVtYWlsIg=="
+---
+# Source: fadi/charts/jupyterhub/templates/hub/secret.yaml
+kind: Secret
+apiVersion: v1
+metadata:
+  name: hub-secret
+  labels:
+    component: hub
+    app: jupyterhub
+    release: my-fadi
+    chart: jupyterhub-0.11.1
+    heritage: Helm
+type: Opaque
+data:
+  values.yaml: "Q2hhcnQ6CiAgTmFtZToganVweXRlcmh1YgogIFZlcnNpb246IDAuMTEuMQpSZWxlYXNlOgogIE5hbWU6IG15LWZhZGkKICBOYW1lc3BhY2U6IGRlZmF1bHQKICBTZXJ2aWNlOiBIZWxtCmN1bGw6CiAgY29uY3VycmVuY3k6IDEwCiAgZW5hYmxlZDogdHJ1ZQogIGV2ZXJ5OiA2MDAKICBtYXhBZ2U6IDAKICByZW1vdmVOYW1lZFNlcnZlcnM6IGZhbHNlCiAgdGltZW91dDogMzYwMAogIHVzZXJzOiBmYWxzZQpjdXN0b206IHt9CmRlYnVnOgogIGVuYWJsZWQ6IGZhbHNlCmVuYWJsZWQ6IHRydWUKZ2xvYmFsOiB7fQpodWI6CiAgYWxsb3dOYW1lZFNlcnZlcnM6IGZhbHNlCiAgYW5ub3RhdGlvbnM6IHt9CiAgYXJnczogW10KICBiYXNlVXJsOiAvCiAgY29tbWFuZDogW10KICBjb25jdXJyZW50U3Bhd25MaW1pdDogNjQKICBjb25maWc6CiAgICBKdXB5dGVySHViOgogICAgICBhZG1pbl9hY2Nlc3M6IHRydWUKICAgICAgYXV0aGVudGljYXRvcl9jbGFzczogbGRhcGF1dGhlbnRpY2F0b3IuTERBUEF1dGhlbnRpY2F0b3IKICAgIExEQVBBdXRoZW50aWNhdG9yOgogICAgICBiaW5kX2RuX3RlbXBsYXRlOgogICAgICAtIGNuPXt1c2VybmFtZX0sZGM9bGRhcCxkYz1jZXRpYyxkYz1iZQogICAgICAtIGNuPXt1c2VybmFtZX0sY249YWRtaW4sZGM9bGRhcCxkYz1jZXRpYyxkYz1iZQogICAgICBlc2NhcGVfdXNlcmRuOiBmYWxzZQogICAgICBsb29rdXBfZG46IGZhbHNlCiAgICAgIHNlcnZlcl9hZGRyZXNzOiBmYWRpLW9wZW5sZGFwCiAgICAgIHVzZV9zc2w6IGZhbHNlCiAgICAgIHVzZXJfYXR0cmlidXRlOiBjbgogIGNvbnNlY3V0aXZlRmFpbHVyZUxpbWl0OiA1CiAgY29udGFpbmVyU2VjdXJpdHlDb250ZXh0OgogICAgYWxsb3dQcml2aWxlZ2VFc2NhbGF0aW9uOiBmYWxzZQogICAgcnVuQXNHcm91cDogMTAwMAogICAgcnVuQXNVc2VyOiAxMDAwCiAgZGI6CiAgICBwdmM6CiAgICAgIGFjY2Vzc01vZGVzOgogICAgICAtIFJlYWRXcml0ZU9uY2UKICAgICAgYW5ub3RhdGlvbnM6IHt9CiAgICAgIHNlbGVjdG9yOiB7fQogICAgICBzdG9yYWdlOiAxR2kKICAgIHR5cGU6IHNxbGl0ZS1wdmMKICBkZXBsb3ltZW50U3RyYXRlZ3k6CiAgICB0eXBlOiBSZWNyZWF0ZQogIGV4dHJhQ29uZmlnOiB7fQogIGV4dHJhQ29uZmlnTWFwOiB7fQogIGV4dHJhQ29udGFpbmVyczogW10KICBleHRyYUVudjoge30KICBleHRyYVZvbHVtZU1vdW50czogW10KICBleHRyYVZvbHVtZXM6IFtdCiAgZnNHaWQ6IDEwMDAKICBpbWFnZToKICAgIG5hbWU6IGp1cHl0ZXJodWIvazhzLWh1YgogICAgcHVsbFBvbGljeTogIiIKICAgIHB1bGxTZWNyZXRzOiBbXQogICAgdGFnOiAwLjExLjEKICBpbml0Q29udGFpbmVyczogW10KICBsYWJlbHM6IHt9CiAgbGl2ZW5lc3NQcm9iZToKICAgIGVuYWJsZWQ6IHRydWUKICAgIGZhaWx1cmVUaHJlc2hvbGQ6IDMwCiAgICBpbml0aWFsRGVsYXlTZWNvbmRzOiAzMDAKICAgIHBlcmlvZFNlY29uZHM6IDEwCiAgICB0aW1lb3V0U2Vjb25kczogMwogIG5ldHdvcmtQb2xpY3k6CiAgICBhbGxvd2VkSW5ncmVzc1BvcnRzOiBbXQogICAgZWdyZXNzOgogICAgLSB0bzoKICAgICAgLSBpcEJsb2NrOgogICAgICAgICAgY2lkcjogMC4wLjAuMC8wCiAgICBlbmFibGVkOiB0cnVlCiAgICBpbmdyZXNzOiBbXQogICAgaW50ZXJOYW1lc3BhY2VBY2Nlc3NMYWJlbHM6IGlnbm9yZQogIG5vZGVTZWxlY3Rvcjoge30KICBwZGI6CiAgICBlbmFibGVkOiBmYWxzZQogICAgbWluQXZhaWxhYmxlOiAxCiAgcmVhZGluZXNzUHJvYmU6CiAgICBlbmFibGVkOiB0cnVlCiAgICBmYWlsdXJlVGhyZXNob2xkOiAxMDAwCiAgICBpbml0aWFsRGVsYXlTZWNvbmRzOiAwCiAgICBwZXJpb2RTZWNvbmRzOiAyCiAgICB0aW1lb3V0U2Vjb25kczogMQogIHJlc291cmNlczoKICAgIHJlcXVlc3RzOgogICAgICBjcHU6IDIwMG0KICAgICAgbWVtb3J5OiA1MTJNaQogIHNlcnZpY2U6CiAgICBhbm5vdGF0aW9uczoge30KICAgIHBvcnRzOiB7fQogICAgdHlwZTogQ2x1c3RlcklQCiAgc2VydmljZXM6IHt9CiAgdGVtcGxhdGVQYXRoczogW10KICB0ZW1wbGF0ZVZhcnM6IHt9CiAgdG9sZXJhdGlvbnM6IFtdCmltYWdlUHVsbFNlY3JldDoKICBhdXRvbWF0aWNSZWZlcmVuY2VJbmplY3Rpb246IHRydWUKICBjcmVhdGU6IGZhbHNlCiAgZW1haWw6ICIiCiAgcGFzc3dvcmQ6ICIiCiAgcmVnaXN0cnk6ICIiCiAgdXNlcm5hbWU6ICIiCmltYWdlUHVsbFNlY3JldHM6IFtdCmluZ3Jlc3M6CiAgYW5ub3RhdGlvbnM6IHt9CiAgZW5hYmxlZDogZmFsc2UKICBob3N0czogW10KICBwYXRoU3VmZml4OiAiIgogIHRsczogW10KcHJlUHVsbGVyOgogIGFubm90YXRpb25zOiB7fQogIGNvbnRhaW5lclNlY3VyaXR5Q29udGV4dDoKICAgIGFsbG93UHJpdmlsZWdlRXNjYWxhdGlvbjogZmFsc2UKICAgIHJ1bkFzR3JvdXA6IDY1NTM0CiAgICBydW5Bc1VzZXI6IDY1NTM0CiAgY29udGludW91czoKICAgIGVuYWJsZWQ6IHRydWUKICBleHRyYUltYWdlczoge30KICBleHRyYVRvbGVyYXRpb25zOiBbXQogIGhvb2s6CiAgICBjb250YWluZXJTZWN1cml0eUNvbnRleHQ6CiAgICAgIGFsbG93UHJpdmlsZWdlRXNjYWxhdGlvbjogZmFsc2UKICAgICAgcnVuQXNHcm91cDogNjU1MzQKICAgICAgcnVuQXNVc2VyOiA2NTUzNAogICAgZW5hYmxlZDogZmFsc2UKICAgIGltYWdlOgogICAgICBuYW1lOiBqdXB5dGVyaHViL2s4cy1pbWFnZS1hd2FpdGVyCiAgICAgIHB1bGxQb2xpY3k6ICIiCiAgICAgIHB1bGxTZWNyZXRzOiBbXQogICAgICB0YWc6IDAuMTEuMQogICAgbm9kZVNlbGVjdG9yOiB7fQogICAgcG9kU2NoZWR1bGluZ1dhaXREdXJhdGlvbjogMTAKICAgIHJlc291cmNlczoKICAgICAgcmVxdWVzdHM6CiAgICAgICAgY3B1OiAwCiAgICAgICAgbWVtb3J5OiAwCiAgICB0b2xlcmF0aW9uczogW10KICBwYXVzZToKICAgIGNvbnRhaW5lclNlY3VyaXR5Q29udGV4dDoKICAgICAgYWxsb3dQcml2aWxlZ2VFc2NhbGF0aW9uOiBmYWxzZQogICAgICBydW5Bc0dyb3VwOiA2NTUzNAogICAgICBydW5Bc1VzZXI6IDY1NTM0CiAgICBpbWFnZToKICAgICAgbmFtZTogazhzLmdjci5pby9wYXVzZQogICAgICBwdWxsUG9saWN5OiAiIgogICAgICBwdWxsU2VjcmV0czogW10KICAgICAgdGFnOiAiMy4yIgogIHB1bGxQcm9maWxlTGlzdEltYWdlczogdHJ1ZQogIHJlc291cmNlczoKICAgIHJlcXVlc3RzOgogICAgICBjcHU6IDAKICAgICAgbWVtb3J5OiAwCnByb3h5OgogIGFubm90YXRpb25zOiB7fQogIGNocDoKICAgIGNvbnRhaW5lclNlY3VyaXR5Q29udGV4dDoKICAgICAgYWxsb3dQcml2aWxlZ2VFc2NhbGF0aW9uOiBmYWxzZQogICAgICBydW5Bc0dyb3VwOiA2NTUzNAogICAgICBydW5Bc1VzZXI6IDY1NTM0CiAgICBleHRyYUNvbW1hbmRMaW5lRmxhZ3M6IFtdCiAgICBleHRyYUVudjoge30KICAgIGltYWdlOgogICAgICBuYW1lOiBqdXB5dGVyaHViL2NvbmZpZ3VyYWJsZS1odHRwLXByb3h5CiAgICAgIHB1bGxQb2xpY3k6ICIiCiAgICAgIHB1bGxTZWNyZXRzOiBbXQogICAgICB0YWc6IDQuMi4yCiAgICBsaXZlbmVzc1Byb2JlOgogICAgICBlbmFibGVkOiB0cnVlCiAgICAgIGluaXRpYWxEZWxheVNlY29uZHM6IDYwCiAgICAgIHBlcmlvZFNlY29uZHM6IDEwCiAgICBuZXR3b3JrUG9saWN5OgogICAgICBhbGxvd2VkSW5ncmVzc1BvcnRzOgogICAgICAtIGh0dHAKICAgICAgLSBodHRwcwogICAgICBlZ3Jlc3M6CiAgICAgIC0gdG86CiAgICAgICAgLSBpcEJsb2NrOgogICAgICAgICAgICBjaWRyOiAwLjAuMC4wLzAKICAgICAgZW5hYmxlZDogdHJ1ZQogICAgICBpbmdyZXNzOiBbXQogICAgICBpbnRlck5hbWVzcGFjZUFjY2Vzc0xhYmVsczogaWdub3JlCiAgICBub2RlU2VsZWN0b3I6IHt9CiAgICBwZGI6CiAgICAgIGVuYWJsZWQ6IGZhbHNlCiAgICAgIG1pbkF2YWlsYWJsZTogMQogICAgcmVhZGluZXNzUHJvYmU6CiAgICAgIGVuYWJsZWQ6IHRydWUKICAgICAgZmFpbHVyZVRocmVzaG9sZDogMTAwMAogICAgICBpbml0aWFsRGVsYXlTZWNvbmRzOiAwCiAgICAgIHBlcmlvZFNlY29uZHM6IDIKICAgIHJlc291cmNlczoKICAgICAgcmVxdWVzdHM6CiAgICAgICAgY3B1OiAyMDBtCiAgICAgICAgbWVtb3J5OiA1MTJNaQogICAgdG9sZXJhdGlvbnM6IFtdCiAgZGI6CiAgICB0eXBlOiBzcWxpdGUtbWVtb3J5CiAgZGVwbG95bWVudFN0cmF0ZWd5OgogICAgdHlwZTogUmVjcmVhdGUKICBodHRwczoKICAgIGVuYWJsZWQ6IGZhbHNlCiAgICBob3N0czogW10KICAgIGxldHNlbmNyeXB0OgogICAgICBhY21lU2VydmVyOiBodHRwczovL2FjbWUtdjAyLmFwaS5sZXRzZW5jcnlwdC5vcmcvZGlyZWN0b3J5CiAgICAgIGNvbnRhY3RFbWFpbDogIiIKICAgIG1hbnVhbDoge30KICAgIHNlY3JldDoKICAgICAgY3J0OiB0bHMuY3J0CiAgICAgIGtleTogdGxzLmtleQogICAgICBuYW1lOiAiIgogICAgdHlwZTogbGV0c2VuY3J5cHQKICBsYWJlbHM6IHt9CiAgc2VjcmV0U3luYzoKICAgIGNvbnRhaW5lclNlY3VyaXR5Q29udGV4dDoKICAgICAgYWxsb3dQcml2aWxlZ2VFc2NhbGF0aW9uOiBmYWxzZQogICAgICBydW5Bc0dyb3VwOiA2NTUzNAogICAgICBydW5Bc1VzZXI6IDY1NTM0CiAgICBpbWFnZToKICAgICAgbmFtZToganVweXRlcmh1Yi9rOHMtc2VjcmV0LXN5bmMKICAgICAgcHVsbFBvbGljeTogIiIKICAgICAgcHVsbFNlY3JldHM6IFtdCiAgICAgIHRhZzogMC4xMS4xCiAgICByZXNvdXJjZXM6IHt9CiAgc2VjcmV0VG9rZW46IGFmODM3NzVlYzNiZmFmMDUwN2NlNTk2ZGY1MWQ0OTFlN2VkNTQ0NTBhZGM0NTQwMzhmYTc0MDU0OTU0NjVmMTkKICBzZXJ2aWNlOgogICAgYW5ub3RhdGlvbnM6IHt9CiAgICBleHRyYVBvcnRzOiBbXQogICAgbGFiZWxzOiB7fQogICAgbG9hZEJhbGFuY2VyU291cmNlUmFuZ2VzOiBbXQogICAgbm9kZVBvcnRzOiB7fQogICAgdHlwZTogQ2x1c3RlcklQCiAgdHJhZWZpazoKICAgIGNvbnRhaW5lclNlY3VyaXR5Q29udGV4dDoKICAgICAgYWxsb3dQcml2aWxlZ2VFc2NhbGF0aW9uOiBmYWxzZQogICAgICBydW5Bc0dyb3VwOiA2NTUzNAogICAgICBydW5Bc1VzZXI6IDY1NTM0CiAgICBleHRyYUR5bmFtaWNDb25maWc6IHt9CiAgICBleHRyYUVudjoge30KICAgIGV4dHJhUG9ydHM6IFtdCiAgICBleHRyYVN0YXRpY0NvbmZpZzoge30KICAgIGV4dHJhVm9sdW1lTW91bnRzOiBbXQogICAgZXh0cmFWb2x1bWVzOiBbXQogICAgaHN0czoKICAgICAgaW5jbHVkZVN1YmRvbWFpbnM6IGZhbHNlCiAgICAgIG1heEFnZTogMTU3MjQ4MDAKICAgICAgcHJlbG9hZDogZmFsc2UKICAgIGltYWdlOgogICAgICBuYW1lOiB0cmFlZmlrCiAgICAgIHB1bGxQb2xpY3k6ICIiCiAgICAgIHB1bGxTZWNyZXRzOiBbXQogICAgICB0YWc6IHYyLjMuNwogICAgbmV0d29ya1BvbGljeToKICAgICAgYWxsb3dlZEluZ3Jlc3NQb3J0czoKICAgICAgLSBodHRwCiAgICAgIC0gaHR0cHMKICAgICAgZWdyZXNzOgogICAgICAtIHRvOgogICAgICAgIC0gaXBCbG9jazoKICAgICAgICAgICAgY2lkcjogMC4wLjAuMC8wCiAgICAgIGVuYWJsZWQ6IHRydWUKICAgICAgaW5ncmVzczogW10KICAgICAgaW50ZXJOYW1lc3BhY2VBY2Nlc3NMYWJlbHM6IGlnbm9yZQogICAgbm9kZVNlbGVjdG9yOiB7fQogICAgcGRiOgogICAgICBlbmFibGVkOiBmYWxzZQogICAgICBtaW5BdmFpbGFibGU6IDEKICAgIHJlc291cmNlczoge30KICAgIHRvbGVyYXRpb25zOiBbXQpyYmFjOgogIGVuYWJsZWQ6IHRydWUKc2NoZWR1bGluZzoKICBjb3JlUG9kczoKICAgIG5vZGVBZmZpbml0eToKICAgICAgbWF0Y2hOb2RlUHVycG9zZTogcHJlZmVyCiAgcG9kUHJpb3JpdHk6CiAgICBkZWZhdWx0UHJpb3JpdHk6IDAKICAgIGVuYWJsZWQ6IGZhbHNlCiAgICBnbG9iYWxEZWZhdWx0OiBmYWxzZQogICAgdXNlclBsYWNlaG9sZGVyUHJpb3JpdHk6IC0xMAogIHVzZXJQbGFjZWhvbGRlcjoKICAgIGNvbnRhaW5lclNlY3VyaXR5Q29udGV4dDoKICAgICAgYWxsb3dQcml2aWxlZ2VFc2NhbGF0aW9uOiBmYWxzZQogICAgICBydW5Bc0dyb3VwOiA2NTUzNAogICAgICBydW5Bc1VzZXI6IDY1NTM0CiAgICBlbmFibGVkOiB0cnVlCiAgICByZXBsaWNhczogMAogIHVzZXJQb2RzOgogICAgbm9kZUFmZmluaXR5OgogICAgICBtYXRjaE5vZGVQdXJwb3NlOiBwcmVmZXIKICB1c2VyU2NoZWR1bGVyOgogICAgY29udGFpbmVyU2VjdXJpdHlDb250ZXh0OgogICAgICBhbGxvd1ByaXZpbGVnZUVzY2FsYXRpb246IGZhbHNlCiAgICAgIHJ1bkFzR3JvdXA6IDY1NTM0CiAgICAgIHJ1bkFzVXNlcjogNjU1MzQKICAgIGVuYWJsZWQ6IHRydWUKICAgIGltYWdlOgogICAgICBuYW1lOiBrOHMuZ2NyLmlvL2t1YmUtc2NoZWR1bGVyCiAgICAgIHB1bGxQb2xpY3k6ICIiCiAgICAgIHB1bGxTZWNyZXRzOiBbXQogICAgICB0YWc6IHYxLjE5LjcKICAgIGxvZ0xldmVsOiA0CiAgICBub2RlU2VsZWN0b3I6IHt9CiAgICBwZGI6CiAgICAgIGVuYWJsZWQ6IHRydWUKICAgICAgbWluQXZhaWxhYmxlOiAxCiAgICBwbHVnaW5zOgogICAgICBzY29yZToKICAgICAgICBkaXNhYmxlZDoKICAgICAgICAtIG5hbWU6IFNlbGVjdG9yU3ByZWFkCiAgICAgICAgLSBuYW1lOiBUYWludFRvbGVyYXRpb24KICAgICAgICAtIG5hbWU6IFBvZFRvcG9sb2d5U3ByZWFkCiAgICAgICAgLSBuYW1lOiBOb2RlUmVzb3VyY2VzQmFsYW5jZWRBbGxvY2F0aW9uCiAgICAgICAgLSBuYW1lOiBOb2RlUmVzb3VyY2VzTGVhc3RBbGxvY2F0ZWQKICAgICAgICAtIG5hbWU6IE5vZGVQcmVmZXJBdm9pZFBvZHMKICAgICAgICAtIG5hbWU6IE5vZGVBZmZpbml0eQogICAgICAgIC0gbmFtZTogSW50ZXJQb2RBZmZpbml0eQogICAgICAgIC0gbmFtZTogSW1hZ2VMb2NhbGl0eQogICAgICAgIGVuYWJsZWQ6CiAgICAgICAgLSBuYW1lOiBOb2RlUHJlZmVyQXZvaWRQb2RzCiAgICAgICAgICB3ZWlnaHQ6IDE2MTA1MQogICAgICAgIC0gbmFtZTogTm9kZUFmZmluaXR5CiAgICAgICAgICB3ZWlnaHQ6IDE0NjMxCiAgICAgICAgLSBuYW1lOiBJbnRlclBvZEFmZmluaXR5CiAgICAgICAgICB3ZWlnaHQ6IDEzMzEKICAgICAgICAtIG5hbWU6IE5vZGVSZXNvdXJjZXNNb3N0QWxsb2NhdGVkCiAgICAgICAgICB3ZWlnaHQ6IDEyMQogICAgICAgIC0gbmFtZTogSW1hZ2VMb2NhbGl0eQogICAgICAgICAgd2VpZ2h0OiAxMQogICAgcmVwbGljYXM6IDIKICAgIHJlc291cmNlczoKICAgICAgcmVxdWVzdHM6CiAgICAgICAgY3B1OiA1MG0KICAgICAgICBtZW1vcnk6IDI1Nk1pCiAgICB0b2xlcmF0aW9uczogW10Kc2luZ2xldXNlcjoKICBjbG91ZE1ldGFkYXRhOgogICAgYmxvY2tXaXRoSXB0YWJsZXM6IHRydWUKICAgIGlwOiAxNjkuMjU0LjE2OS4yNTQKICBjbWQ6IGp1cHl0ZXJodWItc2luZ2xldXNlcgogIGNwdToge30KICBldmVudHM6IHRydWUKICBleHRyYUFubm90YXRpb25zOiB7fQogIGV4dHJhQ29udGFpbmVyczogW10KICBleHRyYUVudjoge30KICBleHRyYUxhYmVsczoKICAgIGh1Yi5qdXB5dGVyLm9yZy9uZXR3b3JrLWFjY2Vzcy1odWI6ICJ0cnVlIgogIGV4dHJhTm9kZUFmZmluaXR5OgogICAgcHJlZmVycmVkOiBbXQogICAgcmVxdWlyZWQ6IFtdCiAgZXh0cmFQb2RBZmZpbml0eToKICAgIHByZWZlcnJlZDogW10KICAgIHJlcXVpcmVkOiBbXQogIGV4dHJhUG9kQW50aUFmZmluaXR5OgogICAgcHJlZmVycmVkOiBbXQogICAgcmVxdWlyZWQ6IFtdCiAgZXh0cmFQb2RDb25maWc6IHt9CiAgZXh0cmFSZXNvdXJjZToKICAgIGd1YXJhbnRlZXM6IHt9CiAgICBsaW1pdHM6IHt9CiAgZXh0cmFUb2xlcmF0aW9uczogW10KICBmc0dpZDogMTAwCiAgaW1hZ2U6CiAgICBuYW1lOiBqdXB5dGVyaHViL2s4cy1zaW5nbGV1c2VyLXNhbXBsZQogICAgcHVsbFBvbGljeTogIiIKICAgIHB1bGxTZWNyZXRzOiBbXQogICAgdGFnOiAwLjExLjEKICBpbml0Q29udGFpbmVyczogW10KICBsaWZlY3ljbGVIb29rczoge30KICBtZW1vcnk6CiAgICBndWFyYW50ZWU6IDFHCiAgbmV0d29ya1BvbGljeToKICAgIGFsbG93ZWRJbmdyZXNzUG9ydHM6IFtdCiAgICBlZ3Jlc3M6CiAgICAtIHRvOgogICAgICAtIGlwQmxvY2s6CiAgICAgICAgICBjaWRyOiAwLjAuMC4wLzAKICAgICAgICAgIGV4Y2VwdDoKICAgICAgICAgIC0gMTY5LjI1NC4xNjkuMjU0LzMyCiAgICBlbmFibGVkOiB0cnVlCiAgICBpbmdyZXNzOiBbXQogICAgaW50ZXJOYW1lc3BhY2VBY2Nlc3NMYWJlbHM6IGlnbm9yZQogIG5ldHdvcmtUb29sczoKICAgIGltYWdlOgogICAgICBuYW1lOiBqdXB5dGVyaHViL2s4cy1uZXR3b3JrLXRvb2xzCiAgICAgIHB1bGxQb2xpY3k6ICIiCiAgICAgIHB1bGxTZWNyZXRzOiBbXQogICAgICB0YWc6IDAuMTEuMQogIG5vZGVTZWxlY3Rvcjoge30KICBwcm9maWxlTGlzdDoKICAtIGRlZmF1bHQ6IHRydWUKICAgIGRlc2NyaXB0aW9uOiAnVG8gYXZvaWQgdG9vIG11Y2ggYmVsbHMgYW5kIHdoaXN0bGVzOiBQeXRob24uJwogICAgZGlzcGxheV9uYW1lOiBNaW5pbWFsIGVudmlyb25tZW50CiAgLSBkZXNjcmlwdGlvbjogJ0lmIHlvdSB3YW50IHRoZSBhZGRpdGlvbmFsIGJlbGxzIGFuZCB3aGlzdGxlczogUHl0aG9uLCBSLCBhbmQgSnVsaWEuJwogICAgZGlzcGxheV9uYW1lOiBEYXRhc2NpZW5jZSBlbnZpcm9ubWVudAogICAga3ViZXNwYXduZXJfb3ZlcnJpZGU6CiAgICAgIGltYWdlOiBqdXB5dGVyL2RhdGFzY2llbmNlLW5vdGVib29rOjdkNDI3ZTdhNGRkZQogIC0gZGVzY3JpcHRpb246IFRoZSBKdXB5dGVyIFN0YWNrcyBzcGFyayBpbWFnZQogICAgZGlzcGxheV9uYW1lOiBTcGFyayBlbnZpcm9ubWVudAogICAga3ViZXNwYXduZXJfb3ZlcnJpZGU6CiAgICAgIGltYWdlOiBqdXB5dGVyL2FsbC1zcGFyay1ub3RlYm9vazpsYXRlc3QKICAtIGRlc2NyaXB0aW9uOiBUZW5zb3JGbG93IE5vdGVib29rCiAgICBkaXNwbGF5X25hbWU6IHRlbnNvcmZsb3cgZW52aXJvbm1lbnQKICAgIGt1YmVzcGF3bmVyX292ZXJyaWRlOgogICAgICBpbWFnZToganVweXRlci90ZW5zb3JmbG93LW5vdGVib29rOmxhdGVzdAogIHN0YXJ0VGltZW91dDogMzAwCiAgc3RvcmFnZToKICAgIGNhcGFjaXR5OiA1R2kKICAgIGR5bmFtaWM6CiAgICAgIHB2Y05hbWVUZW1wbGF0ZTogY2xhaW0te3VzZXJuYW1lfXtzZXJ2ZXJuYW1lfQogICAgICBzdG9yYWdlQWNjZXNzTW9kZXM6CiAgICAgIC0gUmVhZFdyaXRlT25jZQogICAgICB2b2x1bWVOYW1lVGVtcGxhdGU6IHZvbHVtZS17dXNlcm5hbWV9e3NlcnZlcm5hbWV9CiAgICBleHRyYUxhYmVsczoge30KICAgIGV4dHJhVm9sdW1lTW91bnRzOiBbXQogICAgZXh0cmFWb2x1bWVzOiBbXQogICAgaG9tZU1vdW50UGF0aDogL2hvbWUvam92eWFuCiAgICBzdGF0aWM6CiAgICAgIHN1YlBhdGg6ICd7dXNlcm5hbWV9JwogICAgdHlwZTogZHluYW1pYwogIHVpZDogMTAwMAp0cmFlZmlrSW5ncmVzczoKICBlbmFibGVkOiB0cnVlCiAgaG9zdDoganVweXRlcmh1Yi5leGFtcGxlLmNldGljLmJlCiAgdGxzOiBmYWxzZQ=="
+
+  # Used to mount CONFIGPROXY_AUTH_TOKEN on hub/proxy pods for mutual trust
+  proxy.token: "YWY4Mzc3NWVjM2JmYWYwNTA3Y2U1OTZkZjUxZDQ5MWU3ZWQ1NDQ1MGFkYzQ1NDAzOGZhNzQwNTQ5NTQ2NWYxOQ=="
+---
+# Source: fadi/charts/keycloak/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-fadi-keycloak
+  namespace: default
+  labels:
+    app.kubernetes.io/name: keycloak
+    helm.sh/chart: keycloak-2.4.8
+    app.kubernetes.io/instance: my-fadi
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: keycloak
+type: Opaque
+data:
+  admin-password: "cGFzc3dvcmQx"
+  management-password: "cGFzc3dvcmQy"
+  database-password: "WjJKSEhlemk0YUFB"
+---
+# Source: fadi/charts/openldap/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-fadi-openldap
+  labels:
+    app: openldap
+    chart: openldap-1.2.7
+    release: my-fadi
+    heritage: Helm
+type: Opaque
+data:
+  LDAP_ADMIN_PASSWORD: "WjJKSEhlemk0YUFB"
+  LDAP_CONFIG_PASSWORD: "cGFzc3dvcmQy"
+---
+# Source: fadi/charts/spark/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-fadi-spark-secret
+  labels:
+    app.kubernetes.io/name: spark
+    helm.sh/chart: spark-4.1.0
+    app.kubernetes.io/instance: my-fadi
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+---
+# Source: fadi/charts/superset/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-fadi-superset
+  labels:
+    app: superset
+    chart: superset-1.2.0
+    release: my-fadi
+    heritage: Helm
+type: Opaque
+data:
+  init_superset.sh: "L3Vzci9sb2NhbC9iaW4vc3VwZXJzZXQtaW5pdCAtLXVzZXJuYW1lIGFkbWluIC0tZmlyc3RuYW1lIGFkbWluIC0tbGFzdG5hbWUgdXNlciAtLWVtYWlsIGFkbWluQGZhYi5vcmcgLS1wYXNzd29yZCBhZG1pbgpzdXBlcnNldCBydW4="
+  superset_config.py: "ZnJvbSBmbGFza19hcHBidWlsZGVyLnNlY3VyaXR5Lm1hbmFnZXIgaW1wb3J0IEFVVEhfREIsQVVUSF9MREFQCiMtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0KIyBTdXBlcnNldCBzcGVjaWZpYyBjb25maWcKIy0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLQpST1dfTElNSVQgPSA1MDAwClNVUEVSU0VUX1dPUktFUlMgPSAyClNVUEVSU0VUX1dFQlNFUlZFUl9QT1JUID0gODA4OAojLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tCiMtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0KIyBGbGFzayBBcHAgQnVpbGRlciBjb25maWd1cmF0aW9uCiMtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0KIyBZb3VyIEFwcCBzZWNyZXQga2V5ClNFQ1JFVF9LRVkgPSAnXDJcMXRoaXNpc215c2NyZXRrZXlcMVwyXGVceVx5XGgnCiMgVGhlIFNRTEFsY2hlbXkgY29ubmVjdGlvbiBzdHJpbmcgdG8geW91ciBkYXRhYmFzZSBiYWNrZW5kCiMgVGhpcyBjb25uZWN0aW9uIGRlZmluZXMgdGhlIHBhdGggdG8gdGhlIGRhdGFiYXNlIHRoYXQgc3RvcmVzIHlvdXIKIyBzdXBlcnNldCBtZXRhZGF0YSAoc2xpY2VzLCBjb25uZWN0aW9ucywgdGFibGVzLCBkYXNoYm9hcmRzLCAuLi4pLgojIE5vdGUgdGhhdCB0aGUgY29ubmVjdGlvbiBpbmZvcm1hdGlvbiB0byBjb25uZWN0IHRvIHRoZSBkYXRhc291cmNlcwojIHlvdSB3YW50IHRvIGV4cGxvcmUgYXJlIG1hbmFnZWQgZGlyZWN0bHkgaW4gdGhlIHdlYiBVSQpTUUxBTENIRU1ZX0RBVEFCQVNFX1VSSSA9ICdzcWxpdGU6Ly8vL3Zhci9saWIvc3VwZXJzZXQvc3VwZXJzZXQuZGInCiMgRmxhc2stV1RGIGZsYWcgZm9yIENTUkYKV1RGX0NTUkZfRU5BQkxFRCA9IFRydWUKIyBBZGQgZW5kcG9pbnRzIHRoYXQgbmVlZCB0byBiZSBleGVtcHQgZnJvbSBDU1JGIHByb3RlY3Rpb24KV1RGX0NTUkZfRVhFTVBUX0xJU1QgPSBbXQojIFNldCB0aGlzIEFQSSBrZXkgdG8gZW5hYmxlIE1hcGJveCB2aXN1YWxpemF0aW9ucwpNQVBCT1hfQVBJX0tFWSA9ICcnCkRFQlVHPVRydWUKTE9HX0ZPUk1BVCA9ICclKGFzY3RpbWUpczolKGxldmVsbmFtZSlzOiUobmFtZSlzOiUobWVzc2FnZSlzJwpMT0dfTEVWRUwgPSAnREVCVUcnCkFVVEhfVFlQRSA9IEFVVEhfTERBUApBVVRIX0xEQVBfU0VSVkVSID0gImxkYXA6Ly9mYWRpLW9wZW5sZGFwOjM4OSIKQVVUSF9MREFQX1VTRV9UTFMgPSBGYWxzZQpBVVRIX1VTRVJfUkVHSVNUUkFUSU9OID0gVHJ1ZQpBVVRIX0xEQVBfU0VBUkNIID0gImRjPWxkYXAsZGM9Y2V0aWMsZGM9YmUiCkFVVEhfTERBUF9CSU5EX1VTRVIgPSAiY249YWRtaW4sZGM9bGRhcCxkYz1jZXRpYyxkYz1iZSIKQVVUSF9MREFQX0JJTkRfUEFTU1dPUkQgPSAiWjJKSEhlemk0YUFBIgpBVVRIX0xEQVBfVUlEX0ZJRUxEID0gImNuIg=="
+---
+# Source: fadi/charts/grafana/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-fadi-grafana
+  namespace: default
+  labels:
+    helm.sh/chart: grafana-6.1.17
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: my-fadi
+    app.kubernetes.io/version: "7.3.5"
+    app.kubernetes.io/managed-by: Helm
+data:
+  grafana.ini: |
+    [analytics]
+    check_for_updates = true
+    [auth.azuread]
+    allow_sign_up = true
+    allowed_domains = 
+    allowed_groups = 
+    auth_url = https://login.microsoftonline.com/<your_tenant_id>/oauth2/v2.0/authorize
+    client_id = <your_application_id>
+    client_secret = <your_client_secret>
+    enabled = false
+    name = Azure AD
+    scopes = openid email profile
+    token_url = https://login.microsoftonline.com/<your_tenant_id>/oauth2/v2.0/token
+    [auth.generic_oauth]
+    allow_sign_up = true
+    api_url = http://<your_keycloak_URL>/auth/realms/<your_realm>/protocol/openid-connect/userinfo
+    auth_url = http://<your_keycloak_URL>/auth/realms/<your_realm>/protocol/openid-connect/auth
+    client_id = <your_client_id>
+    client_secret = <your_client_secret>
+    enabled = false
+    name = Keycloak
+    scopes = openid email profile
+    tls_skip_verify_insecure = false
+    token_url = http://<your_keycloak_URL>/auth/realms/<your_realm>/protocol/openid-connect/token
+    [auth.ldap]
+    allow_sign_up = true
+    config_file = /etc/grafana/ldap.toml
+    enabled = true
+    [grafana_net]
+    url = https://grafana.net
+    [log]
+    mode = console
+    [paths]
+    data = /var/lib/grafana/data
+    logs = /var/log/grafana
+    plugins = /var/lib/grafana/plugins
+    provisioning = /etc/grafana/provisioning
+    [server]
+    root_url = http://grafana.example.cetic.be
+---
+# Source: fadi/charts/grafana/templates/tests/test-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-fadi-grafana-test
+  namespace: default
+  labels:
+    helm.sh/chart: grafana-6.1.17
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: my-fadi
+    app.kubernetes.io/version: "7.3.5"
+    app.kubernetes.io/managed-by: Helm
+data:
+  run.sh: |-
+    @test "Test Health" {
+      url="http://my-fadi-grafana/api/health"
+
+      code=$(wget --server-response --spider --timeout 10 --tries 1 ${url} 2>&1 | awk '/^  HTTP/{print $2}')
+      [ "$code" == "200" ]
+    }
+---
+# Source: fadi/charts/jupyterhub/templates/hub/configmap.yaml
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: hub-config
+  labels:
+    component: hub
+    app: jupyterhub
+    release: my-fadi
+    chart: jupyterhub-0.11.1
+    heritage: Helm
+data:
+  jupyterhub_config.py: |
+    import os
+    import re
+    import sys
+  
+    from binascii import a2b_hex
+  
+    from tornado.httpclient import AsyncHTTPClient
+    from kubernetes import client
+    from jupyterhub.utils import url_path_join
+  
+    # Make sure that modules placed in the same directory as the jupyterhub config are added to the pythonpath
+    configuration_directory = os.path.dirname(os.path.realpath(__file__))
+    sys.path.insert(0, configuration_directory)
+  
+    from z2jh import get_config, set_config_if_not_none
+  
+  
+    def camelCaseify(s):
+        """convert snake_case to camelCase
+  
+        For the common case where some_value is set from someValue
+        so we don't have to specify the name twice.
+        """
+        return re.sub(r"_([a-z])", lambda m: m.group(1).upper(), s)
+  
+  
+    # Configure JupyterHub to use the curl backend for making HTTP requests,
+    # rather than the pure-python implementations. The default one starts
+    # being too slow to make a large number of requests to the proxy API
+    # at the rate required.
+    AsyncHTTPClient.configure("tornado.curl_httpclient.CurlAsyncHTTPClient")
+  
+    c.JupyterHub.spawner_class = "kubespawner.KubeSpawner"
+  
+    # Connect to a proxy running in a different pod. Note that *_SERVICE_*
+    # environment variables are set by Kubernetes for Services
+    c.ConfigurableHTTPProxy.api_url = (
+        f"http://proxy-api:{os.environ['PROXY_API_SERVICE_PORT']}"
+    )
+    c.ConfigurableHTTPProxy.should_start = False
+  
+    # Do not shut down user pods when hub is restarted
+    c.JupyterHub.cleanup_servers = False
+  
+    # Check that the proxy has routes appropriately setup
+    c.JupyterHub.last_activity_interval = 60
+  
+    # Don't wait at all before redirecting a spawning user to the progress page
+    c.JupyterHub.tornado_settings = {
+        "slow_spawn_timeout": 0,
+    }
+  
+  
+    # configure the hub db connection
+    db_type = get_config("hub.db.type")
+    if db_type == "sqlite-pvc":
+        c.JupyterHub.db_url = "sqlite:///jupyterhub.sqlite"
+    elif db_type == "sqlite-memory":
+        c.JupyterHub.db_url = "sqlite://"
+    else:
+        set_config_if_not_none(c.JupyterHub, "db_url", "hub.db.url")
+  
+  
+    # c.JupyterHub configuration from Helm chart's configmap
+    for trait, cfg_key in (
+        ("concurrent_spawn_limit", None),
+        ("active_server_limit", None),
+        ("base_url", None),
+        # ('cookie_secret', None),  # requires a Hex -> Byte transformation
+        ("allow_named_servers", None),
+        ("named_server_limit_per_user", None),
+        ("authenticate_prometheus", None),
+        ("redirect_to_server", None),
+        ("shutdown_on_logout", None),
+        ("template_paths", None),
+        ("template_vars", None),
+    ):
+        if cfg_key is None:
+            cfg_key = camelCaseify(trait)
+        set_config_if_not_none(c.JupyterHub, trait, "hub." + cfg_key)
+  
+    # a required Hex -> Byte transformation
+    cookie_secret_hex = get_config("hub.cookieSecret")
+    if cookie_secret_hex:
+        c.JupyterHub.cookie_secret = a2b_hex(cookie_secret_hex)
+  
+    # hub_bind_url configures what the JupyterHub process within the hub pod's
+    # container should listen to.
+    hub_container_port = 8081
+    c.JupyterHub.hub_bind_url = f"http://:{hub_container_port}"
+  
+    # hub_connect_url is the URL for connecting to the hub for use by external
+    # JupyterHub services such as the proxy. Note that *_SERVICE_* environment
+    # variables are set by Kubernetes for Services.
+    c.JupyterHub.hub_connect_url = f"http://hub:{os.environ['HUB_SERVICE_PORT']}"
+  
+    # implement common labels
+    # this duplicates the jupyterhub.commonLabels helper
+    common_labels = c.KubeSpawner.common_labels = {}
+    common_labels["app"] = get_config(
+        "nameOverride",
+        default=get_config("Chart.Name", "jupyterhub"),
+    )
+    common_labels["heritage"] = "jupyterhub"
+    chart_name = get_config("Chart.Name")
+    chart_version = get_config("Chart.Version")
+    if chart_name and chart_version:
+        common_labels["chart"] = "{}-{}".format(
+            chart_name,
+            chart_version.replace("+", "_"),
+        )
+    release = get_config("Release.Name")
+    if release:
+        common_labels["release"] = release
+  
+    c.KubeSpawner.namespace = os.environ.get("POD_NAMESPACE", "default")
+  
+    # Max number of consecutive failures before the Hub restarts itself
+    # requires jupyterhub 0.9.2
+    set_config_if_not_none(
+        c.Spawner,
+        "consecutive_failure_limit",
+        "hub.consecutiveFailureLimit",
+    )
+  
+    for trait, cfg_key in (
+        ("pod_name_template", None),
+        ("start_timeout", None),
+        ("image_pull_policy", "image.pullPolicy"),
+        # ('image_pull_secrets', 'image.pullSecrets'), # Managed manually below
+        ("events_enabled", "events"),
+        ("extra_labels", None),
+        ("extra_annotations", None),
+        ("uid", None),
+        ("fs_gid", None),
+        ("service_account", "serviceAccountName"),
+        ("storage_extra_labels", "storage.extraLabels"),
+        ("tolerations", "extraTolerations"),
+        ("node_selector", None),
+        ("node_affinity_required", "extraNodeAffinity.required"),
+        ("node_affinity_preferred", "extraNodeAffinity.preferred"),
+        ("pod_affinity_required", "extraPodAffinity.required"),
+        ("pod_affinity_preferred", "extraPodAffinity.preferred"),
+        ("pod_anti_affinity_required", "extraPodAntiAffinity.required"),
+        ("pod_anti_affinity_preferred", "extraPodAntiAffinity.preferred"),
+        ("lifecycle_hooks", None),
+        ("init_containers", None),
+        ("extra_containers", None),
+        ("mem_limit", "memory.limit"),
+        ("mem_guarantee", "memory.guarantee"),
+        ("cpu_limit", "cpu.limit"),
+        ("cpu_guarantee", "cpu.guarantee"),
+        ("extra_resource_limits", "extraResource.limits"),
+        ("extra_resource_guarantees", "extraResource.guarantees"),
+        ("environment", "extraEnv"),
+        ("profile_list", None),
+        ("extra_pod_config", None),
+    ):
+        if cfg_key is None:
+            cfg_key = camelCaseify(trait)
+        set_config_if_not_none(c.KubeSpawner, trait, "singleuser." + cfg_key)
+  
+    image = get_config("singleuser.image.name")
+    if image:
+        tag = get_config("singleuser.image.tag")
+        if tag:
+            image = "{}:{}".format(image, tag)
+  
+        c.KubeSpawner.image = image
+  
+    # Combine imagePullSecret.create (single), imagePullSecrets (list), and
+    # singleuser.image.pullSecrets (list).
+    image_pull_secrets = []
+    if get_config("imagePullSecret.automaticReferenceInjection") and (
+        get_config("imagePullSecret.create") or get_config("imagePullSecret.enabled")
+    ):
+        image_pull_secrets.append("image-pull-secret")
+    if get_config("imagePullSecrets"):
+        image_pull_secrets.extend(get_config("imagePullSecrets"))
+    if get_config("singleuser.image.pullSecrets"):
+        image_pull_secrets.extend(get_config("singleuser.image.pullSecrets"))
+    if image_pull_secrets:
+        c.KubeSpawner.image_pull_secrets = image_pull_secrets
+  
+    # scheduling:
+    if get_config("scheduling.userScheduler.enabled"):
+        c.KubeSpawner.scheduler_name = os.environ["HELM_RELEASE_NAME"] + "-user-scheduler"
+    if get_config("scheduling.podPriority.enabled"):
+        c.KubeSpawner.priority_class_name = (
+            os.environ["HELM_RELEASE_NAME"] + "-default-priority"
+        )
+  
+    # add node-purpose affinity
+    match_node_purpose = get_config("scheduling.userPods.nodeAffinity.matchNodePurpose")
+    if match_node_purpose:
+        node_selector = dict(
+            matchExpressions=[
+                dict(
+                    key="hub.jupyter.org/node-purpose",
+                    operator="In",
+                    values=["user"],
+                )
+            ],
+        )
+        if match_node_purpose == "prefer":
+            c.KubeSpawner.node_affinity_preferred.append(
+                dict(
+                    weight=100,
+                    preference=node_selector,
+                ),
+            )
+        elif match_node_purpose == "require":
+            c.KubeSpawner.node_affinity_required.append(node_selector)
+        elif match_node_purpose == "ignore":
+            pass
+        else:
+            raise ValueError(
+                "Unrecognized value for matchNodePurpose: %r" % match_node_purpose
+            )
+  
+    # add dedicated-node toleration
+    for key in (
+        "hub.jupyter.org/dedicated",
+        # workaround GKE not supporting / in initial node taints
+        "hub.jupyter.org_dedicated",
+    ):
+        c.KubeSpawner.tolerations.append(
+            dict(
+                key=key,
+                operator="Equal",
+                value="user",
+                effect="NoSchedule",
+            )
+        )
+  
+    # Configure dynamically provisioning pvc
+    storage_type = get_config("singleuser.storage.type")
+  
+    if storage_type == "dynamic":
+        pvc_name_template = get_config("singleuser.storage.dynamic.pvcNameTemplate")
+        c.KubeSpawner.pvc_name_template = pvc_name_template
+        volume_name_template = get_config("singleuser.storage.dynamic.volumeNameTemplate")
+        c.KubeSpawner.storage_pvc_ensure = True
+        set_config_if_not_none(
+            c.KubeSpawner, "storage_class", "singleuser.storage.dynamic.storageClass"
+        )
+        set_config_if_not_none(
+            c.KubeSpawner,
+            "storage_access_modes",
+            "singleuser.storage.dynamic.storageAccessModes",
+        )
+        set_config_if_not_none(
+            c.KubeSpawner, "storage_capacity", "singleuser.storage.capacity"
+        )
+  
+        # Add volumes to singleuser pods
+        c.KubeSpawner.volumes = [
+            {
+                "name": volume_name_template,
+                "persistentVolumeClaim": {"claimName": pvc_name_template},
+            }
+        ]
+        c.KubeSpawner.volume_mounts = [
+            {
+                "mountPath": get_config("singleuser.storage.homeMountPath"),
+                "name": volume_name_template,
+            }
+        ]
+    elif storage_type == "static":
+        pvc_claim_name = get_config("singleuser.storage.static.pvcName")
+        c.KubeSpawner.volumes = [
+            {"name": "home", "persistentVolumeClaim": {"claimName": pvc_claim_name}}
+        ]
+  
+        c.KubeSpawner.volume_mounts = [
+            {
+                "mountPath": get_config("singleuser.storage.homeMountPath"),
+                "name": "home",
+                "subPath": get_config("singleuser.storage.static.subPath"),
+            }
+        ]
+  
+    c.KubeSpawner.volumes.extend(get_config("singleuser.storage.extraVolumes", []))
+    c.KubeSpawner.volume_mounts.extend(
+        get_config("singleuser.storage.extraVolumeMounts", [])
+    )
+  
+    c.JupyterHub.services = []
+  
+    if get_config("cull.enabled", False):
+        cull_cmd = ["python3", "-m", "jupyterhub_idle_culler"]
+        base_url = c.JupyterHub.get("base_url", "/")
+        cull_cmd.append("--url=http://localhost:8081" + url_path_join(base_url, "hub/api"))
+  
+        cull_timeout = get_config("cull.timeout")
+        if cull_timeout:
+            cull_cmd.append("--timeout=%s" % cull_timeout)
+  
+        cull_every = get_config("cull.every")
+        if cull_every:
+            cull_cmd.append("--cull-every=%s" % cull_every)
+  
+        cull_concurrency = get_config("cull.concurrency")
+        if cull_concurrency:
+            cull_cmd.append("--concurrency=%s" % cull_concurrency)
+  
+        if get_config("cull.users"):
+            cull_cmd.append("--cull-users")
+  
+        if get_config("cull.removeNamedServers"):
+            cull_cmd.append("--remove-named-servers")
+  
+        cull_max_age = get_config("cull.maxAge")
+        if cull_max_age:
+            cull_cmd.append("--max-age=%s" % cull_max_age)
+  
+        c.JupyterHub.services.append(
+            {
+                "name": "cull-idle",
+                "admin": True,
+                "command": cull_cmd,
+            }
+        )
+  
+    for name, service in get_config("hub.services", {}).items():
+        # jupyterhub.services is a list of dicts, but
+        # in the helm chart it is a dict of dicts for easier merged-config
+        service.setdefault("name", name)
+        # handle camelCase->snake_case of api_token
+        api_token = service.pop("apiToken", None)
+        if api_token:
+            service["api_token"] = api_token
+        c.JupyterHub.services.append(service)
+  
+  
+    set_config_if_not_none(c.Spawner, "cmd", "singleuser.cmd")
+    set_config_if_not_none(c.Spawner, "default_url", "singleuser.defaultUrl")
+  
+    cloud_metadata = get_config("singleuser.cloudMetadata", {})
+  
+    if (
+        cloud_metadata.get("blockWithIptables") == True
+        or cloud_metadata.get("enabled") == False
+    ):
+        # Use iptables to block access to cloud metadata by default
+        network_tools_image_name = get_config("singleuser.networkTools.image.name")
+        network_tools_image_tag = get_config("singleuser.networkTools.image.tag")
+        ip_block_container = client.V1Container(
+            name="block-cloud-metadata",
+            image=f"{network_tools_image_name}:{network_tools_image_tag}",
+            command=[
+                "iptables",
+                "-A",
+                "OUTPUT",
+                "-d",
+                cloud_metadata.get("ip", "169.254.169.254"),
+                "-j",
+                "DROP",
+            ],
+            security_context=client.V1SecurityContext(
+                privileged=True,
+                run_as_user=0,
+                capabilities=client.V1Capabilities(add=["NET_ADMIN"]),
+            ),
+        )
+  
+        c.KubeSpawner.init_containers.append(ip_block_container)
+  
+  
+    if get_config("debug.enabled", False):
+        c.JupyterHub.log_level = "DEBUG"
+        c.Spawner.debug = True
+  
+  
+    # load hub.config values
+    for section, sub_cfg in get_config("hub.config", {}).items():
+        c[section].update(sub_cfg)
+  
+    # execute hub.extraConfig string
+    extra_config = get_config("hub.extraConfig", {})
+    if isinstance(extra_config, str):
+        from textwrap import indent, dedent
+  
+        msg = dedent(
+            """
+        hub.extraConfig should be a dict of strings,
+        but found a single string instead.
+  
+        extraConfig as a single string is deprecated
+        as of the jupyterhub chart version 0.6.
+  
+        The keys can be anything identifying the
+        block of extra configuration.
+  
+        Try this instead:
+  
+            hub:
+              extraConfig:
+                myConfig: |
+                  {}
+  
+        This configuration will still be loaded,
+        but you are encouraged to adopt the nested form
+        which enables easier merging of multiple extra configurations.
+        """
+        )
+        print(msg.format(indent(extra_config, " " * 10).lstrip()), file=sys.stderr)
+        extra_config = {"deprecated string": extra_config}
+  
+    for key, config_py in sorted(extra_config.items()):
+        print("Loading extra config: %s" % key)
+        exec(config_py)
+  z2jh.py: |
+    """
+    Utility methods for use in jupyterhub_config.py and dynamic subconfigs.
+  
+    Methods here can be imported by extraConfig in values.yaml
+    """
+    from collections import Mapping
+    from functools import lru_cache
+    import os
+  
+    import yaml
+  
+  
+    # memoize so we only load config once
+    @lru_cache()
+    def _load_config():
+        """Load configuration from disk
+  
+        Memoized to only load once
+        """
+        cfg = {}
+        for source in ("config", "secret"):
+            path = f"/etc/jupyterhub/{source}/values.yaml"
+            if os.path.exists(path):
+                print(f"Loading {path}")
+                with open(path) as f:
+                    values = yaml.safe_load(f)
+                cfg = _merge_dictionaries(cfg, values)
+            else:
+                print(f"No config at {path}")
+        return cfg
+  
+  
+    def _merge_dictionaries(a, b):
+        """Merge two dictionaries recursively.
+  
+        Simplified From https://stackoverflow.com/a/7205107
+        """
+        merged = a.copy()
+        for key in b:
+            if key in a:
+                if isinstance(a[key], Mapping) and isinstance(b[key], Mapping):
+                    merged[key] = _merge_dictionaries(a[key], b[key])
+                else:
+                    merged[key] = b[key]
+            else:
+                merged[key] = b[key]
+        return merged
+  
+  
+    def get_config(key, default=None):
+        """
+        Find a config item of a given name & return it
+  
+        Parses everything as YAML, so lists and dicts are available too
+  
+        get_config("a.b.c") returns config['a']['b']['c']
+        """
+        value = _load_config()
+        # resolve path in yaml
+        for level in key.split("."):
+            if not isinstance(value, dict):
+                # a parent is a scalar or null,
+                # can't resolve full path
+                return default
+            if level not in value:
+                return default
+            else:
+                value = value[level]
+        return value
+  
+  
+    def set_config_if_not_none(cparent, name, key):
+        """
+        Find a config item of a given name, set the corresponding Jupyter
+        configuration item if not None
+        """
+        data = get_config(key)
+        if data is not None:
+            setattr(cparent, name, data)
+---
+# Source: fadi/charts/jupyterhub/templates/scheduling/user-scheduler/configmap.yaml
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: user-scheduler
+  labels:
+    component: user-scheduler
+    app: jupyterhub
+    release: my-fadi
+    chart: jupyterhub-0.11.1
+    heritage: Helm
+data:
+  # ref: https://kubernetes.io/docs/reference/scheduling/config/
+  config.yaml: |
+    apiVersion: kubescheduler.config.k8s.io/v1beta1
+    kind: KubeSchedulerConfiguration
+    leaderElection:
+      resourceLock: endpoints
+      resourceName: user-scheduler-lock
+      resourceNamespace: default
+    profiles:
+      - schedulerName: my-fadi-user-scheduler
+        plugins:
+          score:
+            disabled:
+            - name: SelectorSpread
+            - name: TaintToleration
+            - name: PodTopologySpread
+            - name: NodeResourcesBalancedAllocation
+            - name: NodeResourcesLeastAllocated
+            - name: NodePreferAvoidPods
+            - name: NodeAffinity
+            - name: InterPodAffinity
+            - name: ImageLocality
+            enabled:
+            - name: NodePreferAvoidPods
+              weight: 161051
+            - name: NodeAffinity
+              weight: 14631
+            - name: InterPodAffinity
+              weight: 1331
+            - name: NodeResourcesMostAllocated
+              weight: 121
+            - name: ImageLocality
+              weight: 11
+  policy.cfg: "{\"alwaysCheckAllPredicates\":false,\"apiVersion\":\"v1\",\"hardPodAffinitySymmetricWeight\":100,\"kind\":\"Policy\",\"predicates\":[{\"name\":\"PodFitsResources\"},{\"name\":\"HostName\"},{\"name\":\"PodFitsHostPorts\"},{\"name\":\"MatchNodeSelector\"},{\"name\":\"NoDiskConflict\"},{\"name\":\"PodToleratesNodeTaints\"},{\"name\":\"MaxEBSVolumeCount\"},{\"name\":\"MaxGCEPDVolumeCount\"},{\"name\":\"MaxAzureDiskVolumeCount\"},{\"name\":\"MaxCSIVolumeCountPred\"},{\"name\":\"CheckVolumeBinding\"},{\"name\":\"NoVolumeZoneConflict\"},{\"name\":\"MatchInterPodAffinity\"}],\"priorities\":[{\"name\":\"NodePreferAvoidPodsPriority\",\"weight\":161051},{\"name\":\"NodeAffinityPriority\",\"weight\":14641},{\"name\":\"InterPodAffinityPriority\",\"weight\":1331},{\"name\":\"MostRequestedPriority\",\"weight\":121},{\"name\":\"ImageLocalityPriority\",\"weight\":11}]}"
+---
+# Source: fadi/charts/keycloak/templates/configmap-env-vars.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-fadi-keycloak-env-vars
+  namespace: default
+  labels:
+    app.kubernetes.io/name: keycloak
+    helm.sh/chart: keycloak-2.4.8
+    app.kubernetes.io/instance: my-fadi
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: keycloak
+data:
+  KEYCLOAK_CREATE_ADMIN_USER: "true"
+  KEYCLOAK_ADMIN_USER: "admin"
+  KEYCLOAK_MANAGEMENT_USER: "manager"
+  KEYCLOAK_HTTP_PORT: "8080"
+  KEYCLOAK_PROXY_ADDRESS_FORWARDING: "false"
+  KEYCLOAK_ENABLE_STATISTICS: "false"
+  KEYCLOAK_DATABASE_HOST: "fadi-postgresql"
+  KEYCLOAK_DATABASE_PORT: "5432"
+  KEYCLOAK_DATABASE_NAME: "postgres"
+  KEYCLOAK_DATABASE_USER: "admin"
+  KEYCLOAK_CACHE_OWNERS_COUNT: "1"
+  KEYCLOAK_AUTH_CACHE_OWNERS_COUNT: "1"
+  KEYCLOAK_ENABLE_TLS: "false"
+---
+# Source: fadi/charts/nifi/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-fadi-nifi-config
+  labels:
+    app: "nifi"
+    chart: "nifi-1.0.6"
+    release: "my-fadi"
+    heritage: "Helm"
+data:
+  authorizers.xml: |
+    <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+    <!--
+      Licensed to the Apache Software Foundation (ASF) under one or more
+      contributor license agreements.  See the NOTICE file distributed with
+      this work for additional information regarding copyright ownership.
+      The ASF licenses this file to You under the Apache License, Version 2.0
+      (the "License"); you may not use this file except in compliance with
+      the License.  You may obtain a copy of the License at
+          http://www.apache.org/licenses/LICENSE-2.0
+      Unless required by applicable law or agreed to in writing, software
+      distributed under the License is distributed on an "AS IS" BASIS,
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+      See the License for the specific language governing permissions and
+      limitations under the License.
+    -->
+    <!--
+        This file lists the userGroupProviders, accessPolicyProviders, and authorizers to use when running securely. In order
+        to use a specific authorizer it must be configured here and it's identifier must be specified in the nifi.properties file.
+        If the authorizer is a managedAuthorizer, it may need to be configured with an accessPolicyProvider and an userGroupProvider.
+        This file allows for configuration of them, but they must be configured in order:
+        ...
+        all userGroupProviders
+        all accessPolicyProviders
+        all Authorizers
+        ...
+    -->
+    <authorizers>
+        <!--
+            The FileUserGroupProvider will provide support for managing users and groups which is backed by a file
+            on the local file system.
+            - Users File - The file where the FileUserGroupProvider will store users and groups.
+            - Legacy Authorized Users File - The full path to an existing authorized-users.xml that will be automatically
+                be used to load the users and groups into the Users File.
+            - Initial User Identity [unique key] - The identity of a users and systems to seed the Users File. The name of
+                each property must be unique, for example: "Initial User Identity A", "Initial User Identity B",
+                "Initial User Identity C" or "Initial User Identity 1", "Initial User Identity 2", "Initial User Identity 3"
+                NOTE: Any identity mapping rules specified in nifi.properties will also be applied to the user identities,
+                so the values should be the unmapped identities (i.e. full DN from a certificate).
+        -->
+        <userGroupProvider>
+            <identifier>file-user-group-provider</identifier>
+            <class>org.apache.nifi.authorization.FileUserGroupProvider</class>
+            <property name="Users File">./auth-conf/users.xml</property>
+            <property name="Legacy Authorized Users File"></property>
+            <property name="Initial User Identity 0">CN=my-fadi-nifi-0.my-fadi-nifi-headless.default.svc.cluster.local, OU=NIFI</property>
+            <property name="Initial User Identity admin">cn=admin,dc=ldap,dc=example,dc=be</property>
+        </userGroupProvider>
+        <!--
+            The LdapUserGroupProvider will retrieve users and groups from an LDAP server. The users and groups
+            are not configurable.
+            'Authentication Strategy' - How the connection to the LDAP server is authenticated. Possible
+                values are ANONYMOUS, SIMPLE, LDAPS, or START_TLS.
+            'Manager DN' - The DN of the manager that is used to bind to the LDAP server to search for users.
+            'Manager Password' - The password of the manager that is used to bind to the LDAP server to
+                search for users.
+            'TLS - Keystore' - Path to the Keystore that is used when connecting to LDAP using LDAPS or START_TLS.
+            'TLS - Keystore Password' - Password for the Keystore that is used when connecting to LDAP
+                using LDAPS or START_TLS.
+            'TLS - Keystore Type' - Type of the Keystore that is used when connecting to LDAP using
+                LDAPS or START_TLS (i.e. JKS or PKCS12).
+            'TLS - Truststore' - Path to the Truststore that is used when connecting to LDAP using LDAPS or START_TLS.
+            'TLS - Truststore Password' - Password for the Truststore that is used when connecting to
+                LDAP using LDAPS or START_TLS.
+            'TLS - Truststore Type' - Type of the Truststore that is used when connecting to LDAP using
+                LDAPS or START_TLS (i.e. JKS or PKCS12).
+            'TLS - Client Auth' - Client authentication policy when connecting to LDAP using LDAPS or START_TLS.
+                Possible values are REQUIRED, WANT, NONE.
+            'TLS - Protocol' - Protocol to use when connecting to LDAP using LDAPS or START_TLS. (i.e. TLS,
+                TLSv1.1, TLSv1.2, etc).
+            'TLS - Shutdown Gracefully' - Specifies whether the TLS should be shut down gracefully
+                before the target context is closed. Defaults to false.
+            'Referral Strategy' - Strategy for handling referrals. Possible values are FOLLOW, IGNORE, THROW.
+            'Connect Timeout' - Duration of connect timeout. (i.e. 10 secs).
+            'Read Timeout' - Duration of read timeout. (i.e. 10 secs).
+            'Url' - Space-separated list of URLs of the LDAP servers (i.e. ldap://<hostname>:<port>).
+            'Page Size' - Sets the page size when retrieving users and groups. If not specified, no paging is performed.
+            'Sync Interval' - Duration of time between syncing users and groups (i.e. 30 mins). Minimum allowable value is 10 secs.
+            'User Search Base' - Base DN for searching for users (i.e. ou=users,o=nifi). Required to search users.
+            'User Object Class' - Object class for identifying users (i.e. person). Required if searching users.
+            'User Search Scope' - Search scope for searching users (ONE_LEVEL, OBJECT, or SUBTREE). Required if searching users.
+            'User Search Filter' - Filter for searching for users against the 'User Search Base' (i.e. (memberof=cn=team1,ou=groups,o=nifi) ). Optional.
+            'User Identity Attribute' - Attribute to use to extract user identity (i.e. cn). Optional. If not set, the entire DN is used.
+            'User Group Name Attribute' - Attribute to use to define group membership (i.e. memberof). Optional. If not set
+                group membership will not be calculated through the users. Will rely on group membership being defined
+                through 'Group Member Attribute' if set. The value of this property is the name of the attribute in the user ldap entry that
+                associates them with a group. The value of that user attribute could be a dn or group name for instance. What value is expected
+                is configured in the 'User Group Name Attribute - Referenced Group Attribute'.
+            'User Group Name Attribute - Referenced Group Attribute' - If blank, the value of the attribute defined in 'User Group Name Attribute'
+                is expected to be the full dn of the group. If not blank, this property will define the attribute of the group ldap entry that
+                the value of the attribute defined in 'User Group Name Attribute' is referencing (i.e. name). Use of this property requires that
+                'Group Search Base' is also configured.
+            'Group Search Base' - Base DN for searching for groups (i.e. ou=groups,o=nifi). Required to search groups.
+            'Group Object Class' - Object class for identifying groups (i.e. groupOfNames). Required if searching groups.
+            'Group Search Scope' - Search scope for searching groups (ONE_LEVEL, OBJECT, or SUBTREE). Required if searching groups.
+            'Group Search Filter' - Filter for searching for groups against the 'Group Search Base'. Optional.
+            'Group Name Attribute' - Attribute to use to extract group name (i.e. cn). Optional. If not set, the entire DN is used.
+            'Group Member Attribute' - Attribute to use to define group membership (i.e. member). Optional. If not set
+                group membership will not be calculated through the groups. Will rely on group membership being defined
+                through 'User Group Name Attribute' if set. The value of this property is the name of the attribute in the group ldap entry that
+                associates them with a user. The value of that group attribute could be a dn or memberUid for instance. What value is expected
+                is configured in the 'Group Member Attribute - Referenced User Attribute'. (i.e. member: cn=User 1,ou=users,o=nifi vs. memberUid: user1)
+            'Group Member Attribute - Referenced User Attribute' - If blank, the value of the attribute defined in 'Group Member Attribute'
+                is expected to be the full dn of the user. If not blank, this property will define the attribute of the user ldap entry that
+                the value of the attribute defined in 'Group Member Attribute' is referencing (i.e. uid). Use of this property requires that
+                'User Search Base' is also configured. (i.e. member: cn=User 1,ou=users,o=nifi vs. memberUid: user1)
+            NOTE: Any identity mapping rules specified in nifi.properties will also be applied to the user identities.
+                Group names are not mapped.
+        -->
+        <userGroupProvider>
+            <identifier>ldap-user-group-provider</identifier>
+            <class>org.apache.nifi.ldap.tenants.LdapUserGroupProvider</class>
+            <property name="Authentication Strategy">SIMPLE</property>
+            <property name="Manager DN">cn=admin,dc=ldap,dc=example,dc=be</property>
+            <property name="Manager Password">Z2JHHezi4aAA</property>
+            <property name="TLS - Keystore">/opt/nifi/nifi-current/conf/my-fadi-nifi-0.my-fadi-nifi-headless..svc.cluster.local/keystore.jks</property>
+            <property name="TLS - Keystore Password">changeMe</property>
+            <property name="TLS - Keystore Type">jks</property>
+            <property name="TLS - Truststore">/opt/nifi/nifi-current/conf/my-fadi-nifi-0.my-fadi-nifi-headless..svc.cluster.local/truststore.jks</property>
+            <property name="TLS - Truststore Password">changeMe</property>
+            <property name="TLS - Truststore Type">JKS</property>
+            <property name="TLS - Client Auth">NONE</property>
+            <property name="TLS - Protocol">TLS</property>
+            <property name="TLS - Shutdown Gracefully">false</property>
+            <property name="Referral Strategy">IGNORE</property>
+            <property name="Connect Timeout">10 secs</property>
+            <property name="Read Timeout">10 secs</property>
+            <property name="Url">ldap://fadi-openldap:389</property>
+            <property name="Page Size"></property>
+            <property name="Sync Interval">30 mins</property>
+            <property name="User Search Base">cn=admin,dc=ldap,dc=cetic,dc=be</property>
+            <property name="User Object Class">person</property>
+            <property name="User Search Scope">ONE_LEVEL</property>
+            <property name="User Search Filter">(objectClass=*)</property>
+            <property name="User Identity Attribute"></property>
+            <property name="User Group Name Attribute"></property>
+            <property name="User Group Name Attribute - Referenced Group Attribute"></property>
+            <property name="Group Search Base"></property>
+            <property name="Group Object Class">group</property>
+            <property name="Group Search Scope">ONE_LEVEL</property>
+            <property name="Group Search Filter"></property>
+            <property name="Group Name Attribute"></property>
+            <property name="Group Member Attribute"></property>
+            <property name="Group Member Attribute - Referenced User Attribute"></property>
+        </userGroupProvider>
+  
+        <!--
+            The CompositeUserGroupProvider will provide support for retrieving users and groups from multiple sources.
+            - User Group Provider [unique key] - The identifier of user group providers to load from. The name of
+                each property must be unique, for example: "User Group Provider A", "User Group Provider B",
+                "User Group Provider C" or "User Group Provider 1", "User Group Provider 2", "User Group Provider 3"
+                NOTE: Any identity mapping rules specified in nifi.properties are not applied in this implementation. This behavior
+                would need to be applied by the base implementation.
+        -->
+        <userGroupProvider>
+            <identifier>composite-configurable-user-group-provider</identifier>
+            <class>org.apache.nifi.authorization.CompositeConfigurableUserGroupProvider</class>
+            <property name="Configurable User Group Provider">file-user-group-provider</property>
+            <property name="User Group Provider 1">ldap-user-group-provider</property>
+        </userGroupProvider>
+  
+        <!--
+            The CompositeConfigurableUserGroupProvider will provide support for retrieving users and groups from multiple sources.
+            Additionally, a single configurable user group provider is required. Users from the configurable user group provider
+            are configurable, however users loaded from one of the User Group Provider [unique key] will not be.
+            - Configurable User Group Provider - A configurable user group provider.
+            - User Group Provider [unique key] - The identifier of user group providers to load from. The name of
+                each property must be unique, for example: "User Group Provider A", "User Group Provider B",
+                "User Group Provider C" or "User Group Provider 1", "User Group Provider 2", "User Group Provider 3"
+                NOTE: Any identity mapping rules specified in nifi.properties are not applied in this implementation. This behavior
+                would need to be applied by the base implementation.
+        -->
+        <!-- To enable the composite-configurable-user-group-provider remove 2 lines. This is 1 of 2.
+        <userGroupProvider>
+            <identifier>composite-configurable-user-group-provider</identifier>
+            <class>org.apache.nifi.authorization.CompositeConfigurableUserGroupProvider</class>
+            <property name="Configurable User Group Provider">file-user-group-provider</property>
+            <property name="User Group Provider 1"></property>
+        </userGroupProvider>
+        To enable the composite-configurable-user-group-provider remove 2 lines. This is 2 of 2. -->
+  
+        <!--
+            The FileAccessPolicyProvider will provide support for managing access policies which is backed by a file
+            on the local file system.
+            - User Group Provider - The identifier for an User Group Provider defined above that will be used to access
+                users and groups for use in the managed access policies.
+            - Authorizations File - The file where the FileAccessPolicyProvider will store policies.
+            - Initial Admin Identity - The identity of an initial admin user that will be granted access to the UI and
+                given the ability to create additional users, groups, and policies. The value of this property could be
+                a DN when using certificates or LDAP, or a Kerberos principal. This property will only be used when there
+                are no other policies defined. If this property is specified then a Legacy Authorized Users File can not be specified.
+                NOTE: Any identity mapping rules specified in nifi.properties will also be applied to the initial admin identity,
+                so the value should be the unmapped identity. This identity must be found in the configured User Group Provider.
+            - Legacy Authorized Users File - The full path to an existing authorized-users.xml that will be automatically
+                converted to the new authorizations model. If this property is specified then an Initial Admin Identity can
+                not be specified, and this property will only be used when there are no other users, groups, and policies defined.
+                NOTE: Any users in the legacy users file must be found in the configured User Group Provider.
+            - Node Identity [unique key] - The identity of a NiFi cluster node. When clustered, a property for each node
+                should be defined, so that every node knows about every other node. If not clustered these properties can be ignored.
+                The name of each property must be unique, for example for a three node cluster:
+                "Node Identity A", "Node Identity B", "Node Identity C" or "Node Identity 1", "Node Identity 2", "Node Identity 3"
+                NOTE: Any identity mapping rules specified in nifi.properties will also be applied to the node identities,
+                so the values should be the unmapped identities (i.e. full DN from a certificate). This identity must be found
+                in the configured User Group Provider.
+        -->
+        <accessPolicyProvider>
+            <identifier>file-access-policy-provider</identifier>
+            <class>org.apache.nifi.authorization.FileAccessPolicyProvider</class>
+            <property name="User Group Provider">file-user-group-provider</property>
+            <property name="Authorizations File">./auth-conf/authorizations.xml</property>
+            <property name="Initial Admin Identity">cn=admin,dc=ldap,dc=example,dc=be</property>
+            <property name="Legacy Authorized Users File"></property>
+            <property name="Node Identity 0">CN=my-fadi-nifi-0.my-fadi-nifi-headless.default.svc.cluster.local, OU=NIFI</property>
+            <property name="Node Identity"></property>
+        </accessPolicyProvider>
+         <!--
+            The StandardManagedAuthorizer. This authorizer implementation must be configured with the
+            Access Policy Provider which it will use to access and manage users, groups, and policies.
+            These users, groups, and policies will be used to make all access decisions during authorization
+            requests.
+            - Access Policy Provider - The identifier for an Access Policy Provider defined above.
+        -->
+        <authorizer>
+            <identifier>managed-authorizer</identifier>
+            <class>org.apache.nifi.authorization.StandardManagedAuthorizer</class>
+            <property name="Access Policy Provider">file-access-policy-provider</property>
+        </authorizer>
+        <!--
+            NOTE: This Authorizer has been replaced with the more granular approach configured above with the Standard
+            Managed Authorizer. However, it is still available for backwards compatibility reasons.
+            The FileAuthorizer is NiFi's provided authorizer and has the following properties:
+            - Authorizations File - The file where the FileAuthorizer will store policies.
+            - Users File - The file where the FileAuthorizer will store users and groups.
+            - Initial Admin Identity - The identity of an initial admin user that will be granted access to the UI and
+                given the ability to create additional users, groups, and policies. The value of this property could be
+                a DN when using certificates or LDAP, or a Kerberos principal. This property will only be used when there
+                are no other users, groups, and policies defined. If this property is specified then a Legacy Authorized
+                Users File can not be specified.
+                NOTE: Any identity mapping rules specified in nifi.properties will also be applied to the initial admin identity,
+                so the value should be the unmapped identity.
+            - Legacy Authorized Users File - The full path to an existing authorized-users.xml that will be automatically
+                converted to the new authorizations model. If this property is specified then an Initial Admin Identity can
+                not be specified, and this property will only be used when there are no other users, groups, and policies defined.
+            - Node Identity [unique key] - The identity of a NiFi cluster node. When clustered, a property for each node
+                should be defined, so that every node knows about every other node. If not clustered these properties can be ignored.
+                The name of each property must be unique, for example for a three node cluster:
+                "Node Identity A", "Node Identity B", "Node Identity C" or "Node Identity 1", "Node Identity 2", "Node Identity 3"
+                NOTE: Any identity mapping rules specified in nifi.properties will also be applied to the node identities,
+                so the values should be the unmapped identities (i.e. full DN from a certificate).
+        -->
+        <authorizer>
+            <identifier>file-provider</identifier>
+            <class>org.apache.nifi.authorization.FileAuthorizer</class>
+            <property name="Authorizations File">./auth-conf/authorizations.xml</property>
+            <property name="Users File">./auth-conf/users.xml</property>
+            <property name="Initial Admin Identity">cn=admin,dc=ldap,dc=example,dc=be</property>
+            <property name="Legacy Authorized Users File"></property>
+  
+        </authorizer>
+    </authorizers>
+  bootstrap-notification-services.xml: "<?xml version=\"1.0\"?>\n<!--\n  Licensed to
+    the Apache Software Foundation (ASF) under one or more\n  contributor license agreements.
+    \ See the NOTICE file distributed with\n  this work for additional information regarding
+    copyright ownership.\n  The ASF licenses this file to You under the Apache License,
+    Version 2.0\n  (the \"License\"); you may not use this file except in compliance
+    with\n  the License.  You may obtain a copy of the License at\n      http://www.apache.org/licenses/LICENSE-2.0\n
+    \ Unless required by applicable law or agreed to in writing, software\n  distributed
+    under the License is distributed on an \"AS IS\" BASIS,\n  WITHOUT WARRANTIES OR
+    CONDITIONS OF ANY KIND, either express or implied.\n  See the License for the specific
+    language governing permissions and\n  limitations under the License.\n-->\n<services>\n
+    \   <!-- This file is used to define how interested parties are notified when events
+    in NiFi's lifecycle occur. -->\n    <!-- The format of this file is:\n        <services>\n
+    \           <service>\n                <id>service-identifier</id>\n                <class>org.apache.nifi.notifications.DesiredNotificationService</class>\n
+    \               <property name=\"property name\">property value</property>\n                <property
+    name=\"another property\">another property value</property>\n            </service>\n
+    \       </services>\n        \n        This file can contain 0 to many different
+    service definitions.\n        The id can then be referenced from the bootstrap.conf
+    file in order to configure the notification service\n        to be used when particular
+    lifecycle events occur.\n    -->\n    \n<!--\n     <service>\n        <id>email-notification</id>\n
+    \       <class>org.apache.nifi.bootstrap.notification.email.EmailNotificationService</class>\n
+    \       <property name=\"SMTP Hostname\"></property>\n        <property name=\"SMTP
+    Port\"></property>\n        <property name=\"SMTP Username\"></property>\n        <property
+    name=\"SMTP Password\"></property>\n        <property name=\"SMTP TLS\"></property>\n
+    \       <property name=\"From\"></property>\n        <property name=\"To\"></property>\n
+    \    </service>\n-->\n<!--\n     <service>\n        <id>http-notification</id>\n
+    \       <class>org.apache.nifi.bootstrap.notification.http.HttpNotificationService</class>\n
+    \       <property name=\"URL\"></property>\n     </service>\n-->\n</services>\n"
+  bootstrap.conf: |+
+    #
+    # Licensed to the Apache Software Foundation (ASF) under one or more
+    # contributor license agreements.  See the NOTICE file distributed with
+    # this work for additional information regarding copyright ownership.
+    # The ASF licenses this file to You under the Apache License, Version 2.0
+    # (the "License"); you may not use this file except in compliance with
+    # the License.  You may obtain a copy of the License at
+    #
+    #   http://www.apache.org/licenses/LICENSE-2.0
+    #
+    # Unless required by applicable law or agreed to in writing, software
+    # distributed under the License is distributed on an "AS IS" BASIS,
+    # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    # See the License for the specific language governing permissions and
+    # limitations under the License.
+    #
+  
+    # Java command to use when running NiFi
+    java=java
+  
+    # Username to use when running NiFi. This value will be ignored on Windows.
+    run.as=
+  
+    # Configure where NiFi's lib and conf directories live
+    lib.dir=./lib
+    conf.dir=./conf
+  
+    # How long to wait after telling NiFi to shutdown before explicitly killing the Process
+    graceful.shutdown.seconds=20
+  
+    # Disable JSR 199 so that we can use JSP's without running a JDK
+    java.arg.1=-Dorg.apache.jasper.compiler.disablejsr199=true
+  
+    # JVM memory settings
+    java.arg.2=-Xms2g
+    java.arg.3=-Xmx2g
+  
+    # Enable Remote Debugging
+    #java.arg.debug=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=8000
+  
+    java.arg.4=-Djava.net.preferIPv4Stack=true
+  
+    # allowRestrictedHeaders is required for Cluster/Node communications to work properly
+    java.arg.5=-Dsun.net.http.allowRestrictedHeaders=true
+    java.arg.6=-Djava.protocol.handler.pkgs=sun.net.www.protocol
+  
+    # The G1GC is still considered experimental but has proven to be very advantageous in providing great
+    # performance without significant "stop-the-world" delays.
+    #java.arg.13=-XX:+UseG1GC
+  
+    #Set headless mode by default
+    java.arg.14=-Djava.awt.headless=true
+  
+    # Master key in hexadecimal format for encrypted sensitive configuration values
+    nifi.bootstrap.sensitive.key=
+  
+    # Sets the provider of SecureRandom to /dev/urandom to prevent blocking on VMs
+    java.arg.15=-Djava.security.egd=file:/dev/urandom
+  
+    ###
+    # Notification Services for notifying interested parties when NiFi is stopped, started, dies
+    ###
+  
+    # XML File that contains the definitions of the notification services
+    notification.services.file=./conf/bootstrap-notification-services.xml
+  
+    # In the case that we are unable to send a notification for an event, how many times should we retry?
+    notification.max.attempts=5
+  
+    # Comma-separated list of identifiers that are present in the notification.services.file; which services should be used to notify when NiFi is started?
+    #nifi.start.notification.services=email-notification
+  
+    # Comma-separated list of identifiers that are present in the notification.services.file; which services should be used to notify when NiFi is stopped?
+    #nifi.stop.notification.services=email-notification
+  
+    # Comma-separated list of identifiers that are present in the notification.services.file; which services should be used to notify when NiFi dies?
+    #nifi.dead.notification.services=email-notification
+  
+  
+  flow.xml: |
+    <?xml version="1.0" encoding="UTF-8" standalone="no"?>
+    <flowController encoding-version="1.3">
+        <maxTimerDrivenThreadCount>10</maxTimerDrivenThreadCount>
+        <maxEventDrivenThreadCount>5</maxEventDrivenThreadCount>
+        <registries>
+            <flowRegistry>
+                <id>d600bd3c-fe59-46ae-a6d5-cb0d959aa7fc</id>
+                <name>default</name>
+                <url>http://:80</url>
+                <description/>
+            </flowRegistry>
+        </registries>
+        <rootGroup>
+            <id>e169c248-9781-4133-a954-85100ff2eea0</id>
+            <name>Nifi Flow</name>
+            <position x="0.0" y="0.0"/>
+            <comment/>
+        </rootGroup>
+        <controllerServices/>
+        <reportingTasks/>
+    </flowController>
+  login-identity-providers-ldap.xml: "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<!--\n
+    \ Licensed to the Apache Software Foundation (ASF) under one or more\n  contributor
+    license agreements.  See the NOTICE file distributed with\n  this work for additional
+    information regarding copyright ownership.\n  The ASF licenses this file to You
+    under the Apache License, Version 2.0\n  (the \"License\"); you may not use this
+    file except in compliance with\n  the License.  You may obtain a copy of the License
+    at\n      http://www.apache.org/licenses/LICENSE-2.0\n  Unless required by applicable
+    law or agreed to in writing, software\n  distributed under the License is distributed
+    on an \"AS IS\" BASIS,\n  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+    or implied.\n  See the License for the specific language governing permissions and\n
+    \ limitations under the License.\n-->\n<!--\n    This file lists the login identity
+    providers to use when running securely. In order\n    to use a specific provider
+    it must be configured here and it's identifier\n    must be specified in the nifi.properties
+    file.\n-->\n<loginIdentityProviders>\n    <!--\n        Identity Provider for users
+    logging in with username/password against an LDAP server.\n        \n        'Authentication
+    Strategy' - How the connection to the LDAP server is authenticated. Possible\n            values
+    are ANONYMOUS, SIMPLE, LDAPS, or START_TLS.\n        \n        'Manager DN' - The
+    DN of the manager that is used to bind to the LDAP server to search for users.\n
+    \       'Manager Password' - The password of the manager that is used to bind to
+    the LDAP server to\n            search for users.\n            \n        'TLS -
+    Keystore' - Path to the Keystore that is used when connecting to LDAP using LDAPS
+    or START_TLS.\n        'TLS - Keystore Password' - Password for the Keystore that
+    is used when connecting to LDAP\n            using LDAPS or START_TLS.\n        'TLS
+    - Keystore Type' - Type of the Keystore that is used when connecting to LDAP using\n
+    \           LDAPS or START_TLS (i.e. JKS or PKCS12).\n        'TLS - Truststore'
+    - Path to the Truststore that is used when connecting to LDAP using LDAPS or START_TLS.\n
+    \       'TLS - Truststore Password' - Password for the Truststore that is used when
+    connecting to\n            LDAP using LDAPS or START_TLS.\n        'TLS - Truststore
+    Type' - Type of the Truststore that is used when connecting to LDAP using\n            LDAPS
+    or START_TLS (i.e. JKS or PKCS12).\n        'TLS - Client Auth' - Client authentication
+    policy when connecting to LDAP using LDAPS or START_TLS.\n            Possible values
+    are REQUIRED, WANT, NONE.\n        'TLS - Protocol' - Protocol to use when connecting
+    to LDAP using LDAPS or START_TLS. (i.e. TLS,\n            TLSv1.1, TLSv1.2, etc).\n
+    \       'TLS - Shutdown Gracefully' - Specifies whether the TLS should be shut down
+    gracefully \n            before the target context is closed. Defaults to false.\n
+    \           \n        'Referral Strategy' - Strategy for handling referrals. Possible
+    values are FOLLOW, IGNORE, THROW.\n        'Connect Timeout' - Duration of connect
+    timeout. (i.e. 10 secs).\n        'Read Timeout' - Duration of read timeout. (i.e.
+    10 secs).\n       \n        'Url' - Space-separated list of URLs of the LDAP servers
+    (i.e. ldap://<hostname>:<port>).\n        'User Search Base' - Base DN for searching
+    for users (i.e. CN=Users,DC=example,DC=com).\n        'User Search Filter' - Filter
+    for searching for users against the 'User Search Base'.\n            (i.e. sAMAccountName={0}).
+    The user specified name is inserted into '{0}'.\n        'Identity Strategy' - Strategy
+    to identify users. Possible values are USE_DN and USE_USERNAME.\n            The
+    default functionality if this property is missing is USE_DN in order to retain\n
+    \           backward compatibility. USE_DN will use the full DN of the user entry
+    if possible.\n            USE_USERNAME will use the username the user logged in
+    with.\n        'Authentication Expiration' - The duration of how long the user authentication
+    is valid\n            for. If the user never logs out, they will be required to
+    log back in following\n            this duration.\n    -->\n    <provider>\n        <identifier>ldap-provider</identifier>\n
+    \       <class>org.apache.nifi.ldap.LdapProvider</class>\n        <property name=\"Authentication
+    Strategy\">SIMPLE</property>\n        <property name=\"Manager DN\">cn=admin,dc=ldap,dc=example,dc=be</property>\n
+    \       <property name=\"Manager Password\">Z2JHHezi4aAA</property>\n
+    \       <property name=\"TLS - Keystore\">/opt/nifi/nifi-current/conf/my-fadi-nifi-0.my-fadi-nifi-headless.default.svc.cluster.local/keystore.jks</property>\n
+    \       <property name=\"TLS - Keystore Password\"></property>\n
+    \       <property name=\"TLS - Keystore Type\">JKS</property>\n        <property
+    name=\"TLS - Truststore\">/opt/nifi/nifi-current/conf/my-fadi-nifi-0.my-fadi-nifi-headless.default.svc.cluster.local/truststore.jks</property>\n
+    \       <property name=\"TLS - Truststore Password\"></property>\n
+    \       <property name=\"TLS - Truststore Type\">JKS</property>\n        <property
+    name=\"TLS - Client Auth\">NONE</property>\n        <property name=\"TLS - Protocol\">TLS</property>\n
+    \       <property name=\"TLS - Shutdown Gracefully\">false</property>\n\n        <property
+    name=\"Referral Strategy\">FOLLOW</property>\n        <property name=\"Connect Timeout\">10
+    secs</property>\n        <property name=\"Read Timeout\">10 secs</property>\n        <property
+    name=\"Url\">ldap://fadi-openldap:389</property>\n        <property name=\"User
+    Search Base\">cn=admin,dc=ldap,dc=cetic,dc=be</property>\n        <property name=\"User
+    Search Filter\">(cn={0})</property>\n        <property name=\"Identity Strategy\"></property>\n
+    \       <property name=\"Authentication Expiration\">12 hours</property>\n    </provider>\n</loginIdentityProviders>"
+  nifi.properties: |
+    # Licensed to the Apache Software Foundation (ASF) under one or more
+    # contributor license agreements.  See the NOTICE file distributed with
+    # this work for additional information regarding copyright ownership.
+    # The ASF licenses this file to You under the Apache License, Version 2.0
+    # (the "License"); you may not use this file except in compliance with
+    # the License.  You may obtain a copy of the License at
+    #
+    #     http://www.apache.org/licenses/LICENSE-2.0
+    #
+    # Unless required by applicable law or agreed to in writing, software
+    # distributed under the License is distributed on an "AS IS" BASIS,
+    # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    # See the License for the specific language governing permissions and
+    # limitations under the License.
+  
+    # Core Properties #
+    nifi.flow.configuration.file=../data/flow.xml.gz
+    nifi.flow.configuration.archive.enabled=true
+    nifi.flow.configuration.archive.dir=../data/archive/
+    nifi.flow.configuration.archive.max.time=30 days
+    nifi.flow.configuration.archive.max.storage=500 MB
+    nifi.flow.configuration.archive.max.count=
+    nifi.flowcontroller.autoResumeState=true
+    nifi.flowcontroller.graceful.shutdown.period=10 sec
+    nifi.flowservice.writedelay.interval=500 ms
+    nifi.administrative.yield.duration=30 sec
+    # If a component has no work to do (is "bored"), how long should we wait before checking again for work?
+    nifi.bored.yield.duration=10 millis
+  
+    nifi.authorizer.configuration.file=./conf/authorizers.xml
+    nifi.login.identity.provider.configuration.file=./conf/login-identity-providers.xml
+    nifi.templates.directory=../data/templates
+    nifi.ui.banner.text=
+    nifi.ui.autorefresh.interval=30 sec
+    nifi.nar.library.directory=./lib
+    nifi.nar.library.directory.custom=
+    nifi.nar.library.autoload.directory=./extensions
+    nifi.nar.working.directory=./work/nar/
+    nifi.documentation.working.directory=./work/docs/components
+  
+    ####################
+    # State Management #
+    ####################
+    nifi.state.management.configuration.file=./conf/state-management.xml
+    # The ID of the local state provider
+    nifi.state.management.provider.local=local-provider
+    # The ID of the cluster-wide state provider. This will be ignored if NiFi is not clustered but must be populated if running in a cluster.
+    nifi.state.management.provider.cluster=zk-provider
+    # Specifies whether or not this instance of NiFi should run an embedded ZooKeeper server
+    nifi.state.management.embedded.zookeeper.start=false
+    # Properties file that provides the ZooKeeper properties to use if <nifi.state.management.embedded.zookeeper.start> is set to true
+    nifi.state.management.embedded.zookeeper.properties=./conf/zookeeper.properties
+  
+  
+    # H2 Settings
+    nifi.database.directory=../data/database_repository
+    nifi.h2.url.append=;LOCK_TIMEOUT=25000;WRITE_DELAY=0;AUTO_SERVER=FALSE
+  
+    # FlowFile Repository
+    nifi.flowfile.repository.implementation=org.apache.nifi.controller.repository.WriteAheadFlowFileRepository
+    nifi.flowfile.repository.directory=../flowfile_repository
+    nifi.flowfile.repository.partitions=256
+    nifi.flowfile.repository.checkpoint.interval=2 mins
+    nifi.flowfile.repository.always.sync=false
+  
+    nifi.swap.manager.implementation=org.apache.nifi.controller.FileSystemSwapManager
+    nifi.queue.swap.threshold=20000
+    nifi.swap.in.period=5 sec
+    nifi.swap.in.threads=1
+    nifi.swap.out.period=5 sec
+    nifi.swap.out.threads=4
+  
+    # Content Repository
+    nifi.content.repository.implementation=org.apache.nifi.controller.repository.FileSystemRepository
+    nifi.content.claim.max.appendable.size=1 MB
+    nifi.content.claim.max.flow.files=100
+    nifi.content.repository.directory.default=../content_repository
+    nifi.content.repository.archive.max.retention.period=3 days
+    nifi.content.repository.archive.max.usage.percentage=85%
+    nifi.content.repository.archive.enabled=true
+    nifi.content.repository.always.sync=false
+    nifi.content.viewer.url=/nifi-content-viewer/
+  
+    # Provenance Repository Properties
+    nifi.provenance.repository.implementation=org.apache.nifi.provenance.WriteAheadProvenanceRepository
+    nifi.provenance.repository.debug.frequency=1_000_000
+    nifi.provenance.repository.encryption.key.provider.implementation=
+    nifi.provenance.repository.encryption.key.provider.location=
+    nifi.provenance.repository.encryption.key.id=
+    nifi.provenance.repository.encryption.key=
+  
+    # Persistent Provenance Repository Properties
+    nifi.provenance.repository.directory.default=../provenance_repository
+    nifi.provenance.repository.max.storage.time=10 days
+    nifi.provenance.repository.max.storage.size=8 GB
+    nifi.provenance.repository.rollover.time=30 secs
+    nifi.provenance.repository.rollover.size=100 MB
+    nifi.provenance.repository.query.threads=2
+    nifi.provenance.repository.index.threads=2
+    nifi.provenance.repository.compress.on.rollover=true
+    nifi.provenance.repository.always.sync=false
+    nifi.provenance.repository.journal.count=16
+    # Comma-separated list of fields. Fields that are not indexed will not be searchable. Valid fields are:
+    # EventType, FlowFileUUID, Filename, TransitURI, ProcessorID, AlternateIdentifierURI, Relationship, Details
+    nifi.provenance.repository.indexed.fields=EventType, FlowFileUUID, Filename, ProcessorID, Relationship
+    # FlowFile Attributes that should be indexed and made searchable.  Some examples to consider are filename, uuid, mime.type
+    nifi.provenance.repository.indexed.attributes=
+    # Large values for the shard size will result in more Java heap usage when searching the Provenance Repository
+    # but should provide better performance
+    nifi.provenance.repository.index.shard.size=500 MB
+    # Indicates the maximum length that a FlowFile attribute can be when retrieving a Provenance Event from
+    # the repository. If the length of any attribute exceeds this value, it will be truncated when the event is retrieved.
+    nifi.provenance.repository.max.attribute.length=65536
+  
+    # Volatile Provenance Respository Properties
+    nifi.provenance.repository.buffer.size=100000
+  
+    # Component Status Repository
+    nifi.components.status.repository.implementation=org.apache.nifi.controller.status.history.VolatileComponentStatusRepository
+    nifi.components.status.repository.buffer.size=1440
+    nifi.components.status.snapshot.frequency=1 min
+  
+    # Site to Site properties
+    nifi.remote.input.host=
+    nifi.remote.input.secure=true
+    nifi.remote.input.socket.port=10000
+    nifi.remote.input.http.enabled=true
+    nifi.remote.input.http.transaction.ttl=30 sec
+    nifi.remote.contents.cache.expiration=30 secs
+  
+    # web properties #
+    nifi.web.war.directory=./lib
+    nifi.web.proxy.host=nifi.example.cetic.be
+    nifi.web.https.port=8443
+    nifi.web.http.host=
+    nifi.web.http.network.interface.default=
+    nifi.web.https.host=
+    nifi.web.https.network.interface.default=
+    nifi.web.jetty.working.directory=./work/jetty
+    nifi.web.jetty.threads=200
+    # nifi.web.proxy.context.path=
+  
+    # security properties #
+    nifi.sensitive.props.key=changeMechangeMe
+    nifi.sensitive.props.key.protected=
+    nifi.sensitive.props.algorithm=NIFI_PBKDF2_AES_GCM_256
+    nifi.sensitive.props.provider=BC
+    nifi.sensitive.props.additional.keys=
+  
+    
+    nifi.security.keystore=/opt/nifi/nifi-current/conf/my-fadi-nifi-0.my-fadi-nifi-headless.default.svc.cluster.local/keystore.jks
+    nifi.security.keystoreType=jks
+    nifi.security.keystorePasswd=changeMe
+    nifi.security.keyPasswd=changeMe
+    nifi.security.truststore=/opt/nifi/nifi-current/conf/my-fadi-nifi-0.my-fadi-nifi-headless.default.svc.cluster.local/truststore.jks
+    nifi.security.truststoreType=jks
+    nifi.security.truststorePasswd=changeMe
+    proxiedEntity=cn=admin,dc=ldap,dc=example,dc=be
+    nifi.security.user.authorizer=file-provider
+    nifi.security.user.login.identity.provider=ldap-provider
+    
+    nifi.security.needClientAuth=
+  
+    
+  
+  
+    # Apache Knox SSO Properties #
+    nifi.security.user.knox.url=
+    nifi.security.user.knox.publicKey=
+    nifi.security.user.knox.cookieName=hadoop-jwt
+    nifi.security.user.knox.audiences=
+  
+    # Identity Mapping Properties #
+    # These properties allow normalizing user identities such that identities coming from different identity providers
+    # (certificates, LDAP, Kerberos) can be treated the same internally in NiFi. The following example demonstrates normalizing
+    # DNs from certificates and principals from Kerberos into a common identity string:
+    #
+    # nifi.security.identity.mapping.pattern.dn=^CN=(.*?), OU=(.*?), O=(.*?), L=(.*?), ST=(.*?), C=(.*?)$
+    # nifi.security.identity.mapping.value.dn=$1@$2
+    # nifi.security.identity.mapping.pattern.kerb=^(.*?)/instance@(.*?)$
+    # nifi.security.identity.mapping.value.kerb=$1@$2
+  
+    # cluster common properties (all nodes must have same values) #
+    nifi.cluster.protocol.heartbeat.interval=5 sec
+    nifi.cluster.protocol.is.secure=true
+  
+    # cluster node properties (only configure for cluster nodes) #
+    nifi.cluster.is.node=false
+    nifi.cluster.node.address=
+    nifi.cluster.node.protocol.port=6007
+    nifi.cluster.node.protocol.threads=10
+    nifi.cluster.node.protocol.max.threads=50
+    nifi.cluster.node.event.history.size=25
+    nifi.cluster.node.connection.timeout=5 sec
+    nifi.cluster.node.read.timeout=5 sec
+    nifi.cluster.node.max.concurrent.requests=100
+    nifi.cluster.firewall.file=
+    nifi.cluster.flow.election.max.wait.time=1 mins
+    nifi.cluster.flow.election.max.candidates=
+  
+    # zookeeper properties, used for cluster management #
+    nifi.zookeeper.connect.string=
+    nifi.zookeeper.connect.timeout=3 secs
+    nifi.zookeeper.session.timeout=3 secs
+    nifi.zookeeper.root.node=/nifi
+  
+    # Zookeeper properties for the authentication scheme used when creating acls on znodes used for cluster management
+    # Values supported for nifi.zookeeper.auth.type are "default", which will apply world/anyone rights on znodes
+    # and "sasl" which will give rights to the sasl/kerberos identity used to authenticate the nifi node
+    # The identity is determined using the value in nifi.kerberos.service.principal and the removeHostFromPrincipal
+    # and removeRealmFromPrincipal values (which should align with the kerberos.removeHostFromPrincipal and kerberos.removeRealmFromPrincipal
+    # values configured on the zookeeper server).
+    nifi.zookeeper.auth.type=
+    nifi.zookeeper.kerberos.removeHostFromPrincipal=
+    nifi.zookeeper.kerberos.removeRealmFromPrincipal=
+  
+    # kerberos #
+    nifi.kerberos.krb5.file=
+  
+    # kerberos service principal #
+    nifi.kerberos.service.principal=
+    nifi.kerberos.service.keytab.location=
+  
+    # kerberos spnego principal #
+    nifi.kerberos.spnego.principal=
+    nifi.kerberos.spnego.keytab.location=
+    nifi.kerberos.spnego.authentication.expiration=12 hours
+  
+    # external properties files for variable registry
+    # supports a comma delimited list of file locations
+    nifi.variable.registry.properties=
+  state-management.xml: |
+    <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+    <stateManagement>
+        <local-provider>
+            <id>local-provider</id>
+            <class>org.apache.nifi.controller.state.providers.local.WriteAheadLocalStateProvider</class>
+            <property name="Directory">./state/local</property>
+            <property name="Always Sync">false</property>
+            <property name="Partitions">16</property>
+            <property name="Checkpoint Interval">2 mins</property>
+        </local-provider>
+        <cluster-provider>
+            <id>zk-provider</id>
+            <class>org.apache.nifi.controller.state.providers.zookeeper.ZooKeeperStateProvider</class>
+            <property name="Connect String">my-fadi-zookeeper:2181</property>
+            <property name="Root Node">/nifi</property>
+            <property name="Session Timeout">10 seconds</property>
+            <property name="Access Control">Open</property>
+        </cluster-provider>
+    </stateManagement>
+  zookeeper.properties: |+
+    #
+    #
+    # Licensed to the Apache Software Foundation (ASF) under one
+    # or more contributor license agreements.  See the NOTICE file
+    # distributed with this work for additional information
+    # regarding copyright ownership.  The ASF licenses this file
+    # to you under the Apache License, Version 2.0 (the
+    # "License"); you may not use this file except in compliance
+    # with the License.  You may obtain a copy of the License at
+    #
+    #   http://www.apache.org/licenses/LICENSE-2.0
+    #
+    # Unless required by applicable law or agreed to in writing,
+    # software distributed under the License is distributed on an
+    # "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    # KIND, either express or implied.  See the License for the
+    # specific language governing permissions and limitations
+    # under the License.
+    #
+    #
+    #
+  
+    initLimit=10
+    autopurge.purgeInterval=24
+    syncLimit=5
+    tickTime=2000
+    dataDir=./state/zookeeper
+    autopurge.snapRetainCount=30
+  
+    #
+    # Specifies the servers that are part of this zookeeper ensemble. For
+    # every NiFi instance running an embedded zookeeper, there needs to be
+    # a server entry below. For instance:
+    #
+    # server.1=nifi-node1-hostname:2888:3888;2181
+    # server.2=nifi-node2-hostname:2888:3888;2181
+    # server.3=nifi-node3-hostname:2888:3888;2181
+    #
+    # The index of the server corresponds to the myid file that gets created
+    # in the dataDir of each node running an embedded zookeeper. See the
+    # administration guide for more details.
+    #
+  
+    server.1=
+---
+# Source: fadi/charts/openldap/templates/configmap-customldif.yaml
+#
+# A ConfigMap spec for openldap slapd that map directly to files under
+# /container/service/slapd/assets/config/bootstrap/ldif/custom
+#
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-fadi-openldap-customldif
+  labels:
+    app: openldap
+    chart: openldap-1.2.7
+    release: my-fadi
+    heritage: Helm
+data:
+  1-default-users.ldif: |-
+    # You can find an example ldif file.
+---
+# Source: fadi/charts/openldap/templates/configmap-env.yaml
+#
+# A ConfigMap spec for openldap slapd that map directly to env variables in the Pod.
+# List of environment variables supported is from the docker image:
+# https://github.com/osixia/docker-openldap#beginner-guide
+# Note that passwords are defined as secrets
+#
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-fadi-openldap-env
+  labels:
+    app: openldap
+    chart: openldap-1.2.7
+    release: my-fadi
+    heritage: Helm
+data:
+  LDAP_BACKEND: hdb
+  LDAP_DOMAIN: ldap.cetic.be
+  LDAP_ORGANISATION: Cetic
+  LDAP_REMOVE_CONFIG_AFTER_SETUP: "false"
+  LDAP_TLS: "true"
+  LDAP_TLS_ENFORCE: "false"
+  LDAP_TLS_VERIFY_CLIENT: try
+---
+# Source: fadi/charts/phpldapadmin/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-fadi-phpldapadmin
+  labels:
+    app: phpldapadmin
+    chart: phpldapadmin-0.1.4
+    release: my-fadi
+    heritage: Helm
+data:
+  PHPLDAPADMIN_HTTPS: "false"
+  PHPLDAPADMIN_LDAP_HOSTS: fadi-openldap
+  PHPLDAPADMIN_TRUST_PROXY_SSL: "true"
+---
+# Source: fadi/charts/postgresql/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-fadi-postgresql-configuration
+  labels:
+    app: postgresql
+    chart: postgresql-0.2.3
+    release: "my-fadi"
+    heritage: "Helm"
+data:
+  pg_hba.conf: |
+    local all all ldap ldapserver=fadi-openldap  ldapport=389 ldaptls=0 ldapbasedn="dc=ldap,dc=cetic,dc=be" ldapbinddn="cn=admin,dc=ldap,dc=cetic,dc=be" ldapbindpasswd=Z2JHHezi4aAA  ldapsearchfilter=cn=$username
+    host all all 0.0.0.0/0  ldap ldapserver=fadi-openldap  ldapport=389 ldaptls=0 ldapbasedn="dc=ldap,dc=cetic,dc=be" ldapbinddn="cn=admin,dc=ldap,dc=cetic,dc=be" ldapbindpasswd=Z2JHHezi4aAA  ldapsearchfilter=cn=$username
+  initdbscripts.sh: |
+    #!/bin/sh
+    psql -c "create role ldap_users;" postgres admin
+    psql -c "create role ldap_groups;" postgres admin
+    psql -c "create database zabbix;" postgres admin
+#
+# A ConfigMap spec for pgldap-config.yaml 
+# /var/lib/pglda-config.yaml
+#
+---
+# Source: fadi/charts/postgresql/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-fadi-postgresql-pgldap-config
+  labels:
+    app: postgresql
+    chart: postgresql-0.2.3
+    release: "my-fadi"
+    heritage: "Helm"
+data:
+  pgldap-config.yaml: |
+    # Reference: https://github.com/larskanis/pg-ldap-sync/blob/master/config/sample-config.yaml
+    # Connection parameters to LDAP server
+    ldap_connection:
+      host: fadi-openldap
+      port: 389
+      auth:
+        method: :simple
+        username: CN=admin,DC=ldap,DC=cetic,DC=be
+        password: Z2JHHezi4aAA
+      # Search parameters for LDAP users which should be synchronized
+    ldap_users:
+      base: CN=admin,DC=ldap,DC=cetic,DC=be
+      # LDAP filter (according to RFC 2254)
+      # defines to users in LDAP to be synchronized
+      filter: (!(cn=admin))
+      # this attribute is used as PG role name
+      name_attribute: cn
+      # lowercase name for use as PG role name
+      lowercase_name: true
+    ldap_groups:
+        base: DC=ldap,DC=cetic,DC=be
+        filter: (|(cn=group1)(cn=group2)(cn=group3))
+        # this attribute is used as PG role name
+        name_attribute: cn
+        # this attribute must reference to all member DN's of the given group
+        member_attribute: member
+    # Connection parameters to PostgreSQL server
+    # see also: http://rubydoc.info/gems/pg/PG/Connection#initialize-instance_method
+    pg_connection:
+      host: fadi-postgresql
+      dbname: postgres # the db name is usually "postgres"
+      user: admin # the user name is usually "postgres"
+      password: Z2JHHezi4aAA # kubectl get secret --namespace fadi <pod_name> -o jsonpath="{.data.postgresql-password}" | base64 --decode
+    pg_users:
+      # Filter for identifying LDAP generated users in the database.
+      # It's the WHERE-condition to "SELECT rolname, oid FROM pg_roles"
+      # filter: rolcanlogin AND NOT rolsuper
+      filter: oid IN (SELECT pam.member FROM pg_auth_members pam JOIN pg_roles pr ON pr.oid=pam.roleid WHERE pr.rolname='ldap_users')
+      # Options for CREATE RULE statements
+      create_options: LOGIN IN ROLE ldap_users
+    pg_groups:
+      # Filter for identifying LDAP generated groups in the database.
+      # It's the WHERE-condition to "SELECT rolname, oid FROM pg_roles"
+      # filter: NOT rolcanlogin AND NOT rolsuper
+      filter: oid IN (SELECT pam.member FROM pg_auth_members pam JOIN pg_roles pr ON pr.oid=pam.roleid WHERE pr.rolname='ldap_groups')
+      # Options for CREATE RULE statements
+      create_options: NOLOGIN IN ROLE ldap_groups
+      #grant_options:
+---
+# Source: fadi/charts/grafana/templates/pvc.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: my-fadi-grafana
+  namespace: default
+  labels:
+    helm.sh/chart: grafana-6.1.17
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: my-fadi
+    app.kubernetes.io/version: "7.3.5"
+    app.kubernetes.io/managed-by: Helm
+  finalizers:
+    - kubernetes.io/pvc-protection
+spec:
+  accessModes:
+    - "ReadWriteOnce"
+  resources:
+    requests:
+      storage: "10Gi"
+---
+# Source: fadi/charts/jupyterhub/templates/hub/pvc.yaml
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: hub-db-dir
+  labels:
+    component: hub
+    app: jupyterhub
+    release: my-fadi
+    chart: jupyterhub-0.11.1
+    heritage: Helm
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: "1Gi"
+---
+# Source: fadi/charts/openldap/templates/pvc.yaml
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: my-fadi-openldap
+  labels:
+    app: openldap
+    chart: openldap-1.2.7
+    release: my-fadi
+    heritage: Helm
+spec:
+  accessModes:
+    - "ReadWriteOnce"
+  resources:
+    requests:
+      storage: "8Gi"
+---
+# Source: fadi/charts/superset/templates/pvc.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: my-fadi-superset
+  labels:
+    app: superset
+    chart: superset-1.2.0
+    release: my-fadi
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: "8Gi"
+---
+# Source: fadi/charts/grafana/templates/clusterrole.yaml
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  labels:
+    helm.sh/chart: grafana-6.1.17
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: my-fadi
+    app.kubernetes.io/version: "7.3.5"
+    app.kubernetes.io/managed-by: Helm
+  name: my-fadi-grafana-clusterrole
+rules: []
+---
+# Source: fadi/charts/jupyterhub/templates/scheduling/user-scheduler/rbac.yaml
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-fadi-user-scheduler
+  labels:
+    component: user-scheduler
+    app: jupyterhub
+    release: my-fadi
+    chart: jupyterhub-0.11.1
+    heritage: Helm
+rules:
+  # Copied from the system:kube-scheduler ClusterRole of the k8s version
+  # matching the kube-scheduler binary we use. A modification of two resource
+  # name references from kube-scheduler to user-scheduler-lock was made.
+  #
+  # NOTE: These rules have been unchanged between 1.12 and 1.15, then changed in
+  #       1.16 and in 1.17, but unchanged in 1.18 and 1.19.
+  #
+  # ref: https://github.com/kubernetes/kubernetes/blob/v1.19.0/plugin/pkg/auth/authorizer/rbac/bootstrappolicy/testdata/cluster-roles.yaml#L696-L829
+  - apiGroups:
+    - ""
+    - events.k8s.io
+    resources:
+    - events
+    verbs:
+    - create
+    - patch
+    - update
+  - apiGroups:
+    - coordination.k8s.io
+    resources:
+    - leases
+    verbs:
+    - create
+  - apiGroups:
+    - coordination.k8s.io
+    resourceNames:
+    - user-scheduler-lock
+    resources:
+    - leases
+    verbs:
+    - get
+    - update
+  - apiGroups:
+    - ""
+    resources:
+    - endpoints
+    verbs:
+    - create
+  - apiGroups:
+    - ""
+    resourceNames:
+    - user-scheduler-lock
+    resources:
+    - endpoints
+    verbs:
+    - get
+    - update
+  - apiGroups:
+    - ""
+    resources:
+    - nodes
+    verbs:
+    - get
+    - list
+    - watch
+  - apiGroups:
+    - ""
+    resources:
+    - pods
+    verbs:
+    - delete
+    - get
+    - list
+    - watch
+  - apiGroups:
+    - ""
+    resources:
+    - bindings
+    - pods/binding
+    verbs:
+    - create
+  - apiGroups:
+    - ""
+    resources:
+    - pods/status
+    verbs:
+    - patch
+    - update
+  - apiGroups:
+    - ""
+    resources:
+    - replicationcontrollers
+    - services
+    verbs:
+    - get
+    - list
+    - watch
+  - apiGroups:
+    - apps
+    - extensions
+    resources:
+    - replicasets
+    verbs:
+    - get
+    - list
+    - watch
+  - apiGroups:
+    - apps
+    resources:
+    - statefulsets
+    verbs:
+    - get
+    - list
+    - watch
+  - apiGroups:
+    - policy
+    resources:
+    - poddisruptionbudgets
+    verbs:
+    - get
+    - list
+    - watch
+  - apiGroups:
+    - ""
+    resources:
+    - persistentvolumeclaims
+    - persistentvolumes
+    verbs:
+    - get
+    - list
+    - watch
+  - apiGroups:
+    - authentication.k8s.io
+    resources:
+    - tokenreviews
+    verbs:
+    - create
+  - apiGroups:
+    - authorization.k8s.io
+    resources:
+    - subjectaccessreviews
+    verbs:
+    - create
+  - apiGroups:
+    - storage.k8s.io
+    resources:
+    - csinodes
+    verbs:
+    - get
+    - list
+    - watch
+
+  # Copied from the system:volume-scheduler ClusterRole of the k8s version
+  # matching the kube-scheduler binary we use.
+  #
+  # NOTE: These rules have not changed between 1.12 and 1.19.
+  #
+  # ref: https://github.com/kubernetes/kubernetes/blob/v1.19.0/plugin/pkg/auth/authorizer/rbac/bootstrappolicy/testdata/cluster-roles.yaml#L1213-L1240
+  - apiGroups:
+    - ""
+    resources:
+    - persistentvolumes
+    verbs:
+    - get
+    - list
+    - patch
+    - update
+    - watch
+  - apiGroups:
+    - storage.k8s.io
+    resources:
+    - storageclasses
+    verbs:
+    - get
+    - list
+    - watch
+  - apiGroups:
+    - ""
+    resources:
+    - persistentvolumeclaims
+    verbs:
+    - get
+    - list
+    - patch
+    - update
+    - watch
+---
+# Source: fadi/charts/traefik/templates/rbac/clusterrole.yaml
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-fadi-traefik
+  labels:
+    app.kubernetes.io/name: traefik
+    helm.sh/chart: traefik-10.6.2
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/instance: my-fadi
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - services
+      - endpoints
+      - secrets
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - extensions
+      - networking.k8s.io
+    resources:
+      - ingresses
+      - ingressclasses
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - extensions
+      - networking.k8s.io
+    resources:
+      - ingresses/status
+    verbs:
+      - update
+  - apiGroups:
+      - traefik.containo.us
+    resources:
+      - ingressroutes
+      - ingressroutetcps
+      - ingressrouteudps
+      - middlewares
+      - middlewaretcps
+      - tlsoptions
+      - tlsstores
+      - traefikservices
+      - serverstransports
+    verbs:
+      - get
+      - list
+      - watch
+---
+# Source: fadi/charts/grafana/templates/clusterrolebinding.yaml
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-fadi-grafana-clusterrolebinding
+  labels:
+    helm.sh/chart: grafana-6.1.17
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: my-fadi
+    app.kubernetes.io/version: "7.3.5"
+    app.kubernetes.io/managed-by: Helm
+subjects:
+  - kind: ServiceAccount
+    name: my-fadi-grafana
+    namespace: default
+roleRef:
+  kind: ClusterRole
+  name: my-fadi-grafana-clusterrole
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: fadi/charts/jupyterhub/templates/scheduling/user-scheduler/rbac.yaml
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-fadi-user-scheduler
+  labels:
+    component: user-scheduler
+    app: jupyterhub
+    release: my-fadi
+    chart: jupyterhub-0.11.1
+    heritage: Helm
+subjects:
+  - kind: ServiceAccount
+    name: user-scheduler
+    namespace: default
+roleRef:
+  kind: ClusterRole
+  name: my-fadi-user-scheduler
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: fadi/charts/traefik/templates/rbac/clusterrolebinding.yaml
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-fadi-traefik
+  labels:
+    app.kubernetes.io/name: traefik
+    helm.sh/chart: traefik-10.6.2
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/instance: my-fadi
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-fadi-traefik
+subjects:
+  - kind: ServiceAccount
+    name: my-fadi-traefik
+    namespace: default
+---
+# Source: fadi/charts/grafana/templates/role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: my-fadi-grafana
+  namespace: default
+  labels:
+    helm.sh/chart: grafana-6.1.17
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: my-fadi
+    app.kubernetes.io/version: "7.3.5"
+    app.kubernetes.io/managed-by: Helm
+rules:
+- apiGroups:      ['extensions']
+  resources:      ['podsecuritypolicies']
+  verbs:          ['use']
+  resourceNames:  [my-fadi-grafana]
+---
+# Source: fadi/charts/grafana/templates/tests/test-role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: my-fadi-grafana-test
+  namespace: default
+  labels:
+    helm.sh/chart: grafana-6.1.17
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: my-fadi
+    app.kubernetes.io/version: "7.3.5"
+    app.kubernetes.io/managed-by: Helm
+rules:
+- apiGroups:      ['policy']
+  resources:      ['podsecuritypolicies']
+  verbs:          ['use']
+  resourceNames:  [my-fadi-grafana-test]
+---
+# Source: fadi/charts/jupyterhub/templates/hub/rbac.yaml
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: hub
+  labels:
+    component: hub
+    app: jupyterhub
+    release: my-fadi
+    chart: jupyterhub-0.11.1
+    heritage: Helm
+rules:
+  - apiGroups: [""]       # "" indicates the core API group
+    resources: ["pods", "persistentvolumeclaims"]
+    verbs: ["get", "watch", "list", "create", "delete"]
+  - apiGroups: [""]       # "" indicates the core API group
+    resources: ["events"]
+    verbs: ["get", "watch", "list"]
+---
+# Source: fadi/charts/grafana/templates/rolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: my-fadi-grafana
+  namespace: default
+  labels:
+    helm.sh/chart: grafana-6.1.17
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: my-fadi
+    app.kubernetes.io/version: "7.3.5"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: my-fadi-grafana
+subjects:
+- kind: ServiceAccount
+  name: my-fadi-grafana
+  namespace: default
+---
+# Source: fadi/charts/grafana/templates/tests/test-rolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: my-fadi-grafana-test
+  namespace: default
+  labels:
+    helm.sh/chart: grafana-6.1.17
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: my-fadi
+    app.kubernetes.io/version: "7.3.5"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: my-fadi-grafana-test
+subjects:
+- kind: ServiceAccount
+  name: my-fadi-grafana-test
+  namespace: default
+---
+# Source: fadi/charts/jupyterhub/templates/hub/rbac.yaml
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: hub
+  labels:
+    component: hub
+    app: jupyterhub
+    release: my-fadi
+    chart: jupyterhub-0.11.1
+    heritage: Helm
+subjects:
+  - kind: ServiceAccount
+    name: hub
+    namespace: default
+roleRef:
+  kind: Role
+  name: hub
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: fadi/charts/adminer/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-fadi-adminer
+  labels:
+    app.kubernetes.io/name: adminer
+    helm.sh/chart: adminer-0.1.7
+    app.kubernetes.io/instance: my-fadi
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: adminer
+    app.kubernetes.io/instance: my-fadi
+---
+# Source: fadi/charts/grafana/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-fadi-grafana
+  namespace: default
+  labels:
+    helm.sh/chart: grafana-6.1.17
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: my-fadi
+    app.kubernetes.io/version: "7.3.5"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - name: service
+      port: 80
+      protocol: TCP
+      targetPort: 3000
+
+  selector:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: my-fadi
+---
+# Source: fadi/charts/jupyterhub/templates/hub/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: hub
+  labels:
+    component: hub
+    app: jupyterhub
+    release: my-fadi
+    chart: jupyterhub-0.11.1
+    heritage: Helm
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/path: /hub/metrics
+spec:
+  type: ClusterIP
+  selector:
+    component: hub
+    app: jupyterhub
+    release: my-fadi
+  ports:
+    - port: 8081
+      targetPort: http
+---
+# Source: fadi/charts/jupyterhub/templates/proxy/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: proxy-api
+  labels:
+    component: proxy-api
+    app: jupyterhub
+    release: my-fadi
+    chart: jupyterhub-0.11.1
+    heritage: Helm
+spec:
+  selector:
+    component: proxy
+    app: jupyterhub
+    release: my-fadi
+  ports:
+    - port: 8001
+      targetPort: api
+---
+# Source: fadi/charts/jupyterhub/templates/proxy/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: proxy-public
+  labels:
+    component: proxy-public
+    app: jupyterhub
+    release: my-fadi
+    chart: jupyterhub-0.11.1
+    heritage: Helm
+spec:
+  selector:
+    component: proxy
+    release: my-fadi
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+  type: ClusterIP
+---
+# Source: fadi/charts/keycloak/templates/headless-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-fadi-keycloak-headless
+  namespace: default
+  labels:
+    app.kubernetes.io/name: keycloak
+    helm.sh/chart: keycloak-2.4.8
+    app.kubernetes.io/instance: my-fadi
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: keycloak
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: http
+      port: 80
+      protocol: TCP
+      targetPort: http
+  publishNotReadyAddresses: true
+  selector:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/instance: my-fadi
+    app.kubernetes.io/component: keycloak
+---
+# Source: fadi/charts/keycloak/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-fadi-keycloak
+  namespace: default
+  labels:
+    app.kubernetes.io/name: keycloak
+    helm.sh/chart: keycloak-2.4.8
+    app.kubernetes.io/instance: my-fadi
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: keycloak
+spec:
+  type: ClusterIP
+  
+  ports:
+    - name: http
+      port: 80
+      protocol: TCP
+      targetPort: http
+      nodePort: null
+    - name: https
+      port: 443
+      protocol: TCP
+      targetPort: https
+      nodePort: null
+  selector:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/instance: my-fadi
+    app.kubernetes.io/component: keycloak
+---
+# Source: fadi/charts/nifi/charts/zookeeper/templates/svc-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-fadi-zookeeper-headless
+  namespace: default
+  labels:
+    app.kubernetes.io/name: zookeeper
+    helm.sh/chart: zookeeper-5.23.0
+    app.kubernetes.io/instance: my-fadi
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: zookeeper
+spec:
+  type: ClusterIP
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+    
+    - name: tcp-client
+      port: 2181
+      targetPort: client
+    
+    
+    - name: follower
+      port: 2888
+      targetPort: follower
+    - name: tcp-election
+      port: 3888
+      targetPort: election
+  selector:
+    app.kubernetes.io/name: zookeeper
+    app.kubernetes.io/instance: my-fadi
+    app.kubernetes.io/component: zookeeper
+---
+# Source: fadi/charts/nifi/charts/zookeeper/templates/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-fadi-zookeeper
+  namespace: default
+  labels:
+    app.kubernetes.io/name: zookeeper
+    helm.sh/chart: zookeeper-5.23.0
+    app.kubernetes.io/instance: my-fadi
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: zookeeper
+spec:
+  type: ClusterIP
+  ports:
+    
+    - name: tcp-client
+      port: 2181
+      targetPort: client
+    
+    
+    - name: follower
+      port: 2888
+      targetPort: follower
+    - name: tcp-election
+      port: 3888
+      targetPort: election
+  selector:
+    app.kubernetes.io/name: zookeeper
+    app.kubernetes.io/instance: my-fadi
+    app.kubernetes.io/component: zookeeper
+---
+# Source: fadi/charts/nifi/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-fadi-nifi-headless
+  labels:
+    app: "nifi"
+    chart: "nifi-1.0.6"
+    release: "my-fadi"
+    heritage: "Helm"
+  annotations:
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+  - port: 8443
+    name: https
+  - port: 6007
+    name: cluster
+  selector:
+    app: "nifi"
+    release: "my-fadi"
+---
+# Source: fadi/charts/nifi/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-fadi-nifi
+  labels:
+    app: "nifi"
+    chart: "nifi-1.0.6"
+    release: "my-fadi"
+    heritage: "Helm"
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8443
+      name: https
+      targetPort: 8443
+      nodePort: 
+  selector:
+    app: nifi
+    release: my-fadi
+---
+# Source: fadi/charts/openldap/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-fadi-openldap
+  labels:
+    app: openldap
+    chart: openldap-1.2.7
+    release: my-fadi
+    heritage: Helm
+spec:
+  ports:
+    - name: ldap-port
+      protocol: TCP
+      port: 389
+      targetPort: ldap-port
+    - name: ssl-ldap-port
+      protocol: TCP
+      port: 636
+      targetPort: ssl-ldap-port
+  selector:
+    app: openldap
+    release: my-fadi
+  type: ClusterIP
+---
+# Source: fadi/charts/phpldapadmin/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-fadi-phpldapadmin
+  labels:
+    app: phpldapadmin
+    chart: phpldapadmin-0.1.4
+    release: my-fadi
+    heritage: Helm
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: http
+    protocol: TCP
+    name: http
+  selector:
+    app: phpldapadmin
+    release: my-fadi
+---
+# Source: fadi/charts/postgresql/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-fadi-postgresql
+  labels:
+    app: postgresql
+    chart: postgresql-0.2.3
+    release: "my-fadi"
+    heritage: "Helm"
+spec:
+  type: ClusterIP
+  ports:
+  - name: postgresql
+    port: 5432
+    targetPort: postgresql
+  selector:
+    app: postgresql
+    release: "my-fadi"
+---
+# Source: fadi/charts/spark/templates/headless-svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-fadi-spark-headless
+  labels:
+    app.kubernetes.io/name: spark
+    helm.sh/chart: spark-4.1.0
+    app.kubernetes.io/instance: my-fadi
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: spark
+    app.kubernetes.io/instance: my-fadi
+---
+# Source: fadi/charts/spark/templates/svc-master.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-fadi-spark-master-svc
+  labels:
+    app.kubernetes.io/name: spark
+    helm.sh/chart: spark-4.1.0
+    app.kubernetes.io/instance: my-fadi
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 7077
+      targetPort: cluster
+      name: cluster
+      nodePort: null
+    - port: 80
+      targetPort: http
+      name: http
+      protocol: TCP
+      nodePort: null
+  selector:
+    app.kubernetes.io/name: spark
+    app.kubernetes.io/instance: my-fadi
+    app.kubernetes.io/component: master
+---
+# Source: fadi/charts/superset/templates/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-fadi-superset
+  labels:
+    app: superset
+    chart: superset-1.2.0
+    release: my-fadi
+    heritage: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 9000
+      targetPort: 8088
+      protocol: TCP
+  selector:
+    app: superset
+    release: my-fadi
+    component: server
+---
+# Source: fadi/charts/jupyterhub/templates/image-puller/daemonset.yaml
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: continuous-image-puller
+  labels:
+    component: continuous-image-puller
+    app: jupyterhub
+    release: my-fadi
+    chart: jupyterhub-0.11.1
+    heritage: Helm
+spec:
+  selector:
+    matchLabels:
+      component: continuous-image-puller
+      app: jupyterhub
+      release: my-fadi
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 100%
+  template:
+    metadata:
+      labels:
+        component: continuous-image-puller
+        app: jupyterhub
+        release: my-fadi
+    spec:
+      tolerations:
+        - key: hub.jupyter.org_dedicated
+          operator: Equal
+          value: user
+          effect: NoSchedule
+        - key: hub.jupyter.org/dedicated
+          operator: Equal
+          value: user
+          effect: NoSchedule
+      nodeSelector: {}
+      terminationGracePeriodSeconds: 0
+      automountServiceAccountToken: false
+      initContainers:
+        - name: image-pull-metadata-block
+          image: jupyterhub/k8s-network-tools:0.11.1
+          command:
+            - /bin/sh
+            - -c
+            - echo "Pulling complete"
+          resources:
+            requests:
+              cpu: 0
+              memory: 0
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsGroup: 65534
+            runAsUser: 65534
+        - name: image-pull-singleuser
+          image: jupyterhub/k8s-singleuser-sample:0.11.1
+          command:
+            - /bin/sh
+            - -c
+            - echo "Pulling complete"
+          resources:
+            requests:
+              cpu: 0
+              memory: 0
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsGroup: 65534
+            runAsUser: 65534
+        - name: image-pull-singleuser-profilelist-1
+          image: jupyter/datascience-notebook:7d427e7a4dde
+          command:
+            - /bin/sh
+            - -c
+            - echo "Pulling complete"
+          resources:
+            requests:
+              cpu: 0
+              memory: 0
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsGroup: 65534
+            runAsUser: 65534
+        - name: image-pull-singleuser-profilelist-2
+          image: jupyter/all-spark-notebook:latest
+          command:
+            - /bin/sh
+            - -c
+            - echo "Pulling complete"
+          resources:
+            requests:
+              cpu: 0
+              memory: 0
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsGroup: 65534
+            runAsUser: 65534
+        - name: image-pull-singleuser-profilelist-3
+          image: jupyter/tensorflow-notebook:latest
+          command:
+            - /bin/sh
+            - -c
+            - echo "Pulling complete"
+          resources:
+            requests:
+              cpu: 0
+              memory: 0
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsGroup: 65534
+            runAsUser: 65534
+      containers:
+        - name: pause
+          image: k8s.gcr.io/pause:3.2
+          resources:
+            requests:
+              cpu: 0
+              memory: 0
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsGroup: 65534
+            runAsUser: 65534
+---
+# Source: fadi/charts/adminer/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-fadi-adminer
+  labels:
+    app.kubernetes.io/name: adminer
+    helm.sh/chart: adminer-0.1.7
+    app.kubernetes.io/instance: my-fadi
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: adminer
+      app.kubernetes.io/instance: my-fadi
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: adminer
+        app.kubernetes.io/instance: my-fadi
+    spec:      
+      containers:
+        - name: adminer
+          image: "adminer:4.8.1-standalone"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: ADMINER_PLUGINS
+              value: 
+            - name: ADMINER_DESIGN
+              value: pepa-linha
+            - name: ADMINER_DEFAULT_SERVER
+              value:
+---
+# Source: fadi/charts/grafana/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-fadi-grafana
+  namespace: default
+  labels:
+    helm.sh/chart: grafana-6.1.17
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: my-fadi
+    app.kubernetes.io/version: "7.3.5"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: grafana
+      app.kubernetes.io/instance: my-fadi
+  strategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: grafana
+        app.kubernetes.io/instance: my-fadi
+      annotations:
+        checksum/config: c7e8dd83e33c7a2bb1bdfd83eede7afc15c90f86f9f8fd4355643d98622c0d1a
+        checksum/dashboards-json-config: 01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b
+        checksum/sc-dashboard-provider-config: 01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b
+        checksum/secret: 3826fbcd853ee2f060c6aa8c33084cb06b51755f83a968dd84f18f88a482c85b
+    spec:
+      
+      serviceAccountName: my-fadi-grafana
+      securityContext:
+        fsGroup: 472
+        runAsGroup: 472
+        runAsUser: 472
+      initContainers:
+        - name: init-chown-data
+          image: "busybox:1.31.1"
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsNonRoot: false
+            runAsUser: 0
+          command: ["chown", "-R", "472:472", "/var/lib/grafana"]
+          resources:
+            {}
+          volumeMounts:
+            - name: storage
+              mountPath: "/var/lib/grafana"
+      containers:
+        - name: grafana
+          image: "grafana/grafana:7.3.5"
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - name: config
+              mountPath: "/etc/grafana/grafana.ini"
+              subPath: grafana.ini
+            - name: ldap
+              mountPath: "/etc/grafana/ldap.toml"
+              subPath: ldap.toml
+            - name: storage
+              mountPath: "/var/lib/grafana"
+          ports:
+            - name: service
+              containerPort: 80
+              protocol: TCP
+            - name: grafana
+              containerPort: 3000
+              protocol: TCP
+          env:
+            - name: GF_SECURITY_ADMIN_USER
+              valueFrom:
+                secretKeyRef:
+                  name: my-fadi-grafana
+                  key: admin-user
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-fadi-grafana
+                  key: admin-password
+            
+          livenessProbe:
+            failureThreshold: 10
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 60
+            timeoutSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+          resources:
+            {}
+      volumes:
+        - name: config
+          configMap:
+            name: my-fadi-grafana
+        - name: ldap
+          secret:
+            secretName: my-fadi-grafana
+            items:
+              - key: ldap-toml
+                path: ldap.toml
+        - name: storage
+          persistentVolumeClaim:
+            claimName: my-fadi-grafana
+---
+# Source: fadi/charts/jupyterhub/templates/hub/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hub
+  labels:
+    component: hub
+    app: jupyterhub
+    release: my-fadi
+    chart: jupyterhub-0.11.1
+    heritage: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      component: hub
+      app: jupyterhub
+      release: my-fadi
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        component: hub
+        app: jupyterhub
+        release: my-fadi
+        hub.jupyter.org/network-access-proxy-api: "true"
+        hub.jupyter.org/network-access-proxy-http: "true"
+        hub.jupyter.org/network-access-singleuser: "true"
+      annotations:
+        # This lets us autorestart when the secret changes!
+        checksum/config-map: 0153ebce487b14c2b7e4fb07ac902e63c7430f895e919e50343791e182b55c3f
+        checksum/secret: 13173b20576810176b9c832c062d94332366e1450b89b6969fc2bdd9c4a1cb70
+    spec:
+      nodeSelector: {}
+      tolerations: []
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: hub.jupyter.org/node-purpose
+                    operator: In
+                    values: [core]
+      volumes:
+        - name: config
+          configMap:
+            name: hub-config
+        - name: secret
+          secret:
+            secretName: hub-secret
+        - name: hub-db-dir
+          persistentVolumeClaim:
+            claimName: hub-db-dir
+      serviceAccountName: hub
+      securityContext:
+        fsGroup: 1000
+      containers:
+        - name: hub
+          image: jupyterhub/k8s-hub:0.11.1
+          args:
+            - jupyterhub
+            - --config
+            - /etc/jupyterhub/jupyterhub_config.py
+            - --upgrade-db
+          volumeMounts:
+            - mountPath: /etc/jupyterhub/jupyterhub_config.py
+              subPath: jupyterhub_config.py
+              name: config
+            - mountPath: /etc/jupyterhub/z2jh.py
+              subPath: z2jh.py
+              name: config
+            - mountPath: /etc/jupyterhub/config/
+              name: config
+            - mountPath: /etc/jupyterhub/secret/
+              name: secret
+            - mountPath: /srv/jupyterhub
+              name: hub-db-dir
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsGroup: 1000
+            runAsUser: 1000
+          env:
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: HELM_RELEASE_NAME
+              value: "my-fadi"
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: CONFIGPROXY_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: hub-secret
+                  key: proxy.token
+            
+          ports:
+            - name: http
+              containerPort: 8081
+          # livenessProbe notes:
+          # We don't know how long hub database upgrades could take
+          # so having a liveness probe could be a bit risky unless we put
+          # a initialDelaySeconds value with long enough margin for that
+          # to not be an issue. If it is too short, we could end up aborting
+          # database upgrades midway or ending up in an infinite restart
+          # loop.
+          livenessProbe:
+            initialDelaySeconds: 300
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 30
+            httpGet:
+              path: /hub/health
+              port: http
+          readinessProbe:
+            initialDelaySeconds: 0
+            periodSeconds: 2
+            timeoutSeconds: 1
+            failureThreshold: 1000
+            httpGet:
+              path: /hub/health
+              port: http
+---
+# Source: fadi/charts/jupyterhub/templates/proxy/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: proxy
+  labels:
+    component: proxy
+    app: jupyterhub
+    release: my-fadi
+    chart: jupyterhub-0.11.1
+    heritage: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      component: proxy
+      app: jupyterhub
+      release: my-fadi
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        component: proxy
+        app: jupyterhub
+        release: my-fadi
+        hub.jupyter.org/network-access-hub: "true"
+        hub.jupyter.org/network-access-singleuser: "true"
+      annotations:
+        # This lets us autorestart when the secret changes!
+        checksum/hub-secret: 802658798a07829c5c2083233a599a470f363b205bd54b470d9c9e2c9116a059
+        checksum/proxy-secret: 01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b
+    spec:
+      terminationGracePeriodSeconds: 60
+      nodeSelector: {}
+      tolerations: []
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: hub.jupyter.org/node-purpose
+                    operator: In
+                    values: [core]
+      containers:
+        - name: chp
+          image: jupyterhub/configurable-http-proxy:4.2.2
+          command:
+            - configurable-http-proxy
+            - "--ip=::"
+            - "--api-ip=::"
+            - --api-port=8001
+            - --default-target=http://hub:$(HUB_SERVICE_PORT)
+            - --error-target=http://hub:$(HUB_SERVICE_PORT)/hub/error
+            - --port=8000
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+          env:
+            - name: CONFIGPROXY_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: hub-secret
+                  key: proxy.token
+            
+          ports:
+            - name: http
+              containerPort: 8000
+            - name: api
+              containerPort: 8001
+          livenessProbe:
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            httpGet:
+              path: /_chp_healthz
+              port: http
+              scheme: HTTP
+          readinessProbe:
+            initialDelaySeconds: 0
+            periodSeconds: 2
+            httpGet:
+              path: /_chp_healthz
+              port: http
+              scheme: HTTP
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsGroup: 65534
+            runAsUser: 65534
+---
+# Source: fadi/charts/jupyterhub/templates/scheduling/user-scheduler/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-scheduler
+  labels:
+    component: user-scheduler
+    app: jupyterhub
+    release: my-fadi
+    chart: jupyterhub-0.11.1
+    heritage: Helm
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      component: user-scheduler
+      app: jupyterhub
+      release: my-fadi
+  template:
+    metadata:
+      labels:
+        component: user-scheduler
+        app: jupyterhub
+        release: my-fadi
+      annotations:
+        checksum/config-map: 4a4caf14f3466b2e4ffcad8f633d93b9a272d0a3ef59b3849a02cbcb0b41745b
+    spec:
+      serviceAccountName: user-scheduler
+      nodeSelector: {}
+      tolerations: []
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: hub.jupyter.org/node-purpose
+                    operator: In
+                    values: [core]
+      volumes:
+        - name: config
+          configMap:
+            name: user-scheduler
+      containers:
+        - name: user-scheduler
+          # NOTE: When the kube-scheduler 1.17+ binaries fail to find CSINode
+          #       resource in the cluster, they won't start scheduling. Due to
+          #       this, we fallback to the latest functional version with its
+          #       legacy configuration format. This fallback can be removed when
+          #       we assume k8s 1.17 where CSINode is generally available.
+          image: k8s.gcr.io/kube-scheduler:v1.16.15
+          command:
+            - /usr/local/bin/kube-scheduler
+            # NOTE: --leader-elect-... (new) and --lock-object-... (deprecated)
+            #       flags are silently ignored in favor of whats defined in the
+            #       passed KubeSchedulerConfiguration whenever --config is
+            #       passed.
+            #
+            # ref: https://kubernetes.io/docs/reference/command-line-tools-reference/kube-scheduler/
+            #
+            # NOTE: --authentication-skip-lookup=true is used to avoid a
+            #       seemingly harmless error, if we need to not skip
+            #       "authentication lookup" in the future, see the linked issue.
+            #
+            # ref: https://github.com/jupyterhub/zero-to-jupyterhub-k8s/issues/1894
+            - --scheduler-name=my-fadi-user-scheduler
+            - --policy-config-file=/etc/user-scheduler/policy.cfg
+            - --lock-object-name=user-scheduler-lock
+            - --lock-object-namespace=default
+            - --v=4
+          volumeMounts:
+            - mountPath: /etc/user-scheduler
+              name: config
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 10251
+            initialDelaySeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 10251
+          resources:
+            requests:
+              cpu: 50m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsGroup: 65534
+            runAsUser: 65534
+---
+# Source: fadi/charts/openldap/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name:  my-fadi-openldap
+  labels:
+    app: openldap
+    chart: openldap-1.2.7
+    release: my-fadi
+    heritage: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: openldap
+      release: my-fadi
+  template:
+    metadata:
+      annotations:
+        checksum/configmap-env: 1a758436fbfc79f57d4dd9f3cfe7b606a71aeb2949e618fb6b816561557bd6ce
+        checksum/configmap-customldif: 60e7923a9114385077c18e55681ad4dba35da16fee7fa99d1773e0c80f6afdfc
+      labels:
+        app: openldap
+        release: my-fadi
+    spec:
+      initContainers:
+      - name: openldap-init-ldif
+        image: busybox
+        command: ['sh', '-c', 'cp /customldif/* /ldifworkingdir']
+        imagePullPolicy: IfNotPresent
+        volumeMounts:
+        - name: customldif
+          mountPath: /customldif
+        - name: ldifworkingdir
+          mountPath: /ldifworkingdir
+        resources:
+          {}
+      containers:
+        - name: openldap
+          image: "osixia/openldap:1.2.4"
+          imagePullPolicy: IfNotPresent
+          args:
+            - -l
+            - info
+            - --copy-service
+          ports:
+            - name: ldap-port
+              containerPort: 389
+            - name: ssl-ldap-port
+              containerPort: 636
+          envFrom:
+            - configMapRef:
+                name: my-fadi-openldap-env
+            - secretRef:
+                name: my-fadi-openldap
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/ldap
+              subPath: data
+            - name: data
+              mountPath: /etc/ldap/slapd.d
+              subPath: config-data
+            - name: ldifworkingdir
+              mountPath: /container/service/slapd/assets/config/bootstrap/ldif/custom
+          env:
+          livenessProbe:
+            tcpSocket:
+              port: ldap-port
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 10
+          readinessProbe:
+            tcpSocket:
+              port: ldap-port
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 10
+          resources:
+            {}
+      volumes:
+        - name: customldif
+          configMap:
+            name: my-fadi-openldap-customldif
+        - name: ldifworkingdir
+          emptyDir: {}
+        - name: certs
+          emptyDir:
+            medium: Memory
+        - name: data
+          persistentVolumeClaim:
+            claimName: my-fadi-openldap
+---
+# Source: fadi/charts/phpldapadmin/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: my-fadi-phpldapadmin
+  labels:
+    app: phpldapadmin
+    chart: phpldapadmin-0.1.4
+    release: my-fadi
+    heritage: Helm
+
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: phpldapadmin
+      release: my-fadi
+  template:
+    metadata:
+      labels:
+        app: phpldapadmin
+        release: my-fadi
+    spec:
+      containers:
+      - name: phpldapadmin
+        image: "osixia/phpldapadmin:0.7.1"
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 80
+          protocol: TCP
+        envFrom:
+        - configMapRef:
+            name: my-fadi-phpldapadmin
+        livenessProbe:
+            httpGet:
+              path: /
+              port: http
+        readinessProbe:
+            httpGet:
+              path: /
+              port: http
+        resources:
+            {}
+---
+# Source: fadi/charts/superset/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-fadi-superset
+  labels:
+    app: superset
+    chart: superset-1.2.0
+    component: server
+    release: my-fadi
+    heritage: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: superset
+      component: server
+      release: my-fadi
+  template:
+    metadata:
+      name: my-fadi-superset
+      labels:
+        app: superset
+        component: server
+        chart: superset-1.2.0
+        release: my-fadi
+        heritage: Helm
+      annotations:
+        checksum/secrets: 95516de1c84ff14a1c153b2c77c2d53bc59c151f861f35af6dfd5c8ac6f76f09
+    spec:
+      securityContext:
+        runAsUser: 1000
+        fsGroup: 1000
+      volumes:
+        - name: superset-configs
+          secret:
+            secretName: my-fadi-superset
+        - name: storage-volume
+          persistentVolumeClaim:
+            claimName: my-fadi-superset
+      containers:
+        - name: superset
+          image: "amancevice/superset:0.35.2"
+          imagePullPolicy: IfNotPresent
+          command: ["/usr/bin/env"]
+          args: ["gunicorn", "-b", "0.0.0.0:8088", "--limit-request-line", "0", "--limit-request-field_size", "0", "superset:app"]
+          volumeMounts:
+            - name: superset-configs
+              mountPath: /home/superset
+            - name: storage-volume
+              mountPath: /var/lib/superset
+          ports:
+            - name: http
+              containerPort: 8088
+              protocol: TCP
+          livenessProbe:
+            failureThreshold: 2
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 80
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            failureThreshold: 2
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+---
+# Source: fadi/charts/traefik/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-fadi-traefik
+  labels:
+    app.kubernetes.io/name: traefik
+    helm.sh/chart: traefik-10.6.2
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/instance: my-fadi
+  annotations:
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: traefik
+      app.kubernetes.io/instance: my-fadi
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  template: 
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "9100"
+      labels:
+        app.kubernetes.io/name: traefik
+        helm.sh/chart: traefik-10.6.2
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/instance: my-fadi
+    spec:
+      serviceAccountName: my-fadi-traefik
+      terminationGracePeriodSeconds: 60
+      hostNetwork: false
+      containers:
+      - image: "traefik:2.5.4"
+        imagePullPolicy: IfNotPresent
+        name: my-fadi-traefik
+        resources:
+        readinessProbe:
+          httpGet:
+            path: /ping
+            port: 9000
+          failureThreshold: 1
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 2
+        livenessProbe:
+          httpGet:
+            path: /ping
+            port: 9000
+          failureThreshold: 3
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 2
+        ports:
+        - name: "metrics"
+          containerPort: 9100
+          protocol: "TCP"
+        - name: "traefik"
+          containerPort: 9000
+          protocol: "TCP"
+        - name: "web"
+          containerPort: 8000
+          protocol: "TCP"
+        - name: "websecure"
+          containerPort: 8443
+          protocol: "TCP"
+        securityContext:
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsGroup: 65532
+          runAsNonRoot: true
+          runAsUser: 65532
+        volumeMounts:
+          - name: data
+            mountPath: /data
+          - name: tmp
+            mountPath: /tmp
+        args:
+          - "--global.checknewversion"
+          - "--global.sendanonymoususage"
+          - "--entryPoints.metrics.address=:9100/tcp"
+          - "--entryPoints.traefik.address=:9000/tcp"
+          - "--entryPoints.web.address=:8000/tcp"
+          - "--entryPoints.websecure.address=:8443/tcp"
+          - "--api.dashboard=true"
+          - "--ping=true"
+          - "--metrics.prometheus=true"
+          - "--metrics.prometheus.entrypoint=metrics"
+          - "--providers.kubernetescrd"
+          - "--providers.kubernetesingress"
+          - "--providers.kubernetesIngress.ingressClass=traefik-cert-manager"
+      volumes:
+        - name: data
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+      securityContext:
+        fsGroup: 65532
+---
+# Source: fadi/charts/jupyterhub/templates/scheduling/user-placeholder/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: user-placeholder
+  labels:
+    component: user-placeholder
+    app: jupyterhub
+    release: my-fadi
+    chart: jupyterhub-0.11.1
+    heritage: Helm
+spec:
+  podManagementPolicy: Parallel
+  replicas: 0
+  selector:
+    matchLabels:
+      component: user-placeholder
+      app: jupyterhub
+      release: my-fadi
+  serviceName: "user-placeholder"
+  template:
+    metadata:
+      labels:
+        component: user-placeholder
+        app: jupyterhub
+        release: my-fadi
+    spec:
+      schedulerName: my-fadi-user-scheduler
+      tolerations:
+        - key: hub.jupyter.org_dedicated
+          operator: Equal
+          value: user
+          effect: NoSchedule
+        - key: hub.jupyter.org/dedicated
+          operator: Equal
+          value: user
+          effect: NoSchedule
+      nodeSelector: {}
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: hub.jupyter.org/node-purpose
+                    operator: In
+                    values: [user]
+      terminationGracePeriodSeconds: 0
+      automountServiceAccountToken: false
+      containers:
+        - name: pause
+          image: k8s.gcr.io/pause:3.2
+          resources:
+            requests:
+              memory: 1G
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsGroup: 65534
+            runAsUser: 65534
+---
+# Source: fadi/charts/keycloak/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-fadi-keycloak
+  namespace: default
+  labels:
+    app.kubernetes.io/name: keycloak
+    helm.sh/chart: keycloak-2.4.8
+    app.kubernetes.io/instance: my-fadi
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: keycloak
+spec:
+  replicas: 1
+  podManagementPolicy: Parallel
+  serviceName: my-fadi-keycloak-headless
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels: 
+      app.kubernetes.io/name: keycloak
+      app.kubernetes.io/instance: my-fadi
+      app.kubernetes.io/component: keycloak
+  template:
+    metadata:
+      annotations:
+        checksum/configmap-env-vars: a569fd0a17886bff2ce81de5c1e87aa8051f0afcb79be845ecb1cb059834bd13
+        checksum/secrets: 931ca37ac393d5809da1ef0cbfa8cece9f1ebe4197ff8224e999ad4059ddf293
+      labels:
+        app.kubernetes.io/name: keycloak
+        helm.sh/chart: keycloak-2.4.8
+        app.kubernetes.io/instance: my-fadi
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/component: keycloak
+    spec:
+      serviceAccountName: my-fadi-keycloak
+      
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: keycloak
+                    app.kubernetes.io/instance: my-fadi
+                namespaces:
+                  - "default"
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+      containers:
+        - name: keycloak
+          image: docker.io/bitnami/keycloak:12.0.4-debian-10-r52
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+          env:
+            - name: KUBERNETES_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.namespace
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: KEYCLOAK_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-fadi-keycloak
+                  key: admin-password
+            - name: KEYCLOAK_MANAGEMENT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-fadi-keycloak
+                  key: management-password
+            - name: KEYCLOAK_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-fadi-keycloak
+                  key: database-password
+          envFrom:
+            - configMapRef:
+                name: my-fadi-keycloak-env-vars
+          resources:
+            limits: {}
+            requests: {}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: https
+              containerPort: 8443
+              protocol: TCP
+            - name: http-management
+              containerPort: 9990
+              protocol: TCP
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /auth/
+              port: http
+            initialDelaySeconds: 300
+            periodSeconds: 1
+            successThreshold: 1
+            timeoutSeconds: 5
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /auth/realms/master
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+          volumeMounts:
+      volumes:
+---
+# Source: fadi/charts/nifi/charts/zookeeper/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-fadi-zookeeper
+  namespace: default
+  labels:
+    app.kubernetes.io/name: zookeeper
+    helm.sh/chart: zookeeper-5.23.0
+    app.kubernetes.io/instance: my-fadi
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: zookeeper
+    role: zookeeper
+spec:
+  serviceName: my-fadi-zookeeper-headless
+  replicas: 3
+  podManagementPolicy: Parallel
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: zookeeper
+      app.kubernetes.io/instance: my-fadi
+      app.kubernetes.io/component: zookeeper
+  template:
+    metadata:
+      name: my-fadi-zookeeper
+      labels:
+        app.kubernetes.io/name: zookeeper
+        helm.sh/chart: zookeeper-5.23.0
+        app.kubernetes.io/instance: my-fadi
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/component: zookeeper
+    spec:
+      
+      serviceAccountName: default
+      securityContext:
+        fsGroup: 1001
+      containers:
+        - name: zookeeper
+          image: docker.io/bitnami/zookeeper:3.6.2-debian-10-r37
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            runAsUser: 1001
+          command:
+            - bash
+            - -ec
+            - |
+                # Execute entrypoint as usual after obtaining ZOO_SERVER_ID based on POD hostname
+                HOSTNAME=`hostname -s`
+                if [[ $HOSTNAME =~ (.*)-([0-9]+)$ ]]; then
+                  ORD=${BASH_REMATCH[2]}
+                  export ZOO_SERVER_ID=$((ORD+1))
+                else
+                  echo "Failed to get index from hostname $HOST"
+                  exit 1
+                fi
+                exec /entrypoint.sh /run.sh
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+          env:
+            - name: ZOO_DATA_LOG_DIR
+              value: ""
+            - name: ZOO_PORT_NUMBER
+              value: "2181"
+            - name: ZOO_TICK_TIME
+              value: "2000"
+            - name: ZOO_INIT_LIMIT
+              value: "10"
+            - name: ZOO_SYNC_LIMIT
+              value: "5"
+            - name: ZOO_MAX_CLIENT_CNXNS
+              value: "60"
+            - name: ZOO_4LW_COMMANDS_WHITELIST
+              value: "srvr, mntr, ruok"
+            - name: ZOO_LISTEN_ALLIPS_ENABLED
+              value: "no"
+            - name: ZOO_AUTOPURGE_INTERVAL
+              value: "0"
+            - name: ZOO_AUTOPURGE_RETAIN_COUNT
+              value: "3"
+            - name: ZOO_MAX_SESSION_TIMEOUT
+              value: "40000"
+            - name: ZOO_SERVERS
+              value: my-fadi-zookeeper-0.my-fadi-zookeeper-headless.default.svc.cluster.local:2888:3888 my-fadi-zookeeper-1.my-fadi-zookeeper-headless.default.svc.cluster.local:2888:3888 my-fadi-zookeeper-2.my-fadi-zookeeper-headless.default.svc.cluster.local:2888:3888 
+            - name: ZOO_ENABLE_AUTH
+              value: "no"
+            - name: ZOO_HEAP_SIZE
+              value: "1024"
+            - name: ZOO_LOG_LEVEL
+              value: "ERROR"
+            - name: ALLOW_ANONYMOUS_LOGIN
+              value: "yes"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.name
+          ports:
+            
+            - name: client
+              containerPort: 2181
+            
+            
+            - name: follower
+              containerPort: 2888
+            - name: election
+              containerPort: 3888
+          livenessProbe:
+            exec:
+              command: ['/bin/bash', '-c', 'echo "ruok" | timeout 2 nc -w 2 localhost 2181 | grep imok']
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          readinessProbe:
+            exec:
+              command: ['/bin/bash', '-c', 'echo "ruok" | timeout 2 nc -w 2 localhost 2181 | grep imok']
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          volumeMounts:
+            - name: data
+              mountPath: /bitnami/zookeeper
+      volumes:
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        annotations:
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "8Gi"
+---
+# Source: fadi/charts/nifi/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-fadi-nifi
+  labels:
+    app: "nifi"
+    chart: "nifi-1.0.6"
+    release: "my-fadi"
+    heritage: "Helm"
+spec:
+  podManagementPolicy: Parallel
+  serviceName: my-fadi-nifi-headless
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nifi
+      release: my-fadi
+  template:
+    metadata:
+      annotations:
+        security.alpha.kubernetes.io/sysctls: net.ipv4.ip_local_port_range=10000 65000
+      labels:
+        app: "nifi"
+        chart: "nifi-1.0.6"
+        release: "my-fadi"
+        heritage: "Helm"
+    spec:
+      serviceAccountName: default
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+             - weight: 1
+               podAffinityTerm:
+                 labelSelector:
+                    matchExpressions:
+                      - key: "app"
+                        operator: In
+                        values:
+                         - "nifi"
+                 topologyKey: "kubernetes.io/hostname"
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        fsGroup: 1000
+        runAsUser: 1000
+      initContainers:
+      containers:
+      - name: server
+        imagePullPolicy: "IfNotPresent"
+        image: "apache/nifi:1.14.0"
+        command:
+        - bash
+        - -ce
+        - |
+          prop_replace () {
+            target_file=${NIFI_HOME}/conf/${3:-nifi.properties}
+            echo "updating ${1} in ${target_file}"
+            if egrep "^${1}=" ${target_file} &> /dev/null; then
+              sed -i -e "s|^$1=.*$|$1=$2|"  ${target_file}
+            else
+              echo ${1}=${2} >> ${target_file}
+            fi
+          }
+          mkdir -p ${NIFI_HOME}/config-data/conf
+          FQDN=$(hostname -f)
+
+          cat "${NIFI_HOME}/conf/nifi.temp" > "${NIFI_HOME}/conf/nifi.properties"
+          cat "${NIFI_HOME}/conf/authorizers.temp" > "${NIFI_HOME}/conf/authorizers.xml"
+          cat "${NIFI_HOME}/conf/login-identity-providers-ldap.xml" > "${NIFI_HOME}/conf/login-identity-providers.xml"
+
+          if ! test -f /opt/nifi/data/flow.xml.gz && test -f /opt/nifi/data/flow.xml; then
+            gzip /opt/nifi/data/flow.xml
+          fi
+
+          prop_replace nifi.remote.input.host ${FQDN}
+          prop_replace nifi.cluster.node.address ${FQDN}
+          prop_replace nifi.zookeeper.connect.string ${NIFI_ZOOKEEPER_CONNECT_STRING}
+          prop_replace nifi.web.http.host ${FQDN}
+          # Update nifi.properties for web ui proxy hostname
+          prop_replace nifi.web.proxy.host nifi.example.cetic.be
+
+          if [ ! -r "${NIFI_HOME}/conf/nifi-cert.pem" ]
+          then
+            /opt/nifi/nifi-toolkit-current/bin/tls-toolkit.sh standalone \
+              -n 'my-fadi-nifi-0.my-fadi-nifi-headless.default.svc.cluster.local' \
+              -C 'CN=admin, OU=NIFI' \
+              -o "${NIFI_HOME}/conf/" \
+              -P changeMe \
+              -S changeMe \
+              --nifiPropertiesFile /opt/nifi/nifi-current/conf/nifi.properties
+          fi
+          prop_replace nifi.web.http.network.interface.default "eth0" nifi.properties
+          prop_replace nifi.web.http.network.interface.lo "lo" nifi.properties
+
+          for f in "${NIFI_HOME}/conf/authorizers.xml" "${NIFI_HOME}/conf/login-identity-providers.xml" ${NIFI_HOME}/conf/nifi.properties
+          do
+            echo === $f ===
+            cat $f
+          done
+          echo === end of files ===
+
+          function prop () {
+            target_file=${NIFI_HOME}/conf/nifi.properties
+            egrep "^${1}=" ${target_file} | cut -d'=' -f2
+          }
+
+          function offloadNode() {
+              FQDN=$(hostname -f)
+              echo "disconnecting node '$FQDN'"
+              baseUrl=https://${FQDN}:8443
+
+              echo "keystoreType=$(prop nifi.security.keystoreType)" > secure.properties
+              echo "keystore=$(prop nifi.security.keystore)" >> secure.properties
+              echo "keystorePasswd=$(prop nifi.security.keystorePasswd)" >> secure.properties
+              echo "truststoreType=$(prop nifi.security.truststoreType)" >> secure.properties
+              echo "truststore=$(prop nifi.security.truststore)" >> secure.properties
+              echo "truststorePasswd=$(prop nifi.security.truststorePasswd)" >> secure.properties
+              echo "proxiedEntity=CN=admin, OU=NIFI" >> secure.properties
+             
+              secureArgs="-p secure.properties"
+
+              echo baseUrl ${baseUrl}
+              echo "gracefully disconnecting node '$FQDN' from cluster"
+              ${NIFI_TOOLKIT_HOME}/bin/cli.sh nifi get-nodes -ot json -u ${baseUrl} ${secureArgs} > nodes.json
+              nnid=$(jq --arg FQDN "$FQDN" '.cluster.nodes[] | select(.address==$FQDN) | .nodeId' nodes.json)
+              echo "disconnecting node ${nnid}"
+              ${NIFI_TOOLKIT_HOME}/bin/cli.sh nifi disconnect-node -nnid $nnid -u ${baseUrl} ${secureArgs}
+              echo ""
+              echo "get a connected node"
+              connectedNode=$(jq -r 'first(.cluster.nodes|=sort_by(.address)| .cluster.nodes[] | select(.status=="CONNECTED")) | .address' nodes.json)
+              baseUrl=https://${connectedNode}:8443
+              echo baseUrl ${baseUrl}
+              echo ""
+              echo "wait until node has state 'DISCONNECTED'"
+              while [[ "${node_state}" != "DISCONNECTED" ]]; do
+                  sleep 1
+                  ${NIFI_TOOLKIT_HOME}/bin/cli.sh nifi get-nodes -ot json -u ${baseUrl} ${secureArgs} > nodes.json
+                  node_state=$(jq -r --arg FQDN "$FQDN" '.cluster.nodes[] | select(.address==$FQDN) | .status' nodes.json)
+                  echo "state is '${node_state}'"
+              done
+              echo ""
+              echo "node '${nnid}' was disconnected"
+              echo "offloading node"
+              ${NIFI_TOOLKIT_HOME}/bin/cli.sh nifi offload-node -nnid $nnid -u ${baseUrl} ${secureArgs}
+              echo ""
+              echo "wait until node has state 'OFFLOADED'"
+              while [[ "${node_state}" != "OFFLOADED" ]]; do
+                  sleep 1
+                  ${NIFI_TOOLKIT_HOME}/bin/cli.sh nifi get-nodes -ot json -u ${baseUrl} ${secureArgs} > nodes.json
+                  node_state=$(jq -r --arg FQDN "$FQDN" '.cluster.nodes[] | select(.address==$FQDN) | .status' nodes.json)
+                  echo "state is '${node_state}'"
+              done
+          }
+
+          deleteNode() {
+              echo "deleting node"
+              ${NIFI_TOOLKIT_HOME}/bin/cli.sh nifi delete-node -nnid ${nnid} -u ${baseUrl} ${secureArgs}
+              echo "node deleted"
+          }
+
+          trap 'echo Received trapped signal, beginning shutdown...;offloadNode;./bin/nifi.sh stop;deleteNode;exit 0;' TERM HUP INT;
+          trap ":" EXIT
+
+          exec bin/nifi.sh run & nifi_pid="$!"
+          echo NiFi running with PID ${nifi_pid}.
+          wait ${nifi_pid}
+
+        resources:
+          {}
+        ports:
+        - containerPort: 8443
+          name: https
+          protocol: TCP
+        - containerPort: 6007
+          name: cluster
+          protocol: TCP
+        env:
+        - name: NIFI_ZOOKEEPER_CONNECT_STRING
+          value: my-fadi-zookeeper:2181
+        lifecycle:
+          postStart:
+            exec:
+              command: ["/bin/sh", "-c", "/opt/nifi/psql; wget -P /opt/nifi/psql https://jdbc.postgresql.org/download/postgresql-42.2.6.jar"]
+        livenessProbe:
+          initialDelaySeconds: 90
+          periodSeconds: 60
+          tcpSocket:
+            port: 8443
+        volumeMounts:
+          - name: "logs"
+            mountPath: /opt/nifi/nifi-current/logs
+          - name: "data"
+            mountPath: /opt/nifi/data
+          - name: "auth-conf"
+            mountPath: /opt/nifi/nifi-current/auth-conf/
+          - name: "config-data"
+            mountPath: /opt/nifi/nifi-current/config-data
+          - name: "flowfile-repository"
+            mountPath: /opt/nifi/flowfile_repository
+          - name: "content-repository"
+            mountPath: /opt/nifi/content_repository
+          - name: "provenance-repository"
+            mountPath: /opt/nifi/provenance_repository
+          - name: "bootstrap-conf"
+            mountPath: /opt/nifi/nifi-current/conf/bootstrap.conf
+            subPath: "bootstrap.conf"
+          - name: "nifi-properties"
+            mountPath: /opt/nifi/nifi-current/conf/nifi.temp
+            subPath: "nifi.temp"
+          - name: "authorizers-temp"
+            mountPath: /opt/nifi/nifi-current/conf/authorizers.temp
+            subPath: "authorizers.temp"
+          - name: "bootstrap-notification-services-xml"
+            mountPath: /opt/nifi/nifi-current/conf/bootstrap-notification-services.xml
+            subPath: "bootstrap-notification-services.xml"
+          - name: "login-identity-providers-ldap-xml"
+            mountPath: /opt/nifi/nifi-current/conf/login-identity-providers-ldap.xml
+            subPath: "login-identity-providers-ldap.xml"
+          - name: "state-management-xml"
+            mountPath: /opt/nifi/nifi-current/conf/state-management.xml
+            subPath: "state-management.xml"
+          - name: "zookeeper-properties"
+            mountPath: /opt/nifi/nifi-current/conf/zookeeper.properties
+            subPath: "zookeeper.properties"
+          - name: "flow-content"
+            mountPath: /opt/nifi/data/flow.xml
+            subPath: "flow.xml"
+      - name: app-log
+        imagePullPolicy: "IfNotPresent"
+        image: "busybox:1.32.0"
+        args: [tail, -n+1, -F, /var/log/nifi-app.log]
+        resources:
+          limits:
+            cpu: 50m
+            memory: 50Mi
+          requests:
+            cpu: 10m
+            memory: 10Mi
+        volumeMounts:
+        - name: logs
+          mountPath: /var/log
+      - name: bootstrap-log
+        imagePullPolicy: "IfNotPresent"
+        image: "busybox:1.32.0"
+        args: [tail, -n+1, -F, /var/log/nifi-bootstrap.log]
+        resources:
+          limits:
+            cpu: 50m
+            memory: 50Mi
+          requests:
+            cpu: 10m
+            memory: 10Mi
+        volumeMounts:
+        - name: logs
+          mountPath: /var/log
+      - name: user-log
+        imagePullPolicy: "IfNotPresent"
+        image: "busybox:1.32.0"
+        args: [tail, -n+1, -F, /var/log/nifi-user.log]
+        resources:
+          limits:
+            cpu: 50m
+            memory: 50Mi
+          requests:
+            cpu: 10m
+            memory: 10Mi
+        volumeMounts:
+        - name: logs
+          mountPath: /var/log
+      volumes:
+      - name: "bootstrap-conf"
+        configMap:
+          name: my-fadi-nifi-config
+          items:
+            - key: "bootstrap.conf"
+              path: "bootstrap.conf"
+      - name: "nifi-properties"
+        configMap:
+          name: my-fadi-nifi-config
+          items:
+            - key: "nifi.properties"
+              path: "nifi.temp"
+      - name: "authorizers-temp"
+        configMap:
+          name: my-fadi-nifi-config
+          items:
+            - key: "authorizers.xml"
+              path: "authorizers.temp"
+      - name: "bootstrap-notification-services-xml"
+        configMap:
+          name: my-fadi-nifi-config
+          items:
+            - key: "bootstrap-notification-services.xml"
+              path: "bootstrap-notification-services.xml"
+      - name: "login-identity-providers-ldap-xml"
+        configMap:
+          name: my-fadi-nifi-config
+          items:
+            - key: "login-identity-providers-ldap.xml"
+              path: "login-identity-providers-ldap.xml"
+      - name: "state-management-xml"
+        configMap:
+          name: my-fadi-nifi-config
+          items:
+            - key: "state-management.xml"
+              path: "state-management.xml"
+      - name: "zookeeper-properties"
+        configMap:
+          name: my-fadi-nifi-config
+          items:
+            - key: "zookeeper.properties"
+              path: "zookeeper.properties"
+      - name: "flow-content"
+        configMap:
+          name: my-fadi-nifi-config
+          items:
+            - key: "flow.xml"
+              path: "flow.xml"
+  volumeClaimTemplates:
+    - metadata:
+        name: logs
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        storageClassName: 
+        resources:
+          requests:
+            storage: 5Gi
+    - metadata:
+        name: "config-data"
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: 
+        resources:
+          requests:
+            storage: 100Mi
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        storageClassName: 
+        resources:
+          requests:
+            storage: 1Gi
+    - metadata:
+        name: flowfile-repository
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        storageClassName: 
+        resources:
+          requests:
+            storage: 10Gi
+    - metadata:
+        name: content-repository
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        storageClassName: 
+        resources:
+          requests:
+            storage: 10Gi
+    - metadata:
+        name: provenance-repository
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        storageClassName: 
+        resources:
+          requests:
+            storage: 10Gi
+    - metadata:
+        name: auth-conf
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        storageClassName: 
+        resources:
+          requests:
+            storage: 100Mi
+---
+# Source: fadi/charts/postgresql/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-fadi-postgresql
+  labels:
+    app: postgresql
+    chart: postgresql-0.2.3
+    release: "my-fadi"
+    heritage: "Helm"
+spec:
+  serviceName: my-fadi-postgresql-headless
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgresql
+      release: "my-fadi"
+  template:
+    metadata:
+      name: my-fadi-postgresql
+      labels:
+        app: "postgresql"
+        chart: postgresql-0.2.3
+        release: "my-fadi"
+        heritage: "Helm"
+    spec:
+      initContainers:
+      - name: init-chmod-data
+        image: "debian:buster-slim"
+        imagePullPolicy: "Always"
+        resources:
+          {}
+        command:
+          - sh
+          - -c
+          - |
+            mkdir -p /var/lib/postgresql/data
+            chmod 700 /var/lib/postgresql/data
+            find /var/lib/postgresql -mindepth 1 -maxdepth 1 -not -name ".snapshot" -not -name "lost+found" | \
+              xargs chown -R 1001:1001
+        securityContext:
+          runAsUser: 0
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/postgresql
+          subPath: 
+      containers:
+      - name: my-fadi-postgresql
+        image: "postgres:11.5"
+        args: ["-c", "hba_file=/var/lib/postgresql/conf/pg_hba.conf"]
+        imagePullPolicy: "IfNotPresent"
+        resources:
+          {}
+        env:
+        - name: POSTGRES_PASSWORD
+          value: "Z2JHHezi4aAA"
+        - name: POSTGRES_USER
+          value: "admin"
+        - name: POSTGRES_DB
+          value: "postgres"
+        - name: PGDATA
+          value: "/var/lib/postgresql/data/pgdata"
+        ports:
+        - name: postgresql
+          containerPort: 5432
+        livenessProbe:
+            null
+        readinessProbe:
+            null
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/postgresql/data
+          subPath: 
+          readOnly: false
+        - name: postgresql-config-pghba
+          mountPath: /var/lib/postgresql/conf/pg_hba.conf
+          subPath: pg_hba.conf
+          readOnly: false
+        - name: postgresql-config-initdbscripts
+          mountPath: /docker-entrypoint-initdb.d/initdbscripts.sh
+          subPath: initdbscripts.sh
+          readOnly: false
+      volumes:
+      - name: postgresql-config-pghba
+        configMap:
+          name: my-fadi-postgresql-configuration
+          items:
+           - key: pg_hba.conf
+             path: pg_hba.conf
+      - name: postgresql-config-initdbscripts
+        configMap:
+          name: my-fadi-postgresql-configuration
+          items:
+           - key: initdbscripts.sh
+             path: initdbscripts.sh
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "10Gi"
+---
+# Source: fadi/charts/spark/templates/statefulset-master.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-fadi-spark-master
+  labels:
+    app.kubernetes.io/name: spark
+    helm.sh/chart: spark-4.1.0
+    app.kubernetes.io/instance: my-fadi
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: master
+spec:
+  serviceName: my-fadi-spark-headless
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: spark
+      app.kubernetes.io/instance: my-fadi
+      app.kubernetes.io/component: master
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: spark
+        helm.sh/chart: spark-4.1.0
+        app.kubernetes.io/instance: my-fadi
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/component: master
+    spec:
+      
+      securityContext:
+        fsGroup: 1001
+        runAsUser: 1001
+      containers:
+        - name: spark-master
+          image: docker.io/bitnami/spark:3.0.1-debian-10-r65
+          imagePullPolicy: "IfNotPresent"
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: cluster
+              containerPort: 7077
+          volumeMounts:
+          env:
+            - name: SPARK_MODE
+              value: "master"
+            - name: SPARK_DAEMON_MEMORY
+              value: 
+            - name: SPARK_MASTER_PORT
+              value: "7077"
+            - name: SPARK_MASTER_WEBUI_PORT
+              value: "8080"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 180
+            periodSeconds: 20
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          resources:
+            limits: {}
+            requests: {}
+      volumes:
+---
+# Source: fadi/charts/spark/templates/statefulset-worker.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-fadi-spark-worker
+  labels:
+    app.kubernetes.io/name: spark
+    helm.sh/chart: spark-4.1.0
+    app.kubernetes.io/instance: my-fadi
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: worker
+spec:
+  serviceName: my-fadi-spark-headless
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: spark
+      app.kubernetes.io/instance: my-fadi
+      app.kubernetes.io/component: worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: spark
+        helm.sh/chart: spark-4.1.0
+        app.kubernetes.io/instance: my-fadi
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/component: worker
+    spec:
+      
+      securityContext:
+        fsGroup: 1001
+        runAsUser: 1001
+      containers:
+        - name: spark-worker
+          image: docker.io/bitnami/spark:3.0.1-debian-10-r65
+          imagePullPolicy: "IfNotPresent"
+          ports:
+            - name: http
+              containerPort: 8081
+              protocol: TCP
+          volumeMounts:
+          env:
+            - name: SPARK_MODE
+              value: "worker"
+            - name: BASH_DEBUG
+              value: "0"
+            - name: SPARK_DAEMON_MEMORY
+              value: 
+            ## There are some environment variables whose existence needs
+            ## to be checked because Spark checks if they are null instead of an
+            ## empty string
+            - name: SPARK_WORKER_WEBUI_PORT
+              value: "8081"
+            - name: SPARK_DAEMON_JAVA_OPTS
+              value: 
+            - name: SPARK_MASTER_URL
+              value: spark://my-fadi-spark-master-svc:7077
+            # If you use a custom properties file, it must be loaded using a ConfigMap
+            - name: SPARK_WORKER_OPTS
+              value: 
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8081
+            initialDelaySeconds: 180
+            periodSeconds: 20
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8081
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          resources:
+            limits: {}
+            requests: {}
+      volumes:
+---
+# Source: fadi/charts/postgresql/templates/cronjob.yaml
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: pg-ldap-sync
+spec:
+  schedule: "*/30 * * * *" 
+  jobTemplate:
+    metadata:
+      labels:
+        app: "my-fadi"
+    spec:
+      template:
+        spec:
+          containers:
+          - name: pg-ldap-sync
+            image: ceticasbl/pg-ldap-sync:latest
+            args: [ "/workspace/pgldap-config.yaml", "-vv"]
+            imagePullPolicy: IfNotPresent
+            volumeMounts:
+            - name: pgldap-config
+              mountPath: "/workspace"
+              subPath: ""
+          restartPolicy: Never
+          volumes:
+          - name: pgldap-config
+            configMap:
+              name: my-fadi-postgresql-pgldap-config
+              items:
+              - key: pgldap-config.yaml
+                path: pgldap-config.yaml
+---
+# Source: fadi/templates/ingressroutes.yaml
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: grafana-http
+spec:
+  entryPoints:
+    - web
+  routes:
+  - kind: Rule
+    match: Host(`grafana.example.cetic.be`) && PathPrefix(`/`)
+    services:
+    - name: my-fadi-grafana
+      port: 80
+---
+# Source: fadi/templates/ingressroutes.yaml
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: nifi-http
+spec:
+  entryPoints:
+    - web
+  routes:
+  - kind: Rule
+    match: Host(`nifi.example.cetic.be`) && PathPrefix(`/`)
+    services:
+      - name: my-fadi-nifi
+        port: 8443
+    middlewares:
+      - name: https-redirect
+---
+# Source: fadi/templates/ingressroutes.yaml
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: hub-http
+spec:
+  entryPoints:
+    - web
+  routes:
+  - kind: Rule
+    match: Host(`jupyterhub.example.cetic.be`) && PathPrefix(`/`)
+    services:
+    - name: proxy-public
+      port: 80
+---
+# Source: fadi/templates/ingressroutes.yaml
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: superset-http
+spec:
+  entryPoints:
+    - web
+  routes:
+  - kind: Rule
+    match: Host(`superset.example.cetic.be`) && PathPrefix(`/`)
+    services:
+    - name: my-fadi-superset
+      port: 9000
+---
+# Source: fadi/templates/ingressroutes.yaml
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: keycloak-http
+spec:
+  entryPoints:
+    - web
+  routes:
+  - kind: Rule
+    match: Host(`keycloak.example.cetic.be`) && PathPrefix(`/`)
+    services:
+    - name: my-fadi-keycloak
+      port: 80
+---
+# Source: fadi/templates/ingressroutes.yaml
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRouteTCP
+metadata:
+  name: nifi
+spec:
+  entryPoints:
+    - websecure
+  routes:
+  - match: HostSNI(`nifi.example.cetic.be`)
+    services:
+      - name: my-fadi-nifi
+        port: 8443
+  tls:
+    passthrough: true
+---
+# Source: fadi/charts/traefik/templates/service.yaml
+apiVersion: v1
+kind: List
+metadata:
+  name: my-fadi-traefik
+items:
+  - apiVersion: v1
+    kind: Service
+    metadata:
+      name: my-fadi-traefik
+      labels:
+        app.kubernetes.io/name: traefik
+        helm.sh/chart: traefik-10.6.2
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/instance: my-fadi
+      annotations:
+    spec:
+      type: LoadBalancer
+      loadBalancerIP: null
+      selector:
+        app.kubernetes.io/name: traefik
+        app.kubernetes.io/instance: my-fadi
+      ports:
+      - port: 80
+        name: web
+        targetPort: "web"
+        protocol: "TCP"
+      - port: 443
+        name: websecure
+        targetPort: "websecure"
+        protocol: "TCP"
+---
+# Source: fadi/charts/grafana/templates/tests/test.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-fadi-grafana-test
+  labels:
+    helm.sh/chart: grafana-6.1.17
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: my-fadi
+    app.kubernetes.io/version: "7.3.5"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test-success
+  namespace: default
+spec:
+  serviceAccountName: my-fadi-grafana-test
+  containers:
+    - name: my-fadi-test
+      image: "bats/bats:v1.1.0"
+      imagePullPolicy: "IfNotPresent"
+      command: ["/opt/bats/bin/bats", "-t", "/tests/run.sh"]
+      volumeMounts:
+        - mountPath: /tests
+          name: tests
+          readOnly: true
+  volumes:
+  - name: tests
+    configMap:
+      name: my-fadi-grafana-test
+  restartPolicy: Never
+---
+# Source: fadi/charts/traefik/templates/dashboard-hook-ingressroute.yaml
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: my-fadi-traefik-dashboard
+  annotations:
+    helm.sh/hook: "post-install,post-upgrade"
+  labels:
+    app.kubernetes.io/name: traefik
+    helm.sh/chart: traefik-10.6.2
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/instance: my-fadi
+spec:
+  entryPoints:
+    - traefik
+  routes:
+  - match: PathPrefix(`/dashboard`) || PathPrefix(`/api`)
+    kind: Rule
+    services:
+    - name: api@internal
+      kind: TraefikService

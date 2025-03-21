@@ -1,0 +1,179 @@
+---
+# Source: inbucket/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: inbucket-configmap
+  namespace: default
+  labels:
+    app.kubernetes.io/name: inbucket
+    app.kubernetes.io/instance: my-inbucket
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: inbucket-2.4.0
+data:
+  INBUCKET_LOGLEVEL: info
+  INBUCKET_MAILBOXNAMING: local
+  INBUCKET_POP3_ADDR: 0.0.0.0:1100
+  INBUCKET_POP3_DOMAIN: inbucket
+  INBUCKET_POP3_TIMEOUT: 600s
+  INBUCKET_SMTP_ACCEPTDOMAINS: ""
+  INBUCKET_SMTP_ADDR: 0.0.0.0:2500
+  INBUCKET_SMTP_DEFAULTACCEPT: "true"
+  INBUCKET_SMTP_DEFAULTSTORE: "true"
+  INBUCKET_SMTP_DISCARDDOMAINS: ""
+  INBUCKET_SMTP_DOMAIN: inbucket
+  INBUCKET_SMTP_MAXMESSAGEBYTES: "10240000"
+  INBUCKET_SMTP_MAXRECIPIENTS: "200"
+  INBUCKET_SMTP_REJECTDOMAINS: ""
+  INBUCKET_SMTP_STOREDOMAINS: ""
+  INBUCKET_SMTP_TIMEOUT: 300s
+  INBUCKET_SMTP_TLSCERT: cert.crt
+  INBUCKET_SMTP_TLSENABLED: "false"
+  INBUCKET_SMTP_TLSPRIVKEY: cert.key
+  INBUCKET_STORAGE_MAILBOXMSGCAP: "500"
+  INBUCKET_STORAGE_PARAMS: ""
+  INBUCKET_STORAGE_RETENTIONPERIOD: 24h
+  INBUCKET_STORAGE_RETENTIONSLEEP: 50ms
+  INBUCKET_STORAGE_TYPE: memory
+  INBUCKET_WEB_ADDR: 0.0.0.0:9000
+  INBUCKET_WEB_BASEPATH: ""
+  INBUCKET_WEB_COOKIEAUTHKEY: ""
+  INBUCKET_WEB_GREETINGFILE: /config/greeting.html
+  INBUCKET_WEB_MAILBOXPROMPT: '@inbucket'
+  INBUCKET_WEB_MONITORHISTORY: "30"
+  INBUCKET_WEB_MONITORVISIBLE: "true"
+  INBUCKET_WEB_PPROF: "false"
+  INBUCKET_WEB_TEMPLATECACHE: "true"
+  INBUCKET_WEB_UIDIR: ui
+---
+# Source: inbucket/templates/tests/inbucket-config-test.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: inbucket-tests
+  labels:
+    app.kubernetes.io/name: inbucket
+    app.kubernetes.io/instance: my-inbucket
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: inbucket-2.4.0
+data:
+  run.sh: |-
+    @test "Testing Inbucket is accessible" {
+      curl --retry 48 --retry-delay 10 my-inbucket.default.svc.cluster.local:9000
+    }
+---
+# Source: inbucket/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/name: inbucket
+    app.kubernetes.io/instance: my-inbucket
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: inbucket-2.4.0
+  name: my-inbucket
+  namespace: default
+spec:
+  type: "ClusterIP"
+  ports:
+    - name: http
+      port: 9000
+      protocol: TCP
+      targetPort: http
+    - name: smtp
+      port: 2500
+      protocol: TCP
+      targetPort: smtp
+    - name: pop3
+      port: 1100
+      protocol: TCP
+      targetPort: pop3
+  selector:
+    app.kubernetes.io/name: inbucket
+    app.kubernetes.io/instance: my-inbucket
+---
+# Source: inbucket/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: inbucket
+    app.kubernetes.io/instance: my-inbucket
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: inbucket-2.4.0
+  name: my-inbucket
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: inbucket
+      app.kubernetes.io/instance: my-inbucket
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: inbucket
+        app.kubernetes.io/instance: my-inbucket
+        app.kubernetes.io/managed-by: Helm
+        helm.sh/chart: inbucket-2.4.0
+    spec:
+      containers:
+        - name: inbucket
+          image: "inbucket/inbucket:3.0.0@sha256:1f10a0efea694592c06799c729aee1d6d71c9a4f72b73031d4a426ef5f26dfc1"
+          imagePullPolicy: "Always"
+          envFrom:
+          - configMapRef:
+              name: inbucket-configmap
+          ports:
+            - name: http
+              containerPort: 9000
+              protocol: TCP
+            - name: smtp
+              containerPort: 2500
+              protocol: TCP
+            - name: pop3
+              containerPort: 1100
+              protocol: TCP
+          livenessProbe:
+            tcpSocket:
+              port: smtp
+            initialDelaySeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            tcpSocket:
+              port: smtp
+            initialDelaySeconds: 10
+            timeoutSeconds: 5
+          resources:
+            {}
+---
+# Source: inbucket/templates/tests/inbucket-test.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "inbucket-test-pffml"
+  labels:
+    app.kubernetes.io/name: inbucket
+    app.kubernetes.io/instance: my-inbucket
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: inbucket-2.4.0
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  containers:
+    - name: my-inbucket-test
+      image: "bats/bats:v1.10.0@sha256:33d5909905442e39afdb29af693516f213ace6b8100045d408475d5bd15196cb"
+      command:
+      - "bash"
+      - "-c"
+      - |
+        apk add curl
+        bats -t /tests/run.sh
+      volumeMounts:
+      - mountPath: /tests
+        name: tests
+        readOnly: true
+  volumes:
+  - name: tests
+    configMap:
+      name: inbucket-tests
+  restartPolicy: Never

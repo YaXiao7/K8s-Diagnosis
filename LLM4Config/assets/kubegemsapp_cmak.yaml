@@ -1,0 +1,126 @@
+---
+# Source: cmak/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cmak-clusters
+  namespace: default
+  labels:
+    app.kubernetes.io/version: "3.0.0.5-7e7a22e"
+    app.kubernetes.io/name: "cmak"
+data:
+  clusters.yaml: |-
+    cmak:
+      clusters: []
+      clustersCommon:
+        activeOffsetCacheEnabled: true
+        curatorConfig:
+          baseSleepTimeMs: 100
+          maxSleepTimeMs: 1000
+          zkMaxRetry: 100
+        displaySizeEnabled: false
+        enabled: true
+        filterConsumers: false
+        jaasConfig: null
+        jmxEnabled: false
+        jmxPass: null
+        jmxSsl: false
+        jmxUser: null
+        kafkaVersion: 2.2.0
+        logkafkaEnabled: false
+        pollConsumers: true
+        saslMechanism: null
+        securityProtocol: PLAINTEXT
+        tuning:
+          brokerViewThreadPoolQueueSize: 1000
+          brokerViewThreadPoolSize: 10
+          brokerViewUpdatePeriodSeconds: 30
+          clusterManagerThreadPoolQueueSize: 100
+          clusterManagerThreadPoolSize: 10
+          kafkaAdminClientThreadPoolQueueSize: 1000
+          kafkaAdminClientThreadPoolSize: 10
+          kafkaCommandThreadPoolQueueSize: 100
+          kafkaCommandThreadPoolSize: 10
+          kafkaManagedOffsetGroupCacheSize: 1000000
+          kafkaManagedOffsetGroupExpireDays: 7
+          kafkaManagedOffsetMetadataCheckMillis: 30000
+          logkafkaCommandThreadPoolQueueSize: 100
+          logkafkaCommandThreadPoolSize: 10
+          logkafkaUpdatePeriodSeconds: 30
+          offsetCacheThreadPoolQueueSize: 1000
+          offsetCacheThreadPoolSize: 10
+          partitionOffsetCacheTimeoutSecs: 5
+---
+# Source: cmak/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: "cmak"
+  namespace: default
+  labels:
+    app.kubernetes.io/version: "3.0.0.5-7e7a22e"
+    app.kubernetes.io/name: "cmak"
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 9000
+      targetPort: http
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: "cmak"
+---
+# Source: cmak/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cmak
+  namespace: default
+  labels:
+    app.kubernetes.io/version: "3.0.0.5-7e7a22e"
+    app.kubernetes.io/name: "cmak"
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: "cmak"
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/version: "3.0.0.5-7e7a22e"
+        app.kubernetes.io/name: "cmak"
+    spec:
+      containers:
+        - name: ui
+          image: "registry.cn-beijing.aliyuncs.com/kubegemsapp/cmak:3.0.0.5-7e7a22e"
+          imagePullPolicy: IfNotPresent
+          ports:
+          - name: http
+            containerPort: 9000
+            protocol: TCP
+          args:
+          - "-Dcmak.zkhosts=zk:2181"
+          - "-Dhttp.port=9000"
+          
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            failureThreshold: 7
+            initialDelaySeconds: 15
+            timeoutSeconds: 15
+            periodSeconds: 15
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            failureThreshold: 7
+            initialDelaySeconds: 45
+            timeoutSeconds: 15
+            periodSeconds: 30
+          resources:
+            requests: 
+              cpu: 100m
+              memory: 128Mi
+            limits: 
+              cpu: 500m
+              memory: 512Mi

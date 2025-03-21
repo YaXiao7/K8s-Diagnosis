@@ -1,0 +1,140 @@
+---
+# Source: haproxy/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-haproxy
+  namespace: default
+  labels:
+    helm.sh/chart: haproxy-1.22.0
+    app.kubernetes.io/name: haproxy
+    app.kubernetes.io/instance: my-haproxy
+    app.kubernetes.io/version: "2.9.6"
+    app.kubernetes.io/managed-by: Helm
+automountServiceAccountToken: true
+---
+# Source: haproxy/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-haproxy
+  namespace: default
+  labels:
+    helm.sh/chart: haproxy-1.22.0
+    app.kubernetes.io/name: haproxy
+    app.kubernetes.io/instance: my-haproxy
+    app.kubernetes.io/version: "2.9.6"
+    app.kubernetes.io/managed-by: Helm
+data:
+  haproxy.cfg: |
+  
+    global
+      log stdout format raw local0
+      maxconn 1024
+    
+    defaults
+      log global
+      timeout client 60s
+      timeout connect 60s
+      timeout server 60s
+    
+    frontend fe_main
+      bind :80
+      default_backend be_main
+    
+    backend be_main
+      server web1 10.0.0.1:8080 check
+---
+# Source: haproxy/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-haproxy
+  namespace: default
+  labels:
+    helm.sh/chart: haproxy-1.22.0
+    app.kubernetes.io/name: haproxy
+    app.kubernetes.io/instance: my-haproxy
+    app.kubernetes.io/version: "2.9.6"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: haproxy
+    app.kubernetes.io/instance: my-haproxy
+  ports:
+  - name: http
+    protocol: TCP
+    port: 80
+    targetPort: http
+  - name: https
+    protocol: TCP
+    port: 443
+    targetPort: https
+  - name: stat
+    protocol: TCP
+    port: 1024
+    targetPort: stat
+---
+# Source: haproxy/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-haproxy
+  namespace: default
+  labels:
+    helm.sh/chart: haproxy-1.22.0
+    app.kubernetes.io/name: haproxy
+    app.kubernetes.io/instance: my-haproxy
+    app.kubernetes.io/version: "2.9.6"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  minReadySeconds: 0
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: haproxy
+      app.kubernetes.io/instance: my-haproxy
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: haproxy
+        app.kubernetes.io/instance: my-haproxy
+      annotations:
+        checksum/environment: 07c26528640d581f45a64590a4898de6c05be2292f004620ad884cb5af305e6c
+    spec:
+      serviceAccountName: my-haproxy
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        {}
+      dnsPolicy: ClusterFirst
+      volumes:
+        - name: haproxy-config
+          configMap:
+            name: my-haproxy
+      containers:
+        - name: haproxy
+          image: "haproxytech/haproxy-alpine:2.9.6"
+          imagePullPolicy: IfNotPresent
+          args:
+            - -f
+            - /usr/local/etc/haproxy/haproxy.cfg
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+            - name: https
+              containerPort: 443
+              protocol: TCP
+            - name: stat
+              containerPort: 1024
+              protocol: TCP
+          resources:
+            requests:
+              cpu: 250m
+              memory: 128Mi
+          volumeMounts:
+            - name: haproxy-config
+              mountPath: /usr/local/etc/haproxy/haproxy.cfg
+              subPath: haproxy.cfg

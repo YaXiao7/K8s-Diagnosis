@@ -1,0 +1,134 @@
+---
+# Source: vault-token-injector/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-vault-token-injector
+  labels:
+    helm.sh/chart: vault-token-injector-3.1.0
+    app.kubernetes.io/name: vault-token-injector
+    app.kubernetes.io/instance: my-vault-token-injector
+    app.kubernetes.io/version: "v1.9.1"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: vault-token-injector/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-vault-token-injector
+  labels:
+    helm.sh/chart: vault-token-injector-3.1.0
+    app.kubernetes.io/name: vault-token-injector
+    app.kubernetes.io/instance: my-vault-token-injector
+    app.kubernetes.io/version: "v1.9.1"
+    app.kubernetes.io/managed-by: Helm
+data:
+  CIRCLE_CI_TOKEN: cmVwbGFjZW1l
+  TFCLOUD_TOKEN: cmVwbGFjZW1l
+---
+# Source: vault-token-injector/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-vault-token-injector
+  labels:
+    helm.sh/chart: vault-token-injector-3.1.0
+    app.kubernetes.io/name: vault-token-injector
+    app.kubernetes.io/instance: my-vault-token-injector
+    app.kubernetes.io/version: "v1.9.1"
+    app.kubernetes.io/managed-by: Helm
+data:
+  config.yaml: |
+    circleci:
+    - env_variable: VAULT_TOKEN
+      name: FairwindsOps/example
+      vault_role: some-vault-role
+    vaultAddress: https://vault.example.com
+---
+# Source: vault-token-injector/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-vault-token-injector
+  labels:
+    helm.sh/chart: vault-token-injector-3.1.0
+    app.kubernetes.io/name: vault-token-injector
+    app.kubernetes.io/instance: my-vault-token-injector
+    app.kubernetes.io/version: "v1.9.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  ports:
+    - name: http-metrics
+      port: 4329
+      targetPort: 4329
+  selector:
+    app.kubernetes.io/name: vault-token-injector
+    app.kubernetes.io/instance: my-vault-token-injector
+---
+# Source: vault-token-injector/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-vault-token-injector
+  labels:
+    helm.sh/chart: vault-token-injector-3.1.0
+    app.kubernetes.io/name: vault-token-injector
+    app.kubernetes.io/instance: my-vault-token-injector
+    app.kubernetes.io/version: "v1.9.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vault-token-injector
+      app.kubernetes.io/instance: my-vault-token-injector
+  template:
+    metadata:
+      annotations:
+        checksum/config: 03e79ef5afee5f7f86c21599e45894bdfc79ce071b2502f4e4f8a4aedfcd4d8b
+      labels:
+        app.kubernetes.io/name: vault-token-injector
+        app.kubernetes.io/instance: my-vault-token-injector
+    spec:
+      serviceAccountName: my-vault-token-injector
+      securityContext:
+        {}
+      containers:
+        - name: vault-token-injector
+          securityContext:
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 10000
+          image: "us-docker.pkg.dev/fairwinds-ops/oss/vault-token-injector:v1.9.1"
+          imagePullPolicy: Always
+          resources:
+            limits:
+              cpu: 20m
+              memory: 128Mi
+            requests:
+              cpu: 20m
+              memory: 128Mi
+          args:
+            - -c
+            - /config/config.yaml
+            - -v1
+            - --enable-metrics=true
+          ports:
+          - containerPort: 4329
+            name: metrics
+          volumeMounts:
+          - name: config
+            mountPath: /config
+          envFrom:
+          - secretRef:
+              name: my-vault-token-injector
+          env:
+          - name: "VAULT_ADDR"
+            value: "https://vault.example.com"
+      volumes:
+      - name: config
+        configMap:
+          name: my-vault-token-injector

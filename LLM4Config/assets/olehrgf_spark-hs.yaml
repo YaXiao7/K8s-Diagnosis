@@ -1,0 +1,177 @@
+---
+# Source: spark-hs/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    helm.sh/chart: spark-hs-0.0.7
+    app: spark-hs
+    app.kubernetes.io/version: "3.4.1"
+    app.kubernetes.io/managed-by: Helm
+  name: spark-hs
+automountServiceAccountToken: true
+---
+# Source: spark-hs/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: spark-hs-conf
+  labels:
+    helm.sh/chart: spark-hs-0.0.7
+    app: spark-hs
+    app.kubernetes.io/version: "3.4.1"
+    app.kubernetes.io/managed-by: Helm
+data:
+  spark-defaults.conf: |
+    spark.history.store.path=/data/cache
+      spark.history.fs.logDirectory=file:/tmp/spark-events
+      
+  log4j.properties: |
+      # Set everything to be logged to the console
+      log4j.rootCategory=INFO, console
+      log4j.appender.console=org.apache.log4j.ConsoleAppender
+      log4j.appender.console.target=System.out
+      log4j.appender.console.layout=org.apache.log4j.PatternLayout
+      log4j.appender.console.layout.ConversionPattern=%d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n
+      
+      # Set the default spark-shell/spark-sql log level to WARN. When running the
+      # spark-shell/spark-sql, the log level for these classes is used to overwrite
+      # the root logger's log level, so that the user can have different defaults
+      # for the shell and regular Spark apps.
+      log4j.logger.org.apache.spark.repl.Main=WARN
+      log4j.logger.org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver=WARN
+      
+      # Settings to quiet third party logs that are too verbose
+      log4j.logger.org.sparkproject.jetty=WARN
+      log4j.logger.org.sparkproject.jetty.util.component.AbstractLifeCycle=ERROR
+      log4j.logger.org.apache.spark.repl.SparkIMain$exprTyper=INFO
+      log4j.logger.org.apache.spark.repl.SparkILoop$SparkILoopInterpreter=INFO
+      log4j.logger.org.apache.parquet=ERROR
+      log4j.logger.parquet=ERROR
+      
+      # SPARK-9183: Settings to avoid annoying messages when looking up nonexistent UDFs in SparkSQL with Hive support
+      log4j.logger.org.apache.hadoop.hive.metastore.RetryingHMSHandler=FATAL
+      log4j.logger.org.apache.hadoop.hive.ql.exec.FunctionRegistry=ERROR
+      
+      # For deploying Spark ThriftServer
+      # SPARK-34128：Suppress undesirable TTransportException warnings involved in THRIFT-4805
+      log4j.appender.console.filter.1=org.apache.log4j.varia.StringMatchFilter
+      log4j.appender.console.filter.1.StringToMatch=Thrift error occurred during processing of message
+      log4j.appender.console.filter.1.AcceptOnMatch=false
+      
+      # For Spark history server
+      #log4j.logger.org.apache.spark.deploy.history=DEBUG
+---
+# Source: spark-hs/templates/cache.pvc.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: spark-hs-cache
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: default
+  resources:
+    requests:
+      storage: 10Gi
+---
+# Source: spark-hs/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: spark-hs
+  labels:
+    helm.sh/chart: spark-hs-0.0.7
+    app: spark-hs
+    app.kubernetes.io/version: "3.4.1"
+    app.kubernetes.io/managed-by: Helm
+
+spec:
+  type: ClusterIP
+  ports:
+    - name: history-server
+      port: 18080
+  selector:
+    app: spark-hs
+---
+# Source: spark-hs/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spark-hs
+  labels:
+    helm.sh/chart: spark-hs-0.0.7
+    app: spark-hs
+    app.kubernetes.io/version: "3.4.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: spark-hs
+  template:
+    metadata:
+      labels:
+        helm.sh/chart: spark-hs-0.0.7
+        app: spark-hs
+        app.kubernetes.io/version: "3.4.1"
+        app.kubernetes.io/managed-by: Helm
+        app: spark-hs
+      annotations:
+    spec:
+      serviceAccountName: spark-hs
+      containers:
+        - name: spark-hs
+          image: "apache/spark:3.4.1"
+          imagePullPolicy: IfNotPresent
+          resources: 
+            limits:
+              cpu: 1
+              memory: 1000Mi
+            requests:
+              cpu: 400m
+              memory: 1000Mi
+          command: ["/opt/spark/sbin/start-history-server.sh"]
+
+          env:
+            - name: SPARK_CONF_DIR
+              value: /opt/spark/conf
+            - name: SPARK_HISTORY_OPTS
+              value: -Dlog4j.configuration=file:/opt/spark/conf/log4j.properties
+            - name: SPARK_NO_DAEMONIZE
+              value: "false"
+
+          ports:
+            - name: http
+              containerPort: 18080
+              protocol: TCP
+
+          readinessProbe:
+            timeoutSeconds: 4
+            httpGet:
+              path: /
+              port: http
+
+          livenessProbe:
+            timeoutSeconds: 4
+            httpGet:
+              path: /
+              port: http
+
+          volumeMounts:
+            - name: spark-hs-conf
+              mountPath: /opt/spark/conf
+            - name: cache
+              mountPath: /data/cache
+      volumes:
+        - name: spark-hs-conf
+          configMap:
+            name: spark-hs-conf
+            items:
+              - key: spark-defaults.conf
+                path: spark-defaults.conf
+              - key: log4j.properties
+                path: log4j.properties
+        - name: cache
+          persistentVolumeClaim:
+            claimName: spark-hs-cache

@@ -1,0 +1,353 @@
+---
+# Source: flask-note/charts/mariadb/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-flask-note-mariadb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: mariadb
+    helm.sh/chart: mariadb-11.5.5
+    app.kubernetes.io/instance: my-flask-note
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+automountServiceAccountToken: false
+---
+# Source: flask-note/charts/mariadb/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-flask-note-mariadb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: mariadb
+    helm.sh/chart: mariadb-11.5.5
+    app.kubernetes.io/instance: my-flask-note
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  mariadb-root-password: "aGVsbG8="
+  mariadb-password: "aGVsbG8="
+---
+# Source: flask-note/templates/maria-secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+    name: maria-secret
+    # namespace: ankit
+type: Opaque
+stringData:
+    MARIADB_ROOT_PASSWORD: "hello"
+    MARIADB_PASSWORD: "hello"
+    DB_USERNAME: "hello"
+    DB_PASSWORD: "hello"
+---
+# Source: flask-note/charts/mariadb/templates/primary/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-flask-note-mariadb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: mariadb
+    helm.sh/chart: mariadb-11.5.5
+    app.kubernetes.io/instance: my-flask-note
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: primary
+data:
+  my.cnf: |-
+    [mysqld]
+    skip-name-resolve
+    explicit_defaults_for_timestamp
+    basedir=/opt/bitnami/mariadb
+    plugin_dir=/opt/bitnami/mariadb/plugin
+    port=3306
+    socket=/opt/bitnami/mariadb/tmp/mysql.sock
+    tmpdir=/opt/bitnami/mariadb/tmp
+    max_allowed_packet=16M
+    bind-address=*
+    pid-file=/opt/bitnami/mariadb/tmp/mysqld.pid
+    log-error=/opt/bitnami/mariadb/logs/mysqld.log
+    character-set-server=UTF8
+    collation-server=utf8_general_ci
+    slow_query_log=0
+    slow_query_log_file=/opt/bitnami/mariadb/logs/mysqld.log
+    long_query_time=10.0
+    
+    [client]
+    port=3306
+    socket=/opt/bitnami/mariadb/tmp/mysql.sock
+    default-character-set=UTF8
+    plugin_dir=/opt/bitnami/mariadb/plugin
+    
+    [manager]
+    port=3306
+    socket=/opt/bitnami/mariadb/tmp/mysql.sock
+    pid-file=/opt/bitnami/mariadb/tmp/mysqld.pid
+---
+# Source: flask-note/templates/maria-config.yaml
+apiVersion : v1
+kind : ConfigMap
+metadata:
+  name : db-config
+  # namespace: ankit
+data:
+   DB_HOST: myf-mariadb
+   DB_NAME: mydb
+   DB_PORT: '3306'
+   PORT: '5000'
+   MARIADB_DATABASE: mydb
+   MARIADB_USER: hello
+---
+# Source: flask-note/charts/mariadb/templates/primary/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-flask-note-mariadb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: mariadb
+    helm.sh/chart: mariadb-11.5.5
+    app.kubernetes.io/instance: my-flask-note
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: primary
+  annotations:
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+    - name: mysql
+      port: 3306
+      protocol: TCP
+      targetPort: mysql
+      nodePort: null
+  selector: 
+    app.kubernetes.io/name: mariadb
+    app.kubernetes.io/instance: my-flask-note
+    app.kubernetes.io/component: primary
+---
+# Source: flask-note/templates/flask-depl.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: flask-app-service
+spec:
+  selector:
+    app: my-flask-note-flask-note
+  type: LoadBalancer
+  ports:
+    - protocol: TCP
+      port: 8081
+      targetPort: 5000
+---
+# Source: flask-note/templates/flask-depl.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-flask-note-flask-note
+  labels:
+    app: my-flask-note-flask-note
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: my-flask-note-flask-note
+  template:
+    metadata:
+      labels:
+        app: my-flask-note-flask-note
+    spec:
+      containers:
+      - name: flask-note
+        image: ankitjilka31/flask-note:1.3
+        ports:
+          - containerPort: 5000
+        envFrom:
+          - configMapRef:
+              name: db-config
+          - secretRef:
+              name: maria-secret
+---
+# Source: flask-note/charts/mariadb/templates/primary/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-flask-note-mariadb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: mariadb
+    helm.sh/chart: mariadb-11.5.5
+    app.kubernetes.io/instance: my-flask-note
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: primary
+spec:
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels: 
+      app.kubernetes.io/name: mariadb
+      app.kubernetes.io/instance: my-flask-note
+      app.kubernetes.io/component: primary
+  serviceName: my-flask-note-mariadb
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations:
+        checksum/configuration: 8e5601fda4fd937209f7278030f176a4c2d459f4baf013dfb41dd2985fb776bf
+      labels:
+        app.kubernetes.io/name: mariadb
+        helm.sh/chart: mariadb-11.5.5
+        app.kubernetes.io/instance: my-flask-note
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/component: primary
+    spec:
+      
+      serviceAccountName: my-flask-note-mariadb
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: mariadb
+                    app.kubernetes.io/instance: my-flask-note
+                    app.kubernetes.io/component: primary
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+      containers:
+        - name: mariadb
+          image: docker.io/bitnami/mariadb:10.6.12-debian-11-r13
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            allowPrivilegeEscalation: false
+            privileged: false
+            runAsNonRoot: true
+            runAsUser: 1001
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: MARIADB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-flask-note-mariadb
+                  key: mariadb-root-password
+            - name: MARIADB_USER
+              value: "hello"
+            - name: MARIADB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-flask-note-mariadb
+                  key: mariadb-password
+            - name: MARIADB_DATABASE
+              value: "mydb"
+          ports:
+            - name: mysql
+              containerPort: 3306
+          livenessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 120
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+            exec:
+              command:
+                - /bin/bash
+                - -ec
+                - |
+                  password_aux="${MARIADB_ROOT_PASSWORD:-}"
+                  if [[ -f "${MARIADB_ROOT_PASSWORD_FILE:-}" ]]; then
+                      password_aux=$(cat "$MARIADB_ROOT_PASSWORD_FILE")
+                  fi
+                  mysqladmin status -uroot -p"${password_aux}"
+          readinessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+            exec:
+              command:
+                - /bin/bash
+                - -ec
+                - |
+                  password_aux="${MARIADB_ROOT_PASSWORD:-}"
+                  if [[ -f "${MARIADB_ROOT_PASSWORD_FILE:-}" ]]; then
+                      password_aux=$(cat "$MARIADB_ROOT_PASSWORD_FILE")
+                  fi
+                  mysqladmin status -uroot -p"${password_aux}"
+          resources: 
+            limits: {}
+            requests: {}
+          volumeMounts:
+            - name: data
+              mountPath: /bitnami/mariadb
+            - name: config
+              mountPath: /opt/bitnami/mariadb/conf/my.cnf
+              subPath: my.cnf
+      volumes:
+        - name: config
+          configMap:
+            name: my-flask-note-mariadb
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels: 
+          app.kubernetes.io/name: mariadb
+          app.kubernetes.io/instance: my-flask-note
+          app.kubernetes.io/component: primary
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "8Gi"
+---
+# Source: flask-note/templates/db-job.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: my-flask-note-flask-note
+spec:
+  # ttlSecondsAfterFinished: 0
+  template:
+    spec:
+      containers:
+      - name: flask-note
+        image: ankitjilka31/flask-note:1.3
+        command: ["flask", "db", "upgrade"]
+
+        envFrom:
+          - configMapRef:
+              name: db-config
+          - secretRef:
+              name: maria-secret
+
+      restartPolicy: Never
+---
+# Source: flask-note/templates/ingress-single.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: my-flask-note-flask-note
+  annotations:
+    ingress.kubernetes.io/ssl-redirect: "false"
+spec:
+  ingressClassName: traefik
+  rules:
+  - host: myapps.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: flask-app-service
+            port:
+              number: 8081

@@ -1,0 +1,111 @@
+---
+# Source: postgres-backup-local/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-postgres-backup-local
+  labels:
+    helm.sh/chart: postgres-backup-local-0.1.13
+    monitoring: apps
+    app.kubernetes.io/name: postgres-backup-local
+    app.kubernetes.io/instance: my-postgres-backup-local
+    app.kubernetes.io/version: "v0.1.5"
+    app.kubernetes.io/managed-by: Helm
+automountServiceAccountToken: false
+---
+# Source: postgres-backup-local/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-postgres-backup-local
+  labels:
+    helm.sh/chart: postgres-backup-local-0.1.13
+    monitoring: apps
+    app.kubernetes.io/name: postgres-backup-local
+    app.kubernetes.io/instance: my-postgres-backup-local
+    app.kubernetes.io/version: "v0.1.5"
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+stringData:
+  POSTGRES_USER: changeMe
+  POSTGRES_PASSWORD: changeMe
+---
+# Source: postgres-backup-local/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-postgres-backup-local
+  labels:
+    helm.sh/chart: postgres-backup-local-0.1.13
+    monitoring: apps
+    app.kubernetes.io/name: postgres-backup-local
+    app.kubernetes.io/instance: my-postgres-backup-local
+    app.kubernetes.io/version: "v0.1.5"
+    app.kubernetes.io/managed-by: Helm
+data:
+    POSTGRES_HOST: 
+    POSTGRES_PORT:  "5432"
+    POSTGRES_DB: auth
+    POSTGRES_EXTRA_OPTS: "-Z6"
+    SCHEDULE: "@daily"
+    BACKUP_KEEP_DAYS: "7"
+    BACKUP_KEEP_WEEKS: "4"
+    BACKUP_KEEP_MONTHS: "6"
+    HEALTHCHECK_PORT: "8080"
+---
+# Source: postgres-backup-local/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-postgres-backup-local
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgres-backup-local
+      app.kubernetes.io/instance: my-postgres-backup-local
+  serviceName: my-postgres-backup-local
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        helm.sh/chart: postgres-backup-local-0.1.13
+        monitoring: apps
+        app.kubernetes.io/name: postgres-backup-local
+        app.kubernetes.io/instance: my-postgres-backup-local
+        app.kubernetes.io/version: "v0.1.5"
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      serviceAccountName: my-postgres-backup-local
+      securityContext:
+        fsGroup: 999
+        runAsUser: 999
+        runAsGroup: 999
+        runAsNonRoot: true
+      containers:
+        - name: my-postgres-backup-local
+          image: prodrigestivill/postgres-backup-local:12-alpine-8d72d2d
+          imagePullPolicy: IfNotPresent
+          livenessProbe:
+            httpGet:
+              port: 8080
+          readinessProbe:
+            httpGet:
+              port: 8080
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          volumeMounts:
+            - name:  my-postgres-backup-local
+              mountPath: /data
+          resources:
+            {}
+          envFrom:
+            - configMapRef:
+                name: my-postgres-backup-local
+            - secretRef:
+                name: my-postgres-backup-local
+                
+      volumes:
+        - name:  my-postgres-backup-local
+          emptyDir: { }

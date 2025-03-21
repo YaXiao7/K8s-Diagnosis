@@ -1,0 +1,106 @@
+---
+# Source: kubeservice-ebpf-exporter/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-kubeservice-ebpf-exporter
+  namespace: default
+  labels:     
+    helm.sh/chart: kubeservice-ebpf-exporter-1.2.1
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: metrics
+    app.kubernetes.io/part-of: kubeservice-ebpf-exporter
+    app.kubernetes.io/instance: my-kubeservice-ebpf-exporter
+    app.kubernetes.io/name: kubeservice-ebpf-exporter
+    app.kubernetes.io/version: "v2.3.0"
+  annotations:
+    {}
+imagePullSecrets:
+  []
+---
+# Source: kubeservice-ebpf-exporter/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-kubeservice-ebpf-exporter
+  labels:
+    app.kubernetes.io/name: kubeservice-ebpf-exporter
+    app.kubernetes.io/instance: my-kubeservice-ebpf-exporter
+    app.kubernetes.io/managed-by: Helm
+  namespace: default
+spec:
+  ipFamilies:
+  - IPv4
+  ipFamilyPolicy: SingleStack
+  type: ClusterIP
+  ports:
+  - port: 80
+    protocol: TCP
+    targetPort: metrics
+  selector:
+    app.kubernetes.io/name: kubeservice-ebpf-exporter
+    app.kubernetes.io/instance: my-kubeservice-ebpf-exporter
+---
+# Source: kubeservice-ebpf-exporter/templates/daemonset.yaml
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: my-kubeservice-ebpf-exporter
+  namespace: default
+  labels: 
+    app.kubernetes.io/name: kubeservice-ebpf-exporter
+    app.kubernetes.io/instance: my-kubeservice-ebpf-exporter
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kubeservice-ebpf-exporter
+      app.kubernetes.io/instance: my-kubeservice-ebpf-exporter
+  template:
+    metadata:
+      labels: 
+        app.kubernetes.io/name: kubeservice-ebpf-exporter
+        app.kubernetes.io/instance: my-kubeservice-ebpf-exporter
+    spec:
+      automountServiceAccountToken: false
+      serviceAccountName: my-kubeservice-ebpf-exporter
+      containers:
+        - name: my-kubeservice-ebpf-exporter
+          command:
+            - /ebpf_exporter
+          args:
+            - --config.dir
+            - /examples/
+            - --web.listen-address
+            - 0.0.0.0:9435
+            - --config.names
+            - timers,uprobe,usdt,shrinklat,biolatency,accept-latency,bpf-jit,cachestat,cgroup,llcstat,raw-tracepoints,tcp-syn-backlog,tcp-window-clamps
+          image: "ghcr.io/cloudflare/ebpf_exporter:v2.3.0"
+          imagePullPolicy: IfNotPresent
+          ports:
+          - name: metrics
+            containerPort: 9435
+            protocol: TCP
+          volumeMounts:
+            - mountPath: /sys/kernel/debug
+              name: kernel
+            - mountPath: /lib/modules/
+              name: modules
+          securityContext:
+            
+            privileged: true
+      dnsPolicy: ClusterFirst
+      tolerations:
+        - effect: NoSchedule
+          operator: Exists
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      volumes:
+        - hostPath:
+            path: /sys/kernel/debug
+            type: Directory
+          name: kernel
+        - hostPath:
+            path: /lib/modules/
+            type: Directory
+          name: modules

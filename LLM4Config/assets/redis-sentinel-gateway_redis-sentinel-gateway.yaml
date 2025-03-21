@@ -1,0 +1,100 @@
+---
+# Source: redis-sentinel-gateway/templates/ServiceAccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: redis-sentinel-gateway-sa
+---
+# Source: redis-sentinel-gateway/templates/role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: my-redis-sentinel-gateway-role
+rules:
+- apiGroups: [""]
+  resources: ["endpoints", "services"]
+  verbs: ["get", "list", "watch", "create", "update", "patch"]
+- apiGroups: ["coordination.k8s.io"]
+  resources: ["leases"]
+  verbs: ["get", "list", "watch", "create", "update", "patch"]
+---
+# Source: redis-sentinel-gateway/templates/rolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: my-redis-sentinel-gateway-RoleBinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: my-redis-sentinel-gateway-role
+subjects:
+- kind: ServiceAccount
+  name: redis-sentinel-gateway-sa
+  namespace: default
+---
+# Source: redis-sentinel-gateway/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-redis-sentinel-gateway
+  labels:
+    app: my-redis-sentinel-gateway
+    app.kubernetes.io/name: redis-sentinel-gateway
+    helm.sh/chart: redis-sentinel-gateway-1.0.0
+    app.kubernetes.io/instance: my-redis-sentinel-gateway
+    app.kubernetes.io/version: "1.0.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: my-redis-sentinel-gateway
+  template:
+    metadata:
+      labels:
+        app: my-redis-sentinel-gateway
+        app.kubernetes.io/name: redis-sentinel-gateway
+        helm.sh/chart: redis-sentinel-gateway-1.0.0
+        app.kubernetes.io/instance: my-redis-sentinel-gateway
+        app.kubernetes.io/version: "1.0.0"
+        app.kubernetes.io/managed-by: Helm
+      annotations:
+        {}
+    spec:
+      serviceAccountName: redis-sentinel-gateway-sa
+      containers:
+      - name: main
+        image: promzeus/redis-sentinel-gateway:v1
+        imagePullPolicy: Always
+        env:
+          - name: SERVICE_NAME
+            value: redis-gateway
+          - name: SENTINEL_ADDR
+            value: redis-sentinel-server:26379
+          - name: MASTER_NAME
+            value: mymaster
+          - name: LEASE_NAME
+            value: redis-gateway-lease
+          - name: POLL_INTERVAL
+            value: 5s
+          - name: TICK_INTERVAL
+            value: 1s
+          - name: REDIS_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: redis-sentinel-server
+                key: redis-password
+          
+        resources:
+          requests:
+            cpu: 10m
+            memory: 10Mi
+          limits:
+            cpu: 50m
+            memory: 50Mi
+        ports:
+        - containerPort: 6379
+      nodeSelector:
+        {}
+      tolerations:
+        []

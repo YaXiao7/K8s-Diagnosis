@@ -1,0 +1,131 @@
+---
+# Source: java-truststore-injection-webhook/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-java-truststore-injection-webhook
+  labels:
+    helm.sh/chart: java-truststore-injection-webhook-0.0.9
+    app.kubernetes.io/name: java-truststore-injection-webhook
+    app.kubernetes.io/instance: my-java-truststore-injection-webhook
+    app.kubernetes.io/version: "v0.0.9"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: java-truststore-injection-webhook/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-java-truststore-injection-webhook
+  labels:
+    helm.sh/chart: java-truststore-injection-webhook-0.0.9
+    app.kubernetes.io/name: java-truststore-injection-webhook
+    app.kubernetes.io/instance: my-java-truststore-injection-webhook
+    app.kubernetes.io/version: "v0.0.9"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    service.beta.openshift.io/serving-cert-secret-name: java-truststore-injection-webhook-certs
+spec:
+  type: ClusterIP
+  ports:
+    - port: 443
+      targetPort: 9443
+      protocol: TCP
+      name: webhook
+  selector:
+    app.kubernetes.io/name: java-truststore-injection-webhook
+    app.kubernetes.io/instance: my-java-truststore-injection-webhook
+---
+# Source: java-truststore-injection-webhook/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-java-truststore-injection-webhook
+  labels:
+    helm.sh/chart: java-truststore-injection-webhook-0.0.9
+    app.kubernetes.io/name: java-truststore-injection-webhook
+    app.kubernetes.io/instance: my-java-truststore-injection-webhook
+    app.kubernetes.io/version: "v0.0.9"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: java-truststore-injection-webhook
+      app.kubernetes.io/instance: my-java-truststore-injection-webhook
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: java-truststore-injection-webhook
+        app.kubernetes.io/instance: my-java-truststore-injection-webhook
+    spec:
+      serviceAccountName: my-java-truststore-injection-webhook
+      securityContext:
+        null
+      containers:
+        - name: java-truststore-injection-webhook
+          image: "ghcr.io/bakito/java-truststore-injection-webhook:v0.0.9"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: webhook
+              containerPort: 9443
+              protocol: TCP
+          volumeMounts:
+            - mountPath: /opt/go/certs
+              name: "webhook-certs"
+              readOnly: true
+          resources:
+            {}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+
+      volumes:
+        - name: "webhook-certs"
+          secret:
+            defaultMode: 420
+            secretName: java-truststore-injection-webhook-certs
+---
+# Source: java-truststore-injection-webhook/templates/mutatingwebhook.yaml
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: my-java-truststore-injection-webhook
+  labels:
+    helm.sh/chart: java-truststore-injection-webhook-0.0.9
+    app.kubernetes.io/name: java-truststore-injection-webhook
+    app.kubernetes.io/instance: my-java-truststore-injection-webhook
+    app.kubernetes.io/version: "v0.0.9"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+webhooks:
+  - admissionReviewVersions:
+      - v1
+      - v1beta1
+    clientConfig:
+      service:
+        name: my-java-truststore-injection-webhook
+        namespace: default
+        path: /mutate--v1-configmap
+        port: 443
+    failurePolicy: Fail
+    name: truststore-injector.bakito.ch
+    rules:
+      - apiGroups:
+          - ""
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - configmaps
+    objectSelector:
+      # should only be mutated when label is present. objectSelector is evaluated against both the oldObject and newObject
+      matchLabels:
+        jti.bakito.ch/inject-truststore: 'true'
+    sideEffects: None

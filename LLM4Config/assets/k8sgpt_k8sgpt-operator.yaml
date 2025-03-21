@@ -1,0 +1,783 @@
+---
+# Source: k8sgpt-operator/templates/deployment.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-k8sgpt-operator-controller-manager
+  labels:
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: k8sgpt-operator
+    app.kubernetes.io/part-of: k8sgpt-operator
+    helm.sh/chart: k8sgpt-operator-0.1.7
+    app.kubernetes.io/name: k8sgpt-operator
+    app.kubernetes.io/instance: my-k8sgpt-operator
+    app.kubernetes.io/version: "0.0.26"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: k8sgpt-operator/templates/k8sgpt-sa.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name:  k8sgpt
+  labels:
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: k8sgpt-operator
+    app.kubernetes.io/part-of: k8sgpt-operator
+    helm.sh/chart: k8sgpt-operator-0.1.7
+    app.kubernetes.io/name: k8sgpt-operator
+    app.kubernetes.io/instance: my-k8sgpt-operator
+    app.kubernetes.io/version: "0.0.26"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: k8sgpt-operator/templates/k8sgpt-crd.yaml
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: k8sgpts.core.k8sgpt.ai
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.14.0
+  labels:
+    helm.sh/chart: k8sgpt-operator-0.1.7
+    app.kubernetes.io/name: k8sgpt-operator
+    app.kubernetes.io/instance: my-k8sgpt-operator
+    app.kubernetes.io/version: "0.0.26"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  group: core.k8sgpt.ai
+  names:
+    kind: K8sGPT
+    listKind: K8sGPTList
+    plural: k8sgpts
+    singular: k8sgpt
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: K8sGPT is the Schema for the k8sgpts API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: K8sGPTSpec defines the desired state of K8sGPT
+            properties:
+              ai:
+                properties:
+                  anonymized:
+                    default: true
+                    type: boolean
+                  backOff:
+                    properties:
+                      enabled:
+                        default: true
+                        type: boolean
+                      maxRetries:
+                        default: 5
+                        type: integer
+                    required:
+                      - enabled
+                      - maxRetries
+                    type: object
+                  backend:
+                    default: openai
+                    enum:
+                    - openai
+                    - localai
+                    - azureopenai
+                    - amazonbedrock
+                    - cohere
+                    - amazonsagemaker
+                    - google
+                    - googlevertexai
+                    type: string
+                  baseUrl:
+                    type: string
+                  enabled:
+                    type: boolean
+                  engine:
+                    type: string
+                  language:
+                    default: english
+                    type: string
+                  model:
+                    default: gpt-3.5-turbo
+                    type: string
+                  region:
+                    type: string
+                  secret:
+                    properties:
+                      key:
+                        type: string
+                      name:
+                        type: string
+                    type: object
+                required:
+                - backend
+                type: object
+              extraOptions:
+                properties:
+                  backstage:
+                    properties:
+                      enabled:
+                        type: boolean
+                    type: object
+                type: object
+              filters:
+                items:
+                  type: string
+                type: array
+              imagePullSecrets:
+                items:
+                  properties:
+                    name:
+                      type: string
+                  type: object
+                type: array
+              integrations:
+                properties:
+                  trivy:
+                    properties:
+                      enabled:
+                        type: boolean
+                      namespace:
+                        type: string
+                      skipInstall:
+                        type: boolean
+                    type: object
+                type: object
+              kubeconfig:
+                description: Define the kubeconfig the Deployment must use. If empty,
+                  the Deployment will use the ServiceAccount provided by Kubernetes
+                  itself.
+                properties:
+                  key:
+                    type: string
+                  name:
+                    type: string
+                type: object
+              noCache:
+                type: boolean
+              nodeSelector:
+                additionalProperties:
+                  type: string
+                type: object
+              remoteCache:
+                properties:
+                  azure:
+                    properties:
+                      containerName:
+                        type: string
+                      storageAccount:
+                        type: string
+                    type: object
+                  credentials:
+                    properties:
+                      name:
+                        type: string
+                    type: object
+                  gcs:
+                    properties:
+                      bucketName:
+                        type: string
+                      projectId:
+                        type: string
+                      region:
+                        type: string
+                    type: object
+                  s3:
+                    properties:
+                      bucketName:
+                        type: string
+                      region:
+                        type: string
+                    type: object
+                type: object
+              repository:
+                default: ghcr.io/k8sgpt-ai/k8sgpt
+                type: string
+              sink:
+                properties:
+                  channel:
+                    type: string
+                  icon_url:
+                    type: string
+                  secret:
+                    properties:
+                      key:
+                        type: string
+                      name:
+                        type: string
+                    type: object
+                  type:
+                    enum:
+                    - slack
+                    - mattermost
+                    type: string
+                  username:
+                    type: string
+                  webhook:
+                    type: string
+                type: object
+              targetNamespace:
+                type: string
+              version:
+                type: string
+            type: object
+          status:
+            description: K8sGPTStatus defines the observed state of K8sGPT show the current backend used
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []
+---
+# Source: k8sgpt-operator/templates/result-crd.yaml
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: results.core.k8sgpt.ai
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.14.0
+  labels:
+    helm.sh/chart: k8sgpt-operator-0.1.7
+    app.kubernetes.io/name: k8sgpt-operator
+    app.kubernetes.io/instance: my-k8sgpt-operator
+    app.kubernetes.io/version: "0.0.26"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  group: core.k8sgpt.ai
+  names:
+    kind: Result
+    listKind: ResultList
+    plural: results
+    singular: result
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - description: Kind
+      jsonPath: .spec.kind
+      name: Kind
+      type: string
+    - description: Backend
+      jsonPath: .spec.backend
+      name: Backend
+      type: string
+    - description: Age
+      jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Result is the Schema for the results API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: ResultSpec defines the desired state of Result
+            properties:
+              backend:
+                type: string
+              details:
+                type: string
+              error:
+                items:
+                  properties:
+                    sensitive:
+                      items:
+                        properties:
+                          masked:
+                            type: string
+                          unmasked:
+                            type: string
+                        type: object
+                      type: array
+                    text:
+                      type: string
+                  type: object
+                type: array
+              kind:
+                type: string
+              name:
+                type: string
+              parentObject:
+                type: string
+            required:
+            - backend
+            - details
+            - error
+            - kind
+            - name
+            - parentObject
+            type: object
+          status:
+            description: ResultStatus defines the observed state of Result
+            properties:
+              lifecycle:
+                type: string
+              webhook:
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []
+---
+# Source: k8sgpt-operator/templates/k8sgpt-cluster-role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-k8sgpt-operator-k8sgpt
+  labels:
+    helm.sh/chart: k8sgpt-operator-0.1.7
+    app.kubernetes.io/name: k8sgpt-operator
+    app.kubernetes.io/instance: my-k8sgpt-operator
+    app.kubernetes.io/version: "0.0.26"
+    app.kubernetes.io/managed-by: Helm
+rules:
+  - apiGroups:
+      - '*'
+    resources:
+      - '*'
+    verbs:
+      - create
+      - list
+      - get
+      - watch
+      - delete
+  - apiGroups:
+      - apiextensions.k8s.io
+    resources:
+      - '*'
+    verbs:
+      - '*'
+---
+# Source: k8sgpt-operator/templates/manager-rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-k8sgpt-operator-manager-role
+  labels:
+    helm.sh/chart: k8sgpt-operator-0.1.7
+    app.kubernetes.io/name: k8sgpt-operator
+    app.kubernetes.io/instance: my-k8sgpt-operator
+    app.kubernetes.io/version: "0.0.26"
+    app.kubernetes.io/managed-by: Helm
+rules:
+- apiGroups:
+  - '*'
+  resources:
+  - '*'
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - core.k8sgpt.ai
+  resources:
+  - k8sgpts
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - core.k8sgpt.ai
+  resources:
+  - k8sgpts/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - core.k8sgpt.ai
+  resources:
+  - k8sgpts/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - core.k8sgpt.ai
+  resources:
+  - results
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apiextensions.k8s.io
+  resources:
+  - '*'
+  verbs:
+  - '*'
+---
+# Source: k8sgpt-operator/templates/metrics-reader-rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-k8sgpt-operator-metrics-reader
+  labels:
+    app.kubernetes.io/component: kube-rbac-proxy
+    app.kubernetes.io/created-by: k8sgpt-operator
+    app.kubernetes.io/part-of: k8sgpt-operator
+    helm.sh/chart: k8sgpt-operator-0.1.7
+    app.kubernetes.io/name: k8sgpt-operator
+    app.kubernetes.io/instance: my-k8sgpt-operator
+    app.kubernetes.io/version: "0.0.26"
+    app.kubernetes.io/managed-by: Helm
+rules:
+- nonResourceURLs:
+  - /metrics
+  verbs:
+  - get
+---
+# Source: k8sgpt-operator/templates/proxy-rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-k8sgpt-operator-proxy-role
+  labels:
+    app.kubernetes.io/component: kube-rbac-proxy
+    app.kubernetes.io/created-by: k8sgpt-operator
+    app.kubernetes.io/part-of: k8sgpt-operator
+    helm.sh/chart: k8sgpt-operator-0.1.7
+    app.kubernetes.io/name: k8sgpt-operator
+    app.kubernetes.io/instance: my-k8sgpt-operator
+    app.kubernetes.io/version: "0.0.26"
+    app.kubernetes.io/managed-by: Helm
+rules:
+- apiGroups:
+  - authentication.k8s.io
+  resources:
+  - tokenreviews
+  verbs:
+  - create
+- apiGroups:
+  - authorization.k8s.io
+  resources:
+  - subjectaccessreviews
+  verbs:
+  - create
+---
+# Source: k8sgpt-operator/templates/k8sgpt-cluster-role-binding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-k8sgpt-operator-k8sgpt
+  labels:
+    helm.sh/chart: k8sgpt-operator-0.1.7
+    app.kubernetes.io/name: k8sgpt-operator
+    app.kubernetes.io/instance: my-k8sgpt-operator
+    app.kubernetes.io/version: "0.0.26"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-k8sgpt-operator-k8sgpt
+subjects:
+  - kind: ServiceAccount
+    name: "k8sgpt"
+    namespace: default
+---
+# Source: k8sgpt-operator/templates/manager-rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-k8sgpt-operator-manager-rolebinding
+  labels:
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: k8sgpt-operator
+    app.kubernetes.io/part-of: k8sgpt-operator
+    helm.sh/chart: k8sgpt-operator-0.1.7
+    app.kubernetes.io/name: k8sgpt-operator
+    app.kubernetes.io/instance: my-k8sgpt-operator
+    app.kubernetes.io/version: "0.0.26"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: 'my-k8sgpt-operator-manager-role'
+subjects:
+- kind: ServiceAccount
+  name: 'my-k8sgpt-operator-controller-manager'
+  namespace: 'default'
+---
+# Source: k8sgpt-operator/templates/proxy-rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-k8sgpt-operator-proxy-rolebinding
+  labels:
+    app.kubernetes.io/component: kube-rbac-proxy
+    app.kubernetes.io/created-by: k8sgpt-operator
+    app.kubernetes.io/part-of: k8sgpt-operator
+    helm.sh/chart: k8sgpt-operator-0.1.7
+    app.kubernetes.io/name: k8sgpt-operator
+    app.kubernetes.io/instance: my-k8sgpt-operator
+    app.kubernetes.io/version: "0.0.26"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: 'my-k8sgpt-operator-proxy-role'
+subjects:
+- kind: ServiceAccount
+  name: 'my-k8sgpt-operator-controller-manager'
+  namespace: 'default'
+---
+# Source: k8sgpt-operator/templates/leader-election-rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: my-k8sgpt-operator-leader-election-role
+  labels:
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: k8sgpt-operator
+    app.kubernetes.io/part-of: k8sgpt-operator
+    helm.sh/chart: k8sgpt-operator-0.1.7
+    app.kubernetes.io/name: k8sgpt-operator
+    app.kubernetes.io/instance: my-k8sgpt-operator
+    app.kubernetes.io/version: "0.0.26"
+    app.kubernetes.io/managed-by: Helm
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+---
+# Source: k8sgpt-operator/templates/leader-election-rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: my-k8sgpt-operator-leader-election-rolebinding
+  labels:
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: k8sgpt-operator
+    app.kubernetes.io/part-of: k8sgpt-operator
+    helm.sh/chart: k8sgpt-operator-0.1.7
+    app.kubernetes.io/name: k8sgpt-operator
+    app.kubernetes.io/instance: my-k8sgpt-operator
+    app.kubernetes.io/version: "0.0.26"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: 'my-k8sgpt-operator-leader-election-role'
+subjects:
+- kind: ServiceAccount
+  name: 'my-k8sgpt-operator-controller-manager'
+  namespace: 'default'
+---
+# Source: k8sgpt-operator/templates/metrics-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-k8sgpt-operator-controller-manager-metrics-service
+  labels:
+    app.kubernetes.io/component: kube-rbac-proxy
+    app.kubernetes.io/created-by: k8sgpt-operator
+    app.kubernetes.io/part-of: k8sgpt-operator
+    control-plane: controller-manager
+    helm.sh/chart: k8sgpt-operator-0.1.7
+    app.kubernetes.io/name: k8sgpt-operator
+    app.kubernetes.io/instance: my-k8sgpt-operator
+    app.kubernetes.io/version: "0.0.26"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  selector:
+    control-plane: controller-manager
+    app.kubernetes.io/name: k8sgpt-operator
+    app.kubernetes.io/instance: my-k8sgpt-operator
+  ports:
+  - name: https
+    port: 8443
+    protocol: TCP
+    targetPort: https
+---
+# Source: k8sgpt-operator/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-k8sgpt-operator-controller-manager
+  labels:
+    app.kubernetes.io/component: manager
+    app.kubernetes.io/created-by: k8sgpt-operator
+    app.kubernetes.io/part-of: k8sgpt-operator
+    control-plane: controller-manager
+    helm.sh/chart: k8sgpt-operator-0.1.7
+    app.kubernetes.io/name: k8sgpt-operator
+    app.kubernetes.io/instance: my-k8sgpt-operator
+    app.kubernetes.io/version: "0.0.26"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      control-plane: controller-manager
+      app.kubernetes.io/name: k8sgpt-operator
+      app.kubernetes.io/instance: my-k8sgpt-operator
+  template:
+    metadata:
+      labels:
+        control-plane: controller-manager
+        app.kubernetes.io/name: k8sgpt-operator
+        app.kubernetes.io/instance: my-k8sgpt-operator
+      annotations:
+        kubectl.kubernetes.io/default-container: manager
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
+                - arm64
+                - ppc64le
+                - s390x
+              - key: kubernetes.io/os
+                operator: In
+                values:
+                - linux
+      containers:
+      - args:
+        - --secure-listen-address=0.0.0.0:8443
+        - --upstream=http://127.0.0.1:8080/
+        - --logtostderr=true
+        - --v=0
+        env:
+        - name: KUBERNETES_CLUSTER_DOMAIN
+          value: "cluster.local"
+        image: gcr.io/kubebuilder/kube-rbac-proxy:v0.16.0
+        name: kube-rbac-proxy
+        ports:
+        - containerPort: 8443
+          name: https
+          protocol: TCP
+        resources:
+          limits:
+            cpu: 500m
+            memory: 128Mi
+          requests:
+            cpu: 5m
+            memory: 64Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+      - args:
+        - --health-probe-bind-address=:8081
+        - --metrics-bind-address=127.0.0.1:8080
+        - --leader-elect
+        command:
+        - /manager
+        env:
+        - name: KUBERNETES_CLUSTER_DOMAIN
+          value: "cluster.local"
+        - name: OPERATOR_SINK_WEBHOOK_TIMEOUT_SECONDS
+          value: "30s"
+        image: ghcr.io/k8sgpt-ai/k8sgpt-operator:v0.1.7
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        name: manager
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          limits:
+            cpu: 500m
+            memory: 128Mi
+          requests:
+            cpu: 10m
+            memory: 64Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+      securityContext:
+        runAsNonRoot: true
+      serviceAccountName: my-k8sgpt-operator-controller-manager
+      terminationGracePeriodSeconds: 10

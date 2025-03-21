@@ -1,0 +1,166 @@
+---
+# Source: foundry-vtt/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-foundry-vtt
+  labels:
+    app: my-foundry-vtt
+    chart: "foundry-vtt-12.324.0"
+    release: "my-foundry-vtt"
+    heritage: "Helm"
+type: Opaque
+data:
+  adminPassword: YWRtaW4=
+---
+# Source: foundry-vtt/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-foundry-vtt
+  labels:
+    app: my-foundry-vtt
+    chart: "foundry-vtt-12.324.0"
+    release: "my-foundry-vtt"
+    heritage: "Helm"
+    helm.sh/chart: foundry-vtt-12.324.0
+    app.kubernetes.io/name: foundry-vtt
+    app.kubernetes.io/instance: my-foundry-vtt
+    app.kubernetes.io/version: "v12.324"
+    app.kubernetes.io/managed-by: Helm    
+  annotations:
+    external-dns.alpha.kubernetes.io/hostname: foundry.domain.com    
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: Local
+  ports:
+    - port: 80
+      targetPort: http
+      protocol:  TCP
+      name: http
+    - port: 443
+      targetPort: http
+      name: https
+  selector:
+    app.kubernetes.io/name: foundry-vtt
+    app.kubernetes.io/instance: my-foundry-vtt
+---
+# Source: foundry-vtt/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-foundry-vtt
+  labels:
+    helm.sh/chart: foundry-vtt-12.324.0
+    app.kubernetes.io/name: foundry-vtt
+    app.kubernetes.io/instance: my-foundry-vtt
+    app.kubernetes.io/version: "v12.324"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  strategy:
+    type: Recreate
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: foundry-vtt
+      app.kubernetes.io/instance: my-foundry-vtt
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: foundry-vtt
+        app.kubernetes.io/instance: my-foundry-vtt
+    spec:
+      serviceAccountName: default
+      securityContext:
+        {}
+      dnsPolicy: ClusterFirst
+      containers:
+      - name: foundry-vtt
+        securityContext:
+            {}
+        image: "felddy/foundryvtt:12.324"
+        imagePullPolicy: IfNotPresent
+        ports:
+          - name: http
+            containerPort: 30000
+            protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /
+            port: http
+        readinessProbe:
+          initialDelaySeconds: 30
+          httpGet:
+            path: /
+            port: http
+        resources:
+            limits:
+              cpu: 1024m
+              memory: 1024Mi
+            requests:
+              cpu: 500m
+              memory: 512Mi
+        env:
+          - name: UV_THREADPOOL_SIZE
+            value: "6"
+          - name: CONTAINER_CACHE
+            value: /data/container_cache
+          - name: CONTAINER_CACHE_SIZE
+            value: "1"
+          - name: FOUNDRY_GID
+            value: "421"
+          - name: CONTAINER_PATCHES
+            value: /data/patches
+          - name: TIMEZONE
+            value: UTC
+          - name: FOUNDRY_UID
+            value: "421"
+          # Foundry fetch files only
+          # foundry configuration files
+          - name: FOUNDRY_ADMIN_KEY
+            valueFrom:
+              secretKeyRef:
+                name: my-foundry-vtt
+                key: adminPassword
+          - name: FOUNDRY_HOSTNAME
+            value: foundry.domain.com
+          - name: FOUNDRY_LANGUAGE
+            value: en.core
+          - name: FOUNDRY_MINIFY_STATIC_FILES
+            value: "true"
+          - name: FOUNDRY_CSS_THEME
+            value: "foundry"
+          - name: FOUNDRY_PROXY_SSL
+            value: "true"
+          - name: FOUNDRY_VERSION
+            value: "12.324"
+        volumeMounts:
+        - name: data
+          mountPath: /data
+      volumes:
+      - name: data
+        emptyDir: {}
+---
+# Source: foundry-vtt/templates/secrets.yaml
+---
+---
+# Source: foundry-vtt/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-foundry-vtt-test-connection"
+  labels:
+    helm.sh/chart: foundry-vtt-12.324.0
+    app.kubernetes.io/name: foundry-vtt
+    app.kubernetes.io/instance: my-foundry-vtt
+    app.kubernetes.io/version: "v12.324"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-foundry-vtt:80']
+  restartPolicy: Never

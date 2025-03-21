@@ -1,0 +1,601 @@
+---
+# Source: jisort/charts/mysql/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-jisort-mysql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-jisort
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: mysql
+    app.kubernetes.io/version: 8.0.34
+    helm.sh/chart: mysql-9.12.3
+automountServiceAccountToken: true
+secrets:
+  - name: my-jisort-mysql
+---
+# Source: jisort/charts/mysql/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-jisort-mysql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-jisort
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: mysql
+    app.kubernetes.io/version: 8.0.34
+    helm.sh/chart: mysql-9.12.3
+type: Opaque
+data:
+  mysql-root-password: "NklnaXVKeHlHSw=="
+  mysql-password: "SWhzcG1Ic3VGRQ=="
+---
+# Source: jisort/charts/mysql/templates/primary/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-jisort-mysql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-jisort
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: mysql
+    app.kubernetes.io/version: 8.0.34
+    helm.sh/chart: mysql-9.12.3
+    app.kubernetes.io/component: primary
+data:
+  my.cnf: |-
+    [mysqld]
+    default_authentication_plugin=mysql_native_password
+    skip-name-resolve
+    explicit_defaults_for_timestamp
+    basedir=/opt/bitnami/mysql
+    plugin_dir=/opt/bitnami/mysql/lib/plugin
+    port=3306
+    socket=/opt/bitnami/mysql/tmp/mysql.sock
+    datadir=/bitnami/mysql/data
+    tmpdir=/opt/bitnami/mysql/tmp
+    max_allowed_packet=16M
+    bind-address=*
+    pid-file=/opt/bitnami/mysql/tmp/mysqld.pid
+    log-error=/opt/bitnami/mysql/logs/mysqld.log
+    character-set-server=UTF8
+    collation-server=utf8_general_ci
+    slow_query_log=0
+    long_query_time=10.0
+    
+    [client]
+    port=3306
+    socket=/opt/bitnami/mysql/tmp/mysql.sock
+    default-character-set=UTF8
+    plugin_dir=/opt/bitnami/mysql/lib/plugin
+    
+    [manager]
+    port=3306
+    socket=/opt/bitnami/mysql/tmp/mysql.sock
+    pid-file=/opt/bitnami/mysql/tmp/mysqld.pid
+---
+# Source: jisort/templates/pvc.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: my-jisort-data
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: jisort
+    helm.sh/chart: jisort-0.3.3
+    app.kubernetes.io/instance: my-jisort
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "1.17.3"
+    app.kubernetes.io/component: data
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+# Source: jisort/charts/mysql/templates/primary/svc-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-jisort-mysql-headless
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-jisort
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: mysql
+    app.kubernetes.io/version: 8.0.34
+    helm.sh/chart: mysql-9.12.3
+    app.kubernetes.io/component: primary
+spec:
+  type: ClusterIP
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+    - name: mysql
+      port: 3306
+      targetPort: mysql
+  selector:
+    app.kubernetes.io/instance: my-jisort
+    app.kubernetes.io/name: mysql
+    app.kubernetes.io/component: primary
+---
+# Source: jisort/charts/mysql/templates/primary/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-jisort-mysql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-jisort
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: mysql
+    app.kubernetes.io/version: 8.0.34
+    helm.sh/chart: mysql-9.12.3
+    app.kubernetes.io/component: primary
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+    - name: mysql
+      port: 3306
+      protocol: TCP
+      targetPort: mysql
+      nodePort: null
+  selector:
+    app.kubernetes.io/instance: my-jisort
+    app.kubernetes.io/name: mysql
+    app.kubernetes.io/component: primary
+---
+# Source: jisort/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-jisort-server
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: jisort
+    helm.sh/chart: jisort-0.3.3
+    app.kubernetes.io/instance: my-jisort
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "1.17.3"
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: jisort
+    app.kubernetes.io/instance: my-jisort
+    app.kubernetes.io/component: app
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080
+---
+# Source: jisort/templates/ui/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-jisort-web
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: jisort
+    helm.sh/chart: jisort-0.3.3
+    app.kubernetes.io/instance: my-jisort
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "1.17.3"
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: jisort
+    app.kubernetes.io/instance: my-jisort
+    app.kubernetes.io/component: app
+  ports:
+    - protocol: TCP
+      port: 4200
+      targetPort: 80
+---
+# Source: jisort/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-jisort-app
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: jisort
+    helm.sh/chart: jisort-0.3.3
+    app.kubernetes.io/instance: my-jisort
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "1.17.3"
+    app.kubernetes.io/component: app
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: jisort
+      app.kubernetes.io/instance: my-jisort
+      app.kubernetes.io/component: app
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: jisort
+        helm.sh/chart: jisort-0.3.3
+        app.kubernetes.io/instance: my-jisort
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/version: "1.17.3"
+        app.kubernetes.io/component: app
+    spec:
+      
+      imagePullSecrets:
+        - name: docker-registry-secret
+      volumes:
+        - name: fineract-data
+          persistentVolumeClaim:
+            claimName: my-jisort-data
+      initContainers:
+        - name: check-db
+          image: busybox:1.28
+          command:
+            [
+              "sh",
+              "-c",
+              'echo -e "Checking for availability of MySQL server deployment"; while ! nc -z my-jisort-mysql 3306; do sleep 1; printf "-"; done; echo -e " >> MySQL server has started";',
+            ]
+        - name: init-db
+          image: litmuschaos/mysql-client:latest
+          command:
+            [
+              "sh",
+              "-c",
+              'mysql -u root -e "CREATE DATABASE IF NOT EXISTS fineract_default; GRANT ALL PRIVILEGES ON fineract_default.* TO ''fineract''@''%''; FLUSH PRIVILEGES;"',
+            ]
+          env:
+            - name: MYSQL_HOST
+              value: "my-jisort-mysql"
+            - name: MYSQL_TCP_PORT
+              value: "3306"
+            - name: MYSQL_PWD
+              valueFrom:
+                secretKeyRef:
+                  name: my-jisort-mysql
+                  key: mysql-root-password
+        - name: volume-permissions
+          image: busybox
+          command:
+            - /bin/sh
+          args:
+            - '-c'
+            - chmod -R 755 /data && chown 1001:1001 /data
+          resources: { }
+          volumeMounts:
+            - name: fineract-data
+              mountPath: /data
+      containers:
+        - name: fs-my-jisort
+          image: "truehostcloud/fineract:8bb024e60e7c374911df850e1db7df2f8ed5ed37"
+          resources:
+            limits: {}
+            requests: {}
+          volumeMounts:
+            - name: fineract-data
+              mountPath: /data
+          ports:
+            - containerPort: 8080
+              name: server
+          env:
+            - name: FINERACT_NODE_ID
+              value: "1"
+            - name: FINERACT_HIKARI_DRIVER_SOURCE_CLASS_NAME
+              value: "org.mariadb.jdbc.Driver"
+            - name: FINERACT_HIKARI_JDBC_URL
+              value: "jdbc:mariadb://my-jisort-mysql:3306/fineract_tenants"
+            - name: FINERACT_HIKARI_USERNAME
+              value: "fineract"
+            - name: FINERACT_HIKARI_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-jisort-mysql
+                  key: mysql-password
+            - name: FINERACT_DEFAULT_TENANTDB_HOSTNAME
+              value: "my-jisort-mysql"
+            - name: FINERACT_DEFAULT_TENANTDB_PORT
+              value: "3306"
+            - name: FINERACT_DEFAULT_TENANTDB_UID
+              value: "fineract"
+            - name: FINERACT_DEFAULT_TENANTDB_PWD
+              valueFrom:
+                secretKeyRef:
+                  name: my-jisort-mysql
+                  key: mysql-password
+            - name: FINERACT_DEFAULT_TENANTDB_CONN_PARAMS
+              value: 
+            - name: FINERACT_SERVER_SSL_ENABLED
+              value: "false"
+            - name: FINERACT_SERVER_PORT
+              value: "8080"
+            - name: FINERACT_DEFAULT_TENANTDB_TIMEZONE
+              value: Africa/Nairobi
+            - name: FINERACT_DEFAULT_TENANTDB_IDENTIFIER
+              value: 'default'
+            - name: FINERACT_DEFAULT_TENANTDB_NAME
+              value: fineract_default
+            - name: FINERACT_DEFAULT_TENANTDB_DESCRIPTION
+              value: Default Tenant
+            - name: JAVA_TOOL_OPTIONS
+              value: '-Xmx1G'
+            - name: FINERACT_CONTENT_FILESYSTEM_ROOT_FOLDER
+              value: /data
+            - name: FINERACT_PENTAHO_REPORTS_PATH
+              value: /app/pentahoReports
+          startupProbe:
+            httpGet:
+              path: /fineract-provider/actuator/health/liveness
+              port: 8080
+              scheme: HTTP
+            failureThreshold: 60
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /fineract-provider/actuator/health/liveness
+              port: 8080
+              scheme: HTTP
+            initialDelaySeconds: 5
+            timeoutSeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 10
+          readinessProbe:
+            httpGet:
+              path: /fineract-provider/actuator/health/liveness
+              port: 8080
+              scheme: HTTP
+            initialDelaySeconds: 5
+            timeoutSeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 6
+          securityContext:
+            runAsUser: 1001
+            runAsNonRoot: true
+        - name: fw-my-jisort
+          image: "truehostcloud/mifos-web-app:c6d9f624af8b63d250ab78119cd327590947b8f2"
+          resources:
+            limits: {}
+            requests: {}
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            timeoutSeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 6
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            timeoutSeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 6
+          ports:
+            - containerPort: 80
+              name: web
+---
+# Source: jisort/charts/mysql/templates/primary/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-jisort-mysql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-jisort
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: mysql
+    app.kubernetes.io/version: 8.0.34
+    helm.sh/chart: mysql-9.12.3
+    app.kubernetes.io/component: primary
+spec:
+  replicas: 1
+  podManagementPolicy: ""
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: my-jisort
+      app.kubernetes.io/name: mysql
+      app.kubernetes.io/component: primary
+  serviceName: my-jisort-mysql
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations:
+        checksum/configuration: d2bbdcb7616f7a8a23903fc0711b2c4a930a83f928d4896fad1219b5b2fc86c5
+      labels:
+        app.kubernetes.io/instance: my-jisort
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: mysql
+        app.kubernetes.io/version: 8.0.34
+        helm.sh/chart: mysql-9.12.3
+        app.kubernetes.io/component: primary
+    spec:
+      serviceAccountName: my-jisort-mysql
+      
+      imagePullSecrets:
+        - name: docker-registry-secret
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/instance: my-jisort
+                    app.kubernetes.io/name: mysql
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+      initContainers:
+      containers:
+        - name: mysql
+          image: docker.io/bitnami/mysql:8.0.34-debian-11-r56
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-jisort-mysql
+                  key: mysql-root-password
+            - name: MYSQL_USER
+              value: "fineract"
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-jisort-mysql
+                  key: mysql-password
+            - name: MYSQL_DATABASE
+              value: "fineract_tenants"
+          envFrom:
+          ports:
+            - name: mysql
+              containerPort: 3306
+          livenessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+            exec:
+              command:
+                - /bin/bash
+                - -ec
+                - |
+                  password_aux="${MYSQL_ROOT_PASSWORD:-}"
+                  if [[ -f "${MYSQL_ROOT_PASSWORD_FILE:-}" ]]; then
+                      password_aux=$(cat "$MYSQL_ROOT_PASSWORD_FILE")
+                  fi
+                  mysqladmin status -uroot -p"${password_aux}"
+          readinessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+            exec:
+              command:
+                - /bin/bash
+                - -ec
+                - |
+                  password_aux="${MYSQL_ROOT_PASSWORD:-}"
+                  if [[ -f "${MYSQL_ROOT_PASSWORD_FILE:-}" ]]; then
+                      password_aux=$(cat "$MYSQL_ROOT_PASSWORD_FILE")
+                  fi
+                  mysqladmin status -uroot -p"${password_aux}"
+          startupProbe:
+            failureThreshold: 10
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+            exec:
+              command:
+                - /bin/bash
+                - -ec
+                - |
+                  password_aux="${MYSQL_ROOT_PASSWORD:-}"
+                  if [[ -f "${MYSQL_ROOT_PASSWORD_FILE:-}" ]]; then
+                      password_aux=$(cat "$MYSQL_ROOT_PASSWORD_FILE")
+                  fi
+                  mysqladmin status -uroot -p"${password_aux}"
+          resources: 
+            limits: {}
+            requests: {}
+          volumeMounts:
+            - name: data
+              mountPath: /bitnami/mysql
+            - name: config
+              mountPath: /opt/bitnami/mysql/conf/my.cnf
+              subPath: my.cnf
+      volumes:
+        - name: config
+          configMap:
+            name: my-jisort-mysql
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          app.kubernetes.io/instance: my-jisort
+          app.kubernetes.io/name: mysql
+          app.kubernetes.io/component: primary
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "8Gi"
+---
+# Source: jisort/templates/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: my-jisort-server
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: jisort
+    helm.sh/chart: jisort-0.3.3
+    app.kubernetes.io/instance: my-jisort
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "1.17.3"
+    app.kubernetes.io/component: server
+  annotations:
+    nginx.ingress.kubernetes.io/backend-protocol: HTTP
+spec:
+  rules:
+    - host: ""
+      http:
+        paths:
+          - path: /fineract-provider
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: my-jisort-server
+                port:
+                  number: 8080
+---
+# Source: jisort/templates/ui/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: my-jisort-web
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: jisort
+    helm.sh/chart: jisort-0.3.3
+    app.kubernetes.io/instance: my-jisort
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "1.17.3"
+    app.kubernetes.io/component: web
+spec:
+  rules:
+    - host: ""
+      http:
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: my-jisort-web
+                port:
+                  number: 80

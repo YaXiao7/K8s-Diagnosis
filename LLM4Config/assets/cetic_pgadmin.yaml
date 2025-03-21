@@ -1,0 +1,111 @@
+---
+# Source: pgadmin/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-pgadmin-password
+  labels:
+    app: my-pgadmin
+    chart: pgadmin-0.1.12
+    release: "my-pgadmin"
+    heritage: "Helm"
+type: Opaque
+data:
+  pgadmin-password: "YWRtaW4="
+---
+# Source: pgadmin/templates/pvc.yaml
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: my-pgadmin
+  labels:
+    app: my-pgadmin
+    chart: pgadmin-0.1.12
+    release: "my-pgadmin"
+    heritage: "Helm"
+  annotations:
+    volume.alpha.kubernetes.io/storage-class: default
+spec:
+  accessModes:
+    - "ReadWriteOnce"
+  resources:
+    requests:
+      storage: "4Gi"
+---
+# Source: pgadmin/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-pgadmin
+  labels:
+    app: pgadmin
+    chart: pgadmin-0.1.12
+    release: my-pgadmin
+    heritage: Helm
+spec:
+  type: LoadBalancer
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app: pgadmin
+    release: my-pgadmin
+---
+# Source: pgadmin/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-pgadmin
+  labels:
+    app: pgadmin
+    chart: pgadmin-0.1.12
+    release: my-pgadmin
+    heritage: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pgadmin
+      release: my-pgadmin
+  template:
+    metadata:
+      labels:
+        app: pgadmin
+        release: my-pgadmin
+    spec:
+      containers:
+        - name: pgadmin
+          image: "dpage/pgadmin4"
+          imagePullPolicy: IfNotPresent
+          env:
+          - name: PGADMIN_DEFAULT_EMAIL
+            value: pgadmin4@pgadmin.org
+          - name: PGADMIN_DEFAULT_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: my-pgadmin-password
+                key: pgadmin-password
+          - name: PGADMIN_PORT
+            value: "80"
+          ports:
+          - name: http
+            containerPort: 80
+            protocol: TCP
+          - name: https
+            containerPort: 443
+            protocol: TCP
+          volumeMounts:
+          - name: pgadmin-data
+            mountPath: /var/lib/pgadmin
+          resources:
+            {}
+          livenessProbe:
+            null
+          readinessProbe:
+            null
+      volumes:
+        - name: pgadmin-data
+          persistentVolumeClaim:
+            claimName: my-pgadmin

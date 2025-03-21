@@ -1,0 +1,466 @@
+---
+# Source: streama/charts/mysql/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-streama-mysql
+  namespace: default
+  labels:
+    app.kubernetes.io/name: mysql
+    helm.sh/chart: mysql-8.8.26
+    app.kubernetes.io/instance: my-streama
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+secrets:
+  - name: my-streama-mysql
+---
+# Source: streama/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: streama
+  namespace: "default"
+  labels:
+    helm.sh/chart: streama-1.0.1
+    app.kubernetes.io/name: streama
+    app.kubernetes.io/instance: my-streama
+    app.kubernetes.io/version: "1.10.4"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: streama/charts/mysql/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-streama-mysql
+  namespace: default
+  labels:
+    app.kubernetes.io/name: mysql
+    helm.sh/chart: mysql-8.8.26
+    app.kubernetes.io/instance: my-streama
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  mysql-root-password: "VVlkMnFwdWZ3OA=="
+  mysql-password: "c3RyZWFtYQ=="
+---
+# Source: streama/charts/mysql/templates/primary/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-streama-mysql
+  namespace: default
+  labels:
+    app.kubernetes.io/name: mysql
+    helm.sh/chart: mysql-8.8.26
+    app.kubernetes.io/instance: my-streama
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: primary
+data:
+  my.cnf: |-
+    
+    [mysqld]
+    default_authentication_plugin=mysql_native_password
+    skip-name-resolve
+    explicit_defaults_for_timestamp
+    basedir=/opt/bitnami/mysql
+    plugin_dir=/opt/bitnami/mysql/lib/plugin
+    port=3306
+    socket=/opt/bitnami/mysql/tmp/mysql.sock
+    datadir=/bitnami/mysql/data
+    tmpdir=/opt/bitnami/mysql/tmp
+    max_allowed_packet=16M
+    bind-address=0.0.0.0
+    pid-file=/opt/bitnami/mysql/tmp/mysqld.pid
+    log-error=/opt/bitnami/mysql/logs/mysqld.log
+    character-set-server=UTF8
+    collation-server=utf8_general_ci
+    
+    [client]
+    port=3306
+    socket=/opt/bitnami/mysql/tmp/mysql.sock
+    default-character-set=UTF8
+    plugin_dir=/opt/bitnami/mysql/lib/plugin
+    
+    [manager]
+    port=3306
+    socket=/opt/bitnami/mysql/tmp/mysql.sock
+    pid-file=/opt/bitnami/mysql/tmp/mysqld.pid
+---
+# Source: streama/templates/pvc.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: my-streama
+  namespace: "default"
+  labels:
+    helm.sh/chart: streama-1.0.1
+    app.kubernetes.io/name: streama
+    app.kubernetes.io/instance: my-streama
+    app.kubernetes.io/version: "1.10.4"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  storageClassName: "local"
+  accessModes:
+    - "ReadWriteOnce"
+  resources:
+    requests:
+      storage: "10Gi"
+---
+# Source: streama/charts/mysql/templates/primary/svc-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-streama-mysql-headless
+  namespace: default
+  labels:
+    app.kubernetes.io/name: mysql
+    helm.sh/chart: mysql-8.8.26
+    app.kubernetes.io/instance: my-streama
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: primary
+  annotations:
+spec:
+  type: ClusterIP
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+    - name: mysql
+      port: 3306
+      targetPort: mysql
+  selector: 
+    app.kubernetes.io/name: mysql
+    app.kubernetes.io/instance: my-streama
+    app.kubernetes.io/component: primary
+---
+# Source: streama/charts/mysql/templates/primary/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-streama-mysql
+  namespace: default
+  labels:
+    app.kubernetes.io/name: mysql
+    helm.sh/chart: mysql-8.8.26
+    app.kubernetes.io/instance: my-streama
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: primary
+  annotations:
+spec:
+  type: ClusterIP
+  ports:
+    - name: mysql
+      port: 3306
+      protocol: TCP
+      targetPort: mysql
+      nodePort: null
+  selector: 
+    app.kubernetes.io/name: mysql
+    app.kubernetes.io/instance: my-streama
+    app.kubernetes.io/component: primary
+---
+# Source: streama/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-streama
+  namespace: "default"
+  labels:
+    helm.sh/chart: streama-1.0.1
+    app.kubernetes.io/name: streama
+    app.kubernetes.io/instance: my-streama
+    app.kubernetes.io/version: "1.10.4"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - name: streama-http
+      port: 8080
+      targetPort: 8080
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: streama
+    app.kubernetes.io/instance: my-streama
+---
+# Source: streama/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-streama
+  namespace: "default"
+  labels:
+    helm.sh/chart: streama-1.0.1
+    app.kubernetes.io/name: streama
+    app.kubernetes.io/instance: my-streama
+    app.kubernetes.io/version: "1.10.4"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: streama
+      app.kubernetes.io/instance: my-streama
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: streama
+        app.kubernetes.io/instance: my-streama
+    spec:
+      serviceAccountName: streama
+      containers:
+        - name: streama
+          image: "docker.io/just1not2/streama:1.10.4"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: streama-http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: STREAMA_MYSQL_HOST
+              value: my-streama-mysql
+            - name: STREAMA_MYSQL_PORT
+              value: "3306"
+            - name: STREAMA_MYSQL_DB
+              value: streama
+            - name: STREAMA_MYSQL_USER
+              value: streama
+            - name: STREAMA_MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-streama-mysql
+                  key: mysql-password
+          startupProbe:
+            httpGet:
+              path: /
+              port: streama-http
+            initialDelaySeconds: 0
+            periodSeconds: 2
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /
+              port: streama-http
+            initialDelaySeconds: 0
+            periodSeconds: 2
+            timeoutSeconds: 1
+            successThreshold: 1
+            failureThreshold: 2
+          livenessProbe:
+            httpGet:
+              path: /
+              port: streama-http
+            initialDelaySeconds: 0
+            periodSeconds: 5
+            timeoutSeconds: 1
+            successThreshold: 1
+            failureThreshold: 3
+          resources:
+            limits:
+              cpu: 700m
+              memory: 1536Mi
+            requests:
+              cpu: 500m
+              memory: 1024Mi
+          volumeMounts:
+            - name: streama-data
+              mountPath: /data/streama
+      volumes:
+        - name: streama-data
+          persistentVolumeClaim:
+            claimName: my-streama
+---
+# Source: streama/templates/hpa.yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: my-streama
+  namespace: "default"
+  labels:
+    helm.sh/chart: streama-1.0.1
+    app.kubernetes.io/name: streama
+    app.kubernetes.io/instance: my-streama
+    app.kubernetes.io/version: "1.10.4"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: my-streama
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: AverageValue
+          averageValue: 1000m
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Percent
+          value: 20
+          periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 120
+      policies:
+        - type: Pods
+          value: 2
+          periodSeconds: 30
+---
+# Source: streama/charts/mysql/templates/primary/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-streama-mysql
+  namespace: default
+  labels:
+    app.kubernetes.io/name: mysql
+    helm.sh/chart: mysql-8.8.26
+    app.kubernetes.io/instance: my-streama
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: primary
+spec:
+  replicas: 1
+  selector:
+    matchLabels: 
+      app.kubernetes.io/name: mysql
+      app.kubernetes.io/instance: my-streama
+      app.kubernetes.io/component: primary
+  serviceName: my-streama-mysql
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations:
+        checksum/configuration: 2721a83f7c59b1fa51fc26577b8f01d411a558dd86b6a38b86239c838d9e0e60
+      labels:
+        app.kubernetes.io/name: mysql
+        helm.sh/chart: mysql-8.8.26
+        app.kubernetes.io/instance: my-streama
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/component: primary
+    spec:
+      
+      serviceAccountName: my-streama-mysql
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: mysql
+                    app.kubernetes.io/instance: my-streama
+                    app.kubernetes.io/component: primary
+                namespaces:
+                  - "default"
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+      containers:
+        - name: mysql
+          image: docker.io/bitnami/mysql:5.7
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            runAsUser: 1001
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-streama-mysql
+                  key: mysql-root-password
+            - name: MYSQL_USER
+              value: "streama"
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-streama-mysql
+                  key: mysql-password
+            - name: MYSQL_DATABASE
+              value: "streama"
+          ports:
+            - name: mysql
+              containerPort: 3306
+          livenessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+            exec:
+              command:
+                - /bin/bash
+                - -ec
+                - |
+                  password_aux="${MYSQL_ROOT_PASSWORD:-}"
+                  if [[ -f "${MYSQL_ROOT_PASSWORD_FILE:-}" ]]; then
+                      password_aux=$(cat "$MYSQL_ROOT_PASSWORD_FILE")
+                  fi
+                  mysqladmin status -uroot -p"${password_aux}"
+          readinessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+            exec:
+              command:
+                - /bin/bash
+                - -ec
+                - |
+                  password_aux="${MYSQL_ROOT_PASSWORD:-}"
+                  if [[ -f "${MYSQL_ROOT_PASSWORD_FILE:-}" ]]; then
+                      password_aux=$(cat "$MYSQL_ROOT_PASSWORD_FILE")
+                  fi
+                  mysqladmin status -uroot -p"${password_aux}"
+          startupProbe:
+            failureThreshold: 10
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+            exec:
+              command:
+                - /bin/bash
+                - -ec
+                - |
+                  password_aux="${MYSQL_ROOT_PASSWORD:-}"
+                  if [[ -f "${MYSQL_ROOT_PASSWORD_FILE:-}" ]]; then
+                      password_aux=$(cat "$MYSQL_ROOT_PASSWORD_FILE")
+                  fi
+                  mysqladmin status -uroot -p"${password_aux}"
+          resources: 
+            limits: {}
+            requests: {}
+          volumeMounts:
+            - name: data
+              mountPath: /bitnami/mysql
+            - name: config
+              mountPath: /opt/bitnami/mysql/conf/my.cnf
+              subPath: my.cnf
+      volumes:
+        - name: config
+          configMap:
+            name: my-streama-mysql
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels: 
+          app.kubernetes.io/name: mysql
+          app.kubernetes.io/instance: my-streama
+          app.kubernetes.io/component: primary
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "1Gi"
+        storageClassName: local

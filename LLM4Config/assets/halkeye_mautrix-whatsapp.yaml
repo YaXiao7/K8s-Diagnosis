@@ -1,0 +1,182 @@
+---
+# Source: mautrix-whatsapp/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-mautrix-whatsapp
+  labels:
+    helm.sh/chart: mautrix-whatsapp-1.7.0
+    app.kubernetes.io/name: mautrix-whatsapp
+    app.kubernetes.io/instance: my-mautrix-whatsapp
+    app.kubernetes.io/version: "v0.10.3"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: mautrix-whatsapp/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-mautrix-whatsapp
+  labels:
+    helm.sh/chart: mautrix-whatsapp-1.7.0
+    app.kubernetes.io/name: mautrix-whatsapp
+    app.kubernetes.io/instance: my-mautrix-whatsapp
+    app.kubernetes.io/version: "v0.10.3"
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  config.yaml: "YXBwc2VydmljZToKICBob3N0bmFtZTogMC4wLjAuMAogIHBvcnQ6IDI5MzE4Cm1ldHJpY3M6CiAgZW5hYmxlZDogdHJ1ZQogIGxpc3RlbjogMC4wLjAuMDo4MDAw"
+  registration.yaml: "bnVsbA=="
+---
+# Source: mautrix-whatsapp/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-mautrix-whatsapp
+  labels:
+    helm.sh/chart: mautrix-whatsapp-1.7.0
+    app.kubernetes.io/name: mautrix-whatsapp
+    app.kubernetes.io/instance: my-mautrix-whatsapp
+    app.kubernetes.io/version: "v0.10.3"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  externalTrafficPolicy: 
+  ports:
+    - port: 29318
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: mautrix-whatsapp
+    app.kubernetes.io/instance: my-mautrix-whatsapp
+  publishNotReadyAddresses: true
+---
+# Source: mautrix-whatsapp/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-mautrix-whatsapp
+  labels:
+    helm.sh/chart: mautrix-whatsapp-1.7.0
+    app.kubernetes.io/name: mautrix-whatsapp
+    app.kubernetes.io/instance: my-mautrix-whatsapp
+    app.kubernetes.io/version: "v0.10.3"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+
+    rollingUpdate: null
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mautrix-whatsapp
+      app.kubernetes.io/instance: my-mautrix-whatsapp
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mautrix-whatsapp
+        app.kubernetes.io/instance: my-mautrix-whatsapp
+      annotations:
+        checksum/secret: "70dbcf4454a77b1d8b562ba0df7bfd7917427fd3f5add2e1fed1e911e1a6ab7d"
+    spec:
+      serviceAccountName: my-mautrix-whatsapp
+      securityContext:
+        {}
+      initContainers:
+        - name: init
+          securityContext:
+            {}
+          image: "dock.mau.dev/mautrix/whatsapp:v0.10.3"
+          imagePullPolicy: Always
+          command: ["/bin/sh"]
+          args:
+            - "-c"
+            - |-
+              set -ex
+              cp /config/*.yaml /data/
+              chown 1000:1000 -R /data
+              chown 1000:1000 -R /logs
+          env:
+            - { name: UID, value: "1000" }
+            - { name: GID, value: "1000" }
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: logs
+              mountPath: /logs
+            - name: config
+              mountPath: /config
+          resources:
+            {}
+      containers:
+        - name: mautrix-whatsapp
+          securityContext:
+            {}
+          image: "dock.mau.dev/mautrix/whatsapp:v0.10.3"
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 29318
+              protocol: TCP
+            - name: metrics
+              containerPort: 8000
+              protocol: TCP
+          env:
+            - { name: UID, value: "1000" }
+            - { name: GID, value: "1000" }
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: 8000
+            failureThreshold: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: 8000
+            failureThreshold: 5
+            periodSeconds: 10
+          startupProbe:
+            httpGet:
+              path: /metrics
+              port: 8000
+            initialDelaySeconds: 5
+            failureThreshold: 30
+            periodSeconds: 10
+          resources:
+            {}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: logs
+              mountPath: /logs
+      volumes:
+        - name: config
+          secret:
+            secretName: my-mautrix-whatsapp
+        - name: data
+          emptyDir: {}
+        - name: logs
+          emptyDir: {}
+---
+# Source: mautrix-whatsapp/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-mautrix-whatsapp-test-connection"
+  labels:
+    helm.sh/chart: mautrix-whatsapp-1.7.0
+    app.kubernetes.io/name: mautrix-whatsapp
+    app.kubernetes.io/instance: my-mautrix-whatsapp
+    app.kubernetes.io/version: "v0.10.3"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args:  ['my-mautrix-whatsapp:29318']
+  restartPolicy: Never

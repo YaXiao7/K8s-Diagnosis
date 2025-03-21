@@ -1,0 +1,144 @@
+---
+# Source: plex/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-plex
+  labels:
+    helm.sh/chart: plex-2.1.1
+    app.kubernetes.io/name: plex
+    app.kubernetes.io/instance: my-plex
+    app.kubernetes.io/version: "1.25.2"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: plex/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-plex
+  labels:
+    helm.sh/chart: plex-2.1.1
+    app.kubernetes.io/name: plex
+    app.kubernetes.io/instance: my-plex
+    app.kubernetes.io/version: "1.25.2"
+    app.kubernetes.io/managed-by: Helm
+data:
+---
+# Source: plex/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-plex
+  labels:
+    helm.sh/chart: plex-2.1.1
+    app.kubernetes.io/name: plex
+    app.kubernetes.io/instance: my-plex
+    app.kubernetes.io/version: "1.25.2"
+    app.kubernetes.io/managed-by: Helm
+data:
+  {}
+---
+# Source: plex/templates/pvc-config.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: my-plex-config
+  labels:
+    helm.sh/chart: plex-2.1.1
+    app.kubernetes.io/name: plex
+    app.kubernetes.io/instance: my-plex
+    app.kubernetes.io/version: "1.25.2"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  accessModes:
+    - "ReadWriteOnce"
+  resources:
+    requests:
+      storage: "2Gi"
+---
+# Source: plex/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-plex
+  labels:
+    helm.sh/chart: plex-2.1.1
+    app.kubernetes.io/name: plex
+    app.kubernetes.io/instance: my-plex
+    app.kubernetes.io/version: "1.25.2"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 32400
+      targetPort: plex
+      protocol: TCP
+      name: plex
+  selector:
+    app.kubernetes.io/name: plex
+    app.kubernetes.io/instance: my-plex
+---
+# Source: plex/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-plex
+  labels:
+    helm.sh/chart: plex-2.1.1
+    app.kubernetes.io/name: plex
+    app.kubernetes.io/instance: my-plex
+    app.kubernetes.io/version: "1.25.2"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  strategy:
+    type: Recreate
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: plex
+      app.kubernetes.io/instance: my-plex
+  template:
+    metadata:
+      annotations:
+        checksum/configmap: 246571741c9ae78b680c516446c840c400742bd81e1fd5eb9968de39fcf6039e
+        checksum/secret: f514ead5c0708bf85557f77decfb38d942a390ab56d24e46e77f5f73ddc53a8a
+      labels:
+        app.kubernetes.io/name: plex
+        app.kubernetes.io/instance: my-plex
+    spec:
+      hostNetwork: false
+      serviceAccountName: my-plex
+      securityContext:
+        {}
+      dnsPolicy: ClusterFirst
+      containers:
+        - name: plex
+          securityContext:
+            {}
+          image: "docker.io/linuxserver/plex:1.25.2"
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - mountPath: /config
+              name: config
+            - mountPath: /data
+              name: data
+          envFrom:
+            - configMapRef:
+                name: my-plex
+            - secretRef:
+                name: my-plex
+          ports:
+            - name: plex
+              containerPort: 32400
+              protocol: TCP
+          readinessProbe:
+            tcpSocket:
+              port: plex
+          resources:
+            {}
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: my-plex-config
+        - name: data
+          emptyDir: {}

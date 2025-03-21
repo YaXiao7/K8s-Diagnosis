@@ -1,0 +1,60 @@
+---
+# Source: cluster-warmer/templates/priorityclass.yaml
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: my-cluster-warmer
+  labels:
+    helm.sh/chart: cluster-warmer-0.3.0
+    app.kubernetes.io/version: "0.3.0"
+    app.kubernetes.io/managed-by: Helm
+value: -1
+globalDefault: false
+---
+# Source: cluster-warmer/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-cluster-warmer
+  labels:
+    helm.sh/chart: cluster-warmer-0.3.0
+    app.kubernetes.io/version: "0.3.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+    matchLabels:
+      app: my-cluster-warmer
+  template:
+    metadata:
+      labels:
+        app: my-cluster-warmer
+        helm.sh/chart: cluster-warmer-0.3.0
+        app.kubernetes.io/version: "0.3.0"
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      priorityClassName: my-cluster-warmer
+      terminationGracePeriodSeconds: 0
+      containers:
+      - name: "my-cluster-warmer"
+        image: "registry.k8s.io/pause:3.9"
+        imagePullPolicy: IfNotPresent
+        resources:
+          {}
+---
+# Source: cluster-warmer/templates/hpa.yaml
+apiVersion: autoscaling/v1
+kind: HorizontalPodAutoscaler
+metadata:
+  name: my-cluster-warmer
+  labels:
+    helm.sh/chart: cluster-warmer-0.3.0
+    app.kubernetes.io/version: "0.3.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: my-cluster-warmer
+  minReplicas: 1
+  maxReplicas: 1
+  targetCPUUtilizationPercentage: 95

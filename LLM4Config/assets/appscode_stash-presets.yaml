@@ -1,0 +1,145 @@
+---
+# Source: stash-presets/templates/kubestash/encryption-secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: default-encryption-secret
+  namespace: default
+stringData:
+  RESTIC_PASSWORD: ""
+---
+# Source: stash-presets/templates/kubestash/storage-secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: default-storage-cred
+  namespace: default
+  labels:
+    helm.sh/chart: stash-presets-v2024.8.21
+    app.kubernetes.io/name: stash-presets
+    app.kubernetes.io/instance: my-stash-presets
+    app.kubernetes.io/version: "v2024.8.21"
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+stringData:
+  AWS_ACCESS_KEY_ID: ""
+  AWS_SECRET_ACCESS_KEY: ""
+---
+# Source: stash-presets/templates/kubestash/backupstorage.yaml
+apiVersion: storage.kubestash.com/v1alpha1
+kind: BackupStorage
+metadata:
+  name: default
+  namespace: default
+  labels:
+    helm.sh/chart: stash-presets-v2024.8.21
+    app.kubernetes.io/name: stash-presets
+    app.kubernetes.io/instance: my-stash-presets
+    app.kubernetes.io/version: "v2024.8.21"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  usagePolicy:
+    allowedNamespaces:
+      from: All
+  default: true
+  deletionPolicy: Delete
+  storage:
+    provider: s3
+    s3:
+      endpoint: ""
+      bucket: ""
+      secretName: default-storage-cred
+---
+# Source: stash-presets/templates/kubestash/preset.yaml
+apiVersion: charts.x-helm.dev/v1alpha1
+kind: ClusterChartPreset
+metadata:
+  name: stash-presets
+  labels:
+    ace.appscode.com/managed: "true"
+    charts.x-helm.dev/is-default-preset: "true"
+spec:
+  values:
+    spec:
+      backup:
+        tool: KubeStash
+        kubestash:
+          schedule: "0 */2 * * *"
+          storageRef:
+            name: default
+            namespace: default
+          retentionPolicy:
+            name: keep-1mo
+            namespace: default
+          encryptionSecret:
+            name: default-encryption-secret
+            namespace: default
+          storageSecret:
+            create: true
+---
+# Source: stash-presets/templates/kubestash/retentionpolicy/keep-1mo.yaml
+apiVersion: storage.kubestash.com/v1alpha1
+kind: RetentionPolicy
+metadata:
+  name: keep-1mo
+  namespace: default
+spec:
+  successfulSnapshots: # Hourly, daily for 7 days
+    hourly: 8
+    daily: 7
+    weekly: 4
+  failedSnapshots:
+    last: 2
+  usagePolicy:
+    allowedNamespaces:
+      from: All
+---
+# Source: stash-presets/templates/kubestash/retentionpolicy/keep-1wk.yaml
+apiVersion: storage.kubestash.com/v1alpha1
+kind: RetentionPolicy
+metadata:
+  name: keep-1wk
+  namespace: default
+spec:
+  successfulSnapshots: # Hourly, daily for 7 days
+    hourly: 8
+    daily: 7
+  failedSnapshots:
+    last: 2
+  usagePolicy:
+    allowedNamespaces:
+      from: All
+---
+# Source: stash-presets/templates/kubestash/retentionpolicy/keep-1yr.yaml
+apiVersion: storage.kubestash.com/v1alpha1
+kind: RetentionPolicy
+metadata:
+  name: keep-1yr
+  namespace: default
+spec:
+  successfulSnapshots: # Hourly, daily for 7 days
+    hourly: 8
+    daily: 7
+    monthly: 12
+  failedSnapshots:
+    last: 2
+  usagePolicy:
+    allowedNamespaces:
+      from: All
+---
+# Source: stash-presets/templates/kubestash/retentionpolicy/keep-3mo.yaml
+apiVersion: storage.kubestash.com/v1alpha1
+kind: RetentionPolicy
+metadata:
+  name: keep-3mo
+  namespace: default
+spec:
+  successfulSnapshots: # Hourly, daily for 7 days
+    hourly: 8
+    daily: 7
+    weekly: 14
+  failedSnapshots:
+    last: 2
+  usagePolicy:
+    allowedNamespaces:
+      from: All

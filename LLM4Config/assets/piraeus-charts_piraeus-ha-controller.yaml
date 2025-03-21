@@ -1,0 +1,157 @@
+---
+# Source: piraeus-ha-controller/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-piraeus-ha-controller
+  labels:
+    helm.sh/chart: piraeus-ha-controller-1.1.4
+    app.kubernetes.io/name: piraeus-ha-controller
+    app.kubernetes.io/instance: my-piraeus-ha-controller
+    app.kubernetes.io/version: "v1.1.4"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: piraeus-ha-controller/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-piraeus-ha-controller
+  labels:
+    helm.sh/chart: piraeus-ha-controller-1.1.4
+    app.kubernetes.io/name: piraeus-ha-controller
+    app.kubernetes.io/instance: my-piraeus-ha-controller
+    app.kubernetes.io/version: "v1.1.4"
+    app.kubernetes.io/managed-by: Helm
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+    verbs:
+      - get
+      - list
+      - watch
+      - delete
+  - apiGroups:
+      - events.k8s.io
+    resources:
+      - events
+    verbs:
+      - create
+      - patch
+  - apiGroups:
+      - ""
+    resources:
+      - pods/eviction
+    verbs:
+      - create
+  - apiGroups:
+      - ""
+    resources:
+      - nodes
+    verbs:
+      - get
+      - list
+      - watch
+      - patch
+      - update
+  - apiGroups:
+      - ""
+    resources:
+      - persistentvolumes
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - "storage.k8s.io"
+    resources:
+      - volumeattachments
+    verbs:
+      - get
+      - list
+      - watch
+      - delete
+---
+# Source: piraeus-ha-controller/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-piraeus-ha-controller
+  labels:
+    helm.sh/chart: piraeus-ha-controller-1.1.4
+    app.kubernetes.io/name: piraeus-ha-controller
+    app.kubernetes.io/instance: my-piraeus-ha-controller
+    app.kubernetes.io/version: "v1.1.4"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-piraeus-ha-controller
+subjects:
+  - kind: ServiceAccount
+    name: my-piraeus-ha-controller
+    namespace: default
+---
+# Source: piraeus-ha-controller/templates/daemonset.yaml
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: my-piraeus-ha-controller
+  labels:
+    helm.sh/chart: piraeus-ha-controller-1.1.4
+    app.kubernetes.io/name: piraeus-ha-controller
+    app.kubernetes.io/instance: my-piraeus-ha-controller
+    app.kubernetes.io/version: "v1.1.4"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: piraeus-ha-controller
+      app.kubernetes.io/instance: my-piraeus-ha-controller
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: piraeus-ha-controller
+        app.kubernetes.io/instance: my-piraeus-ha-controller
+    spec:
+      serviceAccountName: my-piraeus-ha-controller
+      hostNetwork: true
+      securityContext:
+        {}
+      containers:
+        - name: piraeus-ha-controller
+          args:
+            - /agent
+            - --v=2
+          securityContext:
+            privileged: true
+            readOnlyRootFilesystem: true
+          image: "quay.io/piraeusdatastore/piraeus-ha-controller:v1.1.4"
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              cpu: 50m
+              memory: 100Mi
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          startupProbe:
+            httpGet:
+              port: 8000
+              path: /healthz
+          livenessProbe:
+            httpGet:
+              port: 8000
+              path: /healthz
+      tolerations:
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/master
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/control-plane
+        - effect: NoSchedule
+          key: drbd.linbit.com/lost-quorum
+        - effect: NoSchedule
+          key: drbd.linbit.com/force-io-error

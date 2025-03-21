@@ -1,0 +1,153 @@
+---
+# Source: node-red/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-node-red
+  namespace: "default"
+  labels:
+    helm.sh/chart: node-red-0.32.1
+    app.kubernetes.io/name: node-red
+    app.kubernetes.io/instance: my-node-red
+    app.kubernetes.io/version: "3.1.9"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: node-red/templates/role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: my-node-red
+  namespace: "default"
+  labels:
+    helm.sh/chart: node-red-0.32.1
+    app.kubernetes.io/name: node-red
+    app.kubernetes.io/instance: my-node-red
+    app.kubernetes.io/version: "3.1.9"
+    app.kubernetes.io/managed-by: Helm
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+      - configmaps
+      - services
+    verbs:
+      - get
+      - list
+      - watch
+---
+# Source: node-red/templates/rolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: my-node-red
+  namespace: "default"
+  labels:
+    helm.sh/chart: node-red-0.32.1
+    app.kubernetes.io/name: node-red
+    app.kubernetes.io/instance: my-node-red
+    app.kubernetes.io/version: "3.1.9"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: my-node-red
+subjects:
+  - kind: ServiceAccount
+    name: my-node-red
+    namespace: "default"
+---
+# Source: node-red/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-node-red
+  namespace: "default"
+  labels:
+    helm.sh/chart: node-red-0.32.1
+    app.kubernetes.io/name: node-red
+    app.kubernetes.io/instance: my-node-red
+    app.kubernetes.io/version: "3.1.9"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 1880
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: node-red
+    app.kubernetes.io/instance: my-node-red
+---
+# Source: node-red/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-node-red
+  namespace: "default"
+  labels:
+    helm.sh/chart: node-red-0.32.1
+    app.kubernetes.io/name: node-red
+    app.kubernetes.io/instance: my-node-red
+    app.kubernetes.io/version: "3.1.9"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: node-red
+      app.kubernetes.io/instance: my-node-red
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: node-red
+        app.kubernetes.io/instance: my-node-red
+    spec:
+      serviceAccountName: my-node-red
+      securityContext:
+        fsGroup: 1000
+        runAsUser: 1000
+      containers:
+        - name: node-red
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsGroup: 10003
+            runAsNonRoot: true
+            runAsUser: 10003
+            seccompProfile:
+              type: RuntimeDefault
+          image: "docker.io/nodered/node-red:3.1.9"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 1880
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          resources:
+            limits:
+              cpu: 500m
+              memory: 5123Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+      volumes:
+        - name: data
+          emptyDir: { }
+          
+      terminationGracePeriodSeconds: 30

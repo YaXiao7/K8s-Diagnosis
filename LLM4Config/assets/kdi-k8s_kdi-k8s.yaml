@@ -1,0 +1,148 @@
+---
+# Source: kdi-k8s/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kdi-k8s
+  labels:
+    helm.sh/chart: kdi-k8s-0.1.0
+    app.kubernetes.io/name: kdi-k8s
+    app.kubernetes.io/instance: my-kdi-k8s
+    tier: web
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+automountServiceAccountToken: true
+---
+# Source: kdi-k8s/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+    name: my-kdi-k8s
+type: Opaque
+data:
+    KDI_JWT_SECRET_KEY: "ODd6cmdyZ3p6NmM3YWUxZmFkOGYxODA4ZGViZGVlOTgxNmE0ZmQ0YjNmNDIwZTUwYjJkZDVlY2VmMTlkMjVlMjZmMmU5YTI3Mjc5MjBjYjVlZDBkMTgzMWU0YThmY2U5NjcwN2JmYTYwYmY3YzUxNjQ5MTc1MjM3Y2dyemdyZWd6YTA5NzY2ZTZkYWIzNzk="
+    KDI_JWT_SUB_FOR_K8S_API: "a2RpLXdlYg=="
+    KDI_HELM_DRIVER: "Zg=="
+---
+# Source: kdi-k8s/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-kdi-k8s
+data:
+  KDI_WEB_API_ENDPOINT: "https://kdi-web.kuro08-dev.svc.cluster.local:8070/api/v1"
+---
+# Source: kdi-k8s/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-kdi-k8s
+  labels:
+    helm.sh/chart: kdi-k8s-0.1.0
+    app.kubernetes.io/name: kdi-k8s
+    app.kubernetes.io/instance: my-kdi-k8s
+    tier: web
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8090
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: kdi-k8s
+    app.kubernetes.io/instance: my-kdi-k8s
+    tier: web
+---
+# Source: kdi-k8s/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-kdi-k8s
+  labels:
+    helm.sh/chart: kdi-k8s-0.1.0
+    app.kubernetes.io/name: kdi-k8s
+    app.kubernetes.io/instance: my-kdi-k8s
+    tier: web
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kdi-k8s
+      app.kubernetes.io/instance: my-kdi-k8s
+      tier: web
+  template:
+    metadata:
+      labels:
+        helm.sh/chart: kdi-k8s-0.1.0
+        app.kubernetes.io/name: kdi-k8s
+        app.kubernetes.io/instance: my-kdi-k8s
+        tier: web
+        app.kubernetes.io/version: "1.16.0"
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      serviceAccountName: kdi-k8s
+      securityContext:
+        {}
+      containers:
+        - name: kdi-k8s
+          securityContext:
+            {}
+          image: "kuro08/kdi-k8s:latest"
+          imagePullPolicy: Always
+          ports:
+            - name: api-port
+              containerPort: 8090
+              protocol: TCP
+          
+          env:
+            - name: KDI_K8S_API_PORT
+              value: "8090"
+
+            - name: KDI_WEB_API_ENDPOINT
+              valueFrom:
+                configMapKeyRef:
+                  name: my-kdi-k8s
+                  key: KDI_WEB_API_ENDPOINT
+            
+            - name: KDI_JWT_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: my-kdi-k8s
+                  key: KDI_JWT_SECRET_KEY
+            
+            - name: KDI_JWT_SUB_FOR_K8S_API
+              valueFrom:
+                secretKeyRef:
+                  name: my-kdi-k8s
+                  key: KDI_JWT_SUB_FOR_K8S_API
+            
+            - name: KDI_HELM_DRIVER
+              valueFrom:
+                secretKeyRef:
+                  name: my-kdi-k8s
+                  key: KDI_HELM_DRIVER
+---
+# Source: kdi-k8s/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-kdi-k8s-test-connection"
+  labels:
+    helm.sh/chart: kdi-k8s-0.1.0
+    app.kubernetes.io/name: kdi-k8s
+    app.kubernetes.io/instance: my-kdi-k8s
+    tier: web
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-kdi-k8s:8090']
+  restartPolicy: Never

@@ -1,0 +1,211 @@
+---
+# Source: writefreely/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-writefreely-config
+  labels:
+    helm.sh/chart: writefreely-1.0.0
+    app.kubernetes.io/name: writefreely
+    app.kubernetes.io/instance: my-writefreely
+    app.kubernetes.io/version: "0.13.1"
+    app.kubernetes.io/managed-by: Helm
+data:
+  config.ini: |
+    [server]
+    hidden_host          =
+    port                 = 8080
+    bind                 = 0.0.0.0
+    tls_cert_path        =
+    tls_key_path         =
+    autocert             = false
+    templates_parent_dir =
+    static_parent_dir    =
+    pages_parent_dir     =
+    keys_parent_dir      =
+    hash_seed            =
+    gopher_port          = 0
+    
+    [database]
+    type     = sqlite3
+    filename = app.db
+    username =
+    password =
+    database =
+    host     = localhost
+    port     = 3306
+    tls      = false
+    
+    [app]
+    site_name             = blog
+    site_description      =
+    host                  = http://0.0.0.0:8080
+    theme                 = write
+    editor                =
+    disable_js            = false
+    webfonts              = true
+    landing               =
+    simple_nav            = false
+    wf_modesty            = false
+    chorus                = false
+    forest                = false
+    disable_drafts        = false
+    single_user           = true
+    open_registration     = false
+    open_deletion         = false
+    min_username_len      = 3
+    max_blogs             = 1
+    federation            = true
+    public_stats          = true
+    monetization          = false
+    notes_only            = false
+    private               = false
+    local_timeline        = false
+    user_invites          =
+    default_visibility    =
+    update_checks         = false
+    disable_password_auth = false
+    
+    [oauth.slack]
+    client_id          =
+    client_secret      =
+    team_id            =
+    callback_proxy     =
+    callback_proxy_api =
+    
+    [oauth.writeas]
+    client_id          =
+    client_secret      =
+    auth_location      =
+    token_location     =
+    inspect_location   =
+    callback_proxy     =
+    callback_proxy_api =
+    
+    [oauth.gitlab]
+    client_id          =
+    client_secret      =
+    host               =
+    display_name       =
+    callback_proxy     =
+    callback_proxy_api =
+    
+    [oauth.gitea]
+    client_id          =
+    client_secret      =
+    host               =
+    display_name       =
+    callback_proxy     =
+    callback_proxy_api =
+    
+    [oauth.generic]
+    client_id          =
+    client_secret      =
+    host               =
+    display_name       =
+    callback_proxy     =
+    callback_proxy_api =
+    token_endpoint     =
+    inspect_endpoint   =
+    auth_endpoint      =
+    scope              =
+    allow_disconnect   = false
+    map_user_id        =
+    map_username       =
+    map_display_name   =
+    map_email          =
+---
+# Source: writefreely/templates/common.yaml
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: my-writefreely-writefreely-config
+  labels:
+    helm.sh/chart: writefreely-1.0.0
+    app.kubernetes.io/name: writefreely
+    app.kubernetes.io/instance: my-writefreely
+    app.kubernetes.io/version: "0.13.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  accessModes:
+    - "ReadWriteOnce"
+  resources:
+    requests:
+      storage: "1Gi"
+---
+# Source: writefreely/templates/common.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-writefreely
+  labels:
+    helm.sh/chart: writefreely-1.0.0
+    app.kubernetes.io/name: writefreely
+    app.kubernetes.io/instance: my-writefreely
+    app.kubernetes.io/version: "0.13.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: writefreely
+    app.kubernetes.io/instance: my-writefreely
+---
+# Source: writefreely/templates/common.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-writefreely
+  labels:
+    helm.sh/chart: writefreely-1.0.0
+    app.kubernetes.io/name: writefreely
+    app.kubernetes.io/instance: my-writefreely
+    app.kubernetes.io/version: "0.13.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: writefreely
+      app.kubernetes.io/instance: my-writefreely
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: writefreely
+        app.kubernetes.io/instance: my-writefreely
+    spec:
+      serviceAccountName: default
+      dnsPolicy: ClusterFirst
+      containers:
+      - name: my-writefreely
+        image: "ghcr.io/nicholaswilde/writefreely:version-0.13.1"
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        volumeMounts:
+        - mountPath: /config
+          name: writefreely-config
+        livenessProbe:
+          tcpSocket:
+            port: http
+          initialDelaySeconds: 30
+          failureThreshold: 5
+          timeoutSeconds: 10
+        readinessProbe:
+          tcpSocket:
+            port: http
+          initialDelaySeconds: 30
+          failureThreshold: 5
+          timeoutSeconds: 10
+      volumes:
+      - name: writefreely-config
+        persistentVolumeClaim:
+          claimName: my-writefreely-writefreely-config

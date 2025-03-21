@@ -1,0 +1,132 @@
+---
+# Source: etcd-operator/templates/service-account.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-etcd-operator-etcd-operator
+  labels:
+    chart: "etcd-operator-0.1.1"
+    app: "my-etcd-operator-etcd-operator"
+    heritage: "Helm"
+    release: "my-etcd-operator"
+---
+# Source: etcd-operator/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRole
+metadata:
+  name: my-etcd-operator-etcd-operator
+  labels:
+    chart: "etcd-operator-0.1.1"
+    app: "my-etcd-operator-etcd-operator"
+    heritage: "Helm"
+    release: "my-etcd-operator"
+rules:
+- apiGroups:
+  - etcd.coreos.com
+  resources:
+  - clusters
+  verbs:
+  - "*"
+- apiGroups:
+  - etcd.database.coreos.com
+  resources:
+  - etcdclusters
+  verbs:
+  - "*"
+- apiGroups:
+  - extensions
+  resources:
+  - thirdpartyresources
+  verbs:
+  - "*"
+- apiGroups:
+  - apiextensions.k8s.io
+  resources:
+  - customresourcedefinitions
+  verbs:
+  - "*"
+- apiGroups:
+  - storage.k8s.io
+  resources:
+  - storageclasses
+  verbs:
+  - "*"
+- apiGroups: 
+  - ""
+  resources:
+  - pods
+  - services
+  - endpoints
+  - persistentvolumeclaims
+  - events
+  verbs:
+  - "*"
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  verbs:
+  - "*"
+---
+# Source: etcd-operator/templates/rbac.yaml
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: my-etcd-operator-etcd-operator
+  labels:
+    chart: "etcd-operator-0.1.1"
+    app: "my-etcd-operator-etcd-operator"
+    heritage: "Helm"
+    release: "my-etcd-operator"
+subjects:
+- kind: ServiceAccount
+  name: my-etcd-operator-etcd-operator
+  namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-etcd-operator-etcd-operator
+---
+# Source: etcd-operator/templates/deployment.yaml
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: my-etcd-operator-etcd-operator
+  labels:
+    chart: "etcd-operator-0.1.1"
+    app: "my-etcd-operator-etcd-operator"
+    heritage: "Helm"
+    release: "my-etcd-operator"
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        chart: "etcd-operator-0.1.1"
+        app: my-etcd-operator-etcd-operator
+        heritage: "Helm"
+        release: "my-etcd-operator"
+    spec:
+      serviceAccountName: my-etcd-operator-etcd-operator
+      containers:
+      - name: etcd-operator
+        image: "quay.io/coreos/etcd-operator:v0.6.1"
+        imagePullPolicy: IfNotPresent
+        command:
+        - "/usr/local/bin/etcd-operator"
+        env:
+        - name: MY_POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: MY_POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        resources:
+            limits:
+              cpu: 100m
+              memory: 128Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi

@@ -1,0 +1,114 @@
+---
+# Source: ladeit/templates/server-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-ladeit-ladeit
+  labels:
+    app: ladeit
+    chart: ladeit-0.4.0
+    release: my-ladeit
+    heritage: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8000
+      targetPort: 8000
+      protocol: TCP
+      name: ladeit
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
+      name: webkubectl
+  selector:
+    app: ladeit
+    release: my-ladeit
+---
+# Source: ladeit/templates/server-deployment.yaml
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: my-ladeit-ladeit
+  labels:
+    app: ladeit
+    chart: ladeit-0.4.0
+    release: my-ladeit
+    heritage: Helm
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: ladeit
+        release: my-ladeit
+    spec:
+      containers:
+        - name: ladeit
+          image: "ladeit/ladeit:latest"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          env:
+          - name: LADEIT_WEBKUBECTL_HOST
+            value: ladeit-example.com
+#          livenessProbe:
+#            httpGet:
+#              path: /actuator/health
+#              port: 8000
+#          readinessProbe:
+#            httpGet:
+#              path: /actuator/health
+#              port: 8000
+          resources:
+            limits:
+              cpu: 1500m
+              memory: 3Gi
+            requests:
+              cpu: 500m
+              memory: 1Gi
+        - image: "kubeoperator/webkubectl:v2.4.0"
+          imagePullPolicy: IfNotPresent
+          name: webkubectl
+          ports:
+          - containerPort: 8080
+            protocol: TCP
+          securityContext:
+            privileged: true
+          resources:
+            limits:
+              cpu: 1000m
+              memory: 2Gi
+            requests:
+              cpu: 500m
+              memory: 500m
+---
+# Source: ladeit/templates/ingress.yaml
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: my-ladeit-ladeit
+  labels:
+    app: ladeit
+    chart: ladeit-0.4.0
+    release: my-ladeit
+    heritage: Helm
+  annotations:
+spec:
+  rules:
+    - host: ladeit-example.local
+      http:
+        paths:
+          - path: /terminal
+            pathType: Prefix
+            backend:
+              serviceName: my-ladeit-ladeit
+              servicePort: 8080 
+          - path: /api/kube-config
+            pathType: Prefix
+            backend:
+              serviceName: my-ladeit-ladeit
+              servicePort: 8080 
+          - path: /           
+            backend:
+              serviceName: my-ladeit-ladeit
+              servicePort: 8000

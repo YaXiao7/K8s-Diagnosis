@@ -1,0 +1,244 @@
+---
+# Source: kube-httpcache/templates/pdb.yaml
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: my-kube-httpcache
+  labels:
+    helm.sh/chart: kube-httpcache-0.8.1
+    app.kubernetes.io/name: kube-httpcache
+    app.kubernetes.io/instance: my-kube-httpcache
+    app.kubernetes.io/version: "v0.8.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kube-httpcache
+      app.kubernetes.io/instance: my-kube-httpcache
+---
+# Source: kube-httpcache/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-kube-httpcache
+  labels:
+    helm.sh/chart: kube-httpcache-0.8.1
+    app.kubernetes.io/name: kube-httpcache
+    app.kubernetes.io/instance: my-kube-httpcache
+    app.kubernetes.io/version: "v0.8.1"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: kube-httpcache/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-kube-httpcache
+  labels:
+    helm.sh/chart: kube-httpcache-0.8.1
+    app.kubernetes.io/name: kube-httpcache
+    app.kubernetes.io/instance: my-kube-httpcache
+    app.kubernetes.io/version: "v0.8.1"
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  secret: "d251RGg0YWJVSXpMeDVkbG9oV2xzeXB5Nk05RkROMko="
+---
+# Source: kube-httpcache/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-kube-httpcache
+data:
+  default.vcl.tmpl: |
+    vcl 4.0;
+    
+    import std;
+    import directors;
+    
+    // ".Frontends" is a slice that contains all known Varnish instances
+    // (as selected by the service specified by -frontend-service).
+    // The backend name needs to be the Pod name, since this value is compared
+    // to the server identity ("server.identity" [1]) later.
+    //
+    //   [1]: https://varnish-cache.org/docs/6.4/reference/vcl.html#local-server-remote-and-client
+    {{ range .Frontends }}
+    backend {{ .Name }} {
+        .host = "{{ .Host }}";
+        .port = "{{ .Port }}";
+    }
+    {{- end }}
+    
+    {{ range .Backends }}
+    backend be-{{ .Name }} {
+        .host = "{{ .Host }}";
+        .port = "{{ .Port }}";
+    }
+    {{- end }}
+    
+    sub vcl_init {
+        new cluster = directors.hash();
+    
+        {{ range .Frontends -}}
+        cluster.add_backend({{ .Name }}, 1);
+        {{ end }}
+    
+        new lb = directors.round_robin();
+    
+        {{ range .Backends -}}
+        lb.add_backend(be-{{ .Name }});
+        {{ end }}
+    }
+    
+    sub vcl_recv
+    {
+        # Set backend hint for non cachable objects.
+        set req.backend_hint = lb.backend();
+    
+        # ...
+    
+        # Routing logic. Pass a request to an appropriate Varnish node.
+        # See https://info.varnish-software.com/blog/creating-self-routing-varnish-cluster for more info.
+        unset req.http.x-cache;
+        set req.backend_hint = cluster.backend(req.url);
+        set req.http.x-shard = req.backend_hint;
+        if (req.http.x-shard != server.identity) {
+            return(pass);
+        }
+        set req.backend_hint = lb.backend();
+    
+        # ...
+    
+        return(hash);
+    }
+---
+# Source: kube-httpcache/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: my-kube-httpcache
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - endpoints
+  - pods
+  verbs:
+  - watch
+  - get
+---
+# Source: kube-httpcache/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    helm.sh/chart: kube-httpcache-0.8.1
+    app.kubernetes.io/name: kube-httpcache
+    app.kubernetes.io/instance: my-kube-httpcache
+    app.kubernetes.io/version: "v0.8.1"
+    app.kubernetes.io/managed-by: Helm
+  name: my-kube-httpcache
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: my-kube-httpcache
+subjects:
+  - kind: ServiceAccount
+    name: my-kube-httpcache
+---
+# Source: kube-httpcache/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-kube-httpcache
+  labels:
+    helm.sh/chart: kube-httpcache-0.8.1
+    app.kubernetes.io/name: kube-httpcache
+    app.kubernetes.io/instance: my-kube-httpcache
+    app.kubernetes.io/version: "v0.8.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+      protocol: TCP
+    - name: "signaller"
+      port: 8090
+      targetPort: 8090
+  selector:
+    app.kubernetes.io/name: kube-httpcache
+    app.kubernetes.io/instance: my-kube-httpcache
+---
+# Source: kube-httpcache/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-kube-httpcache
+  labels:
+    helm.sh/chart: kube-httpcache-0.8.1
+    app.kubernetes.io/name: kube-httpcache
+    app.kubernetes.io/instance: my-kube-httpcache
+    app.kubernetes.io/version: "v0.8.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  serviceName: my-kube-httpcache
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kube-httpcache
+      app.kubernetes.io/instance: my-kube-httpcache
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kube-httpcache
+        app.kubernetes.io/instance: my-kube-httpcache
+    spec:
+      serviceAccountName: my-kube-httpcache
+      securityContext:
+        {}
+      containers:
+        - name: kube-httpcache
+          securityContext:
+            {}
+          image: "quay.io/mittwald/kube-httpcache:stable"
+          imagePullPolicy: IfNotPresent
+          args:
+          - -admin-addr=0.0.0.0
+          - -admin-port=6083
+          - -signaller-enable
+          - -signaller-port=8090
+          - -frontend-port=8080
+          - -frontend-watch
+          - -frontend-namespace=$(NAMESPACE)
+          - -frontend-service=my-kube-httpcache
+          - -backend-watch
+          - -backend-namespace=$(NAMESPACE)
+          - -backend-service=backend-service
+          - -varnish-secret-file=/etc/varnish/k8s-secret/secret
+          - -varnish-vcl-template=/etc/varnish/tmpl/default.vcl.tmpl
+          - -varnish-storage=malloc,128M
+          
+          - -varnish-vcl-template-poll
+          env:
+          - name: NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          volumeMounts:
+          - name: template
+            mountPath: /etc/varnish/tmpl
+          - name: secret
+            mountPath: /etc/varnish/k8s-secret
+          - name: var
+            mountPath: /var/lib/varnish
+      volumes:
+      - name: template
+        configMap:
+          name: my-kube-httpcache
+      - name: secret
+        secret:
+          secretName: my-kube-httpcache
+      - name: var
+        emptyDir: {}

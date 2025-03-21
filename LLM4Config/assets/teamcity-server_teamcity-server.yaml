@@ -1,0 +1,610 @@
+---
+# Source: teamcity-server/templates/proxy/pdb.yaml.tpl
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: my-teamcity-server-proxy
+  labels:
+    app: my-teamcity-server-proxy
+    component: proxy
+spec:
+  selector:
+    matchLabels:
+      app: my-teamcity-server-proxy
+      component: proxy
+  minAvailable: 1
+---
+# Source: teamcity-server/templates/teamcity/pdb.yaml.tpl
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: my-teamcity-server
+  labels:
+    app: my-teamcity-server
+spec:
+  selector:
+    matchLabels:
+      app: my-teamcity-server
+      component: server
+  minAvailable: 1
+---
+# Source: teamcity-server/templates/proxy/configmap.yaml.tpl
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: my-teamcity-server-haproxy-cfg
+data:
+  haproxy.cfg: |
+    defaults
+        mode http
+        timeout connect 240s
+        timeout client 1200s
+        timeout server 1200s
+
+    frontend stats-in
+        bind *:8080
+
+        stats enable
+        stats uri /
+
+    frontend http-in
+        bind *:80
+
+        default_backend web_endpoint
+        option httplog
+        log stdout local0  info
+
+        option http-buffer-request
+        declare capture request len 40000000
+        http-request capture req.body id 0
+        capture request header user-agent len 150
+        capture request header Host len 15
+
+        capture cookie X-TeamCity-Node-Id-Cookie= len 100
+
+        http-request add-header X-TeamCity-Proxy "type=haproxy; version=2023.11"
+        http-request set-header X-Forwarded-Host %[req.hdr(Host)]
+
+        acl node_id_cookie_found req.cook(X-TeamCity-Node-Id-Cookie) -m found
+        acl browser req.hdr(User-Agent) -m sub Mozilla
+
+        default_backend clients_not_supporting_cookies
+        use_backend clients_with_node_id_cookie if node_id_cookie_found
+        use_backend clients_supporting_cookies if browser
+
+    backend clients_with_node_id_cookie
+        # this backend handles the clients that provided the "X-TeamCity-Node-Id-Cookie" cookie
+        # clients that do so are TeamCity agents and browsers handling HTTP requests asking to switch to a specific node
+        cookie X-TeamCity-Node-Id-Cookie
+
+        http-request disable-l7-retry if METH_POST METH_PUT METH_DELETE
+        retry-on empty-response conn-failure response-timeout 502 503 504
+        retries 5
+
+        option httpchk GET /healthCheck/ready
+
+        default-server check fall 6 inter 10000 downinter 5000
+        server my-teamcity-server-0 my-teamcity-server-direct-0:8111 cookie my-teamcity-server-0
+        server my-teamcity-server-1 my-teamcity-server-direct-1:8111 cookie my-teamcity-server-1
+
+    backend clients_supporting_cookies
+        # this backend is for the browsers without "X-TeamCity-Node-Id-Cookie"
+        # these requests will be served in a round-robin manner to a healthy server
+        balance roundrobin
+        option redispatch
+        cookie TCSESSIONID prefix nocache
+
+        http-request disable-l7-retry if METH_POST METH_PUT METH_DELETE
+
+        option httpchk
+
+        http-check connect
+        http-check send meth GET uri /healthCheck/preferredNodeStatus
+        http-check expect status 200
+
+        default-server check fall 6 inter 10000 downinter 5000 on-marked-down shutdown-sessions
+        server my-teamcity-server-0 my-teamcity-server-direct-0:8111 cookie n1 weight 50
+        server my-teamcity-server-1 my-teamcity-server-direct-1:8111 cookie n1 weight 50
+
+    backend clients_not_supporting_cookies
+        # for compatibiity reasons requests from non browser clients are always
+        # routed to a single node (the first healthy)
+        balance first
+        option redispatch
+
+        http-request disable-l7-retry if METH_POST METH_PUT METH_DELETE
+
+        option httpchk
+
+        http-check connect
+        http-check send meth GET uri /healthCheck/preferredNodeStatus
+        http-check expect status 200
+
+        default-server check fall 6 inter 10000 downinter 5000 on-marked-down shutdown-sessions
+        server my-teamcity-server-0 my-teamcity-server-direct-0:8111
+        server my-teamcity-server-1 my-teamcity-server-direct-1:8111
+---
+# Source: teamcity-server/templates/teamcity/configmap.yaml.tpl
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-teamcity-server-datadir-config
+data:
+    database.properties: |
+      connectionUrl=jdbc:mysql://127.0.0.1/teamcity?allowPublicKeyRetrieval=true&useSSL=false
+      connectionProperties.user=teamcity
+      connectionProperties.password=password
+      maxConnections=50
+---
+# Source: teamcity-server/templates/teamcity/configmap.yaml.tpl
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-teamcity-server-services
+data:
+    fastunzip.sh: |
+      #!/bin/bash
+      cd /opt/teamcity/webapps/ROOT/WEB-INF/plugins
+      for zip in ./*.zip; do
+        test -f $zip || continue
+        unzip $zip -d $(basename $zip .zip) > /dev/null && rm -f $zip &
+      done
+      wait
+---
+# Source: teamcity-server/templates/teamcity/configmap.yaml.tpl
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-teamcity-server-startup-wrp
+data:
+  run-services-wrp.sh: |
+    #!/bin/bash
+    HOSTNAME=$(cat /etc/hostname)
+
+    initfile=${TEAMCITY_DATA_PATH}/system/dataDirectoryInitialized
+    if [ "$HOSTNAME" == "my-teamcity-server-0" ]; then
+      if [ ! -f $initfile ]; then
+        echo $initfile not found
+        echo Assume initial setup
+        index=0
+        while [ -d ${TEAMCITY_DATA_PATH}/config.back.$index ]; do
+          index=$((index + 1))
+        done
+        echo Hide mounted files
+        mv -v ${TEAMCITY_DATA_PATH}/config ${TEAMCITY_DATA_PATH}/config.back.$index
+      fi
+    fi
+
+    set -x
+    case "$HOSTNAME" in
+    "my-teamcity-server-0")
+      export ROOT_URL=http://my-teamcity-server-0.my-teamcity-server-headless.default:8111
+      export NODE_ID=my-teamcity-server-0
+      export TEAMCITY_SERVER_OPTS="-Dteamcity.server.nodeId=${NODE_ID} -Dteamcity.server.rootURL=${ROOT_URL} $TEAMCITY_SERVER_OPTS"
+      echo Override server responsibilities
+      export TEAMCITY_SERVER_OPTS="-Dteamcity.server.responsibilities=MAIN_NODE,CAN_PROCESS_BUILD_TRIGGERS,CAN_PROCESS_USER_DATA_MODIFICATION_REQUESTS,CAN_CHECK_FOR_CHANGES,CAN_PROCESS_BUILD_MESSAGES $TEAMCITY_SERVER_OPTS"
+      exec /run-services.sh
+    ;;
+    "my-teamcity-server-1")
+      export ROOT_URL=http://my-teamcity-server-1.my-teamcity-server-headless.default:8111
+      export NODE_ID=my-teamcity-server-1
+      export TEAMCITY_SERVER_OPTS="-Dteamcity.server.nodeId=${NODE_ID} -Dteamcity.server.rootURL=${ROOT_URL} $TEAMCITY_SERVER_OPTS"
+      echo Override server responsibilities
+      export TEAMCITY_SERVER_OPTS="-Dteamcity.server.responsibilities=CAN_PROCESS_BUILD_TRIGGERS,CAN_PROCESS_USER_DATA_MODIFICATION_REQUESTS,CAN_CHECK_FOR_CHANGES,CAN_PROCESS_BUILD_MESSAGES $TEAMCITY_SERVER_OPTS"
+      exec /run-services.sh
+    ;;
+    esac
+---
+# Source: teamcity-server/templates/teamcity/pvc.yaml.tpl
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: teamcity-server-data
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes: ["ReadWriteMany"]
+  resources: {"requests":{"storage":"16Gi"}}
+  storageClassName: efs
+  volumeMode: Filesystem
+---
+# Source: teamcity-server/templates/proxy/service.yaml.tpl
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-teamcity-server-proxy
+spec:
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: http
+    - name: stats
+      protocol: TCP
+      port: 8080
+      targetPort: stats
+  selector:
+    app: my-teamcity-server-proxy
+  type: ClusterIP
+---
+# Source: teamcity-server/templates/teamcity/service.yaml.tpl
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-teamcity-server
+spec:
+  ports:
+    - name: http
+      protocol: TCP
+      port: 8111
+      targetPort: http
+  selector:
+    app: my-teamcity-server
+    component: server
+  type: ClusterIP
+---
+# Source: teamcity-server/templates/teamcity/service.yaml.tpl
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-teamcity-server-headless
+spec:
+  type: ClusterIP
+  clusterIP: None
+  publishNotReadyAddresses: false
+  ports:
+    - name: http
+      protocol: TCP
+      port: 8111
+      targetPort: http
+  selector:
+    app: my-teamcity-server
+    component: server
+---
+# Source: teamcity-server/templates/teamcity/service.yaml.tpl
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-teamcity-server-direct-0
+  annotations:
+    node-id: "my-teamcity-server-0"
+spec:
+  ports:
+    - name: http
+      protocol: TCP
+      port: 8111
+      targetPort: http
+  selector:
+    app: my-teamcity-server
+    component: server
+    statefulset.kubernetes.io/pod-name: my-teamcity-server-0
+  type: ClusterIP
+---
+# Source: teamcity-server/templates/teamcity/service.yaml.tpl
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-teamcity-server-direct-h0
+  annotations:
+    node-id: "my-teamcity-server-0"
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+    - name: http
+      protocol: TCP
+      port: 8111
+      targetPort: http
+  selector:
+    app: my-teamcity-server
+    component: server
+    statefulset.kubernetes.io/pod-name: my-teamcity-server-0
+  type: ClusterIP
+---
+# Source: teamcity-server/templates/teamcity/service.yaml.tpl
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-teamcity-server-direct-1
+  annotations:
+    node-id: "my-teamcity-server-1"
+spec:
+  ports:
+    - name: http
+      protocol: TCP
+      port: 8111
+      targetPort: http
+  selector:
+    app: my-teamcity-server
+    component: server
+    statefulset.kubernetes.io/pod-name: my-teamcity-server-1
+  type: ClusterIP
+---
+# Source: teamcity-server/templates/teamcity/service.yaml.tpl
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-teamcity-server-direct-h1
+  annotations:
+    node-id: "my-teamcity-server-1"
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+    - name: http
+      protocol: TCP
+      port: 8111
+      targetPort: http
+  selector:
+    app: my-teamcity-server
+    component: server
+    statefulset.kubernetes.io/pod-name: my-teamcity-server-1
+  type: ClusterIP
+---
+# Source: teamcity-server/templates/proxy/haproxy.yaml.tpl
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-teamcity-server-proxy
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: my-teamcity-server-proxy
+      component: proxy
+  template:
+    metadata:
+      annotations:
+        config-sha: cde90eaa4a34ff8d34ea2338db489fd2774e0011
+      labels:
+        app: my-teamcity-server-proxy
+        component: proxy
+    spec:
+      containers:
+      - name: haproxy
+        image: haproxy:3.0
+        imagePullPolicy: IfNotPresent
+        lifecycle:
+          preStop:
+            exec:
+              command:
+                - sh
+                - -c
+                - sleep 10; kill -s SIGUSR1 1
+        startupProbe: {"failureThreshold":120,"httpGet":{"path":"/login.html","port":"http","scheme":"HTTP"},"periodSeconds":5}
+        livenessProbe: null
+        ports:
+        - name: http
+          containerPort: 80
+        - name: stats
+          containerPort: 8080
+        resources: {"requests":{"cpu":"10m","memory":"80Mi"}}
+        volumeMounts:
+          - name: haproxy-config
+            mountPath: /usr/local/etc/haproxy
+      volumes:
+      - name: haproxy-config
+        configMap:
+          name: my-teamcity-server-haproxy-cfg
+          defaultMode: 420
+          optional: false
+      securityContext:
+        sysctls:
+        - name: net.ipv4.ip_unprivileged_port_start
+          value: "1"
+      imagePullSecrets: []
+      topologySpreadConstraints:
+        - labelSelector:
+            matchLabels:
+              app: 'my-teamcity-server-proxy'
+          maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+        - labelSelector:
+            matchLabels:
+              app: 'my-teamcity-server-proxy'
+          maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+      tolerations:
+        - key: 'my-teamcity-server-proxy'
+          operator: Exists
+---
+# Source: teamcity-server/templates/teamcity/teamcity.yaml.tpl
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-teamcity-server
+spec:
+  replicas: 2
+  serviceName: my-teamcity-server-headless
+  podManagementPolicy: OrderedReady
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: my-teamcity-server
+      component: server
+  template:
+    metadata:
+      annotations:
+        config-sha: 662b92d762e4b74d30cb552dd5560932b2c885ee
+      labels:
+        app: my-teamcity-server
+        component: server
+    spec:
+      containers:
+      - name: my-teamcity-server
+        image: jetbrains/teamcity-server:latest
+        imagePullPolicy: Always
+        command:
+        - /run-services-wrp.sh
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: TEAMCITY_SERVER_MEM_OPTS
+          value: -Xms512m -Xmx2048m
+        startupProbe: null
+        livenessProbe: {"failureThreshold":3,"httpGet":{"path":"/healthCheck/healthy","port":"http","scheme":"HTTP"},"periodSeconds":30}
+        readinessProbe: {"failureThreshold":2,"httpGet":{"path":"/healthCheck/ready","port":"http","scheme":"HTTP"},"periodSeconds":10}
+        ports: [{"containerPort":8111,"name":"http","protocol":"TCP"}]
+        resources: {"requests":{"cpu":"100m","memory":"2048Mi"}}
+        volumeMounts:
+        - mountPath: /data/teamcity_server/datadir
+          name: teamcity-server-data
+        
+        - name: datadir-config
+          mountPath: /data/teamcity_server/datadir/config/database.properties
+          subPath: database.properties
+        
+        
+        - mountPath: /services/fastunzip.sh
+          name: services
+          subPath: fastunzip.sh
+        - mountPath: /run-services-wrp.sh
+          name: startup-wrp
+          subPath: run-services-wrp.sh
+        - mountPath: /opt/teamcity/cache
+          name: cache
+        - mountPath: /opt/teamcity/logs
+          name: logs
+        - mountPath: /opt/teamcity/temp
+          name: temp
+        - mountPath: /home/tcuser
+          name: home-tcuser
+      volumes:
+      
+      - name: datadir-config
+        configMap:
+          defaultMode: 0644
+          name: my-teamcity-server-datadir-config
+      
+      
+      
+      - name: services
+        configMap:
+          defaultMode: 0755
+          name: my-teamcity-server-services
+      
+      - name: startup-wrp
+        configMap:
+          defaultMode: 0755
+          name: my-teamcity-server-startup-wrp
+          optional: false
+      - name: teamcity-server-data
+        persistentVolumeClaim:
+          claimName: teamcity-server-data
+      - emptyDir: {}
+        name: cache
+      - emptyDir: {}
+        name: logs
+      - emptyDir: {}
+        name: temp
+      - emptyDir: {}
+        name: home-tcuser
+      imagePullSecrets: []
+      topologySpreadConstraints:
+        - labelSelector:
+            matchLabels:
+              app: 'my-teamcity-server'
+          maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+        - labelSelector:
+            matchLabels:
+              app: 'my-teamcity-server'
+          maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+      tolerations:
+        - key: 'my-teamcity-server'
+          operator: Exists
+  volumeClaimTemplates:
+---
+# Source: teamcity-server/templates/proxy/ingress.yaml.tpl
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: my-teamcity-server-proxy
+  annotations:
+    null
+spec:
+  ingressClassName: nginx
+  tls:
+  - secretName: "my-teamcity-server-proxy-tls"
+    hosts:
+    - teamcity.example.com
+    - teamcity.isolated.example.com
+    - teamcity-main.example.com
+  rules:
+  - host: teamcity.example.com
+    http:
+      paths:
+        - path: /img
+          pathType: ImplementationSpecific
+          backend:
+            service:
+              name: my-teamcity-server
+              port:
+                name: http
+        - path: /js
+          pathType: ImplementationSpecific
+          backend:
+            service:
+              name: my-teamcity-server
+              port:
+                name: http
+        - path: /presignedTokenAuth
+          pathType: ImplementationSpecific
+          backend:
+            service:
+              name: my-teamcity-server
+              port:
+                name: http
+        - pathType: ImplementationSpecific
+          backend:
+            service:
+              name: my-teamcity-server-proxy
+              port:
+                name: http
+  - host: teamcity.isolated.example.com
+    http:
+      paths:
+        - path: /img
+          pathType: ImplementationSpecific
+          backend:
+            service:
+              name: my-teamcity-server
+              port:
+                name: http
+        - path: /js
+          pathType: ImplementationSpecific
+          backend:
+            service:
+              name: my-teamcity-server
+              port:
+                name: http
+        - path: /presignedTokenAuth
+          pathType: ImplementationSpecific
+          backend:
+            service:
+              name: my-teamcity-server
+              port:
+                name: http
+        - pathType: ImplementationSpecific
+          backend:
+            service:
+              name: my-teamcity-server-proxy
+              port:
+                name: http
+  - host: teamcity-main.example.com
+    http:
+      paths:
+        - pathType: ImplementationSpecific
+          backend:
+            service:
+              name: my-teamcity-server-direct-h0
+              port:
+                name: http

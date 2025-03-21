@@ -1,0 +1,146 @@
+---
+# Source: schildichat-web/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-schildichat-web
+  labels:
+    helm.sh/chart: schildichat-web-1.2.0
+    app.kubernetes.io/name: schildichat-web
+    app.kubernetes.io/instance: my-schildichat-web
+    app.kubernetes.io/version: "latest"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: schildichat-web/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-schildichat-web
+  labels:
+    helm.sh/chart: schildichat-web-1.2.0
+    app.kubernetes.io/name: schildichat-web
+    app.kubernetes.io/instance: my-schildichat-web
+    app.kubernetes.io/version: "latest"
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  config.json: "eyJicmFuZCI6IlNjaGlsZGlDaGF0IiwiZGVmYXVsdENvdW50cnlDb2RlIjoiR0IiLCJkZWZhdWx0X2ZlZGVyYXRlIjp0cnVlLCJkZWZhdWx0X3RoZW1lXCIiOiJsaWdodCIsImRpc2FibGVfM3BpZF9sb2dpbiI6ZmFsc2UsImRpc2FibGVfY3VzdG9tX3VybHMiOmZhbHNlLCJkaXNhYmxlX2d1ZXN0cyI6ZmFsc2UsImRpc2FibGVfbG9naW5fbGFuZ3VhZ2Vfc2VsZWN0b3IiOmZhbHNlLCJlbmFibGVfcHJlc2VuY2VfYnlfaHNfdXJsIjp7Imh0dHBzOi8vbWF0cml4LWNsaWVudC5tYXRyaXgub3JnIjpmYWxzZSwiaHR0cHM6Ly9tYXRyaXgub3JnIjpmYWxzZX0sImludGVncmF0aW9uc19yZXN0X3VybCI6Imh0dHBzOi8vc2NhbGFyLnZlY3Rvci5pbS9hcGkiLCJpbnRlZ3JhdGlvbnNfdWlfdXJsIjoiaHR0cHM6Ly9zY2FsYXIudmVjdG9yLmltLyIsImludGVncmF0aW9uc193aWRnZXRzX3VybHMiOlsiaHR0cHM6Ly9zY2FsYXIudmVjdG9yLmltL19tYXRyaXgvaW50ZWdyYXRpb25zL3YxIiwiaHR0cHM6Ly9zY2FsYXIudmVjdG9yLmltL2FwaSIsImh0dHBzOi8vc2NhbGFyLXN0YWdpbmcudmVjdG9yLmltL19tYXRyaXgvaW50ZWdyYXRpb25zL3YxIiwiaHR0cHM6Ly9zY2FsYXItc3RhZ2luZy52ZWN0b3IuaW0vYXBpIl0sImppdHNpIjp7InByZWZlcnJlZERvbWFpbiI6Im1lZXQuaml0LnNpIn0sInJvb21EaXJlY3RvcnkiOnsic2VydmVycyI6WyJtYXRyaXgub3JnIl19LCJzZXR0aW5nRGVmYXVsdHMiOnsiYnJlYWRjcnVtYnMiOnRydWV9LCJzaG93TGFic1NldHRpbmdzIjp0cnVlfQ=="
+---
+# Source: schildichat-web/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-schildichat-web
+  labels:
+    helm.sh/chart: schildichat-web-1.2.0
+    app.kubernetes.io/name: schildichat-web
+    app.kubernetes.io/instance: my-schildichat-web
+    app.kubernetes.io/version: "latest"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  externalTrafficPolicy: 
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: schildichat-web
+    app.kubernetes.io/instance: my-schildichat-web
+---
+# Source: schildichat-web/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-schildichat-web
+  labels:
+    helm.sh/chart: schildichat-web-1.2.0
+    app.kubernetes.io/name: schildichat-web
+    app.kubernetes.io/instance: my-schildichat-web
+    app.kubernetes.io/version: "latest"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: schildichat-web
+      app.kubernetes.io/instance: my-schildichat-web
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: schildichat-web
+        app.kubernetes.io/instance: my-schildichat-web
+      annotations:
+        checksum/secret: "a68893d4026e820f6e1285a127d67935cf37df13e413d1faa615486c80ef0f8f"
+    spec:
+      serviceAccountName: my-schildichat-web
+      securityContext:
+        {}
+      containers:
+        - name: schildichat-web
+          securityContext:
+            {}
+          image: "ghcr.io/schildichat/schildichat-web:latest@sha256:a87f572878059851c38e0b18f5548aea8f3fbff744c09efe17d5cb06e5aa5cb2"
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh"]
+          args:
+            - "-c"
+            - |
+              rm -f /app/config.json /app/config.json.gz && \
+                ln -s /config/config.json /app/config.json && \
+                cat /config/config.json | gzip > /app/config.json.gz && \
+                exec nginx -g "daemon off;"
+          volumeMounts:
+            - name: config
+              mountPath: "/config"
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            failureThreshold: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            failureThreshold: 5
+            periodSeconds: 10
+          startupProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            failureThreshold: 30
+            periodSeconds: 10
+          resources:
+            {}
+      volumes:
+        - name: config
+          secret:
+            secretName: my-schildichat-web
+---
+# Source: schildichat-web/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-schildichat-web-test-connection"
+  labels:
+    helm.sh/chart: schildichat-web-1.2.0
+    app.kubernetes.io/name: schildichat-web
+    app.kubernetes.io/instance: my-schildichat-web
+    app.kubernetes.io/version: "latest"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args:  ['my-schildichat-web:80']
+  restartPolicy: Never

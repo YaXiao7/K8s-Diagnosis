@@ -1,0 +1,180 @@
+---
+# Source: ml-engine/templates/all.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-ml-engine
+  labels:
+    app.kubernetes.io/name: ml-engine
+    helm.sh/chart: ml-engine-0.1.0
+    app.kubernetes.io/instance: my-ml-engine
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: ml-engine/templates/all.yaml
+apiVersion: v1
+kind: ConfigMap
+immutable: false
+metadata:
+  name: my-ml-engine
+  labels:
+    app.kubernetes.io/name: ml-engine
+    helm.sh/chart: ml-engine-0.1.0
+    app.kubernetes.io/instance: my-ml-engine
+    app.kubernetes.io/managed-by: Helm
+data:
+  configs.yaml: |
+    controller:
+      transport:
+        buffer:
+          readBufferSize: 256KiB
+          writeBufferSize: 256KiB
+        maxIdleConns: 0
+        tcpKeepalive:
+          enabled: false
+          period: 15s
+        timeout: 30s
+      url: ""
+    debugMode: false
+    grpc:
+      compression:
+        enabled: false
+        type: Zstd
+      connection:
+        host: 0.0.0.0
+        insecure: true
+        maxMessageSize: 50MiB
+        port: 8091
+        readBufferSize: 50MiB
+        timeout: 15s
+        writeBufferSize: 50MiB
+      enabled: true
+      keepalive:
+        enforcementPolicy:
+          minTime: 20m
+          permitWithoutStream: false
+        time: 5m
+        timeout: 5m
+      useReflection: true
+    monitoring:
+      enabled: true
+    profiling:
+      enabled: false
+    single:
+      buffer:
+        readBufferSize: 256KiB
+        writeBufferSize: 256KiB
+      concurrency: 100000
+      enabled: true
+      host: 0.0.0.0
+      httptransport:
+        maxIdleConnDuration: 15s
+        readTimeout: 7s
+        writeTimeout: 7s
+      name: pprof/monitoring server
+      port: 8097
+      tcpKeepalive:
+        enabled: true
+        period: 1s
+---
+# Source: ml-engine/templates/all.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-ml-engine
+  labels:
+    app.kubernetes.io/name: ml-engine
+    helm.sh/chart: ml-engine-0.1.0
+    app.kubernetes.io/instance: my-ml-engine
+    app.kubernetes.io/managed-by: Helm
+spec:
+  ports:
+    - name: grpc
+      port: 8091
+      protocol: TCP
+      targetPort: grpc
+    - name: monitoring
+      port: 8097
+      protocol: TCP
+      targetPort: monitoring
+  selector:
+    app.kubernetes.io/name: ml-engine
+    app.kubernetes.io/instance: my-ml-engine
+---
+# Source: ml-engine/templates/all.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-ml-engine
+  labels:
+    app.kubernetes.io/name: ml-engine
+    helm.sh/chart: ml-engine-0.1.0
+    app.kubernetes.io/instance: my-ml-engine
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ml-engine
+      app.kubernetes.io/instance: my-ml-engine
+  template:
+    metadata:
+      annotations:
+        checksum/config: 'f3c41c40306333f23d25c83819f3bf5751c7c7f8826c3ee3d0bc4ed175a57fee'
+        
+      labels:
+        app.kubernetes.io/name: ml-engine
+        helm.sh/chart: ml-engine-0.1.0
+        app.kubernetes.io/instance: my-ml-engine
+        app.kubernetes.io/managed-by: Helm
+    spec:      
+      serviceAccountName: my-ml-engine
+      securityContext: 
+        fsGroup: 1001
+      containers:
+        -
+          name: ml-engine
+          image: foo/bar:latest
+          imagePullPolicy: Always
+          securityContext: 
+            runAsNonRoot: true
+            runAsUser: 1001
+          command:
+            - /app
+          args:
+            - -conf=/etc/ml-engine/configs/configs.yaml
+          resources:
+            limits: {}
+            requests: {}
+          ports:  
+            - name: grpc
+              containerPort: 8091
+            - name: monitoring
+              containerPort: 8097
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /healthz
+              port: 8097
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 15
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /readyz
+              port: 8097
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 15
+          volumeMounts:  
+            - mountPath: /etc/ml-engine/configs
+              name: configs
+              readOnly: true
+      volumes:   
+        - configMap:
+            name: 'my-ml-engine'
+          name: configs

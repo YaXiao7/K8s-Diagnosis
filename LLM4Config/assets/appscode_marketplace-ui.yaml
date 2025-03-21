@@ -1,0 +1,77 @@
+---
+# Source: marketplace-ui/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-marketplace-ui
+  namespace: default
+  labels:
+    helm.sh/chart: marketplace-ui-v2023.11.14
+    app.kubernetes.io/name: marketplace-ui
+    app.kubernetes.io/instance: my-marketplace-ui
+    app.kubernetes.io/version: "0.3.1-rc.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: marketplace-ui
+    app.kubernetes.io/instance: my-marketplace-ui
+---
+# Source: marketplace-ui/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-marketplace-ui
+  namespace: default
+  labels:
+    helm.sh/chart: marketplace-ui-v2023.11.14
+    app.kubernetes.io/name: marketplace-ui
+    app.kubernetes.io/instance: my-marketplace-ui
+    app.kubernetes.io/version: "0.3.1-rc.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: marketplace-ui
+      app.kubernetes.io/instance: my-marketplace-ui
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: marketplace-ui
+        app.kubernetes.io/instance: my-marketplace-ui
+    spec:
+      
+      securityContext:
+        {}
+      containers:
+        - name: marketplace-ui
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          image: "ghcr.io/appscode/marketplace-ui:0.3.1-rc.1"
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+            {}

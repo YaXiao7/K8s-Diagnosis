@@ -1,0 +1,724 @@
+---
+# Source: agola/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-agola
+  labels:
+    helm.sh/chart: agola-0.6.1
+    app.kubernetes.io/name: agola
+    app.kubernetes.io/instance: my-agola
+    app.kubernetes.io/version: "v0.9.2"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: agola/templates/config.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-agola-conf
+  labels:
+    helm.sh/chart: agola-0.6.1
+    app.kubernetes.io/name: agola
+    app.kubernetes.io/instance: my-agola
+    app.kubernetes.io/version: "v0.9.2"
+    app.kubernetes.io/managed-by: Helm
+stringData:
+  config.yml: |
+    configstore:
+      dataDir: /agola/local/configstore
+      db:
+        connString: postgres://agola:password@postgres:5432/configstore?sslmode=disable
+        type: postgres
+      objectStorage:
+        accessKey: minio
+        bucket: configstore
+        endpoint: http://minio-service:9000
+        location: us-east-1
+        secretAccessKey: minio123
+        type: s3
+      web:
+        listenAddress: :4002
+    executor:
+      activeTasksLimit: 2
+      allowPrivilegedContainers: false
+      dataDir: /agola/local/executor
+      driver:
+        type: kubernetes
+      initImage:
+        image: busybox:stable
+      runserviceURL: http://agola-runservice:4000
+      toolboxPath: ./bin
+      web:
+        listenAddress: :4001
+    gateway:
+      adminToken: MyComplexAdminToken
+      apiExposedURL: http://agola.example.net
+      configstoreURL: http://agola-configstore:4002
+      cookieSigning:
+        key: deadbeefcafeaa
+      gitserverURL: http://agola-gitserver:4003
+      runserviceURL: http://agola-runservice:4000
+      tokenSigning:
+        key: cafedeadbeefbb
+        method: hmac
+      unsecureCookies: true
+      web:
+        listenAddress: :8000
+      webExposedURL: http://agola.example.net
+    gitserver:
+      dataDir: /agola/local/gitserver
+      gatewayURL: http://agola-gateway:8000
+      web:
+        listenAddress: :4003
+    notification:
+      configstoreURL: http://agola-configstore:4002
+      db:
+        connString: postgres://agola:password@postgres:5432/notification?sslmode=disable
+        type: postgres
+      runserviceURL: http://agola-runservice:4000
+      webExposedURL: http://agola.example.net
+    runservice:
+      dataDir: /agola/local/runservice
+      db:
+        connString: postgres://agola:password@postgres:5432/runservice?sslmode=disable
+        type: postgres
+      debug: false
+      objectStorage:
+        accessKey: minio
+        bucket: runservice
+        endpoint: http://minio-service:9000
+        location: us-east-1
+        secretAccessKey: minio123
+        type: s3
+      web:
+        listenAddress: :4000
+    scheduler:
+      runserviceURL: http://agola-runservice:4000
+---
+# Source: agola/templates/clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-agola
+  labels:
+    helm.sh/chart: agola-0.6.1
+    app.kubernetes.io/name: agola
+    app.kubernetes.io/instance: my-agola
+    app.kubernetes.io/version: "v0.9.2"
+    app.kubernetes.io/managed-by: Helm
+rules:
+  - apiGroups:
+    - ""
+    resources:
+    - nodes
+    verbs:
+    - "*"
+---
+# Source: agola/templates/clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-agola
+  labels:
+    helm.sh/chart: agola-0.6.1
+    app.kubernetes.io/name: agola
+    app.kubernetes.io/instance: my-agola
+    app.kubernetes.io/version: "v0.9.2"
+    app.kubernetes.io/managed-by: Helm
+subjects:
+  - kind: ServiceAccount
+    name: my-agola
+    namespace: default
+roleRef:
+  kind: ClusterRole
+  name: my-agola
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: agola/templates/role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: my-agola
+  labels:
+    helm.sh/chart: agola-0.6.1
+    app.kubernetes.io/name: agola
+    app.kubernetes.io/instance: my-agola
+    app.kubernetes.io/version: "v0.9.2"
+    app.kubernetes.io/managed-by: Helm
+rules:
+  - apiGroups:
+    - ""
+    - "coordination.k8s.io"
+    resources:
+    - nodes
+    - pods
+    - pods/exec
+    - configmaps
+    - leases
+    - secrets
+    verbs:
+    - "*"
+---
+# Source: agola/templates/rolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: my-agola
+  labels:
+    helm.sh/chart: agola-0.6.1
+    app.kubernetes.io/name: agola
+    app.kubernetes.io/instance: my-agola
+    app.kubernetes.io/version: "v0.9.2"
+    app.kubernetes.io/managed-by: Helm
+subjects:
+  - kind: ServiceAccount
+    name: my-agola
+    namespace: default
+roleRef:
+  kind: Role
+  name: my-agola
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: agola/templates/configstore/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-agola-configstore
+  labels:
+    helm.sh/chart: agola-0.6.1
+    app.kubernetes.io/name: agola
+    app.kubernetes.io/instance: my-agola
+    app.kubernetes.io/version: "v0.9.2"
+    app.kubernetes.io/managed-by: Helm
+    agola.io/component: configstore
+spec:
+  type: ClusterIP
+  ports:
+    - protocol: TCP
+      name: configstore
+      port: 4002
+      targetPort: 4002
+  selector:
+    app.kubernetes.io/name: agola
+    app.kubernetes.io/instance: my-agola
+    agola.io/component: configstore
+---
+# Source: agola/templates/gateway/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-agola-gateway
+  labels:
+    helm.sh/chart: agola-0.6.1
+    app.kubernetes.io/name: agola
+    app.kubernetes.io/instance: my-agola
+    app.kubernetes.io/version: "v0.9.2"
+    app.kubernetes.io/managed-by: Helm
+    agola.io/component: gateway
+spec:
+  type: ClusterIP
+  ports:
+    - protocol: TCP
+      name: gateway
+      port: 8000
+      targetPort: 8000
+  selector:
+    app.kubernetes.io/name: agola
+    app.kubernetes.io/instance: my-agola
+    agola.io/component: gateway
+---
+# Source: agola/templates/gitserver/service-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-agola-gitserver-headless
+  labels:
+    helm.sh/chart: agola-0.6.1
+    app.kubernetes.io/name: agola
+    app.kubernetes.io/instance: my-agola
+    app.kubernetes.io/version: "v0.9.2"
+    app.kubernetes.io/managed-by: Helm
+    agola.io/component: gitserver
+spec:
+  type: ClusterIP
+  ports:
+    - protocol: TCP
+      name: gitserver
+      port: 4003
+      targetPort: 4003
+  selector:
+    app.kubernetes.io/name: agola
+    app.kubernetes.io/instance: my-agola
+    agola.io/component: gitserver
+---
+# Source: agola/templates/gitserver/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-agola-gitserver
+  labels:
+    helm.sh/chart: agola-0.6.1
+    app.kubernetes.io/name: agola
+    app.kubernetes.io/instance: my-agola
+    app.kubernetes.io/version: "v0.9.2"
+    app.kubernetes.io/managed-by: Helm
+    agola.io/component: gitserver
+spec:
+  type: ClusterIP
+  ports:
+    - protocol: TCP
+      name: gitserver
+      port: 4001
+      targetPort: 4003
+  selector:
+    app.kubernetes.io/name: agola
+    app.kubernetes.io/instance: my-agola
+    agola.io/component: gitserver
+---
+# Source: agola/templates/runservice/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-agola-runservice
+  labels:
+    helm.sh/chart: agola-0.6.1
+    app.kubernetes.io/name: agola
+    app.kubernetes.io/instance: my-agola
+    app.kubernetes.io/version: "v0.9.2"
+    app.kubernetes.io/managed-by: Helm
+    agola.io/component: runservice
+spec:
+  type: ClusterIP
+  ports:
+    - protocol: TCP
+      name: runservice
+      port: 4000
+      targetPort: 4000
+  selector:
+    app.kubernetes.io/name: agola
+    app.kubernetes.io/instance: my-agola
+    agola.io/component: runservice
+---
+# Source: agola/templates/configstore/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-agola-configstore
+  labels:
+    helm.sh/chart: agola-0.6.1
+    app.kubernetes.io/name: agola
+    app.kubernetes.io/instance: my-agola
+    app.kubernetes.io/version: "v0.9.2"
+    app.kubernetes.io/managed-by: Helm
+    agola.io/component: configstore
+spec:
+  revisionHistoryLimit: 5
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: agola
+      app.kubernetes.io/instance: my-agola
+      agola.io/component: configstore
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: agola
+        app.kubernetes.io/instance: my-agola
+        agola.io/component: configstore
+    spec:
+      serviceAccountName: my-agola
+      securityContext:
+        {}
+      containers:
+        - name: configstore
+          securityContext:
+            {}
+          image: "docker.io/sorintlab/agola:v0.9.2"
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/agola
+            - serve
+            - "--config"
+            - /etc/agola/config.yml
+            - "--components"
+            - configstore
+          ports:
+            - name: configstore
+              containerPort: 4002
+              protocol: TCP
+          livenessProbe:
+            tcpSocket:
+              port: 4002
+          resources:
+            {}
+          volumeMounts:
+          - name: conf
+            mountPath: /etc/agola
+          - name: local
+            mountPath: /agola/local
+      volumes:
+        - name: conf
+          secret:
+            secretName: my-agola-conf
+        - name: local
+          emptyDir: {}
+---
+# Source: agola/templates/executor/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-agola-executor
+  labels:
+    helm.sh/chart: agola-0.6.1
+    app.kubernetes.io/name: agola
+    app.kubernetes.io/instance: my-agola
+    app.kubernetes.io/version: "v0.9.2"
+    app.kubernetes.io/managed-by: Helm
+    agola.io/component: executor
+spec:
+  revisionHistoryLimit: 5
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: agola
+      app.kubernetes.io/instance: my-agola
+      agola.io/component: executor
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: agola
+        app.kubernetes.io/instance: my-agola
+        agola.io/component: executor
+    spec:
+      serviceAccountName: my-agola
+      securityContext:
+        {}
+      containers:
+        - name: executor
+          securityContext:
+            {}
+          image: "docker.io/sorintlab/agola:v0.9.2"
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/agola
+            - serve
+            - "--config"
+            - /etc/agola/config.yml
+            - "--components"
+            - executor
+          ports:
+            - name: executor
+              containerPort: 4001
+              protocol: TCP
+          livenessProbe:
+            tcpSocket:
+              port: 4001
+          resources:
+            {}
+          volumeMounts:
+          - name: conf
+            mountPath: /etc/agola
+          - name: local
+            mountPath: /agola/local
+      volumes:
+        - name: conf
+          secret:
+            secretName: my-agola-conf
+        - name: local
+          emptyDir: {}
+---
+# Source: agola/templates/gateway/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-agola-gateway
+  labels:
+    helm.sh/chart: agola-0.6.1
+    app.kubernetes.io/name: agola
+    app.kubernetes.io/instance: my-agola
+    app.kubernetes.io/version: "v0.9.2"
+    app.kubernetes.io/managed-by: Helm
+    agola.io/component: gateway
+spec:
+  revisionHistoryLimit: 5
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: agola
+      app.kubernetes.io/instance: my-agola
+      agola.io/component: gateway
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: agola
+        app.kubernetes.io/instance: my-agola
+        agola.io/component: gateway
+    spec:
+      serviceAccountName: my-agola
+      securityContext:
+        {}
+      containers:
+        - name: gateway
+          securityContext:
+            {}
+          image: "docker.io/sorintlab/agola:v0.9.2"
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/agola
+            - serve
+            - "--config"
+            - /etc/agola/config.yml
+            - "--components"
+            - gateway,scheduler,notification
+          ports:
+            - name: gateway
+              containerPort: 8000
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8000
+          resources:
+            {}
+          volumeMounts:
+          - name: conf
+            mountPath: /etc/agola
+          - name: local
+            mountPath: /agola/local
+      volumes:
+        - name: conf
+          secret:
+            secretName: my-agola-conf
+        - name: local
+          emptyDir: {}
+---
+# Source: agola/templates/runservice/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-agola-runservice
+  labels:
+    helm.sh/chart: agola-0.6.1
+    app.kubernetes.io/name: agola
+    app.kubernetes.io/instance: my-agola
+    app.kubernetes.io/version: "v0.9.2"
+    app.kubernetes.io/managed-by: Helm
+    agola.io/component: runservice
+spec:
+  revisionHistoryLimit: 5
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: agola
+      app.kubernetes.io/instance: my-agola
+      agola.io/component: runservice
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: agola
+        app.kubernetes.io/instance: my-agola
+        agola.io/component: runservice
+    spec:
+      serviceAccountName: my-agola
+      securityContext:
+        {}
+      containers:
+        - name: runservice
+          securityContext:
+            {}
+          image: "docker.io/sorintlab/agola:v0.9.2"
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/agola
+            - serve
+            - "--config"
+            - /etc/agola/config.yml
+            - "--components"
+            - runservice
+          ports:
+            - name: runservice
+              containerPort: 4000
+              protocol: TCP
+          livenessProbe:
+            tcpSocket:
+              port: 4000
+          resources:
+            {}
+          volumeMounts:
+          - name: conf
+            mountPath: /etc/agola
+          - name: local
+            mountPath: /agola/local
+      volumes:
+        - name: conf
+          secret:
+            secretName: my-agola-conf
+        - name: local
+          emptyDir: {}
+---
+# Source: agola/templates/gitserver/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-agola-gitserver
+  labels:
+    helm.sh/chart: agola-0.6.1
+    app.kubernetes.io/name: agola
+    app.kubernetes.io/instance: my-agola
+    app.kubernetes.io/version: "v0.9.2"
+    app.kubernetes.io/managed-by: Helm
+    agola.io/component: gitserver
+spec:
+  serviceName: my-agola-gitserver-headless
+  revisionHistoryLimit: 5
+  replicas: 1
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: agola
+      app.kubernetes.io/instance: my-agola
+      agola.io/component: gitserver
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: agola
+        app.kubernetes.io/instance: my-agola
+        agola.io/component: gitserver
+    spec:
+      serviceAccountName: my-agola
+      securityContext:
+        {}
+      containers:
+        - name: gitserver
+          securityContext:
+            {}
+          image: "docker.io/sorintlab/agola:v0.9.2"
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/agola
+            - serve
+            - "--config"
+            - /etc/agola/config.yml
+            - "--components"
+            - gitserver
+          ports:
+            - name: gitserver
+              containerPort: 4003
+              protocol: TCP
+          livenessProbe:
+            tcpSocket:
+              port: 4003
+          resources:
+            {}
+          volumeMounts:
+          - name: conf
+            mountPath: /etc/agola
+          - name: local
+            mountPath: /agola/local
+      volumes:
+        - name: conf
+          secret:
+            secretName: my-agola-conf
+        - name: local
+          emptyDir: {}
+---
+# Source: agola/templates/configstore/migrate-db.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: my-agola-configstore-migrate-db
+  labels:
+    helm.sh/chart: agola-0.6.1
+    app.kubernetes.io/name: agola
+    app.kubernetes.io/instance: my-agola
+    app.kubernetes.io/version: "v0.9.2"
+    app.kubernetes.io/managed-by: Helm
+    agola.io/component: configstore
+  annotations:
+    helm.sh/hook: post-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  template:
+    metadata:
+      name: my-agola-configstore-migrate-db
+      labels:
+        helm.sh/chart: agola-0.6.1
+        app.kubernetes.io/name: agola
+        app.kubernetes.io/instance: my-agola
+        app.kubernetes.io/version: "v0.9.2"
+        app.kubernetes.io/managed-by: Helm
+        agola.io/component: configstore
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: configstore-migrate-db
+          image: "docker.io/sorintlab/agola:v0.9.2"
+          command:
+            - /bin/agola
+            - migrate
+            - "--config"
+            - /etc/agola/config.yml
+            - "--service"
+            - configstore
+          volumeMounts:
+          - name: conf
+            mountPath: /etc/agola
+      volumes:
+        - name: conf
+          secret:
+            secretName: my-agola-conf
+---
+# Source: agola/templates/runservice/migrate-db.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: my-agola-runservice-migrate-db
+  labels:
+    helm.sh/chart: agola-0.6.1
+    app.kubernetes.io/name: agola
+    app.kubernetes.io/instance: my-agola
+    app.kubernetes.io/version: "v0.9.2"
+    app.kubernetes.io/managed-by: Helm
+    agola.io/component: runservice
+  annotations:
+    helm.sh/hook: post-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  template:
+    metadata:
+      name: my-agola-runservice-migrate-db
+      labels:
+        helm.sh/chart: agola-0.6.1
+        app.kubernetes.io/name: agola
+        app.kubernetes.io/instance: my-agola
+        app.kubernetes.io/version: "v0.9.2"
+        app.kubernetes.io/managed-by: Helm
+        agola.io/component: runservice
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: runservice-migrate-db
+          image: "docker.io/sorintlab/agola:v0.9.2"
+          command:
+            - /bin/agola
+            - migrate
+            - "--config"
+            - /etc/agola/config.yml
+            - "--service"
+            - runservice
+          volumeMounts:
+          - name: conf
+            mountPath: /etc/agola
+      volumes:
+        - name: conf
+          secret:
+            secretName: my-agola-conf

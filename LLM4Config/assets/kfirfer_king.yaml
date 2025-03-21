@@ -1,0 +1,102 @@
+---
+# Source: king/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-king
+  labels:
+    helm.sh/chart: king-0.1.0
+    app.kubernetes.io/name: king
+    app.kubernetes.io/instance: my-king
+    app.kubernetes.io/version: "latest"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: king/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-king
+  labels:
+    helm.sh/chart: king-0.1.0
+    app.kubernetes.io/name: king
+    app.kubernetes.io/instance: my-king
+    app.kubernetes.io/version: "latest"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: king
+    app.kubernetes.io/instance: my-king
+---
+# Source: king/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-king
+  labels:
+    helm.sh/chart: king-0.1.0
+    app.kubernetes.io/name: king
+    app.kubernetes.io/instance: my-king
+    app.kubernetes.io/version: "latest"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: king
+      app.kubernetes.io/instance: my-king
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: king
+        app.kubernetes.io/instance: my-king
+    spec:
+      serviceAccountName: my-king
+      securityContext:
+        {}
+      containers:
+        - name: king
+          securityContext:
+            {}
+          image: "kfirfer/king:latest"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+            {}
+---
+# Source: king/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-king-test-connection"
+  labels:
+    helm.sh/chart: king-0.1.0
+    app.kubernetes.io/name: king
+    app.kubernetes.io/instance: my-king
+    app.kubernetes.io/version: "latest"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-king:80']
+  restartPolicy: Never

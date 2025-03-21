@@ -1,0 +1,542 @@
+---
+# Source: cephfs-csi/templates/csi-nodeplugin-rbac.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cephfs-csi-nodeplugin
+  namespace: cephfs-system
+---
+# Source: cephfs-csi/templates/csi-provisioner-rbac.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cephfs-csi-provisioner
+  namespace: cephfs-system
+---
+# Source: cephfs-csi/templates/ceph-config.yaml
+apiVersion: v1
+kind: ConfigMap
+data:
+  ceph.conf: |
+    [global]
+    auth_cluster_required = cephx
+    auth_service_required = cephx
+    auth_client_required = cephx
+    # Workaround for http://tracker.ceph.com/issues/23446
+    fuse_set_user_groups = false
+    # ceph-fuse which uses libfuse2 by default has write buffer size of 2KiB
+    # adding 'fuse_big_writes = true' option by default to override this limit
+    # see https://github.com/ceph/ceph-csi/issues/1928
+    fuse_big_writes = true
+  # keyring is a required key and its value should be empty
+  keyring: |
+metadata:
+  name: ceph-config
+  namespace: cephfs-system
+---
+# Source: cephfs-csi/templates/csi-config-map.yaml
+apiVersion: v1
+kind: ConfigMap
+data:
+  config.json: "[\n  {\n    \"clusterID\": \"c12bb647-66fb-4237-b19f-d91c79158a4a\",\n    \"monitors\": [\n      \"192.168.240.97:6789\"\n    ]\n  }\n]"
+metadata:
+  name: ceph-csi-config
+  namespace: cephfs-system
+---
+# Source: cephfs-csi/templates/csi-nodeplugin-rbac.yaml
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: cephfs-csi-nodeplugin
+rules:
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get"]
+---
+# Source: cephfs-csi/templates/csi-provisioner-rbac.yaml
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: cephfs-external-provisioner-runner
+rules:
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["list", "watch", "create", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["persistentvolumes"]
+    verbs: ["get", "list", "watch", "create", "delete", "patch"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list", "watch", "update"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["snapshot.storage.k8s.io"]
+    resources: ["volumesnapshots"]
+    verbs: ["get", "list"]
+  - apiGroups: ["snapshot.storage.k8s.io"]
+    resources: ["volumesnapshotcontents"]
+    verbs: ["create", "get", "list", "watch", "update", "delete"]
+  - apiGroups: ["snapshot.storage.k8s.io"]
+    resources: ["volumesnapshotclasses"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["volumeattachments"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["volumeattachments/status"]
+    verbs: ["patch"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims/status"]
+    verbs: ["update", "patch"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["csinodes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["snapshot.storage.k8s.io"]
+    resources: ["volumesnapshotcontents/status"]
+    verbs: ["update"]
+---
+# Source: cephfs-csi/templates/csi-nodeplugin-rbac.yaml
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: cephfs-csi-nodeplugin
+subjects:
+  - kind: ServiceAccount
+    name: cephfs-csi-nodeplugin
+    namespace: cephfs-system
+roleRef:
+  kind: ClusterRole
+  name: cephfs-csi-nodeplugin
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: cephfs-csi/templates/csi-provisioner-rbac.yaml
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: cephfs-csi-provisioner-role
+subjects:
+  - kind: ServiceAccount
+    name: cephfs-csi-provisioner
+    namespace: cephfs-system
+roleRef:
+  kind: ClusterRole
+  name: cephfs-external-provisioner-runner
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: cephfs-csi/templates/csi-provisioner-rbac.yaml
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  # replace with non-default namespace name
+  namespace: cephfs-system
+  name: cephfs-external-provisioner-cfg
+rules:
+  # remove this once we stop supporting v1.0.0
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "create", "delete"]
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "watch", "list", "delete", "update", "create"]
+---
+# Source: cephfs-csi/templates/csi-provisioner-rbac.yaml
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: cephfs-csi-provisioner-role-cfg
+  # replace with non-default namespace name
+  namespace: cephfs-system
+subjects:
+  - kind: ServiceAccount
+    name: cephfs-csi-provisioner
+    # replace with non-default namespace name
+    namespace: cephfs-system
+roleRef:
+  kind: Role
+  name: cephfs-external-provisioner-cfg
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: cephfs-csi/templates/csi-cephfsplugin-provisioner.yaml
+kind: Service
+apiVersion: v1
+metadata:
+  name: csi-cephfsplugin-provisioner
+  namespace: cephfs-system
+  labels:
+    app: csi-metrics
+spec:
+  selector:
+    app: csi-cephfsplugin-provisioner
+  ports:
+    - name: http-metrics
+      port: 8080
+      protocol: TCP
+      targetPort: 8681
+---
+# Source: cephfs-csi/templates/csi-cephfsplugin.yaml
+# This is a service to expose the liveness metrics
+apiVersion: v1
+kind: Service
+metadata:
+  name: csi-metrics-cephfsplugin
+  namespace: cephfs-system
+  labels:
+    app: csi-metrics
+spec:
+  ports:
+    - name: http-metrics
+      port: 8080
+      protocol: TCP
+      targetPort: 8681
+  selector:
+    app: csi-cephfsplugin
+---
+# Source: cephfs-csi/templates/csi-cephfsplugin.yaml
+kind: DaemonSet
+apiVersion: apps/v1
+metadata:
+  name: csi-cephfsplugin
+  namespace: cephfs-system
+spec:
+  selector:
+    matchLabels:
+      app: csi-cephfsplugin
+  template:
+    metadata:
+      labels:
+        app: csi-cephfsplugin
+    spec:
+      serviceAccountName: cephfs-csi-nodeplugin
+      priorityClassName: system-node-critical
+      hostNetwork: true
+      # to use e.g. Rook orchestrated cluster, and mons' FQDN is
+      # resolved through k8s service, set dns policy to cluster first
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+        - name: driver-registrar
+          # This is necessary only for systems with SELinux, where
+          # non-privileged sidecar containers cannot access unix domain socket
+          # created by privileged CSI driver container.
+          securityContext:
+            privileged: true
+          image: k8s.gcr.io/sig-storage/csi-node-driver-registrar:v2.4.0
+          args:
+            - "--v=5"
+            - "--csi-address=/csi/csi.sock"
+            - "--kubelet-registration-path=/var/lib/kubelet/plugins/cephfs.csi.ceph.com/csi.sock"
+          env:
+            - name: KUBE_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
+            - name: registration-dir
+              mountPath: /registration
+        - name: csi-cephfsplugin
+          securityContext:
+            privileged: true
+            capabilities:
+              add: ["SYS_ADMIN"]
+            allowPrivilegeEscalation: true
+          # for stable functionality replace canary with latest release version
+          image: quay.io/cephcsi/cephcsi:v3.5.1
+          args:
+            - "--nodeid=$(NODE_ID)"
+            - "--type=cephfs"
+            - "--nodeserver=true"
+            - "--endpoint=$(CSI_ENDPOINT)"
+            - "--v=5"
+            - "--drivername=cephfs.csi.ceph.com"
+            - "--enableprofiling=false"
+            # If topology based provisioning is desired, configure required
+            # node labels representing the nodes topology domain
+            # and pass the label names below, for CSI to consume and advertise
+            # its equivalent topology domain
+            # - "--domainlabels=failure-domain/region,failure-domain/zone"
+          env:
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: NODE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: CSI_ENDPOINT
+              value: unix:///csi/csi.sock
+          imagePullPolicy: "IfNotPresent"
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
+            - name: mountpoint-dir
+              mountPath: /var/lib/kubelet/pods
+              mountPropagation: Bidirectional
+            - name: plugin-dir
+              mountPath: /var/lib/kubelet/plugins
+              mountPropagation: "Bidirectional"
+            - name: host-sys
+              mountPath: /sys
+            - name: etc-selinux
+              mountPath: /etc/selinux
+              readOnly: true
+            - name: lib-modules
+              mountPath: /lib/modules
+              readOnly: true
+            - name: host-dev
+              mountPath: /dev
+            - name: host-mount
+              mountPath: /run/mount
+            - name: ceph-config
+              mountPath: /etc/ceph/
+            - name: ceph-csi-config
+              mountPath: /etc/ceph-csi-config/
+            - name: keys-tmp-dir
+              mountPath: /tmp/csi/keys
+        - name: liveness-prometheus
+          securityContext:
+            privileged: true
+          image: quay.io/cephcsi/cephcsi:v3.5.1
+          args:
+            - "--type=liveness"
+            - "--endpoint=$(CSI_ENDPOINT)"
+            - "--metricsport=8681"
+            - "--metricspath=/metrics"
+            - "--polltime=60s"
+            - "--timeout=3s"
+          env:
+            - name: CSI_ENDPOINT
+              value: unix:///csi/csi.sock
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
+          imagePullPolicy: "IfNotPresent"
+      volumes:
+        - name: socket-dir
+          hostPath:
+            path: /var/lib/kubelet/plugins/cephfs.csi.ceph.com/
+            type: DirectoryOrCreate
+        - name: registration-dir
+          hostPath:
+            path: /var/lib/kubelet/plugins_registry/
+            type: Directory
+        - name: mountpoint-dir
+          hostPath:
+            path: /var/lib/kubelet/pods
+            type: DirectoryOrCreate
+        - name: plugin-dir
+          hostPath:
+            path: /var/lib/kubelet/plugins
+            type: Directory
+        - name: host-sys
+          hostPath:
+            path: /sys
+        - name: etc-selinux
+          hostPath:
+            path: /etc/selinux
+        - name: lib-modules
+          hostPath:
+            path: /lib/modules
+        - name: host-dev
+          hostPath:
+            path: /dev
+        - name: host-mount
+          hostPath:
+            path: /run/mount
+        - name: ceph-config
+          configMap:
+            name: ceph-config
+        - name: ceph-csi-config
+          configMap:
+            name: ceph-csi-config
+        - name: keys-tmp-dir
+          emptyDir: {
+            medium: "Memory"
+          }
+---
+# Source: cephfs-csi/templates/csi-cephfsplugin-provisioner.yaml
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: csi-cephfsplugin-provisioner
+  namespace: cephfs-system
+spec:
+  selector:
+    matchLabels:
+      app: csi-cephfsplugin-provisioner
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: csi-cephfsplugin-provisioner
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - csi-cephfsplugin-provisioner
+              topologyKey: "kubernetes.io/hostname"
+      serviceAccountName: cephfs-csi-provisioner
+      priorityClassName: system-cluster-critical
+      containers:
+        - name: csi-provisioner
+          image: k8s.gcr.io/sig-storage/csi-provisioner:v3.1.0
+          args:
+            - "--csi-address=$(ADDRESS)"
+            - "--v=5"
+            - "--timeout=150s"
+            - "--leader-election=true"
+            - "--retry-interval-start=500ms"
+            - "--feature-gates=Topology=false"
+            - "--extra-create-metadata=true"
+          env:
+            - name: ADDRESS
+              value: unix:///csi/csi-provisioner.sock
+          imagePullPolicy: "IfNotPresent"
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
+        - name: csi-resizer
+          image: k8s.gcr.io/sig-storage/csi-resizer:v1.3.0
+          args:
+            - "--csi-address=$(ADDRESS)"
+            - "--v=5"
+            - "--timeout=150s"
+            - "--leader-election"
+            - "--retry-interval-start=500ms"
+            - "--handle-volume-inuse-error=false"
+          env:
+            - name: ADDRESS
+              value: unix:///csi/csi-provisioner.sock
+          imagePullPolicy: "IfNotPresent"
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
+        - name: csi-snapshotter
+          image: k8s.gcr.io/sig-storage/csi-snapshotter:v4.2.0
+          args:
+            - "--csi-address=$(ADDRESS)"
+            - "--v=5"
+            - "--timeout=150s"
+            - "--leader-election=true"
+          env:
+            - name: ADDRESS
+              value: unix:///csi/csi-provisioner.sock
+          imagePullPolicy: "IfNotPresent"
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
+        - name: csi-cephfsplugin-attacher
+          image: k8s.gcr.io/sig-storage/csi-attacher:v3.4.0
+          args:
+            - "--v=5"
+            - "--csi-address=$(ADDRESS)"
+            - "--leader-election=true"
+            - "--retry-interval-start=500ms"
+          env:
+            - name: ADDRESS
+              value: /csi/csi-provisioner.sock
+          imagePullPolicy: "IfNotPresent"
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
+        - name: csi-cephfsplugin
+          # for stable functionality replace canary with latest release version
+          image: quay.io/cephcsi/cephcsi:v3.5.1
+          args:
+            - "--nodeid=$(NODE_ID)"
+            - "--type=cephfs"
+            - "--controllerserver=true"
+            - "--endpoint=$(CSI_ENDPOINT)"
+            - "--v=5"
+            - "--drivername=cephfs.csi.ceph.com"
+            - "--pidlimit=-1"
+            - "--enableprofiling=false"
+          env:
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: NODE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: CSI_ENDPOINT
+              value: unix:///csi/csi-provisioner.sock
+          imagePullPolicy: "IfNotPresent"
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
+            - name: host-sys
+              mountPath: /sys
+            - name: lib-modules
+              mountPath: /lib/modules
+              readOnly: true
+            - name: host-dev
+              mountPath: /dev
+            - name: ceph-config
+              mountPath: /etc/ceph/
+            - name: ceph-csi-config
+              mountPath: /etc/ceph-csi-config/
+            - name: keys-tmp-dir
+              mountPath: /tmp/csi/keys
+        - name: liveness-prometheus
+          image: quay.io/cephcsi/cephcsi:v3.5.1
+          args:
+            - "--type=liveness"
+            - "--endpoint=$(CSI_ENDPOINT)"
+            - "--metricsport=8681"
+            - "--metricspath=/metrics"
+            - "--polltime=60s"
+            - "--timeout=3s"
+          env:
+            - name: CSI_ENDPOINT
+              value: unix:///csi/csi-provisioner.sock
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
+          imagePullPolicy: "IfNotPresent"
+      volumes:
+        - name: socket-dir
+          emptyDir: {
+            medium: "Memory"
+          }
+        - name: host-sys
+          hostPath:
+            path: /sys
+        - name: lib-modules
+          hostPath:
+            path: /lib/modules
+        - name: host-dev
+          hostPath:
+            path: /dev
+        - name: ceph-config
+          configMap:
+            name: ceph-config
+        - name: ceph-csi-config
+          configMap:
+            name: ceph-csi-config
+        - name: keys-tmp-dir
+          emptyDir: {
+            medium: "Memory"
+          }

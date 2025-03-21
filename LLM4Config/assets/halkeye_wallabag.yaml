@@ -1,0 +1,350 @@
+---
+# Source: wallabag/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-wallabag
+  labels:
+    helm.sh/chart: wallabag-0.2.4
+    app.kubernetes.io/name: wallabag
+    app.kubernetes.io/instance: my-wallabag
+    app.kubernetes.io/version: "2.4.2"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: wallabag/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-wallabag
+  labels:
+    helm.sh/chart: wallabag-0.2.4
+    app.kubernetes.io/name: wallabag
+    app.kubernetes.io/instance: my-wallabag
+    app.kubernetes.io/version: "2.4.2"
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  postgres_host: "cG9zdGdyZXNxbA=="
+  postgres_port: "NTQzMg=="
+  postgres_user: "d2FsbGFiYWc="
+  postgres_password: "cGFzc3dvcmQ="
+  postgres_name: "d2FsbGFiYWc="
+
+  redis_host: "cmVkaXMtbWFzdGVy"
+  redis_password: "cGFzc3dvcmQ="
+---
+# Source: wallabag/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-wallabag
+  labels:
+    helm.sh/chart: wallabag-0.2.4
+    app.kubernetes.io/name: wallabag
+    app.kubernetes.io/instance: my-wallabag
+    app.kubernetes.io/version: "2.4.2"
+    app.kubernetes.io/managed-by: Helm
+data:
+  parameters.yml: |
+    parameters:
+      database_driver: pdo_pgsql
+      database_driver_class: Wallabag\CoreBundle\Doctrine\DBAL\Driver\CustomPostgreSQLDriver
+      database_host: "postgresql"
+      database_port: "5432"
+      database_name: "wallabag"
+      database_user: "wallabag"
+      database_password: "password"
+      database_path: '%kernel.root_dir%/../data/db/wallabag.sqlite'
+      database_table_prefix: wallabag_
+      database_socket: null
+      database_charset: utf8
+      server_name: "Your wallabag instance"
+      domain_name: "http://wallabag.org"
+      mailer_transport: smtp
+      mailer_host: null
+      mailer_port: null
+      mailer_user: null
+      mailer_password: null
+      mailer_encryption: 
+      mailer_auth_mode: 
+      locale: en
+      secret: ovmpmAWXRCabNlMgzlzFXDYmCFfzGv
+      twofactor_auth: true
+      twofactor_sender: no-reply@wallabag.org
+      fosuser_registration: true
+      fosuser_confirmation: true
+      # how long the access token should live in seconds for the API
+      fos_oauth_server_access_token_lifetime: 3600
+      # how long the refresh token should life in seconds for the API
+      fos_oauth_server_refresh_token_lifetime: 1209600
+      from_email: "no-reply@example.org"
+      rss_limit: 50
+      rabbitmq_host: localhost
+      rabbitmq_port: 5672
+      rabbitmq_user: guest
+      rabbitmq_password: guest
+      rabbitmq_prefetch_count: 10
+      redis_scheme: tcp
+      redis_host: "redis-master"
+      redis_port: 6379
+      redis_path: null
+      redis_password: "password"
+---
+# Source: wallabag/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-wallabag
+  labels:
+    helm.sh/chart: wallabag-0.2.4
+    app.kubernetes.io/name: wallabag
+    app.kubernetes.io/instance: my-wallabag
+    app.kubernetes.io/version: "2.4.2"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  externalTrafficPolicy: 
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: wallabag
+    app.kubernetes.io/instance: my-wallabag
+---
+# Source: wallabag/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-wallabag
+  labels:
+    helm.sh/chart: wallabag-0.2.4
+    app.kubernetes.io/name: wallabag
+    app.kubernetes.io/instance: my-wallabag
+    app.kubernetes.io/version: "2.4.2"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: wallabag
+      app.kubernetes.io/instance: my-wallabag
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: wallabag
+        app.kubernetes.io/instance: my-wallabag
+      annotations:
+        checksum/config: "a45d1aead9de11c51a4c7f0730f523752b1d590a800be806def02d47a2cf3ce0"
+    spec:
+      serviceAccountName: my-wallabag
+      securityContext:
+        {}
+      initContainers:
+        - name: wallabag-migrate
+          securityContext:
+            {}
+          image: "wallabag/wallabag:2.4.2"
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsUser: 65534
+            runAsGroup: 65534
+          command: ['/var/www/wallabag/bin/console']
+          workingDir: '/var/www/wallabag/'
+          args:
+            - doctrine:migrations:migrate
+            - --env=prod
+            - --no-interaction
+          volumeMounts:
+            - mountPath: /var/www/wallabag/web/assets/images
+              name: storage
+            - mountPath: /var/www/wallabag/app/config/parameters.yml
+              name: config
+              subPath: parameters.yml
+            - mountPath: /var/www/wallabag/var/cache
+              name: cache
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: my-wallabag
+                  key: postgres_user
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-wallabag
+                  key: postgres_password
+            - {name: SYMFONY__ENV__DATABASE_DRIVER, value: "pdo_pgsql"}
+            - {name: SYMFONY__ENV__DATABASE_DRIVER_CLASS, value: "Wallabag\\CoreBundle\\Doctrine\\DBAL\\Driver\\CustomPostgreSQLDriver"}
+            - name: SYMFONY__ENV__DATABASE_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: my-wallabag
+                  key: postgres_host
+            - name: SYMFONY__ENV__DATABASE_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: my-wallabag
+                  key: postgres_port
+            - name: SYMFONY__ENV__DATABASE_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: my-wallabag
+                  key: postgres_name
+            - name: SYMFONY__ENV__DATABASE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: my-wallabag
+                  key: postgres_user
+            - name: SYMFONY__ENV__DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-wallabag
+                  key: postgres_password
+            - name: SYMFONY__ENV__REDIS_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: my-wallabag
+                  key: redis_host
+            - name: SYMFONY__ENV__REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-wallabag
+                  key: redis_password
+
+            - {name: SYMFONY__ENV__FROM_EMAIL, value: "no-reply@example.org"}
+
+            - {name: SYMFONY__ENV__DOMAIN_NAME, value: "http://wallabag.org"}
+      containers:
+        - name: wallabag
+          securityContext:
+            {}
+          image: "wallabag/wallabag:2.4.2"
+          imagePullPolicy: IfNotPresent
+          command: ['/bin/s6-svscan']
+          args:
+            - /etc/s6/
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: my-wallabag
+                  key: postgres_user
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-wallabag
+                  key: postgres_password
+            - {name: SYMFONY__ENV__DATABASE_DRIVER, value: "pdo_pgsql"}
+            - {name: SYMFONY__ENV__DATABASE_DRIVER_CLASS, value: "Wallabag\\CoreBundle\\Doctrine\\DBAL\\Driver\\CustomPostgreSQLDriver"}
+            - name: SYMFONY__ENV__DATABASE_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: my-wallabag
+                  key: postgres_host
+            - name: SYMFONY__ENV__DATABASE_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: my-wallabag
+                  key: postgres_port
+            - name: SYMFONY__ENV__DATABASE_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: my-wallabag
+                  key: postgres_name
+            - name: SYMFONY__ENV__DATABASE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: my-wallabag
+                  key: postgres_user
+            - name: SYMFONY__ENV__DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-wallabag
+                  key: postgres_password
+            - name: SYMFONY__ENV__REDIS_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: my-wallabag
+                  key: redis_host
+            - name: SYMFONY__ENV__REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-wallabag
+                  key: redis_password
+
+            - {name: SYMFONY__ENV__FROM_EMAIL, value: "no-reply@example.org"}
+
+            - {name: SYMFONY__ENV__DOMAIN_NAME, value: "http://wallabag.org"}
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          livenessProbe:
+            exec:
+              command:
+                - curl
+                - -f
+                - http://localhost:80/login
+            failureThreshold: 5
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command:
+                - curl
+                - -f
+                - http://localhost:80/login
+            failureThreshold: 5
+            periodSeconds: 10
+          startupProbe:
+            exec:
+              command:
+                - curl
+                - -f
+                - http://localhost:80/login
+            initialDelaySeconds: 5
+            failureThreshold: 30
+            periodSeconds: 10
+          resources:
+            {}
+          volumeMounts:
+            - mountPath: /var/www/wallabag/web/assets/images
+              name: storage
+            - mountPath: /var/www/wallabag/app/config/parameters.yml
+              name: config
+              subPath: parameters.yml
+            - mountPath: /var/www/wallabag/var/cache
+              name: cache
+      volumes:
+        - name: config
+          configMap:
+            name: my-wallabag
+            items:
+              - key: parameters.yml
+                path: parameters.yml
+        - name: cache
+          emptyDir: {}
+        - name: storage
+          emptyDir: {}
+---
+# Source: wallabag/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-wallabag-test-connection"
+  labels:
+    helm.sh/chart: wallabag-0.2.4
+    app.kubernetes.io/name: wallabag
+    app.kubernetes.io/instance: my-wallabag
+    app.kubernetes.io/version: "2.4.2"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args:  ['my-wallabag:80']
+  restartPolicy: Never

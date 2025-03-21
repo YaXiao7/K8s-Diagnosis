@@ -1,0 +1,79 @@
+---
+# Source: trivy-sbom/templates/trivy-sbom-parse-definition.yaml
+# SPDX-FileCopyrightText: the secureCodeBox authors
+#
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: "execution.securecodebox.io/v1"
+kind: ParseDefinition
+metadata:
+  name: "sbom-cyclonedx"
+spec:
+  image: "docker.io/securecodebox/parser-cyclonedx:4.8.0"
+  imagePullPolicy: IfNotPresent
+  ttlSecondsAfterFinished: 
+  env:
+    []
+  scopeLimiterAliases:
+    {}
+  affinity:
+    {}
+  tolerations:
+    []
+---
+# Source: trivy-sbom/templates/trivy-sbom-scan-type.yaml
+# SPDX-FileCopyrightText: the secureCodeBox authors
+#
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: "execution.securecodebox.io/v1"
+kind: ScanType
+metadata:
+  name: "trivy-sbom-image"
+spec:
+  extractResults:
+    type: sbom-cyclonedx
+    location: "/home/securecodebox/sbom-cyclonedx.json"
+  jobTemplate:
+    spec:
+      suspend: false
+      backoffLimit: 3
+
+      template:
+        spec:
+          restartPolicy: OnFailure
+          affinity:
+            {}
+          tolerations:
+            []
+          securityContext:
+            {}
+          containers:
+            - name: trivy-sbom
+              image: "docker.io/aquasec/trivy:0.54.1"
+              imagePullPolicy: IfNotPresent
+              command:
+                - "trivy"
+                - "image"
+                # Suppress progress bar, as it pollutes non interactive terminal logs
+                - "--no-progress"
+                - "--format"
+                - "cyclonedx"
+                - "--output"
+                - "/home/securecodebox/sbom-cyclonedx.json"
+              resources:
+                {}
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                  - all
+                privileged: false
+                readOnlyRootFilesystem: false
+                runAsNonRoot: false
+              env:
+                []
+              volumeMounts:
+                []
+          volumes:
+            []

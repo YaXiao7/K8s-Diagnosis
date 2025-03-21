@@ -1,0 +1,104 @@
+---
+# Source: sentry-kubernetes/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:     
+    app: sentry-kubernetes
+    heritage: Helm
+    release: my-sentry-kubernetes
+    chart: sentry-kubernetes-0.3.4
+  name: my-sentry-kubernetes
+---
+# Source: sentry-kubernetes/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  labels:     
+    app: sentry-kubernetes
+    heritage: Helm
+    release: my-sentry-kubernetes
+    chart: sentry-kubernetes-0.3.4
+  name: my-sentry-kubernetes
+type: Opaque
+data:
+  sentry.dsn: "PGNoYW5nZS1tZT4="
+---
+# Source: sentry-kubernetes/templates/clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:     
+    app: sentry-kubernetes
+    heritage: Helm
+    release: my-sentry-kubernetes
+    chart: sentry-kubernetes-0.3.4
+  name: my-sentry-kubernetes
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - get
+      - list
+      - watch
+---
+# Source: sentry-kubernetes/templates/clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:     
+    app: sentry-kubernetes
+    heritage: Helm
+    release: my-sentry-kubernetes
+    chart: sentry-kubernetes-0.3.4
+  name: my-sentry-kubernetes
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-sentry-kubernetes
+subjects:
+  - kind: ServiceAccount
+    name: my-sentry-kubernetes
+    namespace: default
+---
+# Source: sentry-kubernetes/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:     
+    app: sentry-kubernetes
+    heritage: Helm
+    release: my-sentry-kubernetes
+    chart: sentry-kubernetes-0.3.4
+  name: my-sentry-kubernetes
+spec:
+  replicas: 
+  selector:
+    matchLabels:
+      app: sentry-kubernetes
+  template:
+    metadata:
+      annotations:
+        checksum/secrets: b6db20be1efe1bb4576aaf6ea6d2ef010790f372b26c0830d9c3d677be78f960
+      labels:
+        app: sentry-kubernetes
+        release: my-sentry-kubernetes
+    spec:
+      containers:
+      - name: sentry-kubernetes
+        image: "getsentry/sentry-kubernetes:latest"
+        imagePullPolicy: Always
+        env:
+          - name: DSN
+            valueFrom:
+              secretKeyRef:
+                name: my-sentry-kubernetes
+                key: sentry.dsn
+          
+          
+          
+        resources:
+          {}
+      serviceAccountName: my-sentry-kubernetes

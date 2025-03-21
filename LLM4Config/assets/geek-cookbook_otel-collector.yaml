@@ -1,0 +1,145 @@
+---
+# Source: otel-collector/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-otel-collector-otelconfig
+  labels:
+    configsecret: otelcollector
+    helm.sh/chart: otel-collector-1.2.2
+    app.kubernetes.io/name: otel-collector
+    app.kubernetes.io/instance: my-otel-collector
+    app.kubernetes.io/version: "0.46.0"
+    app.kubernetes.io/managed-by: Helm
+stringData:
+  otelConfigFile: |-
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: "0.0.0.0:4317"
+          http:
+            endpoint: "0.0.0.0:4318"
+    processors:
+      batch:
+      memory_limiter:
+        # 80% of maximum memory up to 2G
+        limit_mib: 1500
+        # 25% of limit up to 2G
+        spike_limit_mib: 512
+        check_interval: 5s
+    
+    extensions:
+      health_check:
+        endpoint: 0.0.0.0:13133
+      zpages: {}
+      memory_ballast:
+        # Memory Ballast size should be max 1/3 to 1/2 of memory.
+        size_mib: 683
+    exporters:
+      logging:
+        logLevel: debug
+    
+    service:
+      extensions: [zpages, memory_ballast, health_check]
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [logging]
+---
+# Source: otel-collector/templates/common.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-otel-collector
+  labels:
+    app.kubernetes.io/instance: my-otel-collector
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: otel-collector
+    app.kubernetes.io/version: 0.46.0
+    helm.sh/chart: otel-collector-1.2.2
+  annotations:
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8888
+    targetPort: 8888
+    protocol: TCP
+    name: metrics
+  - port: 4317
+    targetPort: 4317
+    protocol: TCP
+    name: otlpgrpc
+  - port: 4318
+    targetPort: 4318
+    protocol: TCP
+    name: otlphttp
+  selector:
+    app.kubernetes.io/name: otel-collector
+    app.kubernetes.io/instance: my-otel-collector
+---
+# Source: otel-collector/templates/common.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-otel-collector
+  labels:
+    app.kubernetes.io/instance: my-otel-collector
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: otel-collector
+    app.kubernetes.io/version: 0.46.0
+    helm.sh/chart: otel-collector-1.2.2
+spec:
+  revisionHistoryLimit: 3
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: otel-collector
+      app.kubernetes.io/instance: my-otel-collector
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: otel-collector
+        app.kubernetes.io/instance: my-otel-collector
+    spec:
+      
+      serviceAccountName: default
+      automountServiceAccountToken: true
+      dnsPolicy: ClusterFirst
+      enableServiceLinks: true
+      containers:
+        - name: my-otel-collector
+          image: "otel/opentelemetry-collector-contrib:0.46.0"
+          imagePullPolicy: IfNotPresent
+          args:
+            
+            - --config=/conf/otel-collector-config.yaml
+          ports:
+            - name: metrics
+              containerPort: 8888
+              protocol: TCP
+            - name: otlpgrpc
+              containerPort: 4317
+              protocol: TCP
+            - name: otlphttp
+              containerPort: 4318
+              protocol: TCP
+          volumeMounts:
+            - name: otel-config-file
+              mountPath: /conf/otel-collector-config.yaml
+              subPath: otelConfigFile
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /
+              port: 13133
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 1
+      volumes:
+        - name: otel-config-file
+          secret:
+            secretName: my-otel-collector-otelconfig

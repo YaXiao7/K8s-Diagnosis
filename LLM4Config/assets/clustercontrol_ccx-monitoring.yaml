@@ -1,0 +1,2283 @@
+---
+# Source: ccx-monitoring/charts/alertmanager/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-ccx-monitoring-alertmanager
+  labels:
+    helm.sh/chart: alertmanager-1.7.0
+    app.kubernetes.io/name: alertmanager
+    app.kubernetes.io/instance: my-ccx-monitoring
+    app.kubernetes.io/version: "v0.26.0"
+    app.kubernetes.io/managed-by: Helm
+  namespace: default
+automountServiceAccountToken: true
+---
+# Source: ccx-monitoring/charts/grafana/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    helm.sh/chart: grafana-7.0.1
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: my-ccx-monitoring
+    app.kubernetes.io/version: "10.1.5"
+    app.kubernetes.io/managed-by: Helm
+  name: my-ccx-monitoring-grafana
+  namespace: default
+---
+# Source: ccx-monitoring/charts/kube-state-metrics/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:    
+    helm.sh/chart: kube-state-metrics-5.16.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: metrics
+    app.kubernetes.io/part-of: kube-state-metrics
+    app.kubernetes.io/name: kube-state-metrics
+    app.kubernetes.io/instance: my-ccx-monitoring
+    app.kubernetes.io/version: "2.10.1"
+  name: my-ccx-monitoring-kube-state-metrics
+  namespace: default
+---
+# Source: ccx-monitoring/charts/prometheus-node-exporter/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-ccx-monitoring-prometheus-node-exporter
+  namespace: default
+  labels:
+    helm.sh/chart: prometheus-node-exporter-4.23.2
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: metrics
+    app.kubernetes.io/part-of: prometheus-node-exporter
+    app.kubernetes.io/name: prometheus-node-exporter
+    app.kubernetes.io/instance: my-ccx-monitoring
+    app.kubernetes.io/version: "1.6.1"
+---
+# Source: ccx-monitoring/charts/victoria-metrics-alert/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-ccx-monitoring-victoria-metrics-alert
+  namespace: default
+  labels:
+    helm.sh/chart: victoria-metrics-alert-0.8.6
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: ccx-monitoring/charts/victoria-metrics-single/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    helm.sh/chart: victoria-metrics-single-0.9.14
+    app.kubernetes.io/managed-by: Helm
+  name: my-ccx-monitoring-victoria-metrics-single
+  namespace: default
+---
+# Source: ccx-monitoring/charts/grafana/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-ccx-monitoring-grafana
+  namespace: default
+  labels:
+    helm.sh/chart: grafana-7.0.1
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: my-ccx-monitoring
+    app.kubernetes.io/version: "10.1.5"
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  admin-user: "YWRtaW4="
+  admin-password: "TVVsRENYT2ZGc0dKR3VsZExybzZQdXo5T2ZaaU5yQXlkN3FXRml2UA=="
+  ldap-toml: ""
+---
+# Source: ccx-monitoring/charts/alertmanager/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-ccx-monitoring-alertmanager
+  labels:
+    helm.sh/chart: alertmanager-1.7.0
+    app.kubernetes.io/name: alertmanager
+    app.kubernetes.io/instance: my-ccx-monitoring
+    app.kubernetes.io/version: "v0.26.0"
+    app.kubernetes.io/managed-by: Helm
+  namespace: default
+data:
+  alertmanager.yml: |
+    global:
+      resolve_timeout: 15m
+    receivers:
+    - name: webhook-alerts
+      webhook_configs:
+      - send_resolved: false
+        url: http://ccx-stores-listener-svc.production.svc:18097/alert-manager
+    - name: slack-notifications
+      slack_configs:
+      - api_url: http://CHANGE_ME.COM
+        channel: null
+        color: '{{ if eq .Status "firing" }}{{ if eq .CommonLabels.severity "warning"
+          }}warning{{ else }}danger{{ end }}{{ else }}good{{ end }}'
+        icon_url: https://avatars3.githubusercontent.com/u/3380462
+        send_resolved: true
+        text: |-
+          {{ range .Alerts -}} *{{ .Labels.severity | toUpper }}*
+          *Summary:* {{ .Annotations.summary }}
+          {{ .Annotations.description }}
+          *Details:*
+            {{ range .Labels.SortedPairs }} • *{{ .Name }}:* `{{ .Value }}`
+            {{ end }}
+          {{ end }}
+        title: '[{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing
+          | len }} alerts {{ end }}] {{ .CommonLabels.alertname }} for {{ .CommonLabels.instance
+          }}'
+    route:
+      group_interval: 5m
+      group_wait: 10s
+      receiver: slack-notifications
+      repeat_interval: 24h
+      routes:
+      - receiver: slack-notifications
+      - group_by:
+        - ClusterName
+        - instance
+        - alertname
+        matchers:
+        - alert_category="webhook-alerts"
+        receiver: webhook-alerts
+    templates:
+    - /etc/alertmanager/*.tmpl
+---
+# Source: ccx-monitoring/charts/grafana/templates/configmap-dashboard-provider.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    helm.sh/chart: grafana-7.0.1
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: my-ccx-monitoring
+    app.kubernetes.io/version: "10.1.5"
+    app.kubernetes.io/managed-by: Helm
+  name: my-ccx-monitoring-grafana-config-dashboards
+  namespace: default
+data:
+  provider.yaml: |-
+    apiVersion: 1
+    providers:
+      - name: 'sidecarProvider'
+        orgId: 1
+        folder: ''
+        type: file
+        disableDeletion: false
+        allowUiUpdates: false
+        updateIntervalSeconds: 30
+        options:
+          foldersFromFilesStructure: false
+          path: /tmp/dashboards
+---
+# Source: ccx-monitoring/charts/grafana/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-ccx-monitoring-grafana
+  namespace: default
+  labels:
+    helm.sh/chart: grafana-7.0.1
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: my-ccx-monitoring
+    app.kubernetes.io/version: "10.1.5"
+    app.kubernetes.io/managed-by: Helm
+data:
+  grafana.ini: |
+    [analytics]
+    check_for_updates = true
+    [grafana_net]
+    url = https://grafana.net
+    [log]
+    mode = console
+    [paths]
+    data = /var/lib/grafana/
+    logs = /var/log/grafana
+    plugins = /var/lib/grafana/plugins
+    provisioning = /etc/grafana/provisioning
+    [server]
+    domain = grafana.local
+---
+# Source: ccx-monitoring/charts/victoria-metrics-alert/templates/server-alerts-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-ccx-monitoring-victoria-metrics-alert-server-alert-rules-config
+  namespace: default
+  labels:
+    app: server
+    app.kubernetes.io/name: victoria-metrics-alert
+    app.kubernetes.io/instance: my-ccx-monitoring
+    helm.sh/chart: victoria-metrics-alert-0.8.6
+    app.kubernetes.io/managed-by: Helm
+data:
+  alert-rules.yaml: |
+    
+    groups:
+    - name: Datastore Status
+      rules:
+      - alert: Cluster Failed
+        annotations:
+          summary: '{{ $labels.ClusterName }} has been down for more than 3 minutes.'
+          title: Cluster {{ $labels.ClusterName }} is FAILED
+        expr: cmon_cluster_failed == 1
+        for: 3m
+        labels:
+          severity: critical
+      - alert: Cluster Degraded
+        annotations:
+          summary: '{{ $labels.ClusterName }} has been degraded for more than 3 minutes.'
+          title: Cluster {{ $labels.ClusterName }} is DEGRADED
+        expr: cmon_cluster_degraded == 1
+        for: 3m
+        labels:
+          severity: warning
+      - alert: Datastore Repair Failed
+        annotations:
+          summary: '{{ $labels.datastore }} Datastore repair job has failed.'
+          title: Datastore {{ $labels.datastore }} repair has FAILED
+        expr: increase(datastores_repairs_failed[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+      - alert: Cluster Failed to Init
+        annotations:
+          summary: '{{ $labels.ClusterName }} failed to initialize on {{ $labels.ControllerId
+            }}.'
+          title: Cluster {{ $labels.ClusterName }} failed to initialize on {{ $labels.ControllerId
+            }}
+        expr: cmon_cluster_failed_init > 0
+        for: 0m
+        labels:
+          severity: critical
+    - name: CCX Alerts
+      rules:
+      - alert: New User
+        annotations:
+          description: "New user has signed up \n  VALUE = {{ $value }}\n  LABELS = {{
+            $labels }}"
+          summary: New user has signed up on {{ $labels.instance }})
+        expr: increase(admin_users_total[1m]) > 0
+        for: 0m
+        labels:
+          severity: info
+      - alert: Datastore Created
+        annotations:
+          description: "New datastore \n  VALUE = {{ $value }}\n  LABELS = {{ $labels
+            }}"
+          summary: New datastore created on {{ $labels.instance }})
+        expr: increase(admin_datastores_total{status="all"}[1m]) > 0
+        for: 0m
+        labels:
+          severity: info
+    - name: Deployment status
+      rules:
+      - alert: service-down
+        annotations:
+          summary: |
+            {{ .Labels.deployment }} in {{ .Labels.namespace }} has 0 replicas running for last 5 minutes
+          title: |
+            {{ .Labels.deployment }} in {{ .Labels.namespace }}
+        expr: kube_deployment_status_replicas_available < 1
+        for: 5m
+        labels:
+          name: '{{ .Labels.deployment }}'
+          namespace: '{{ .Labels.namespace }}'
+    - name: Statefulset status
+      rules:
+      - alert: service-down
+        annotations:
+          summary: |
+            {{ .Labels.statefulset }} in {{ .Labels.namespace }} has 0 replicas running for last 5 minutes
+        expr: kube_statefulset_status_replicas_available < 1
+        for: 5m
+        labels:
+          name: '{{ .Labels.statefulset }}'
+          namespace: '{{ .Labels.namespace }}'
+    - name: Metrics alerts
+      rules:
+      - alert: MetricsJobMissing
+        annotations:
+          description: |-
+            A Victoria Metrics job has disappeared
+              VALUE = {{ $value }}
+              LABELS = {{ $labels }}
+          summary: Victoria metrics job missing (instance {{ $labels.instance }})
+        expr: absent(up{job="victoriametrics"})
+        for: 0m
+        labels:
+          severity: warning
+      - alert: MetricsTargetMissing
+        annotations:
+          description: |-
+            A Metrics target has disappeared. An exporter might be crashed.
+              VALUE = {{ $value }}
+              LABELS = {{ $labels }}
+          summary: Metrics target missing (instance {{ $labels.instance }})
+        expr: up == 0
+        for: 10m
+        labels:
+          severity: critical
+      - alert: MetricsAllTargetsMissing
+        annotations:
+          description: |-
+            A Metrics job does not have living target anymore.
+              VALUE = {{ $value }}
+              LABELS = {{ $labels }}
+          summary: Metrics all targets missing (instance {{ $labels.instance }})
+        expr: sum by (job) (up) == 0
+        for: 10m
+        labels:
+          severity: critical
+    - name: Kubernetes Apps
+      rules:
+      - alert: KubernetesContainerOomKiller
+        annotations:
+          description: |-
+            Container {{ $labels.container }} in pod {{ $labels.namespace }}/{{ $labels.pod }} has been OOMKilled {{ $value }} times in the last 10 minutes.
+              VALUE = {{ $value }}
+              LABELS = {{ $labels }}
+          summary: Kubernetes container oom killer (instance {{ $labels.instance }})
+        expr: (kube_pod_container_status_restarts_total - kube_pod_container_status_restarts_total
+          offset 10m >= 1) and ignoring (reason) min_over_time(kube_pod_container_status_last_terminated_reason{reason="OOMKilled"}[10m])
+          == 1
+        for: 0m
+        labels:
+          severity: critical
+      - alert: KubernetesPodCrashLooping
+        annotations:
+          description: |-
+            Pod {{ $labels.pod }} restarting more than once during last ten minutes.
+              VALUE = {{ $value }}
+              LABELS = {{ $labels }}
+          summary: Container {{ $labels.container }} in Pod {{ $labels.namespace }}/{{
+            $labels.pod }} restarting more than once times during ten minutes.
+        expr: (sum(increase(kube_pod_container_status_restarts_total[10m])) by (container,
+          instance, pod, namespace)) > 1
+        for: 15m
+        labels:
+          severity: critical
+    - name: Hosts alerts
+      rules:
+      - alert: HostOutOfMemory
+        annotations:
+          description: |-
+            Node memory is filling up (< 10% left)
+              VALUE = {{ $value }}
+              LABELS = {{ $labels }}
+          summary: Host out of memory (instance {{ $labels.instance }})
+        expr: node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes * 100 < 10
+        for: 2m
+        labels:
+          severity: warning
+      - alert: HostMemoryUnderMemoryPressure
+        annotations:
+          description: |-
+            The node is under heavy memory pressure. High rate of major page faults
+              VALUE = {{ $value }}
+              LABELS = {{ $labels }}
+          summary: Host memory under memory pressure (instance {{ $labels.instance }})
+        expr: rate(node_vmstat_pgmajfault[1m]) > 1000
+        for: 2m
+        labels:
+          severity: warning
+      - alert: HostUnusualDiskReadRate
+        annotations:
+          description: |-
+            Disk is probably reading too much data (> 50 MB/s)
+              VALUE = {{ $value }}
+              LABELS = {{ $labels }}
+          summary: Host unusual disk read rate (instance {{ $labels.instance }})
+        expr: sum by (instance) (rate(node_disk_read_bytes_total[2m])) / 1024 / 1024 >
+          50
+        for: 5m
+        labels:
+          severity: warning
+      - alert: HostUnusualDiskWriteRate
+        annotations:
+          description: |-
+            Disk is probably writing too much data (> 50 MB/s)
+              VALUE = {{ $value }}
+              LABELS = {{ $labels }}
+          summary: Host unusual disk write rate (instance {{ $labels.instance }})
+        expr: sum by (instance) (rate(node_disk_written_bytes_total[2m])) / 1024 / 1024
+          > 50
+        for: 5m
+        labels:
+          severity: warning
+      - alert: HostAutoScaleDiskSpaceReached
+        annotations:
+          description: 'Disk usage on instance {{ $labels.instance }} is above the autoscale
+            threshold of 70%. Current usage: {{ $value }}%'
+          summary: Disk autoscale threshold has been reached on instance {{ $labels.instance
+            }} {{ $value }}%
+        expr: (1 - (node_filesystem_avail_bytes{mountpoint ="/data"} / node_filesystem_size_bytes{mountpoint
+          ="/data"})) * 100 > 70
+        for: 5m
+        labels:
+          alert_category: webhook-alerts
+          severity: warning
+      - alert: HostOutOfDiskSpace
+        annotations:
+          description: |-
+            Disk is almost full (< 10% left)
+              VALUE = {{ $value }}
+              LABELS = {{ $labels }}
+          summary: Host out of disk space (instance {{ $labels.instance }})
+        expr: (node_filesystem_avail_bytes * 100) / node_filesystem_size_bytes < 10 and
+          ON (instance, device, mountpoint) node_filesystem_readonly == 0
+        for: 5m
+        labels:
+          alert_category: webhook-alerts
+          severity: critical
+      - alert: HostDiskWillFillIn24Hours
+        annotations:
+          description: |-
+            Filesystem is predicted to run out of space within the next 24 hours at current write rate
+              VALUE = {{ $value }}
+              LABELS = {{ $labels }}
+          summary: Host disk will fill in 24 hours (instance {{ $labels.instance }})
+        expr: (node_filesystem_avail_bytes * 100) / node_filesystem_size_bytes < 10 and
+          ON (instance, device, mountpoint) predict_linear(node_filesystem_avail_bytes{fstype!~"tmpfs"}[1h],
+          24 * 3600) < 0 and ON (instance, device, mountpoint) node_filesystem_readonly
+          == 0
+        for: 5m
+        labels:
+          severity: warning
+      - alert: HostOutOfInodes
+        annotations:
+          description: |-
+            Disk is almost running out of available inodes (< 10% left)
+              VALUE = {{ $value }}
+              LABELS = {{ $labels }}
+          summary: Host out of inodes (instance {{ $labels.instance }})
+        expr: node_filesystem_files_free{mountpoint ="/rootfs"} / node_filesystem_files{mountpoint="/rootfs"}
+          * 100 < 10 and ON (instance, device, mountpoint) node_filesystem_readonly{mountpoint="/rootfs"}
+          == 0
+        for: 5m
+        labels:
+          severity: warning
+      - alert: HostHighCpuLoad
+        annotations:
+          description: |-
+            CPU load is > 80%
+              VALUE = {{ $value }}
+              LABELS = {{ $labels }}
+          summary: Host high CPU load (instance {{ $labels.instance }})
+        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[2m]))
+          * 100) > 80
+        for: 0m
+        labels:
+          severity: warning
+      - alert: HostCpuStealNoisyNeighbor
+        annotations:
+          description: |-
+            CPU steal is > 10%. A noisy neighbor is killing VM performances or a spot instance may be out of credit.
+              VALUE = {{ $value }}
+              LABELS = {{ $labels }}
+          summary: Host CPU steal noisy neighbor (instance {{ $labels.instance }})
+        expr: avg by(instance) (rate(node_cpu_seconds_total{mode="steal"}[5m])) * 100
+          > 10
+        for: 0m
+        labels:
+          severity: warning
+      - alert: HostCpuHighIowait
+        annotations:
+          description: |-
+            CPU iowait > 5%. A high iowait means that you are disk or network bound.
+              VALUE = {{ $value }}
+              LABELS = {{ $labels }}
+          summary: Host CPU high iowait (instance {{ $labels.instance }})
+        expr: avg by (instance) (rate(node_cpu_seconds_total{mode="iowait"}[5m])) * 100
+          > 5
+        for: 0m
+        labels:
+          severity: warning
+      - alert: HostContextSwitching
+        annotations:
+          description: |-
+            Context switching is growing on node (> 1000 / s)
+              VALUE = {{ $value }}
+              LABELS = {{ $labels }}
+          summary: Host context switching (instance {{ $labels.instance }})
+        expr: (rate(node_context_switches_total[5m])) / (count without(cpu, mode) (node_cpu_seconds_total{mode="idle"}))
+          > 1000
+        for: 0m
+        labels:
+          severity: warning
+      - alert: HostOomKillDetected
+        annotations:
+          description: |-
+            OOM kill detected
+              VALUE = {{ $value }}
+              LABELS = {{ $labels }}
+          summary: Host OOM kill detected (instance {{ $labels.instance }})
+        expr: increase(node_vmstat_oom_kill[1m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+    - name: MySQL Alerts
+      rules:
+      - alert: MysqlTooManyConnections(>80%)
+        annotations:
+          description: |-
+            More than 80% of MySQL connections are in use on {{ $labels.instance }}
+              VALUE = {{ $value }}
+              LABELS = {{ $labels }}
+          summary: MySQL too many connections (> 80%) (instance {{ $labels.instance }})
+        expr: max_over_time(mysql_global_status_threads_connected[1m]) / mysql_global_variables_max_connections
+          * 100 > 80
+        for: 2m
+        labels:
+          severity: warning
+      - alert: MysqlSlaveReplicationLag
+        annotations:
+          description: |-
+            MySQL replication lag on {{ $labels.instance }}
+              VALUE = {{ $value }}
+              LABELS = {{ $labels }}
+          summary: MySQL Slave replication lag (instance {{ $labels.instance }})
+        expr: mysql_slave_status_master_server_id > 0 and ON (instance) (mysql_slave_status_seconds_behind_master
+          - mysql_slave_status_sql_delay) > 30
+        for: 1m
+        labels:
+          severity: warning
+    - name: PostgreSQL Alerts
+      rules:
+      - alert: PostgresqlExporterError
+        annotations:
+          description: |-
+            Postgresql exporter is showing errors. A query may be buggy in query.yaml
+              VALUE = {{ $value }}
+              LABELS = {{ $labels }}
+          summary: Postgresql exporter error (instance {{ $labels.instance }})
+        expr: pg_exporter_last_scrape_error > 0
+        for: 0m
+        labels:
+          severity: warning
+      - alert: PostgresqlTooManyConnections
+        annotations:
+          description: |-
+            PostgreSQL instance has too many connections (> 80%).
+              VALUE = {{ $value }}
+              LABELS = {{ $labels }}
+          summary: Postgresql too many connections (instance {{ $labels.instance }})
+        expr: sum by (datname) (pg_stat_activity_count{datname!~"template.*|postgres"})
+          > pg_settings_max_connections * 0.8
+        for: 2m
+        labels:
+          severity: warning
+      - alert: PostgresqlDeadLocks
+        annotations:
+          description: |-
+            PostgreSQL has dead-locks
+              VALUE = {{ $value }}
+              LABELS = {{ $labels }}
+          summary: Postgresql dead locks (instance {{ $labels.instance }})
+        expr: increase(pg_stat_database_deadlocks{datname!~"template.*|postgres"}[1m])
+          > 5
+        for: 0m
+        labels:
+          severity: warning
+      - alert: PostgresqlHighRollbackRate
+        annotations:
+          description: |-
+            Ratio of transactions being aborted compared to committed is > 2 %
+              VALUE = {{ $value }}
+              LABELS = {{ $labels }}
+          summary: Postgresql high rollback rate (instance {{ $labels.instance }})
+        expr: rate(pg_stat_database_xact_rollback{datname!~"template.*"}[3m]) / rate(pg_stat_database_xact_commit{datname!~"template.*"}[3m])
+          > 0.02
+        for: 0m
+        labels:
+          severity: warning
+    - name: Vault Alerts
+      rules:
+      - alert: VaultDown
+        annotations:
+          description: |
+            Vault may be down or not accesible!
+            Please see https://ccx-monitoring.s9s-dev.net/vm/targets for more information.
+          summary: Vault is missing metrics at (instance {{ $labels.instance }} job {{
+            $labels.job }} cluster {{ $labels.cluster }})
+        expr: up{job="vault"} == 0
+        for: 5m
+        labels:
+          severity: critical
+      - alert: VaultSealed
+        annotations:
+          description: |-
+            Vault instance is sealed on {{ $labels.instance }}
+              VALUE = {{ $value }}
+              LABELS = {{ $labels }}
+          summary: Vault sealed (instance {{ $labels.instance }} cluster {{ $labels.cluster
+            }} )
+        expr: vault_core_unsealed == 0
+        for: 5m
+        labels:
+          severity: critical
+    - name: Backup Alerts
+      rules:
+      - alert: Backup Failed
+        annotations:
+          description: |-
+            Backup failed for {{ $labels.name }}
+              VALUE = {{ $value }}
+              LABELS = {{ $labels }}
+          summary: Backup failed for datastore {{ $labels.name }} {{ $labels.cid }} cluster
+            {{ $labels.cluster }}
+        expr: cmon_cluster_backup_failed == 1
+        for: 2m
+        labels:
+          severity: warning
+      - alert: Backup Upload Failed
+        annotations:
+          description: |-
+            Uploading backup failed for {{ $labels.name }}
+              VALUE = {{ $value }}
+              LABELS = {{ $labels }}
+          summary: Upload of backup failed for datastore {{ $labels.name }} {{ $labels.cid
+            }} cluster {{ $labels.cluster }}
+        expr: cmon_cluster_backup_failed == 1
+        for: 2m
+        labels:
+          severity: warning
+---
+# Source: ccx-monitoring/charts/victoria-metrics-single/templates/scrape-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-ccx-monitoring-victoria-metrics-single-server-scrapeconfig
+  namespace: default
+  labels:
+    app: server
+    app.kubernetes.io/name: victoria-metrics-single
+    app.kubernetes.io/instance: my-ccx-monitoring
+    helm.sh/chart: victoria-metrics-single-0.9.14
+    app.kubernetes.io/managed-by: Helm
+data:
+  scrape.yml: |
+    
+    global:
+      external_labels:
+        cluster: ccx
+        monitor: clustercontrol
+        use_cmon_sd: true
+      scrape_interval: 1m
+      scrape_timeout: 10s
+    
+    scrape_configs:
+    - job_name: victoriametrics
+      relabel_configs:
+      - replacement: ccx
+        target_label: cluster
+      static_configs:
+      - targets:
+        - localhost:8428
+    - bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+      job_name: kubernetes-apiservers
+      kubernetes_sd_configs:
+      - role: endpoints
+      relabel_configs:
+      - action: keep
+        regex: default;kubernetes;https
+        source_labels:
+        - __meta_kubernetes_namespace
+        - __meta_kubernetes_service_name
+        - __meta_kubernetes_endpoint_port_name
+      - replacement: ccx
+        target_label: cluster
+      scheme: https
+      tls_config:
+        ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        insecure_skip_verify: true
+    - bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+      job_name: kubernetes-nodes
+      kubernetes_sd_configs:
+      - role: node
+      relabel_configs:
+      - action: labelmap
+        regex: __meta_kubernetes_node_label_(.+)
+      - replacement: kubernetes.default.svc:443
+        target_label: __address__
+      - regex: (.+)
+        replacement: /api/v1/nodes/$1/proxy/metrics
+        source_labels:
+        - __meta_kubernetes_node_name
+        target_label: __metrics_path__
+      - replacement: ccx
+        target_label: cluster
+      scheme: https
+      tls_config:
+        ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        insecure_skip_verify: true
+    - bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+      job_name: kubernetes-nodes-cadvisor
+      kubernetes_sd_configs:
+      - role: node
+      relabel_configs:
+      - action: labelmap
+        regex: __meta_kubernetes_node_label_(.+)
+      - replacement: kubernetes.default.svc:443
+        target_label: __address__
+      - regex: (.+)
+        replacement: /api/v1/nodes/$1/proxy/metrics/cadvisor
+        source_labels:
+        - __meta_kubernetes_node_name
+        target_label: __metrics_path__
+      - replacement: ccx
+        target_label: cluster
+      scheme: https
+      tls_config:
+        ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        insecure_skip_verify: true
+    - job_name: kubernetes-node-exporter
+      kubernetes_sd_configs:
+      - role: node
+      relabel_configs:
+      - action: labelmap
+        regex: __meta_kubernetes_node_label_(.+)
+      - action: replace
+        regex: (.+):(.+)
+        replacement: ${1}:9100
+        source_labels:
+        - __address__
+        target_label: __address__
+      - replacement: ccx
+        target_label: cluster
+      scheme: http
+    - job_name: kubernetes-service-endpoints
+      kubernetes_sd_configs:
+      - role: endpoints
+      relabel_configs:
+      - action: drop
+        regex: true
+        source_labels:
+        - __meta_kubernetes_pod_container_init
+      - action: keep_if_equal
+        source_labels:
+        - __meta_kubernetes_service_annotation_prometheus_io_port
+        - __meta_kubernetes_pod_container_port_number
+      - action: keep
+        regex: true
+        source_labels:
+        - __meta_kubernetes_service_annotation_prometheus_io_scrape
+      - action: replace
+        regex: (https?)
+        source_labels:
+        - __meta_kubernetes_service_annotation_prometheus_io_scheme
+        target_label: __scheme__
+      - action: replace
+        regex: (.+)
+        source_labels:
+        - __meta_kubernetes_service_annotation_prometheus_io_path
+        target_label: __metrics_path__
+      - action: replace
+        regex: ([^:]+)(?::\d+)?;(\d+)
+        replacement: $1:$2
+        source_labels:
+        - __address__
+        - __meta_kubernetes_service_annotation_prometheus_io_port
+        target_label: __address__
+      - action: labelmap
+        regex: __meta_kubernetes_service_label_(.+)
+      - action: replace
+        source_labels:
+        - __meta_kubernetes_namespace
+        target_label: kubernetes_namespace
+      - action: replace
+        source_labels:
+        - __meta_kubernetes_service_name
+        target_label: kubernetes_name
+      - action: replace
+        source_labels:
+        - __meta_kubernetes_pod_node_name
+        target_label: kubernetes_node
+      - replacement: ccx
+        target_label: cluster
+    - job_name: kubernetes-service-endpoints-slow
+      kubernetes_sd_configs:
+      - role: endpoints
+      relabel_configs:
+      - action: drop
+        regex: true
+        source_labels:
+        - __meta_kubernetes_pod_container_init
+      - action: keep_if_equal
+        source_labels:
+        - __meta_kubernetes_service_annotation_prometheus_io_port
+        - __meta_kubernetes_pod_container_port_number
+      - action: keep
+        regex: true
+        source_labels:
+        - __meta_kubernetes_service_annotation_prometheus_io_scrape_slow
+      - action: replace
+        regex: (https?)
+        source_labels:
+        - __meta_kubernetes_service_annotation_prometheus_io_scheme
+        target_label: __scheme__
+      - action: replace
+        regex: (.+)
+        source_labels:
+        - __meta_kubernetes_service_annotation_prometheus_io_path
+        target_label: __metrics_path__
+      - action: replace
+        regex: ([^:]+)(?::\d+)?;(\d+)
+        replacement: $1:$2
+        source_labels:
+        - __address__
+        - __meta_kubernetes_service_annotation_prometheus_io_port
+        target_label: __address__
+      - action: labelmap
+        regex: __meta_kubernetes_service_label_(.+)
+      - action: replace
+        source_labels:
+        - __meta_kubernetes_namespace
+        target_label: kubernetes_namespace
+      - action: replace
+        source_labels:
+        - __meta_kubernetes_service_name
+        target_label: kubernetes_name
+      - action: replace
+        source_labels:
+        - __meta_kubernetes_pod_node_name
+        target_label: kubernetes_node
+      - replacement: ccx
+        target_label: cluster
+      scrape_interval: 5m
+      scrape_timeout: 30s
+    - job_name: kubernetes-services
+      kubernetes_sd_configs:
+      - role: service
+      metrics_path: /probe
+      params:
+        module:
+        - http_2xx
+      relabel_configs:
+      - action: keep
+        regex: true
+        source_labels:
+        - __meta_kubernetes_service_annotation_prometheus_io_probe
+      - source_labels:
+        - __address__
+        target_label: __param_target
+      - replacement: blackbox
+        target_label: __address__
+      - source_labels:
+        - __param_target
+        target_label: instance
+      - action: labelmap
+        regex: __meta_kubernetes_service_label_(.+)
+      - source_labels:
+        - __meta_kubernetes_namespace
+        target_label: kubernetes_namespace
+      - source_labels:
+        - __meta_kubernetes_service_name
+        target_label: kubernetes_name
+      - replacement: ccx
+        target_label: cluster
+    - job_name: kubernetes-pods
+      kubernetes_sd_configs:
+      - role: pod
+      relabel_configs:
+      - action: drop
+        regex: true
+        source_labels:
+        - __meta_kubernetes_pod_container_init
+      - action: keep_if_equal
+        source_labels:
+        - __meta_kubernetes_pod_annotation_prometheus_io_port
+        - __meta_kubernetes_pod_container_port_number
+      - action: keep
+        regex: true
+        source_labels:
+        - __meta_kubernetes_pod_annotation_prometheus_io_scrape
+      - action: replace
+        regex: (.+)
+        source_labels:
+        - __meta_kubernetes_pod_annotation_prometheus_io_path
+        target_label: __metrics_path__
+      - action: replace
+        regex: ([^:]+)(?::\d+)?;(\d+)
+        replacement: $1:$2
+        source_labels:
+        - __address__
+        - __meta_kubernetes_pod_annotation_prometheus_io_port
+        target_label: __address__
+      - action: labelmap
+        regex: __meta_kubernetes_pod_label_(.+)
+      - action: replace
+        source_labels:
+        - __meta_kubernetes_namespace
+        target_label: kubernetes_namespace
+      - action: replace
+        source_labels:
+        - __meta_kubernetes_pod_name
+        target_label: kubernetes_pod_name
+      - replacement: ccx
+        target_label: cluster
+      scheme: http
+    - http_sd_configs:
+      - url: http://cmon-master.production:8080
+      job_name: cmon-sd
+      relabel_configs:
+      - regex: (.*):(\d+)
+        replacement: ${1}
+        source_labels:
+        - __address__
+        target_label: ip
+      - replacement: lab
+        target_label: environment
+      - replacement: ccx
+        target_label: cluster
+      - replacement: true
+        target_label: use_cmon_sd
+---
+# Source: ccx-monitoring/charts/victoria-metrics-single/templates/server-pvc.yaml
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: my-ccx-monitoring-victoria-metrics-single-server
+  namespace: default
+  labels:
+    app: server
+    app.kubernetes.io/name: victoria-metrics-single
+    app.kubernetes.io/instance: my-ccx-monitoring
+    helm.sh/chart: victoria-metrics-single-0.9.14
+    app.kubernetes.io/managed-by: Helm
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: "16Gi"
+---
+# Source: ccx-monitoring/charts/grafana/templates/clusterrole.yaml
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  labels:
+    helm.sh/chart: grafana-7.0.1
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: my-ccx-monitoring
+    app.kubernetes.io/version: "10.1.5"
+    app.kubernetes.io/managed-by: Helm
+  name: my-ccx-monitoring-grafana-clusterrole
+rules:
+  - apiGroups: [""] # "" indicates the core API group
+    resources: ["configmaps", "secrets"]
+    verbs: ["get", "watch", "list"]
+---
+# Source: ccx-monitoring/charts/kube-state-metrics/templates/role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:    
+    helm.sh/chart: kube-state-metrics-5.16.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: metrics
+    app.kubernetes.io/part-of: kube-state-metrics
+    app.kubernetes.io/name: kube-state-metrics
+    app.kubernetes.io/instance: my-ccx-monitoring
+    app.kubernetes.io/version: "2.10.1"
+  name: my-ccx-monitoring-kube-state-metrics
+rules:
+
+- apiGroups: ["certificates.k8s.io"]
+  resources:
+  - certificatesigningrequests
+  verbs: ["list", "watch"]
+
+- apiGroups: [""]
+  resources:
+  - configmaps
+  verbs: ["list", "watch"]
+
+- apiGroups: ["batch"]
+  resources:
+  - cronjobs
+  verbs: ["list", "watch"]
+
+- apiGroups: ["extensions", "apps"]
+  resources:
+  - daemonsets
+  verbs: ["list", "watch"]
+
+- apiGroups: ["extensions", "apps"]
+  resources:
+  - deployments
+  verbs: ["list", "watch"]
+
+- apiGroups: [""]
+  resources:
+  - endpoints
+  verbs: ["list", "watch"]
+
+- apiGroups: ["autoscaling"]
+  resources:
+  - horizontalpodautoscalers
+  verbs: ["list", "watch"]
+
+- apiGroups: ["extensions", "networking.k8s.io"]
+  resources:
+  - ingresses
+  verbs: ["list", "watch"]
+
+- apiGroups: ["batch"]
+  resources:
+  - jobs
+  verbs: ["list", "watch"]
+
+- apiGroups: ["coordination.k8s.io"]
+  resources:
+  - leases
+  verbs: ["list", "watch"]
+
+- apiGroups: [""]
+  resources:
+  - limitranges
+  verbs: ["list", "watch"]
+
+- apiGroups: ["admissionregistration.k8s.io"]
+  resources:
+    - mutatingwebhookconfigurations
+  verbs: ["list", "watch"]
+
+- apiGroups: [""]
+  resources:
+  - namespaces
+  verbs: ["list", "watch"]
+
+- apiGroups: ["networking.k8s.io"]
+  resources:
+  - networkpolicies
+  verbs: ["list", "watch"]
+
+- apiGroups: [""]
+  resources:
+  - nodes
+  verbs: ["list", "watch"]
+
+- apiGroups: [""]
+  resources:
+  - persistentvolumeclaims
+  verbs: ["list", "watch"]
+
+- apiGroups: [""]
+  resources:
+  - persistentvolumes
+  verbs: ["list", "watch"]
+
+- apiGroups: ["policy"]
+  resources:
+    - poddisruptionbudgets
+  verbs: ["list", "watch"]
+
+- apiGroups: [""]
+  resources:
+  - pods
+  verbs: ["list", "watch"]
+
+- apiGroups: ["extensions", "apps"]
+  resources:
+  - replicasets
+  verbs: ["list", "watch"]
+
+- apiGroups: [""]
+  resources:
+  - replicationcontrollers
+  verbs: ["list", "watch"]
+
+- apiGroups: [""]
+  resources:
+  - resourcequotas
+  verbs: ["list", "watch"]
+
+- apiGroups: [""]
+  resources:
+  - secrets
+  verbs: ["list", "watch"]
+
+- apiGroups: [""]
+  resources:
+  - services
+  verbs: ["list", "watch"]
+
+- apiGroups: ["apps"]
+  resources:
+  - statefulsets
+  verbs: ["list", "watch"]
+
+- apiGroups: ["storage.k8s.io"]
+  resources:
+    - storageclasses
+  verbs: ["list", "watch"]
+
+- apiGroups: ["admissionregistration.k8s.io"]
+  resources:
+    - validatingwebhookconfigurations
+  verbs: ["list", "watch"]
+
+- apiGroups: ["storage.k8s.io"]
+  resources:
+    - volumeattachments
+  verbs: ["list", "watch"]
+---
+# Source: ccx-monitoring/charts/victoria-metrics-single/templates/clusterrole.yaml
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-ccx-monitoring-victoria-metrics-single-clusterrole
+  labels:
+    helm.sh/chart: victoria-metrics-single-0.9.14
+    app.kubernetes.io/managed-by: Helm
+rules:
+  - apiGroups:
+    - discovery.k8s.io
+    resources:
+    - endpointslices
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [ "" ]
+    resources:
+      - nodes
+      - nodes/proxy
+      - nodes/metrics
+      - services
+      - endpoints
+      - pods
+    verbs: [ "get", "list", "watch" ]
+  - apiGroups:
+      - extensions
+      - networking.k8s.io
+    resources:
+      - ingresses
+    verbs: [ "get", "list", "watch" ]
+  - nonResourceURLs: [ "/metrics" ]
+    verbs: [ "get" ]
+---
+# Source: ccx-monitoring/charts/grafana/templates/clusterrolebinding.yaml
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-ccx-monitoring-grafana-clusterrolebinding
+  labels:
+    helm.sh/chart: grafana-7.0.1
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: my-ccx-monitoring
+    app.kubernetes.io/version: "10.1.5"
+    app.kubernetes.io/managed-by: Helm
+subjects:
+  - kind: ServiceAccount
+    name: my-ccx-monitoring-grafana
+    namespace: default
+roleRef:
+  kind: ClusterRole
+  name: my-ccx-monitoring-grafana-clusterrole
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: ccx-monitoring/charts/kube-state-metrics/templates/clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:    
+    helm.sh/chart: kube-state-metrics-5.16.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: metrics
+    app.kubernetes.io/part-of: kube-state-metrics
+    app.kubernetes.io/name: kube-state-metrics
+    app.kubernetes.io/instance: my-ccx-monitoring
+    app.kubernetes.io/version: "2.10.1"
+  name: my-ccx-monitoring-kube-state-metrics
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-ccx-monitoring-kube-state-metrics
+subjects:
+- kind: ServiceAccount
+  name: my-ccx-monitoring-kube-state-metrics
+  namespace: default
+---
+# Source: ccx-monitoring/charts/victoria-metrics-alert/templates/clusterrolebinding.yaml
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-ccx-monitoring-victoria-metrics-alert-server-clusterrolebinding
+  namespace: default
+  labels:
+    app: server
+    app.kubernetes.io/name: victoria-metrics-alert
+    app.kubernetes.io/instance: my-ccx-monitoring
+    helm.sh/chart: victoria-metrics-alert-0.8.6
+    app.kubernetes.io/managed-by: Helm
+subjects:
+  - kind: ServiceAccount
+    name: my-ccx-monitoring-victoria-metrics-alert
+    namespace: default
+roleRef:
+  kind: ClusterRole
+  name: my-ccx-monitoring-victoria-metrics-alert-server-clusterrole
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: ccx-monitoring/charts/victoria-metrics-single/templates/clusterrolebinding.yaml
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-ccx-monitoring-victoria-metrics-single-clusterrolebinding
+  labels:
+    helm.sh/chart: victoria-metrics-single-0.9.14
+    app.kubernetes.io/managed-by: Helm
+subjects:
+  - kind: ServiceAccount
+    name: my-ccx-monitoring-victoria-metrics-single
+    namespace: default
+roleRef:
+  kind: ClusterRole
+  name: my-ccx-monitoring-victoria-metrics-single-clusterrole
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: ccx-monitoring/charts/grafana/templates/role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: my-ccx-monitoring-grafana
+  namespace: default
+  labels:
+    helm.sh/chart: grafana-7.0.1
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: my-ccx-monitoring
+    app.kubernetes.io/version: "10.1.5"
+    app.kubernetes.io/managed-by: Helm
+rules: []
+---
+# Source: ccx-monitoring/charts/victoria-metrics-alert/templates/role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name:  my-ccx-monitoring-victoria-metrics-alert-server
+  namespace: default
+  labels:
+    app: server
+    app.kubernetes.io/name: victoria-metrics-alert
+    app.kubernetes.io/instance: my-ccx-monitoring
+    helm.sh/chart: victoria-metrics-alert-0.8.6
+    app.kubernetes.io/managed-by: Helm
+rules: []
+---
+# Source: ccx-monitoring/charts/grafana/templates/rolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: my-ccx-monitoring-grafana
+  namespace: default
+  labels:
+    helm.sh/chart: grafana-7.0.1
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: my-ccx-monitoring
+    app.kubernetes.io/version: "10.1.5"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: my-ccx-monitoring-grafana
+subjects:
+- kind: ServiceAccount
+  name: my-ccx-monitoring-grafana
+  namespace: default
+---
+# Source: ccx-monitoring/charts/victoria-metrics-alert/templates/rolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: my-ccx-monitoring-victoria-metrics-alert-server
+  namespace: default
+  labels:
+    app: server
+    app.kubernetes.io/name: victoria-metrics-alert
+    app.kubernetes.io/instance: my-ccx-monitoring
+    helm.sh/chart: victoria-metrics-alert-0.8.6
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: my-ccx-monitoring-victoria-metrics-alert-server
+subjects:
+- kind: ServiceAccount
+  name: my-ccx-monitoring-victoria-metrics-alert
+  namespace: default
+---
+# Source: ccx-monitoring/charts/alertmanager/templates/services.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-ccx-monitoring-alertmanager
+  labels:
+    helm.sh/chart: alertmanager-1.7.0
+    app.kubernetes.io/name: alertmanager
+    app.kubernetes.io/instance: my-ccx-monitoring
+    app.kubernetes.io/version: "v0.26.0"
+    app.kubernetes.io/managed-by: Helm
+  namespace: default
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9093
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: alertmanager
+    app.kubernetes.io/instance: my-ccx-monitoring
+---
+# Source: ccx-monitoring/charts/alertmanager/templates/services.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-ccx-monitoring-alertmanager-headless
+  labels:
+    helm.sh/chart: alertmanager-1.7.0
+    app.kubernetes.io/name: alertmanager
+    app.kubernetes.io/instance: my-ccx-monitoring
+    app.kubernetes.io/version: "v0.26.0"
+    app.kubernetes.io/managed-by: Helm
+  namespace: default
+spec:
+  clusterIP: None
+  ports:
+    - port: 9093
+      targetPort: http
+      protocol: TCP
+      name: http
+    - port: 9094
+      targetPort: clusterpeer-tcp
+      protocol: TCP
+      name: cluster-tcp
+    - port: 9094
+      targetPort: clusterpeer-udp
+      protocol: UDP
+      name: cluster-udp
+  selector:
+    app.kubernetes.io/name: alertmanager
+    app.kubernetes.io/instance: my-ccx-monitoring
+---
+# Source: ccx-monitoring/charts/grafana/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-ccx-monitoring-grafana
+  namespace: default
+  labels:
+    helm.sh/chart: grafana-7.0.1
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: my-ccx-monitoring
+    app.kubernetes.io/version: "10.1.5"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - name: service
+      port: 3000
+      protocol: TCP
+      targetPort: 3000
+  selector:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: my-ccx-monitoring
+---
+# Source: ccx-monitoring/charts/kube-state-metrics/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-ccx-monitoring-kube-state-metrics
+  namespace: default
+  labels:    
+    helm.sh/chart: kube-state-metrics-5.16.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: metrics
+    app.kubernetes.io/part-of: kube-state-metrics
+    app.kubernetes.io/name: kube-state-metrics
+    app.kubernetes.io/instance: my-ccx-monitoring
+    app.kubernetes.io/version: "2.10.1"
+  annotations:
+    prometheus.io/scrape: 'true'
+spec:
+  type: "ClusterIP"
+  ports:
+  - name: "http"
+    protocol: TCP
+    port: 8080
+    targetPort: 8080
+  
+  selector:    
+    app.kubernetes.io/name: kube-state-metrics
+    app.kubernetes.io/instance: my-ccx-monitoring
+---
+# Source: ccx-monitoring/charts/prometheus-node-exporter/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-ccx-monitoring-prometheus-node-exporter
+  namespace: default
+  labels:
+    helm.sh/chart: prometheus-node-exporter-4.23.2
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: metrics
+    app.kubernetes.io/part-of: prometheus-node-exporter
+    app.kubernetes.io/name: prometheus-node-exporter
+    app.kubernetes.io/instance: my-ccx-monitoring
+    app.kubernetes.io/version: "1.6.1"
+  annotations:
+    prometheus.io/scrape: "true"
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9100
+      targetPort: 9100
+      protocol: TCP
+      name: metrics
+  selector:
+    app.kubernetes.io/name: prometheus-node-exporter
+    app.kubernetes.io/instance: my-ccx-monitoring
+---
+# Source: ccx-monitoring/charts/victoria-metrics-alert/templates/server-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: default
+  labels:
+    app: server
+    app.kubernetes.io/name: victoria-metrics-alert
+    app.kubernetes.io/instance: my-ccx-monitoring
+    helm.sh/chart: victoria-metrics-alert-0.8.6
+    app.kubernetes.io/managed-by: Helm
+  name: my-ccx-monitoring-victoria-metrics-alert-server
+spec:
+  ports:
+    - name: http
+      port: 8880
+      targetPort: http
+      protocol: TCP
+  selector:
+    app: server
+    app.kubernetes.io/name: victoria-metrics-alert
+    app.kubernetes.io/instance: my-ccx-monitoring
+  type: "ClusterIP"
+---
+# Source: ccx-monitoring/charts/victoria-metrics-single/templates/server-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: default
+  labels:
+    app: server
+    app.kubernetes.io/name: victoria-metrics-single
+    app.kubernetes.io/instance: my-ccx-monitoring
+    helm.sh/chart: victoria-metrics-single-0.9.14
+    app.kubernetes.io/managed-by: Helm
+  name: my-ccx-monitoring-victoria-metrics-single-server
+spec:
+  ports:
+    - name: http
+      port: 9090
+      protocol: TCP
+      targetPort: http
+  selector:
+    app: server
+    app.kubernetes.io/name: victoria-metrics-single
+    app.kubernetes.io/instance: my-ccx-monitoring
+  type: "ClusterIP"
+---
+# Source: ccx-monitoring/charts/prometheus-node-exporter/templates/daemonset.yaml
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: my-ccx-monitoring-prometheus-node-exporter
+  namespace: default
+  labels:
+    helm.sh/chart: prometheus-node-exporter-4.23.2
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: metrics
+    app.kubernetes.io/part-of: prometheus-node-exporter
+    app.kubernetes.io/name: prometheus-node-exporter
+    app.kubernetes.io/instance: my-ccx-monitoring
+    app.kubernetes.io/version: "1.6.1"
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus-node-exporter
+      app.kubernetes.io/instance: my-ccx-monitoring
+  revisionHistoryLimit: 10
+  updateStrategy:
+    rollingUpdate:
+      maxUnavailable: 1
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations:
+        cluster-autoscaler.kubernetes.io/safe-to-evict: "true"
+      labels:
+        helm.sh/chart: prometheus-node-exporter-4.23.2
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/component: metrics
+        app.kubernetes.io/part-of: prometheus-node-exporter
+        app.kubernetes.io/name: prometheus-node-exporter
+        app.kubernetes.io/instance: my-ccx-monitoring
+        app.kubernetes.io/version: "1.6.1"
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        fsGroup: 65534
+        runAsGroup: 65534
+        runAsNonRoot: true
+        runAsUser: 65534
+      serviceAccountName: my-ccx-monitoring-prometheus-node-exporter
+      containers:
+        - name: node-exporter
+          image: quay.io/prometheus/node-exporter:v1.6.1
+          imagePullPolicy: IfNotPresent
+          args:
+            - --path.procfs=/host/proc
+            - --path.sysfs=/host/sys
+            - --path.rootfs=/host/root
+            - --path.udev.data=/host/root/run/udev/data
+            - --web.listen-address=[$(HOST_IP)]:9100
+          securityContext:
+            readOnlyRootFilesystem: true
+          env:
+            - name: HOST_IP
+              value: 0.0.0.0
+          ports:
+            - name: metrics
+              containerPort: 9100
+              protocol: TCP
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              httpHeaders:
+              path: /
+              port: 9100
+              scheme: HTTP
+            initialDelaySeconds: 0
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              httpHeaders:
+              path: /
+              port: 9100
+              scheme: HTTP
+            initialDelaySeconds: 0
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+          volumeMounts:
+            - name: proc
+              mountPath: /host/proc
+              readOnly:  true
+            - name: sys
+              mountPath: /host/sys
+              readOnly: true
+            - name: root
+              mountPath: /host/root
+              mountPropagation: HostToContainer
+              readOnly: true
+      hostNetwork: true
+      hostPID: true
+      nodeSelector:
+        kubernetes.io/os: linux
+      tolerations:
+        - effect: NoSchedule
+          operator: Exists
+      volumes:
+        - name: proc
+          hostPath:
+            path: /proc
+        - name: sys
+          hostPath:
+            path: /sys
+        - name: root
+          hostPath:
+            path: /
+---
+# Source: ccx-monitoring/charts/grafana/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-ccx-monitoring-grafana
+  namespace: default
+  labels:
+    helm.sh/chart: grafana-7.0.1
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: my-ccx-monitoring
+    app.kubernetes.io/version: "10.1.5"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: grafana
+      app.kubernetes.io/instance: my-ccx-monitoring
+  strategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: grafana
+        app.kubernetes.io/instance: my-ccx-monitoring
+      annotations:
+        checksum/config: 840476b1027d8a89adf404609eb2195f710e8cad4bb4533a841b3a62ce786a12
+        checksum/dashboards-json-config: 01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b
+        checksum/sc-dashboard-provider-config: 142654bc0b97c4dabade6a96e67bc9a9fa788758fe6a5662d12ae0082a8db293
+        checksum/secret: ff10b82435b3256b8ac909e23c1a67b9fb9b1ab94648044ef6b63261bef1f9d0
+        kubectl.kubernetes.io/default-container: grafana
+        prometheus.io/port: "3000"
+        prometheus.io/scrape: "true"
+    spec:
+      
+      serviceAccountName: my-ccx-monitoring-grafana
+      automountServiceAccountToken: true
+      securityContext:
+        fsGroup: 472
+        runAsGroup: 472
+        runAsNonRoot: true
+        runAsUser: 472
+      enableServiceLinks: true
+      containers:
+        - name: grafana-sc-dashboard
+          image: "quay.io/kiwigrid/k8s-sidecar:1.25.1"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: METHOD
+              value: WATCH
+            - name: LABEL
+              value: "grafana_dashboard"
+            - name: FOLDER
+              value: "/tmp/dashboards"
+            - name: RESOURCE
+              value: "both"
+            - name: REQ_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: my-ccx-monitoring-grafana
+                  key: admin-user
+            - name: REQ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-ccx-monitoring-grafana
+                  key: admin-password
+            - name: REQ_URL
+              value: http://localhost:3000/api/admin/provisioning/dashboards/reload
+            - name: REQ_METHOD
+              value: POST
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: sc-dashboard-volume
+              mountPath: "/tmp/dashboards"
+        - name: grafana-sc-datasources
+          image: "quay.io/kiwigrid/k8s-sidecar:1.25.1"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: METHOD
+              value: WATCH
+            - name: LABEL
+              value: "grafana_datasource"
+            - name: FOLDER
+              value: "/etc/grafana/provisioning/datasources"
+            - name: RESOURCE
+              value: "both"
+            - name: REQ_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: my-ccx-monitoring-grafana
+                  key: admin-user
+            - name: REQ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-ccx-monitoring-grafana
+                  key: admin-password
+            - name: REQ_URL
+              value: http://localhost:3000/api/admin/provisioning/datasources/reload
+            - name: REQ_METHOD
+              value: POST
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: sc-datasources-volume
+              mountPath: "/etc/grafana/provisioning/datasources"
+        - name: grafana
+          image: "docker.io/grafana/grafana:10.1.5"
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: config
+              mountPath: "/etc/grafana/grafana.ini"
+              subPath: grafana.ini
+            - name: storage
+              mountPath: "/var/lib/grafana"
+            - name: sc-dashboard-volume
+              mountPath: "/tmp/dashboards"
+            - name: sc-dashboard-provider
+              mountPath: "/etc/grafana/provisioning/dashboards/sc-dashboardproviders.yaml"
+              subPath: provider.yaml
+            - name: sc-datasources-volume
+              mountPath: "/etc/grafana/provisioning/datasources"
+          ports:
+            - name: grafana
+              containerPort: 3000
+              protocol: TCP
+            - name: gossip-tcp
+              containerPort: 9094
+              protocol: TCP
+            - name: gossip-udp
+              containerPort: 9094
+              protocol: UDP
+          env:
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: GF_SECURITY_ADMIN_USER
+              valueFrom:
+                secretKeyRef:
+                  name: my-ccx-monitoring-grafana
+                  key: admin-user
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-ccx-monitoring-grafana
+                  key: admin-password
+            - name: GF_PATHS_DATA
+              value: /var/lib/grafana/
+            - name: GF_PATHS_LOGS
+              value: /var/log/grafana
+            - name: GF_PATHS_PLUGINS
+              value: /var/lib/grafana/plugins
+            - name: GF_PATHS_PROVISIONING
+              value: /etc/grafana/provisioning
+          livenessProbe:
+            failureThreshold: 10
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 60
+            timeoutSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+      volumes:
+        - name: config
+          configMap:
+            name: my-ccx-monitoring-grafana
+        - name: storage
+          emptyDir: {}
+        - name: sc-dashboard-volume
+          emptyDir:
+            {}
+        - name: sc-dashboard-provider
+          configMap:
+            name: my-ccx-monitoring-grafana-config-dashboards
+        - name: sc-datasources-volume
+          emptyDir:
+            {}
+---
+# Source: ccx-monitoring/charts/kube-state-metrics/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-ccx-monitoring-kube-state-metrics
+  namespace: default
+  labels:    
+    helm.sh/chart: kube-state-metrics-5.16.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: metrics
+    app.kubernetes.io/part-of: kube-state-metrics
+    app.kubernetes.io/name: kube-state-metrics
+    app.kubernetes.io/instance: my-ccx-monitoring
+    app.kubernetes.io/version: "2.10.1"
+spec:
+  selector:
+    matchLabels:      
+      app.kubernetes.io/name: kube-state-metrics
+      app.kubernetes.io/instance: my-ccx-monitoring
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  revisionHistoryLimit: 10
+  template:
+    metadata:
+      labels:        
+        helm.sh/chart: kube-state-metrics-5.16.0
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/component: metrics
+        app.kubernetes.io/part-of: kube-state-metrics
+        app.kubernetes.io/name: kube-state-metrics
+        app.kubernetes.io/instance: my-ccx-monitoring
+        app.kubernetes.io/version: "2.10.1"
+      annotations:
+        prometheus.io/port: "8080"
+        prometheus.io/scrape: "true"
+    spec:
+      hostNetwork: false
+      serviceAccountName: my-ccx-monitoring-kube-state-metrics
+      securityContext:
+        fsGroup: 65534
+        runAsGroup: 65534
+        runAsNonRoot: true
+        runAsUser: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: kube-state-metrics
+        args:
+        - --port=8080
+        - --resources=certificatesigningrequests,configmaps,cronjobs,daemonsets,deployments,endpoints,horizontalpodautoscalers,ingresses,jobs,leases,limitranges,mutatingwebhookconfigurations,namespaces,networkpolicies,nodes,persistentvolumeclaims,persistentvolumes,poddisruptionbudgets,pods,replicasets,replicationcontrollers,resourcequotas,secrets,services,statefulsets,storageclasses,validatingwebhookconfigurations,volumeattachments
+        imagePullPolicy: IfNotPresent
+        image: registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.10.1
+        ports:
+        - containerPort: 8080
+          name: "http"
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            httpHeaders:
+            path: /healthz
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 5
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            httpHeaders:
+            path: /
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 5
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+---
+# Source: ccx-monitoring/charts/victoria-metrics-alert/templates/server-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-ccx-monitoring-victoria-metrics-alert-server
+  namespace: default
+  labels:
+    app: server
+    app.kubernetes.io/name: victoria-metrics-alert
+    app.kubernetes.io/instance: my-ccx-monitoring
+    helm.sh/chart: victoria-metrics-alert-0.8.6
+    app.kubernetes.io/managed-by: Helm
+spec:
+  minReadySeconds: 0
+  replicas: 2
+  selector:
+    matchLabels:
+      app: server
+      app.kubernetes.io/name: victoria-metrics-alert
+      app.kubernetes.io/instance: my-ccx-monitoring
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: server
+        app.kubernetes.io/name: victoria-metrics-alert
+        app.kubernetes.io/instance: my-ccx-monitoring
+        helm.sh/chart: victoria-metrics-alert-0.8.6
+        app.kubernetes.io/managed-by: Helm
+      annotations:
+        checksum/config: 90fa3e8331f854e50c11c375a1f1612ee53746b3075c042d5c6b66397a186ace
+        prometheus.io/port: "8880"
+        prometheus.io/scrape: "true"
+    spec:
+      serviceAccountName: my-ccx-monitoring-victoria-metrics-alert
+      securityContext:
+        {}
+      automountServiceAccountToken: true
+      containers:
+        - name: victoria-metrics-alert-server
+          securityContext:
+            {}
+          image: "victoriametrics/vmalert:v1.96.0"
+          args:
+            - -rule=/config/alert-rules.yaml
+            - -datasource.url=http://ccx-monitoring-victoria-metrics-single-server:9090
+            - -notifier.url=http://ccx-monitoring-alertmanager:9093
+            - -remoteRead.url=
+            - -remoteWrite.url=
+            - -envflag.enable=true
+            - -envflag.prefix=VM_
+            - -loggerFormat=json
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8880
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          volumeMounts:
+            - name: alerts-config
+              mountPath: /config
+            
+          resources:
+            {}
+      affinity:
+        
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                - vmalert
+            topologyKey: kubernetes.io/hostname
+      volumes:
+        - name: alerts-config
+          configMap:
+            name: my-ccx-monitoring-victoria-metrics-alert-server-alert-rules-config
+---
+# Source: ccx-monitoring/charts/victoria-metrics-single/templates/server-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: server
+    app.kubernetes.io/name: victoria-metrics-single
+    app.kubernetes.io/instance: my-ccx-monitoring
+    helm.sh/chart: victoria-metrics-single-0.9.14
+    app.kubernetes.io/managed-by: Helm
+  name: my-ccx-monitoring-victoria-metrics-single-server
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: server
+      app.kubernetes.io/name: victoria-metrics-single
+      app.kubernetes.io/instance: my-ccx-monitoring
+  replicas: 1
+  strategy:
+    # Must be "Recreate" when we have a persistent volume
+    type: Recreate
+  template:
+    metadata:
+      annotations:
+        prometheus.io/port: "8428"
+        prometheus.io/scrape: "true"
+      labels:
+        app: server
+        app.kubernetes.io/name: victoria-metrics-single
+        app.kubernetes.io/instance: my-ccx-monitoring
+        helm.sh/chart: victoria-metrics-single-0.9.14
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      automountServiceAccountToken: true
+      containers:
+        - name: victoria-metrics-single-server
+          securityContext:
+            {}
+          image: "victoriametrics/victoria-metrics:v1.96.0"
+          imagePullPolicy: "IfNotPresent"
+          args:
+            - "--retentionPeriod=1"
+            - "--storageDataPath=/storage"
+            - -promscrape.config=/scrapeconfig/scrape.yml
+            - --envflag.enable=true
+            - --envflag.prefix=VM_
+            - --loggerFormat=json
+            - --maxLabelsPerTimeseries=99
+            - --promscrape.maxScrapeSize=5.6777216e+07
+          ports:
+            - name: http
+              containerPort: 8428
+          livenessProbe:
+            failureThreshold: 10
+            httpGet:
+              path: /health
+              port: 8428
+              scheme: HTTP
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 15
+            timeoutSeconds: 5
+          resources:
+            {}
+          volumeMounts:
+            - name: server-volume
+              mountPath: /storage
+              subPath: 
+            - name: scrapeconfig
+              mountPath: /scrapeconfig
+            
+      serviceAccountName: my-ccx-monitoring-victoria-metrics-single
+      terminationGracePeriodSeconds: 60
+      volumes:
+      - name: scrapeconfig
+        configMap:
+          name: my-ccx-monitoring-victoria-metrics-single-server-scrapeconfig
+      - name: server-volume
+        persistentVolumeClaim:
+          claimName: my-ccx-monitoring-victoria-metrics-single-server
+---
+# Source: ccx-monitoring/charts/alertmanager/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-ccx-monitoring-alertmanager
+  labels:
+    helm.sh/chart: alertmanager-1.7.0
+    app.kubernetes.io/name: alertmanager
+    app.kubernetes.io/instance: my-ccx-monitoring
+    app.kubernetes.io/version: "v0.26.0"
+    app.kubernetes.io/managed-by: Helm
+  namespace: default
+spec:
+  replicas: 2
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: alertmanager
+      app.kubernetes.io/instance: my-ccx-monitoring
+  serviceName: my-ccx-monitoring-alertmanager-headless
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: alertmanager
+        app.kubernetes.io/instance: my-ccx-monitoring
+      annotations:
+        checksum/config: dc0df9a0479b3db18c8a6860b0e1503e80c8bfde600d500e1d931b59f5791b36
+        prometheus.io/port: "9093"
+        prometheus.io/scrape: "true"
+    spec:
+      automountServiceAccountToken: true
+      serviceAccountName: my-ccx-monitoring-alertmanager
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchExpressions:
+                  - {key: app.kubernetes.io/name, operator: In, values: [alertmanager]}
+      securityContext:
+        fsGroup: 65534
+      containers:
+        - name: alertmanager
+          securityContext:
+            runAsGroup: 65534
+            runAsNonRoot: true
+            runAsUser: 65534
+          image: "quay.io/prometheus/alertmanager:v0.26.0"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: status.podIP
+          args:
+            - --storage.path=/alertmanager
+            - --config.file=/etc/alertmanager/alertmanager.yml
+            - --cluster.advertise-address=[$(POD_IP)]:9094
+            - --cluster.listen-address=0.0.0.0:9094
+            - --cluster.peer=my-ccx-monitoring-alertmanager-0.my-ccx-monitoring-alertmanager-headless:9094
+            - --cluster.peer=my-ccx-monitoring-alertmanager-1.my-ccx-monitoring-alertmanager-headless:9094
+          ports:
+            - name: http
+              containerPort: 9093
+              protocol: TCP
+            - name: clusterpeer-tcp
+              containerPort: 9094
+              protocol: TCP
+            - name: clusterpeer-udp
+              containerPort: 9094
+              protocol: UDP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+            {}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/alertmanager
+            - name: storage
+              mountPath: /alertmanager
+      volumes:
+        - name: config
+          configMap:
+            name: my-ccx-monitoring-alertmanager
+  volumeClaimTemplates:
+    - metadata:
+        name: storage
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 50Mi
+---
+# Source: ccx-monitoring/charts/grafana/templates/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: my-ccx-monitoring-grafana
+  namespace: default
+  labels:
+    helm.sh/chart: grafana-7.0.1
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: my-ccx-monitoring
+    app.kubernetes.io/version: "10.1.5"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  tls:
+    - hosts:
+      - grafana.local
+      secretName: grafana-cert
+  rules:
+    - host: grafana.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: my-ccx-monitoring-grafana
+                port:
+                  number: 3000
+---
+# Source: ccx-monitoring/charts/grafana/templates/tests/test-serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    helm.sh/chart: grafana-7.0.1
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: my-ccx-monitoring
+    app.kubernetes.io/version: "10.1.5"
+    app.kubernetes.io/managed-by: Helm
+  name: my-ccx-monitoring-grafana-test
+  namespace: default
+  annotations:
+    "helm.sh/hook": test-success
+    "helm.sh/hook-delete-policy": "before-hook-creation,hook-succeeded"
+---
+# Source: ccx-monitoring/charts/grafana/templates/tests/test-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-ccx-monitoring-grafana-test
+  namespace: default
+  annotations:
+    "helm.sh/hook": test-success
+    "helm.sh/hook-delete-policy": "before-hook-creation,hook-succeeded"
+  labels:
+    helm.sh/chart: grafana-7.0.1
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: my-ccx-monitoring
+    app.kubernetes.io/version: "10.1.5"
+    app.kubernetes.io/managed-by: Helm
+data:
+  run.sh: |-
+    @test "Test Health" {
+      url="http://my-ccx-monitoring-grafana/api/health"
+
+      code=$(wget --server-response --spider --timeout 90 --tries 10 ${url} 2>&1 | awk '/^  HTTP/{print $2}')
+      [ "$code" == "200" ]
+    }
+---
+# Source: ccx-monitoring/charts/grafana/templates/tests/test.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-ccx-monitoring-grafana-test
+  labels:
+    helm.sh/chart: grafana-7.0.1
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: my-ccx-monitoring
+    app.kubernetes.io/version: "10.1.5"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test-success
+    "helm.sh/hook-delete-policy": "before-hook-creation,hook-succeeded"
+  namespace: default
+spec:
+  serviceAccountName: my-ccx-monitoring-grafana-test
+  containers:
+    - name: my-ccx-monitoring-test
+      image: "docker.io/bats/bats:v1.4.1"
+      imagePullPolicy: "IfNotPresent"
+      command: ["/opt/bats/bin/bats", "-t", "/tests/run.sh"]
+      volumeMounts:
+        - mountPath: /tests
+          name: tests
+          readOnly: true
+  volumes:
+    - name: tests
+      configMap:
+        name: my-ccx-monitoring-grafana-test
+  restartPolicy: Never

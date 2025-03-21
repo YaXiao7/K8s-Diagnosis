@@ -1,0 +1,385 @@
+---
+# Source: gitlab-zoekt/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-gitlab-zoekt
+  namespace: default
+  labels:
+    helm.sh/chart: gitlab-zoekt-1.4.1
+    app.kubernetes.io/name: gitlab-zoekt
+    app.kubernetes.io/instance: my-gitlab-zoekt
+    app.kubernetes.io/version: "0.8.3"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: gitlab-zoekt/templates/deployment-nginx-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-gitlab-zoekt-gateway-nginx-conf
+  namespace: default
+  labels:
+    helm.sh/chart: gitlab-zoekt-1.4.1
+    app.kubernetes.io/name: gitlab-zoekt
+    app.kubernetes.io/instance: my-gitlab-zoekt
+    app.kubernetes.io/version: "0.8.3"
+    app.kubernetes.io/managed-by: Helm
+    
+    
+data:
+  nginx.conf: |
+    events {
+        use epoll;
+    }
+
+    http {
+        server {
+            listen       8080;
+            server_tokens off;
+
+            proxy_http_version 1.1;
+
+            proxy_set_header Host            $host;
+            proxy_set_header X-Forwarded-For $remote_addr;
+
+            resolver kube-dns.kube-system.svc.cluster.local;
+
+            set $backend_gateway my-gitlab-zoekt.default.svc.cluster.local:8080;
+
+            location = /health {
+              return 200;
+            }
+
+            location / {
+              proxy_pass http://$backend_gateway;
+
+              proxy_read_timeout 30m;
+            }
+
+            location ~ ^/nodes/([^/]+)/(.*) {
+              set $target_host http://$1:8080/$2;
+
+              proxy_pass   $target_host;
+              proxy_read_timeout 30m;
+            }
+        }
+    }
+---
+# Source: gitlab-zoekt/templates/nginx-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-gitlab-zoekt-nginx-conf
+  namespace: default
+  labels:
+    helm.sh/chart: gitlab-zoekt-1.4.1
+    app.kubernetes.io/name: gitlab-zoekt
+    app.kubernetes.io/instance: my-gitlab-zoekt
+    app.kubernetes.io/version: "0.8.3"
+    app.kubernetes.io/managed-by: Helm
+    
+    
+data:
+  nginx.conf: |
+    events {
+        use epoll;
+    }
+
+    http {
+        upstream indexer {
+          server 127.0.0.1:6065;
+        }
+
+        upstream webserver {
+          server 127.0.0.1:6070;
+        }
+
+        server {
+            listen       8080;
+            server_tokens off;
+
+            location = /health {
+              auth_basic off;
+              return 200;
+            }
+
+            location = / {
+              auth_basic off;
+              proxy_pass http://webserver/;
+            }
+
+            location = /metrics {
+              auth_basic off;
+              proxy_pass http://webserver/metrics;
+            }
+
+            location = /indexer/metrics {
+              auth_basic off;
+              proxy_pass http://indexer;
+            }
+
+            location /indexer {
+              proxy_pass http://indexer;
+              proxy_read_timeout 30m;
+            }
+
+            location / {
+              proxy_pass http://webserver;
+            }
+        }
+    }
+---
+# Source: gitlab-zoekt/templates/svc-backend.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-gitlab-zoekt
+  namespace: default
+  labels:
+    helm.sh/chart: gitlab-zoekt-1.4.1
+    app.kubernetes.io/name: gitlab-zoekt
+    app.kubernetes.io/instance: my-gitlab-zoekt
+    app.kubernetes.io/version: "0.8.3"
+    app.kubernetes.io/managed-by: Helm
+    
+    
+    
+spec:
+  clusterIP: None
+  ports:
+  - port: 8080
+    name: gateway
+  selector:
+    app.kubernetes.io/name: gitlab-zoekt
+    app.kubernetes.io/instance: my-gitlab-zoekt
+---
+# Source: gitlab-zoekt/templates/svc-gateway.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-gitlab-zoekt-gateway
+  namespace: default
+  labels:
+    helm.sh/chart: gitlab-zoekt-1.4.1
+    app.kubernetes.io/name: gitlab-zoekt
+    app.kubernetes.io/instance: my-gitlab-zoekt
+    app.kubernetes.io/version: "0.8.3"
+    app.kubernetes.io/managed-by: Helm
+    
+    
+    
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+  - port: 8080
+    name: gateway
+  selector:
+    app.kubernetes.io/name: gitlab-zoekt-gateway
+    app.kubernetes.io/instance: my-gitlab-zoekt
+---
+# Source: gitlab-zoekt/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-gitlab-zoekt-gateway
+  namespace: default
+  labels:
+    helm.sh/chart: gitlab-zoekt-1.4.1
+    app.kubernetes.io/name: gitlab-zoekt
+    app.kubernetes.io/instance: my-gitlab-zoekt
+    app.kubernetes.io/version: "0.8.3"
+    app.kubernetes.io/managed-by: Helm
+    
+    
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: gitlab-zoekt-gateway
+      app.kubernetes.io/instance: my-gitlab-zoekt
+  template:
+    metadata:
+      annotations:
+        checksum/config: 2cd71929a70007d30c12a3fe3e0b5a5462142934054d2c3d8ec3da29a884c55e
+      labels:
+        app.kubernetes.io/name: gitlab-zoekt-gateway
+        app.kubernetes.io/instance: my-gitlab-zoekt
+    spec:
+      containers:
+        - name: zoekt-external-gateway
+          securityContext:
+            {}
+          image: nginx:1.25.5
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+              name: gateway
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+          volumeMounts:
+            - name: nginx-conf
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+              readOnly: true
+            - name: external-nginx-var-run
+              mountPath: /var/run
+            - name: external-nginx-var-cache-nginx
+              mountPath: /var/cache/nginx
+      volumes:
+        - name: nginx-conf
+          configMap:
+            name: my-gitlab-zoekt-gateway-nginx-conf
+            items:
+              - key: nginx.conf
+                path: nginx.conf
+        - name: external-nginx-var-run
+          emptyDir: {}
+        - name: external-nginx-var-cache-nginx
+          emptyDir: {}
+---
+# Source: gitlab-zoekt/templates/stateful_sets.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-gitlab-zoekt
+  namespace: default
+  labels:
+    helm.sh/chart: gitlab-zoekt-1.4.1
+    app.kubernetes.io/name: gitlab-zoekt
+    app.kubernetes.io/instance: my-gitlab-zoekt
+    app.kubernetes.io/version: "0.8.3"
+    app.kubernetes.io/managed-by: Helm
+    
+    
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: gitlab-zoekt
+      app.kubernetes.io/instance: my-gitlab-zoekt
+  serviceName: my-gitlab-zoekt
+  replicas: 1
+  template:
+    metadata:
+      annotations:
+        checksum/config: 6e46870f354d1ad9c67d03dea92774ebb020c5af5ffc7236b3820309f06bd6f6
+      labels:
+        app.kubernetes.io/name: gitlab-zoekt
+        app.kubernetes.io/instance: my-gitlab-zoekt
+    spec:
+      serviceAccountName: my-gitlab-zoekt
+      securityContext:
+        fsGroup: 1000
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: zoekt-indexer
+          securityContext:
+            runAsGroup: 1000
+            runAsUser: 1000
+          image: registry.gitlab.com/gitlab-org/build/cng/gitlab-zoekt-indexer:v0.8.3-e2027
+          imagePullPolicy: IfNotPresent
+          ports:
+          - containerPort: 6065
+            name: indexer
+          livenessProbe:
+            httpGet:
+              path: /indexer/health
+              port: 6065
+          readinessProbe:
+            httpGet:
+              path: /indexer/health
+              port: 6065
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+          volumeMounts:
+          - name: zoekt-index
+            mountPath: /data/index
+          env:
+          - name: CTAGS_COMMAND
+            value: ""
+        - name: zoekt-webserver
+          securityContext:
+            runAsGroup: 1000
+            runAsUser: 1000
+          image: registry.gitlab.com/gitlab-org/build/cng/gitlab-zoekt-webserver:v0.0.2-fcb27
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 6070
+              name: webserver
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 6070
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 6070
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+          volumeMounts:
+          - name: zoekt-index
+            mountPath: /data/index
+          env:
+        - name: zoekt-internal-gateway
+          securityContext:
+            {}
+          image: nginx:1.25.5
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+              name: gateway
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+          volumeMounts:
+            - name: nginx-conf
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+              readOnly: true
+            - name: internal-nginx-var-run
+              mountPath: /var/run
+            - name: internal-nginx-var-cache-nginx
+              mountPath: /var/cache/nginx
+      volumes:
+        - name: nginx-conf
+          configMap:
+            name: my-gitlab-zoekt-nginx-conf
+            items:
+              - key: nginx.conf
+                path: nginx.conf
+        - name: internal-nginx-var-run
+          emptyDir: {}
+        - name: internal-nginx-var-cache-nginx
+          emptyDir: {}
+  volumeClaimTemplates:
+  - metadata:
+      name: zoekt-index
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName:  
+      resources:
+        requests:
+          storage: 2Gi

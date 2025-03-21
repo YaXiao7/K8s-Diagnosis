@@ -1,0 +1,82 @@
+---
+# Source: app/templates/service-account.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-app
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: app
+    helm.sh/chart: app-0.99.18
+    app.kubernetes.io/instance: my-app
+    app.kubernetes.io/managed-by: Helm
+    
+automountServiceAccountToken: true
+---
+# Source: app/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-app
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: app
+    helm.sh/chart: app-0.99.18
+    app.kubernetes.io/instance: my-app
+    app.kubernetes.io/managed-by: Helm
+    
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  minReadySeconds: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: app
+      app.kubernetes.io/instance: my-app
+      
+  template:
+    metadata:
+      annotations:        
+      labels:
+        app.kubernetes.io/name: app
+        helm.sh/chart: app-0.99.18
+        app.kubernetes.io/instance: my-app
+        app.kubernetes.io/managed-by: Helm
+        
+    spec:
+      enableServiceLinks: true
+      serviceAccountName: my-app
+      
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: app
+                    app.kubernetes.io/instance: my-app
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+      initContainers:
+      containers:
+        - name: app
+          image: 
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 1001
+          env:
+          envFrom:
+          resources:
+            limits: {}
+            requests: {}
+          volumeMounts:
+      volumes:

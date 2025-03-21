@@ -1,0 +1,231 @@
+---
+# Source: training-operator/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-training-operator
+  labels:
+    helm.sh/chart: training-operator-1.2.2
+    app.kubernetes.io/name: training-operator
+    app.kubernetes.io/instance: my-training-operator
+    app.kubernetes.io/version: "1.3.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: training-operator/templates/clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-training-operator
+  labels:
+    helm.sh/chart: training-operator-1.2.2
+    app.kubernetes.io/name: training-operator
+    app.kubernetes.io/instance: my-training-operator
+    app.kubernetes.io/version: "1.3.0"
+    app.kubernetes.io/managed-by: Helm
+rules:
+  - apiGroups:
+      - kubeflow.org
+    resources:
+      - tfjobs
+      - mxjobs
+      - pytorchjobs
+      - xgboostjobs
+      - tfjobs/status
+      - pytorchjobs/status
+      - mxjobs/status
+      - xgboostjobs/status
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+      - services
+      - endpoints
+      - events
+    verbs:
+      - "*"
+  - apiGroups:
+      - apps
+      - extensions
+    resources:
+      - deployments
+    verbs:
+      - "*"
+  - apiGroups:
+      - scheduling.volcano.sh
+    resources:
+      - podgroups
+    verbs:
+      - "*"
+---
+# Source: training-operator/templates/clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-training-operator
+  labels:
+    helm.sh/chart: training-operator-1.2.2
+    app.kubernetes.io/name: training-operator
+    app.kubernetes.io/instance: my-training-operator
+    app.kubernetes.io/version: "1.3.0"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-training-operator
+subjects:
+  - kind: ServiceAccount
+    name: my-training-operator
+    namespace: default
+---
+# Source: training-operator/templates/metrics-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-training-operator-metrics
+  labels:
+    helm.sh/chart: training-operator-1.2.2
+    app.kubernetes.io/name: training-operator
+    app.kubernetes.io/instance: my-training-operator
+    app.kubernetes.io/version: "1.3.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: http-metrics
+      protocol: TCP
+      name: http-metrics
+  selector:
+    app.kubernetes.io/name: training-operator
+    app.kubernetes.io/instance: my-training-operator
+---
+# Source: training-operator/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-training-operator
+  labels:
+    helm.sh/chart: training-operator-1.2.2
+    app.kubernetes.io/name: training-operator
+    app.kubernetes.io/instance: my-training-operator
+    app.kubernetes.io/version: "1.3.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: training-operator
+      app.kubernetes.io/instance: my-training-operator
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: training-operator
+        app.kubernetes.io/instance: my-training-operator
+    spec:
+      serviceAccountName: my-training-operator
+      securityContext:
+        {}
+      containers:
+        - name: training-operator
+          securityContext:
+            {}
+          image: "public.ecr.aws/j1r0q0g6/training/training-operator:760ac1171dd30039a7363ffa03c77454bd714da5"
+          imagePullPolicy: IfNotPresent
+          command:
+            - /manager
+          env:
+            - name: MY_POD_NAMESPACE
+              value: default
+            - name: MY_POD_NAME
+              value: my-training-operator
+          ports:
+            - name: http-metrics
+              containerPort: 8080
+              protocol: TCP
+            - name: http-probes
+              containerPort: 8081
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http-probes
+            initialDelaySeconds: 0
+            periodSeconds: 10
+            timeoutSeconds: 1
+            failureThreshold: 3
+            successThreshold: 1
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http-probes
+            initialDelaySeconds: 0
+            periodSeconds: 10
+            timeoutSeconds: 1
+            failureThreshold: 3
+            successThreshold: 1
+          resources:
+            {}
+---
+# Source: training-operator/templates/tests/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-training-operator-tests
+  labels:
+    helm.sh/chart: training-operator-1.2.2
+    app.kubernetes.io/name: training-operator
+    app.kubernetes.io/instance: my-training-operator
+    app.kubernetes.io/version: "1.3.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: tests
+  annotations:
+    helm.sh/hook: test
+data:
+  test_all.py: |
+    import requests
+
+
+    def test_metrics_service_connection():
+        url = "http://my-training-operator-metrics:8080/metrics"
+
+        response = requests.get(url)
+
+        assert response.status_code == 200
+---
+# Source: training-operator/templates/tests/pod.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-training-operator-tests
+  labels:
+    helm.sh/chart: training-operator-1.2.2
+    app.kubernetes.io/name: training-operator
+    app.kubernetes.io/instance: my-training-operator
+    app.kubernetes.io/version: "1.3.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: tests
+  annotations:
+    helm.sh/hook: test
+spec:
+  containers:
+    - name: tests
+      image: "ghcr.io/cowboysysop/pytest:1.0.35"
+      imagePullPolicy: IfNotPresent
+      volumeMounts:
+        - name: tests
+          mountPath: /tests
+          readOnly: true
+      workingDir: /tests
+  restartPolicy: Never
+  volumes:
+    - name: tests
+      configMap:
+        name: my-training-operator-tests

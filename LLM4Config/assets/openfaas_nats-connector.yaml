@@ -1,0 +1,72 @@
+---
+# Source: nats-connector/templates/deployment.yml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nats-connector
+    component: nats-connector
+    chart: nats-connector-0.3.2
+    heritage: Helm
+    release: my-nats-connector
+    # Helm/k8s recommended label names v
+    app.kubernetes.io/name: nats-connector
+    app.kubernetes.io/instance: my-nats-connector
+    app.kubernetes.io/version: 0.3.2
+    app.kubernetes.io/component: nats-connector
+    app.kubernetes.io/part-of: openfaas
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: nats-connector-0.3.2
+  name: my-nats-connector
+  namespace: "default"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nats-connector
+      component: nats-connector
+
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "false"
+      labels:
+        app: nats-connector
+        component: nats-connector
+    spec:
+      containers:
+        - name: nats-connector
+          image: ghcr.io/openfaas/nats-connector:0.3.0
+          env:
+            - name: upstream_timeout
+              value: "30s"
+            - name: gateway_url
+              value: "http://gateway.openfaas:8080"
+            - name: topics
+              value: "nats-test,"
+            - name: print_response
+              value: "false"
+            - name: print_response_body
+              value: "false"
+            - name: basic_auth
+              value: "true"
+            - name: secret_mount_path
+              value: "/var/secrets/"
+            - name: topic_delimiter
+              value: ","
+            - name: asynchronous_invocation
+              value: "false"
+            - name: broker_host
+              value: "nats"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+          volumeMounts:
+            - name: auth
+              readOnly: true
+              mountPath: "/var/secrets/"
+      volumes:
+        - name: auth
+          secret:
+            secretName: basic-auth

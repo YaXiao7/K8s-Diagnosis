@@ -1,0 +1,197 @@
+---
+# Source: keycloakx/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-keycloakx
+  namespace: default
+  labels:
+    helm.sh/chart: keycloakx-2.5.1
+    app.kubernetes.io/name: keycloakx
+    app.kubernetes.io/instance: my-keycloakx
+    app.kubernetes.io/version: "25.0.0"
+    app.kubernetes.io/managed-by: Helm
+imagePullSecrets:
+    []
+automountServiceAccountToken: true
+---
+# Source: keycloakx/templates/service-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-keycloakx-headless
+  namespace: default
+  labels:
+    helm.sh/chart: keycloakx-2.5.1
+    app.kubernetes.io/name: keycloakx
+    app.kubernetes.io/instance: my-keycloakx
+    app.kubernetes.io/version: "25.0.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: headless
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: keycloakx
+    app.kubernetes.io/instance: my-keycloakx
+---
+# Source: keycloakx/templates/service-http.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-keycloakx-http
+  namespace: default
+  labels:
+    helm.sh/chart: keycloakx-2.5.1
+    app.kubernetes.io/name: keycloakx
+    app.kubernetes.io/instance: my-keycloakx
+    app.kubernetes.io/version: "25.0.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: http
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
+    - name: https
+      port: 8443
+      targetPort: https
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: keycloakx
+    app.kubernetes.io/instance: my-keycloakx
+---
+# Source: keycloakx/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-keycloakx
+  namespace: default
+  labels:
+    helm.sh/chart: keycloakx-2.5.1
+    app.kubernetes.io/name: keycloakx
+    app.kubernetes.io/instance: my-keycloakx
+    app.kubernetes.io/version: "25.0.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: keycloakx
+      app.kubernetes.io/instance: my-keycloakx
+  replicas: 1
+  serviceName: my-keycloakx-headless
+  podManagementPolicy: OrderedReady
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations:
+        checksum/config-startup: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+        checksum/secrets: 44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a
+      labels:
+        app.kubernetes.io/name: keycloakx
+        app.kubernetes.io/instance: my-keycloakx
+    spec:
+      containers:
+        - name: keycloak
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+          image: "quay.io/keycloak/keycloak:25.0.0"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: KC_HTTP_RELATIVE_PATH
+              value: /auth
+            - name: KC_CACHE
+              value: "ispn"
+            - name: KC_CACHE_STACK
+              value: "kubernetes"
+            - name: KC_PROXY_HEADERS
+              value: forwarded
+            - name: KC_HTTP_ENABLED
+              value: "true"
+            - name: KC_METRICS_ENABLED
+              value: "true"
+            - name: KC_HEALTH_ENABLED
+              value: "true"
+          envFrom:
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: 'http-internal'
+              containerPort: 9000
+              protocol: TCP
+            - name: https
+              containerPort: 8443
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: '/auth/health/live'
+              port: 'http-internal'
+              scheme: 'HTTP'
+            initialDelaySeconds: 0
+            timeoutSeconds: 5
+            
+          readinessProbe:
+            httpGet:
+              path: '/auth/health/ready'
+              port: 'http-internal'
+              scheme: 'HTTP'
+            initialDelaySeconds: 10
+            timeoutSeconds: 1
+            
+          startupProbe:
+            httpGet:
+              path: '/auth/health'
+              port: 'http-internal'
+              scheme: 'HTTP'
+            initialDelaySeconds: 15
+            timeoutSeconds: 1
+            failureThreshold: 60
+            periodSeconds: 5
+            
+          resources:
+            {}
+          volumeMounts:
+      serviceAccountName: my-keycloakx
+      securityContext:
+        fsGroup: 1000
+      enableServiceLinks: true
+      restartPolicy: Always
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: keycloakx
+                  app.kubernetes.io/instance: my-keycloakx
+                matchExpressions:
+                  - key: app.kubernetes.io/component
+                    operator: NotIn
+                    values:
+                      - test
+              topologyKey: kubernetes.io/hostname
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: keycloakx
+                    app.kubernetes.io/instance: my-keycloakx
+                  matchExpressions:
+                    - key: app.kubernetes.io/component
+                      operator: NotIn
+                      values:
+                        - test
+                topologyKey: topology.kubernetes.io/zone
+        
+      terminationGracePeriodSeconds: 60
+      volumes:

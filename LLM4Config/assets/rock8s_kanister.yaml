@@ -1,0 +1,265 @@
+---
+# Source: kanister/templates/secrets/s3.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: kanister-creds
+  namespace: default
+  labels:
+    app.kubernetes.io/name: kanister
+    helm.sh/chart: kanister-0.93.0
+    app.kubernetes.io/instance: my-kanister
+    app.kubernetes.io/managed-by: Helm
+type: secrets.kanister.io/aws
+stringData:
+  AWS_ACCESS_KEY_ID: ""
+  AWS_SECRET_ACCESS_KEY: ""
+---
+# Source: kanister/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: default.kanister
+  labels:
+    app.kubernetes.io/name: kanister
+    helm.sh/chart: kanister-0.93.0
+    app.kubernetes.io/instance: my-kanister
+    app.kubernetes.io/managed-by: Helm
+rules:
+  - apiGroups:
+      - apps
+    resources:
+      - statefulsets
+      - deployments
+      - daemonsets
+      - replicasets
+    verbs:
+      - create
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups: ['']
+    resources:
+      - secrets
+    verbs:
+      - get
+      - list
+      - update
+  - apiGroups:
+      - cr.kanister.io
+    resources:
+      - '*'
+    verbs:
+      - '*'
+  - apiGroups:
+      - integration.rock8s.com
+    resources:
+      - plugs
+    verbs:
+      - '*'
+---
+# Source: kanister/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: default.kanister
+  labels:
+    app.kubernetes.io/name: kanister
+    helm.sh/chart: kanister-0.93.0
+    app.kubernetes.io/instance: my-kanister
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: default.kanister
+subjects:
+  - kind: ServiceAccount
+    name: default
+    namespace: default
+---
+# Source: kanister/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: kanister
+  labels:
+    app.kubernetes.io/name: kanister
+    helm.sh/chart: kanister-0.93.0
+    app.kubernetes.io/instance: my-kanister
+    app.kubernetes.io/managed-by: Helm
+rules:
+  # TODO: narrow api groups
+  - apiGroups:
+      - '*'
+    resources:
+      - '*'
+    verbs:
+      - '*'
+---
+# Source: kanister/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kanister
+  labels:
+    app.kubernetes.io/name: kanister
+    helm.sh/chart: kanister-0.93.0
+    app.kubernetes.io/instance: my-kanister
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: kanister
+subjects:
+  - kind: ServiceAccount
+    name: default
+    namespace: default
+---
+# Source: kanister/templates/profile.yaml
+apiVersion: cr.kanister.io/v1alpha1
+kind: Profile
+metadata:
+  name: kanister
+  labels:
+    app.kubernetes.io/name: kanister
+    helm.sh/chart: kanister-0.93.0
+    app.kubernetes.io/instance: my-kanister
+    app.kubernetes.io/managed-by: Helm
+location:
+  type: s3Compliant
+  bucket: ""
+  endpoint: "aws.us-east-1.amazonaws.com"
+  prefix: ""
+  region: ""
+credential:
+  type: keyPair
+  keyPair:
+    idField: AWS_ACCESS_KEY_ID
+    secretField: AWS_SECRET_ACCESS_KEY
+    secret:
+      apiVersion: v1
+      kind: Secret
+      name: kanister-creds
+      namespace: default
+skipSSLVerify: true
+---
+# Source: kanister/templates/socket.yaml
+apiVersion: integration.rock8s.com/v1beta1
+kind: Socket
+metadata:
+  name: kanister
+  labels:
+    app.kubernetes.io/name: kanister
+    helm.sh/chart: kanister-0.93.0
+    app.kubernetes.io/instance: my-kanister
+    app.kubernetes.io/managed-by: Helm
+spec:
+  epoch: "1726482891"
+  interface:
+    config:
+      plug:
+        blueprint:
+          required: true
+        workload:
+          required: true
+        schedule: {}
+  resources:
+    - when: [coupled, updated]
+      do: recreate
+      stringTemplate: |
+        apiVersion: batch/v1
+        kind: Job
+        metadata:
+          name: kanister-coupled-or-updated-{% .plug.metadata.namespace %}
+        spec:
+          activeDeadlineSeconds: 360
+          backoffLimit: 6
+          ttlSecondsAfterFinished: 360
+          template:
+            metadata:
+              annotations:
+                sidecar.istio.io/inject: 'false'
+            spec:
+              automountServiceAccountToken: true
+              restartPolicy: Never
+              affinity:
+                nodeAffinity:
+                  requiredDuringSchedulingIgnoredDuringExecution:
+                    nodeSelectorTerms:
+                      - matchExpressions:
+                          - key: kubernetes.io/arch
+                            operator: In
+                            values:
+                              - amd64
+              containers:
+                - name: kubectl
+                  image: registry.gitlab.com/bitspur/rock8s/images/kube-commands:3.18
+                  command:
+                    - sh
+                    - -c
+                    - |
+                      cat <<EOF | kubectl get -f - -o json | \
+                        jq '.items[0].metadata.name = "{% .plug.metadata.namespace %}.{% .plugConfig.blueprint %}"' | \
+                        jq '.items[0].metadata.namespace = ""' | \
+                        kubectl apply -f - --namespace=default
+                      apiVersion: cr.kanister.io/v1alpha1
+                      kind: Blueprint
+                      metadata:
+                        name: {% .plugConfig.blueprint | quote %}
+                        namespace: {% .plug.metadata.namespace | quote %}
+                      EOF
+                      kubectl get pods -n default \
+                        -l job-name=kanister-coupled-or-updated-{% .plug.metadata.namespace %} \
+                        --field-selector status.phase=Failed \
+                        -o yaml | kubectl delete -f -
+    - when: [coupled, updated]
+      do: recreate
+      stringTemplate: |
+        {%- if .plugConfig.schedule %}
+        apiVersion: batch/v1
+        kind: CronJob
+        metadata:
+          name: kanister-{% .plug.metadata.namespace %}
+        spec:
+          schedule: {% .plugConfig.schedule | quote %}
+          jobTemplate:
+            spec:
+              activeDeadlineSeconds: 360
+              backoffLimit: 6
+              ttlSecondsAfterFinished: 360
+              template:
+                metadata:
+                  annotations:
+                    sidecar.istio.io/inject: 'false'
+                spec:
+                  automountServiceAccountToken: true
+                  restartPolicy: Never
+                  affinity:
+                    nodeAffinity:
+                      requiredDuringSchedulingIgnoredDuringExecution:
+                        nodeSelectorTerms:
+                          - matchExpressions:
+                              - key: kubernetes.io/arch
+                                operator: In
+                                values:
+                                  - amd64
+                  containers:
+                    - name: backup
+                      image: registry.gitlab.com/bitspur/rock8s/images/kanukopia:0.100.0-bookworm
+                      command:
+                        - /bin/sh
+                        - -c
+                        - |
+                          kanukopia backup \
+                            -n '{% .plug.metadata.namespace %}' \
+                            '{% .plugConfig.blueprint %}'
+        {%- end %}
+    - when: [decoupled]
+      do: delete
+      template:
+        apiVersion: cr.kanister.io/v1alpha1
+        kind: Blueprint
+        metadata:
+          name: '{% .plug.metadata.namespace %}.{% .plugConfig.blueprint %}'

@@ -1,0 +1,779 @@
+---
+# Source: finops-policies/templates/autoscaler_policies/hpa-rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/component: cleanup-controller
+    app.kubernetes.io/instance: kyverno
+    app.kubernetes.io/part-of: kyverno
+  name: kyverno:create-hpa
+rules:
+- apiGroups:
+  - "autoscaling"
+  resources:
+  - horizontalpodautoscalers
+  verbs:
+  - get
+  - watch
+  - list
+  - create
+  - update
+  - delete
+---
+# Source: finops-policies/templates/cleanup-rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/component: cleanup-controller
+    app.kubernetes.io/instance: kyverno
+    app.kubernetes.io/part-of: kyverno
+  name: kyverno:cleanup-deployments
+rules:
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  verbs:
+  - get
+  - watch
+  - list
+  - delete
+---
+# Source: finops-policies/templates/scale_deployment_to_zero-rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/component: background-controller
+    app.kubernetes.io/instance: kyverno
+    app.kubernetes.io/part-of: kyverno
+  name: kyverno:update-deployments
+rules:
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  verbs:
+  - update
+---
+# Source: finops-policies/templates/autoscaler_policies/hpa-rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kyverno:create-hpa
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kyverno:create-hpa
+subjects:
+- kind: ServiceAccount
+  name: kyverno-background-controller
+  namespace: default
+---
+# Source: finops-policies/templates/cleanup-rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kyverno:cleanup-deployments
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kyverno:cleanup-deployments
+subjects:
+- kind: ServiceAccount
+  name: kyverno-cleanup-controller
+  namespace: default
+---
+# Source: finops-policies/templates/scale_deployment_to_zero-rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kyverno:update-deployments
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kyverno:update-deployments
+subjects:
+- kind: ServiceAccount
+  name: kyverno-background-controller
+  namespace: default
+---
+# Source: finops-policies/templates/cleanup.yaml
+apiVersion: kyverno.io/v2
+kind: ClusterCleanupPolicy
+metadata:
+  name: cleandeploy
+  annotations:
+    policies.kyverno.io/title: Cluster Cleanup Policy
+    policies.kyverno.io/category: FinOps
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/subject: Service
+    policies.kyverno.io/minversion: 1.9.0
+    policies.kyverno.io/description: >-
+      Automate the resource cleanup process by using a CleanupPolicy.
+
+      Remove Deployments which have the label canremove: "true" if they have less than two replicas on a schedule of every 5 minutes.
+  labels:
+    helm.sh/chart: finops-policies-v0.0.6
+    app.kubernetes.io/name: finops-policies
+    app.kubernetes.io/instance: my-finops-policies
+    app.kubernetes.io/version: "v0.0.6"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  match:
+    any:
+    - resources:
+        kinds:
+          - Deployment
+        selector:
+          matchLabels:
+            canremove: "true"
+  conditions:
+    any:
+    - key: "{{ target.spec.replicas }}"
+      operator: LessThan
+      value: 2
+  schedule: "*/5 * * * *"
+---
+# Source: finops-policies/templates/autoscaler_policies/add_hpa.yaml
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: add-hpa
+  annotations:
+    policies.kyverno.io/title: Add Horizontal Pod Autoscaler
+    policies.kyverno.io/category: FinOps
+    policies.kyverno.io/subject: Add HPA
+    policies.kyverno.io/minversion: 1.8.0
+    policies.kyverno.io/description: >-
+      A Kyverno policy can generate HPA resources for each deployment that ensures that the application
+      can handle sudden spikes in traffic without downtime, and can also scale down when the demand decreases,
+      which saves resources and reduces costs
+  labels:
+    helm.sh/chart: finops-policies-v0.0.6
+    app.kubernetes.io/name: finops-policies
+    app.kubernetes.io/instance: my-finops-policies
+    app.kubernetes.io/version: "v0.0.6"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  rules:
+  - name: default-hpa
+    match:
+      any:
+      - resources:
+          kinds:
+          - Deployment
+    generate:
+      apiVersion: autoscaling/v1
+      kind: HorizontalPodAutoscaler
+      name: "{{request.object.metadata.name}}"
+      namespace: "{{request.object.metadata.namespace}}"
+      data:
+        kind: HorizontalPodAutoscaler
+        spec:
+          scaleTargetRef:
+            apiVersion: apps/v1
+            kind: Deployment
+            name: "{{request.object.metadata.name}}"
+          minReplicas: 1
+          maxReplicas: 10
+        targetCPUUtilizationPercentage: 50
+---
+# Source: finops-policies/templates/autoscaler_policies/add_safe_to_evict.yaml
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: add-safe-to-evict
+  annotations:
+    policies.kyverno.io/category: FinOps
+    policies.kyverno.io/subject: Pod,Annotation
+    policies.kyverno.io/minversion: 1.6.0
+    policies.kyverno.io/description: >-
+      The Kubernetes cluster autoscaler does not evict pods that
+      use hostPath or emptyDir volumes. To allow eviction of these pods, the annotation
+      cluster-autoscaler.kubernetes.io/safe-to-evict=true must be added to the pods.
+  labels:
+    helm.sh/chart: finops-policies-v0.0.6
+    app.kubernetes.io/name: finops-policies
+    app.kubernetes.io/instance: my-finops-policies
+    app.kubernetes.io/version: "v0.0.6"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  rules:
+  - name: annotate-empty-dir
+    match:
+      any:
+      - resources:
+          kinds:
+          - Pod
+    mutate:
+      patchStrategicMerge:
+        metadata:
+          annotations:
+            +(cluster-autoscaler.kubernetes.io/safe-to-evict): "true"
+        spec:
+          volumes:
+          - <(emptyDir): {}
+  - name: annotate-host-path
+    match:
+      any:
+      - resources:
+          kinds:
+          - Pod
+    mutate:
+      patchStrategicMerge:
+        metadata:
+          annotations:
+            +(cluster-autoscaler.kubernetes.io/safe-to-evict): "true"
+        spec:
+          volumes:
+          - hostPath:
+              <(path): "*"
+---
+# Source: finops-policies/templates/block-large-image.yaml
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: block-large-images
+  annotations:
+    policies.kyverno.io/title: Block Large Images
+    policies.kyverno.io/category: Other
+    policies.kyverno.io/severity: medium
+    kyverno.io/kyverno-version: 1.6.0
+    policies.kyverno.io/minversion: 1.6.0
+    kyverno.io/kubernetes-version: "1.23"
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/description: >-
+      Pods which run containers of very large image size take longer to pull
+      and require more space to store. A user may either inadvertently or purposefully
+      name an image which is unusually large to disrupt operations. This policy
+      checks the size of every container image and blocks if it is over 2 Gibibytes.
+  labels:
+    helm.sh/chart: finops-policies-v0.0.6
+    app.kubernetes.io/name: finops-policies
+    app.kubernetes.io/instance: my-finops-policies
+    app.kubernetes.io/version: "v0.0.6"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  validationFailureAction: Audit
+  rules:
+  - name: block-over-twogi
+    match:
+      any:
+      - resources:
+          kinds:
+          - Pod
+    preconditions:
+      all:
+      - key: "{{request.operation || 'BACKGROUND'}}"
+        operator: NotEquals
+        value: DELETE
+    validate:
+      message: "images with size greater than 2Gi not allowed"
+      foreach:
+      - list: "request.object.spec.containers"
+        context:
+        - name: imageSize
+          imageRegistry:
+            reference: "{{ element.image }}"
+            # Note that we need to use `to_string` here to allow kyverno to treat it like a resource quantity of type memory
+            # the total size of an image as calculated by docker is the total sum of its layer sizes
+            jmesPath: "to_string(sum(manifest.layers[*].size))"
+        deny:
+          conditions:
+            all:
+            - key: "2Gi"
+              operator: LessThan
+              value: "{{imageSize}}"
+---
+# Source: finops-policies/templates/disallow_service_type_loadBalancer.yaml
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: no-loadbalancer-service
+  annotations:
+    policies.kyverno.io/title: Disallow Service Type LoadBalancer
+    policies.kyverno.io/category: FinOps
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/subject: Service
+    policies.kyverno.io/minversion: 1.6.0
+    policies.kyverno.io/description: >-
+      Especially in cloud provider environments, a Service having type LoadBalancer will cause the
+      provider to respond by creating a load balancer somewhere in the customer account. This adds
+      cost and complexity to a deployment. Without restricting this ability, users may easily
+      overrun established budgets and security practices set by the organization. This policy restricts
+      use of the Service type LoadBalancer.
+  labels:
+    helm.sh/chart: finops-policies-v0.0.6
+    app.kubernetes.io/name: finops-policies
+    app.kubernetes.io/instance: my-finops-policies
+    app.kubernetes.io/version: "v0.0.6"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  validationFailureAction: Audit
+  background: true
+  rules:
+  - name: no-LoadBalancer
+    match:
+      any:
+      - resources:
+          kinds:
+          - Service
+    validate:
+      message: "Service of type LoadBalancer is not allowed."
+      pattern:
+        spec:
+          type: "!LoadBalancer"
+---
+# Source: finops-policies/templates/prevent_orphan_pods.yaml
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: prevent-naked-pods
+  annotations:
+    policies.kyverno.io/title: Prevent Orphan Pods
+    pod-policies.kyverno.io/autogen-controllers: none
+    policies.kyverno.io/category: FinOps
+    policies.kyverno.io/severity: medium
+    kyverno.io/kyverno-version: 1.7.0
+    policies.kyverno.io/minversion: 1.6.0
+    kyverno.io/kubernetes-version: "1.23"
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/description: >-
+      Pods not created by workload controllers such as Deployments
+      have no self-healing or scaling abilities and are unsuitable for production.
+      This policy prevents such "naked" Pods from being created unless they originate
+      from a higher-level workload controller of some sort.
+  labels:
+    helm.sh/chart: finops-policies-v0.0.6
+    app.kubernetes.io/name: finops-policies
+    app.kubernetes.io/instance: my-finops-policies
+    app.kubernetes.io/version: "v0.0.6"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  validationFailureAction: Audit
+  background: true
+  rules:
+  - name: naked-pods
+    match:
+      any:
+      - resources:
+          kinds:
+          - Pod
+    preconditions:
+      all:
+      - key: "{{request.operation || 'BACKGROUND'}}"
+        operator: NotEquals
+        value: DELETE
+    validate:
+      message: "Naked Pods are not allowed. They must be created by Pod controllers."
+      deny:
+        conditions:
+          any:
+          - key: ownerReferences
+            operator: AnyNotIn
+            value: "{{request.object.metadata.keys(@)}}"
+---
+# Source: finops-policies/templates/quota_management_policies/Add_ns_quota.yaml
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: add-ns-quota
+  annotations:
+    policies.kyverno.io/title: Add Quota
+    policies.kyverno.io/category: FinOps
+    policies.kyverno.io/subject: ResourceQuota, LimitRange
+    policies.kyverno.io/minversion: 1.6.0
+    policies.kyverno.io/description: >-
+      To better control the number of resources that can be created in a given
+      Namespace and provide default resource consumption limits for Pods,
+      ResourceQuota and LimitRange resources are recommended.
+      This policy will generate ResourceQuota and LimitRange resources when
+      a new Namespace is created.
+spec:
+  rules:
+  - name: generate-resourcequota
+    match:
+      any:
+      - resources:
+          kinds:
+          - Namespace
+    generate:
+      apiVersion: v1
+      kind: ResourceQuota
+      name: default-resourcequota
+      synchronize: true
+      namespace: "{{request.object.metadata.name}}"
+      data:
+        spec:
+          hard:
+            requests.cpu: '4'
+            requests.memory: '16Gi'
+            limits.cpu: '4'
+            limits.memory: '16Gi'
+  - name: generate-limitrange
+    match:
+      any:
+      - resources:
+          kinds:
+          - Namespace
+    generate:
+      apiVersion: v1
+      kind: LimitRange
+      name: default-limitrange
+      synchronize: true
+      namespace: "{{request.object.metadata.name}}"
+      data:
+        spec:
+          limits:
+          - default:
+              cpu: 500m
+              memory: 1Gi
+            defaultRequest:
+              cpu: 200m
+              memory: 256Mi
+            type: Container
+---
+# Source: finops-policies/templates/quota_management_policies/Require limits_and_requests.yaml
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-requests-limits
+  annotations:
+    policies.kyverno.io/title: Require Limits and Requests
+    policies.kyverno.io/category: FinOps
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/minversion: 1.6.0
+    policies.kyverno.io/description: >-
+      As application workloads share cluster resources, it is important to limit resources
+      requested and consumed by each Pod. It is recommended to require resource requests and
+      limits per Pod, especially for memory and CPU. If a Namespace level request or limit is specified,
+      defaults will automatically be applied to each Pod based on the LimitRange configuration.
+      This policy validates that all containers have something specified for memory and CPU
+      requests and memory limits.
+spec:
+  validationFailureAction: Audit
+  background: true
+  rules:
+  - name: validate-resources
+    match:
+      any:
+      - resources:
+          kinds:
+          - Pod
+    validate:
+      message: "CPU and memory resource requests and limits are required."
+      pattern:
+        spec:
+          containers:
+          - resources:
+              requests:
+                memory: "?*"
+                cpu: "?*"
+              limits:
+                memory: "?*"
+---
+# Source: finops-policies/templates/quota_management_policies/namespace_inventory_check.yaml
+apiVersion: kyverno.io/v2beta1
+kind: ClusterPolicy
+metadata:
+  name: namespace-inventory-check
+  annotations:
+    policies.kyverno.io/title: Namespace Inventory Check
+    policies.kyverno.io/category: FinOps
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/subject: Namespace
+    kyverno.io/kyverno-version: 1.9.0
+    policies.kyverno.io/minversion: 1.9.0
+    kyverno.io/kubernetes-version: "1.24"
+    policies.kyverno.io/description: >-
+      In cases such as multi-tenancy where new Namespaces must be fully
+      provisioned before they can be used, it may not be easy to declare and
+      understand if/when the Namespace is ready. Having a policy which defines
+      all the resources which are required for each Namespace can assist in determining
+      compliance. This policy, expected to be run in background mode only, performs a Namespace
+      inventory check to ensure that all Namespaces have a ResourceQuota and NetworkPolicy.
+      Additional rules may be written to extend the check for your needs. By default, background
+      scans occur every one hour which may be changed with an additional container flag. Please
+      see the installation documentation for details.
+spec:
+  background: true
+  validationFailureAction: Audit
+  rules:
+  - name: resourcequotas
+    match:
+      any:
+      - resources:
+          kinds:
+          - Namespace
+    # exclude:
+    #   any:
+    #   - resources:
+    #       namespaces:
+    #       - kube-system
+    #       - kube-public
+    #       - kube-node-lease
+    #       - gke-*
+    #       - gmp-*
+    context:
+    - name: resourcequotas
+      apiCall:
+        urlPath: "/api/v1/namespaces/{{request.object.metadata.name}}/resourcequotas"
+        jmesPath: "items[] | length(@)"
+    validate:
+      message: "Every Namespace must have at least one ResourceQuota."
+      deny:
+        conditions:
+          all:
+          - key: "{{ resourcequotas }}"
+            operator: Equals
+            value: 0
+  - name: networkpolicies
+    match:
+      any:
+      - resources:
+          kinds:
+          - Namespace
+    # exclude:
+    #   any:
+    #   - resources:
+    #       namespaces:
+    #       - kube-system
+    #       - kube-public
+    #       - kube-node-lease
+    #       - gke-*
+    #       - gmp-*
+    context:
+    - name: netpols
+      apiCall:
+        urlPath: "/apis/networking.k8s.io/v1/namespaces/{{request.object.metadata.name}}/networkpolicies"
+        jmesPath: "items[] | length(@)"
+    validate:
+      message: "Every Namespace must have at least one NetworkPolicy."
+      deny:
+        conditions:
+          all:
+          - key: "{{ netpols }}"
+            operator: Equals
+            value: 0
+---
+# Source: finops-policies/templates/restrict_scale.yaml
+apiVersion: kyverno.io/v2beta1
+kind: ClusterPolicy
+metadata:
+  name: restrict-scale
+  annotations:
+    policies.kyverno.io/title: Restrict Scale
+    policies.kyverno.io/category: FinOps
+    policies.kyverno.io/severity: medium
+    kyverno.io/kyverno-version: 1.9.0
+    policies.kyverno.io/minversion: 1.9.0
+    kyverno.io/kubernetes-version: "1.24"
+    policies.kyverno.io/subject: Deployment
+    policies.kyverno.io/description: >-
+      Pod controllers such as Deployments which implement replicas and permit the scale action
+      use a `/scale` subresource to control this behavior. In addition to checks for creations of
+      such controllers that their replica is in a certain shape, the scale operation and subresource
+      needs to be accounted for as well. This policy, operable beginning in Kyverno 1.9, is a collection
+      of rules which can be used to limit the replica count both upon creation of a Deployment and
+      when a scale operation is performed.
+  labels:
+    helm.sh/chart: finops-policies-v0.0.6
+    app.kubernetes.io/name: finops-policies
+    app.kubernetes.io/instance: my-finops-policies
+    app.kubernetes.io/version: "v0.0.6"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  validationFailureAction: Audit
+  background: false
+  rules:
+  # This rule can be used to limit scale operations based upon Deployment labels assuming the given label
+  # is also used as a selector.
+  - name: scale-max-eight
+    match:
+      any:
+      - resources:
+          kinds:
+          - Deployment/scale
+    validate:
+      message: The replica count for this Deployment may not exceed 8.
+      pattern:
+        =(status):
+          =(selector): "*type=monitoring*"
+        spec:
+          replicas: <9
+  # This rule can be used for more advanced decision making, for example limiting scale based
+  # upon Deployment annotations which are not sent by the API server to admission controllers
+  # when a scale is performed.
+  - name: scale-max-eight-annotations
+    match:
+      any:
+      - resources:
+          kinds:
+          - Deployment/scale
+    context:
+      - name: parentdeploy
+        apiCall:
+          urlPath: "/apis/apps/v1/namespaces/{{request.namespace}}/deployments?fieldSelector=metadata.name={{request.name}}"
+          jmesPath: "items[0]"
+      - name: dept
+        variable:
+          jmesPath: parentdeploy.metadata.annotations."corp.org/dept"
+          default: empty
+    validate:
+      message: The replica count for this Deployment may not exceed 8.
+      deny:
+        conditions:
+          all:
+          - key: "{{dept}}"
+            operator: Equals
+            value: engineering
+          - key: "{{request.object.spec.replicas}}"
+            operator: GreaterThan
+            value: 8
+  # This rule, which is a simple check on Deployments for replicas (not scaling them) can be used
+  # to complement scale operations. This may be needed along with at least one of the prior two rules
+  # to fully limit the number of total replicas allowed. For example, this rule would limit creation of
+  # Deployments to no more than 4 replicas, without an additional rule for scaling it would not prevent
+  # scaling over 4. By combining this CREATE rule with one of the scale rules above, a cluster admin
+  # may effectively provide an allowed range of replicas good for both day1 and day2 operations.
+  - name: create-max-four
+    match:
+      any:
+      - resources:
+          kinds:
+          - Deployment
+          selector:
+            matchLabels:
+              type: monitoring
+    validate:
+      message: The replica count for this Deployment may not exceed 4.
+      pattern:
+        spec:
+          replicas: <5
+---
+# Source: finops-policies/templates/scale_deployment_to_zero.yaml
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: scale-deployment-zero
+  annotations:
+    policies.kyverno.io/title: Scale Deployment to Zero
+    policies.kyverno.io/category: FinOps
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/subject: Deployment
+    kyverno.io/kyverno-version: 1.7.0
+    policies.kyverno.io/minversion: 1.7.0
+    kyverno.io/kubernetes-version: "1.23"
+    policies.kyverno.io/description: >-
+      If a Deployment's Pods are seen crashing multiple times it usually indicates
+      there is an issue that must be manually resolved. Removing the failing Pods and
+      marking the Deployment is often a useful troubleshooting step. This policy watches
+      existing Pods and if any are observed to have restarted more than
+      once, indicating a potential crashloop, Kyverno scales its parent deployment to zero
+      and writes an annotation signaling to an SRE team that troubleshooting is needed.
+      It may be necessary to grant additional privileges to the Kyverno ServiceAccount,
+      via one of the existing ClusterRoleBindings or a new one, so it can modify Deployments.
+  labels:
+    helm.sh/chart: finops-policies-v0.0.6
+    app.kubernetes.io/name: finops-policies
+    app.kubernetes.io/instance: my-finops-policies
+    app.kubernetes.io/version: "v0.0.6"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  rules:
+  - name: annotate-deployment-rule
+    match:
+      any:
+      - resources:
+          kinds:
+          - v1/Pod.status
+    preconditions:
+      all:
+      - key: "{{request.operation || 'BACKGROUND'}}"
+        operator: Equals
+        value: UPDATE
+      - key: "{{request.object.status.containerStatuses[0].restartCount}}"
+        operator: GreaterThan
+        value: 1
+    context:
+    - name: rsname
+      variable:
+        jmesPath: "request.object.metadata.ownerReferences[0].name"
+        default: ''
+    - name: deploymentname
+      apiCall:
+        urlPath: "/apis/apps/v1/namespaces/{{request.namespace}}/replicasets"
+        jmesPath: "items[?metadata.name=='{{rsname}}'].metadata.ownerReferences[0].name | [0]"
+    mutate:
+      targets:
+        - apiVersion: apps/v1
+          kind: Deployment
+          name: "{{deploymentname}}"
+          namespace: "{{request.namespace}}"
+      patchStrategicMerge:
+        metadata:
+          annotations:
+            sre.corp.org/troubleshooting-needed: "true"
+        spec:
+          replicas: 0
+---
+# Source: finops-policies/templates/validate-cost-center-label.yaml
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: cost-center-label
+  annotations:
+    pod-policies.kyverno.io/autogen-controllers: none
+    policies.kyverno.io/title: Cost Center Label
+    policies.kyverno.io/minversion: 1.6.0
+    policies.kyverno.io/category: Compliance
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/description: >-
+      Labels are key/value pairs that are attached to objects, such as pods.
+      Labels are intended to be used to specify identifying attributes of objects
+      that are meaningful and relevant to users, but do not directly imply semantics
+      to the core system. Labels can be used to organize and to select subsets of objects.
+      This policy validates that Pods should specify a label `cost-center-label`.
+  labels:
+    helm.sh/chart: finops-policies-v0.0.6
+    app.kubernetes.io/name: finops-policies
+    app.kubernetes.io/instance: my-finops-policies
+    app.kubernetes.io/version: "v0.0.6"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+  - name: validate-cost-center-label
+    match:
+      any:
+      - resources:
+          kinds:
+          - Pod
+    validate:
+      message: "using 'cost-center-label' is must."
+      pattern:
+        metadata:
+          labels:
+            cost-center-label: "xyz"
+  - name: validate-podcontroller-namespace
+    match:
+      any:
+      - resources:
+          kinds:
+          - DaemonSet
+          - Deployment
+          - Job
+          - CronJob
+          - StatefulSet
+    validate:
+      message: "using 'cost-center-label' is must."
+      pattern:
+        metadata:
+          labels:
+            cost-center-label: "xyz"

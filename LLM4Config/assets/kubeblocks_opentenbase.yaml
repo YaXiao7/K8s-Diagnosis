@@ -1,0 +1,1211 @@
+---
+# Source: opentenbase/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: opentenbase-config
+  labels:
+    helm.sh/chart: opentenbase-0.1.0
+    app.kubernetes.io/name: opentenbase
+    app.kubernetes.io/instance: my-opentenbase
+    app.kubernetes.io/version: "2.5.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+  global.conf: |
+    listen_addresses = '*'
+
+  gtm.conf: |
+    
+
+  gtm_proxy.conf: |
+    
+
+  datanode.conf: |
+    listen_addresses = '0.0.0.0'
+    max_connections = 500
+    max_pool_size = 65535
+    shared_buffers = 256MB
+    max_prepared_transactions = 2000
+    maintenance_work_mem = 256MB
+    wal_level = logical
+    max_wal_senders = 64
+    max_wal_size = 1GB
+    min_wal_size = 256MB
+    log_destination = 'csvlog'
+    logging_collector = on
+    log_directory = 'pg_log'
+    log_filename = 'postgresql-%A-%H.log'
+    synchronous_commit = local
+    synchronous_standby_names = ''
+
+  coordinator.conf: |
+    listen_addresses = '0.0.0.0'
+    max_connections = 500
+    max_pool_size = 65535
+    shared_buffers = 256MB
+    max_prepared_transactions = 2000
+    maintenance_work_mem = 256MB
+    wal_level = logical
+    max_wal_senders = 64
+    max_wal_size = 1GB
+    min_wal_size = 256MB
+    log_destination = 'csvlog'
+    logging_collector = on
+    log_directory = 'pg_log'
+    log_filename = 'postgresql-%A-%H.log'
+    synchronous_commit = local
+    synchronous_standby_names = ''
+---
+# Source: opentenbase/templates/scripts.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: opentenbase-scripts
+  labels:
+    helm.sh/chart: opentenbase-0.1.0
+    app.kubernetes.io/name: opentenbase
+    app.kubernetes.io/instance: my-opentenbase
+    app.kubernetes.io/version: "2.5.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+  
+  cn_entrypoint: |-
+    #!/usr/bin/env bash
+    # Coordinator initialization script
+    CUR_PATH="$(dirname "${BASH_SOURCE[0]}")"
+    # shellcheck source=./common.sh
+    source "${CUR_PATH}/common.sh"
+    
+    # initialize dependencies.
+    # shellcheck source=./initialize_env_dependencies
+    source "${CUR_PATH}/initialize_env_dependencies" || exit $?
+    
+    log:info "Initializing coordinator node @ ${PG_NODE}"
+    
+    if [ "${POD_INDEX}" -eq 0 ]; then
+      log:info "Starting postgres as master coordinator"
+      # initialize the database.
+      # shellcheck source=./initialize_postgres_db
+      source "${CUR_PATH}/initialize_postgres_db" || exit $?
+      # start the node register in the bg.
+      "${CUR_PATH}/register_node" &
+    else
+      log:info "Starting postgres as standby coordinator"
+      # initialize the database.
+      # shellcheck source=./initialize_standby_coordinator
+      source "${CUR_PATH}/initialize_standby_coordinator" || exit $?
+    fi
+    
+    # starting postgres.
+    postgres \
+      -D "${PGDATA}" \
+      -h "${PG_HOST}" \
+      -p "${PG_PORT}" \
+      --coordinator
+  common.sh: |-
+    #!/usr/bin/env bash
+    
+    # black="\e[0;30m"
+    # red="\e[0;31m"
+    # green="\e[0;32m"
+    # yellow="\e[0;33m"
+    # blue="\e[0;34m"
+    # purple="\e[0;35m"
+    # cyan="\e[0;36m"
+    # white="\e[0;37m"
+    # orange="\e[0;91m"
+    
+    # Methods and functions to be used in all other scripts.
+    : ${LOGGING_SHOW_COLORS:="true"}
+    : ${LOGGING_INFO_PREFIX_COLOR:="\e[0;32m"}
+    : ${LOGGING_INFO_PREFIX:=":INFO"}
+    : ${LOGGING_ERROR_PREFIX_COLOR:="\e[0;31m"}
+    : ${LOGGING_ERROR_PREFIX:=":ERROR"}
+    : ${LOGGING_WARNING_PREFIX_COLOR:="\e[0;33m"}
+    : ${LOGGING_WARNING_PREFIX:=":WARNING"}
+    : ${LOGGING_ARCHIVE_PREFIX_COLOR:="\e[0;34m"}
+    : ${LOGGING_ARCHIVE_PREFIX:=":INFO"}
+    : ${LOGGING_SCRIPT_PREFIX:=":INFO"}
+    : ${LOGGING_SCRIPT_PREFIX_COLOR:="\e[0;36m"}
+    : ${LOGGING_SCRIPT_TEXT_COLOR:="\e[0;35m"}
+    
+    # TODO: Apply common format for stackdriver.
+    logging_core_print() {
+        local LOG_TYPE="$1"
+        local RESET_COLOR="\e[0m"
+        # remove the first argument.
+        shift
+    
+        local LOG_TYPE_PREFIX_ENV_NAME="LOGGING_${LOG_TYPE}_PREFIX"
+        LOG_TYPE_PREFIX="${!LOG_TYPE_PREFIX_ENV_NAME}"
+    
+        if [ "$LOGGING_SHOW_COLORS" != "true" ]; then
+            echo "${LOGGING_PREFIX}${LOG_TYPE_PREFIX} " "$@"
+        else
+            local LOG_PREFIX_COLOR_ENV_NAME="LOGGING_${LOG_TYPE}_PREFIX_COLOR"
+            local LOG_TEXT_COLOR_ENV_NAME="LOGGING_${LOG_TYPE}_TEXT_COLOR"
+            LOG_PREFIX_COLOR="${!LOG_PREFIX_COLOR_ENV_NAME}"
+            LOG_TEXT_COLOR="${!LOG_TEXT_COLOR_ENV_NAME}"
+    
+            if [ -z "${LOG_TEXT_COLOR}" ]; then LOG_TEXT_COLOR="${RESET_COLOR}"; fi
+    
+            echo -e "${LOG_PREFIX_COLOR}${LOGGING_PREFIX}${LOG_TYPE_PREFIX}${LOG_TEXT_COLOR}" "$@" "${RESET_COLOR}"
+        fi
+    }
+    
+    # log a line with the logging prefex.
+    function log:info() {
+        logging_core_print "INFO" "$@"
+    }
+    
+    function log:error() {
+        logging_core_print "ERROR" "$@"
+    }
+    
+    function log:warning() {
+        logging_core_print "WARNING" "$@"
+    }
+    
+    function log:script() {
+        logging_core_print "SCRIPT" "$@"
+    }
+    
+    function log:archive() {
+        logging_core_print "ARCHIVE" "$@"
+    }
+    
+    function print_bash_error_stack() {
+        for ((i = 1; i < ${#FUNCNAME[@]} - 1; i++)); do
+            local FPATH
+            FPATH="$(realpath "${BASH_SOURCE[$i + 1]}")"
+            log:error "$i: ${FPATH}:${BASH_LINENO[$i]} @ ${FUNCNAME[$i]}"
+        done
+    }
+    
+    function assert() {
+        if [ "$1" -ne 0 ]; then
+            log:error "$2"
+            print_bash_error_stack
+            return "$1"
+        fi
+    }
+    
+    function assert_warn() {
+        if [ "$1" -ne 0 ]; then
+            log:warning "$2"
+        fi
+    }
+    
+  dn_entrypoint: |-
+    #!/usr/bin/env bash
+    # Datanode initialization script
+    CUR_PATH="$(dirname "${BASH_SOURCE[0]}")"
+    # shellcheck source=./common.sh
+    source "${CUR_PATH}/common.sh"
+    
+    # initialize dependencies.
+    # shellcheck source=./initialize_env_dependencies
+    source "${CUR_PATH}/initialize_env_dependencies" || exit $?
+    
+    if [ "${POD_INDEX}" -eq 0 ]; then
+      log:info "Starting postgres as master datanode"
+      # initialize the database.
+      # shellcheck source=./initialize_postgres_db
+      source "${CUR_PATH}/initialize_postgres_db" || exit $?
+      # start the node register in the bg.
+      "${CUR_PATH}/register_node" &
+    else
+      log:info "Starting postgres as standby datanode"
+      # initialize the database.
+      # shellcheck source=./initialize_standby_datanode
+      source "${CUR_PATH}/initialize_standby_datanode" || exit $?
+    fi
+    
+    # starting postgres
+    postgres \
+      -D "${PGDATA}" \
+      -h "${PG_HOST}" \
+      -p "${PG_PORT}" \
+      --datanode
+  gtm_entrypoint: |-
+    #!/usr/bin/env bash
+    # bash script for GTM
+    CUR_PATH="$(dirname "${BASH_SOURCE[0]}")"
+    # shellcheck source=./common.sh
+    source "${CUR_PATH}/common.sh"
+    
+    log:info "Starting as global transaction manager (GTM)"
+    
+    # init and load methods.
+    # shellcheck source=./initialize_env_dependencies
+    source "${CUR_PATH}/initialize_env_dependencies"
+    # shellcheck source=./methods_recovery
+    source "${CUR_PATH}/methods_recovery"
+    
+    # validating data directory.
+    log:info "Creating data directory if does not exist"
+    mkdir -p "${PGDATA}"
+    
+    # call to recover if needed.
+    recover_if_needed || exit $?
+    
+    log:info "Set data folder permissions 0700"
+    chmod -R 0700 "${PGDATA}"
+    
+    # loading current gtm control info.
+    CONTROL_INFO=""
+    if [ -f "${PGDATA}/gtm.control" ]; then
+      CONTROL_INFO=$(cat "${PGDATA}/gtm.control")
+      CONTROL_INFO=${CONTROL_INFO##*( )}
+    fi
+    
+    if [ -z "${CONTROL_INFO}" ]; then
+      log:info "GTM configuration not found, calling initdb"
+    
+      initgtm -D "${PGDATA}" -Z gtm
+    
+      # shellcheck source=./initialize_networks
+      source "${CUR_PATH}/initialize_networks" || exit $?
+      # shellcheck source=./initialize_node_config
+      source "${CUR_PATH}/initialize_node_config" || exit $?
+    else
+      log:info "GTM configuration found, init skipped."
+      if [ -f "${PGDATA}/gtm.pid" ]; then
+        log:warning "GTM process not shut down properly or chart was terminated." \
+          "Lock file gtm.pid still exists. Deleting old lock file."
+        rm "${PGDATA}/gtm.pid"
+      fi
+    
+      log:info "Current control state:"
+      echo "${CONTROL_INFO}"
+      echo
+    fi
+    
+    # replication section
+    # shellcheck source=./initialize_standby_gtm
+    source "${CUR_PATH}/initialize_standby_gtm" || exit $?
+    
+    backup_data_state &
+    log:info "Started gtm recovery process"
+    
+    # start the GTM
+    gtm -D "${PGDATA}" -h "${PG_HOST}" -n "${PG_NODE}" -p "${PG_GTM_PORT}" -l /dev/stdout
+  initialize_env_dependencies: |-
+    #!/usr/bin/env bash
+    # Initializes the env variables in the pod,
+    # depending on pod type.
+    CUR_PATH="$(dirname "${BASH_SOURCE[0]}")"
+    # shellcheck source=./common.sh
+    source "${CUR_PATH}/common.sh"
+    
+    POD_INDEX=$(echo "${POD_NAME}" | grep -Eo "[0-9]+\s*$")
+    export POD_INDEX
+    
+    if [ -z "${PG_NODE}" ]; then
+      case "${NODE_TYPE}" in
+      datanode)
+        PG_NODE="dn_${POD_INDEX}"
+        POD_CLUSTER_INDEX=$((POD_INDEX + COORDINATOR_COUNT + PROXY_COUNT + 1))
+        PGXL_NODE_INDEX=$((POD_INDEX + 10000))
+        export PGXL_NODE_INDEX
+        ;;
+      coordinator)
+        PG_NODE="cn_${POD_INDEX}"
+        POD_CLUSTER_INDEX=$((POD_INDEX + PROXY_COUNT + 1))
+        PGXL_NODE_INDEX=$((POD_INDEX + 10000))
+        export PGXL_NODE_INDEX
+        ;;
+      proxy)
+        PG_NODE="PXY_${POD_INDEX}"
+        POD_CLUSTER_INDEX=$((POD_INDEX + 1))
+        ;;
+      *)
+        if [ -n "${NODE_TYPE}" ]; then
+          log:warning "Cluster node type not recognized '${NODE_TYPE}', skipping env initialization"
+        fi
+        ;;
+      esac
+    fi
+    
+    export POD_CLUSTER_INDEX
+    
+  initialize_networks: |-
+    #!/usr/bin/env bash
+    # Initialize the host connection to allow all connections to datanodes and authenticated connections to coordinators.
+    
+    CUR_PATH="$(dirname "${BASH_SOURCE[0]}")"
+    # shellcheck source=./common.sh
+    source "${CUR_PATH}/common.sh"
+    
+    export PG_AUTH_METHOD="trust"
+    if [ -n "${PGPASSWORD}" ] && [ -n "${AUTH_TYPE}" ]; then
+      PG_AUTH_METHOD="${AUTH_TYPE}"
+      log:info "Added network config to allow password protected connections."
+    else
+      log:warning "Superuser password not found, all connections will be allowed!"
+    fi
+    
+    if [ "${NODE_TYPE}" == "datanode" ]; then
+      echo "host all all all trust" >>"${PGDATA}/pg_hba.conf"
+    else
+      echo "host all all all ${PG_AUTH_METHOD}" >>"${PGDATA}/pg_hba.conf"
+    fi
+    echo "host replication all all ${PG_AUTH_METHOD}" >>"${PGDATA}/pg_hba.conf"
+    
+  initialize_node_config: |-
+    #!/usr/bin/env bash
+    # Initialize the node configuration.
+    CUR_PATH="$(dirname "${BASH_SOURCE[0]}")"
+    # shellcheck source=./common.sh
+    source "${CUR_PATH}/common.sh"
+    log:info "Initializing node configuration for ${NODE_TYPE} @ ${PG_NODE}"
+    
+    NODE_CONFIG_FILE=""
+    CONFIG_TARGET_FILE=""
+    
+    case "${NODE_TYPE}" in
+    gtm)
+      CONFIG_TARGET_FILE="${PGDATA}/gtm.conf"
+      NODE_CONFIG_FILE="/config/gtm.conf"
+      ;;
+    datanode)
+      CONFIG_TARGET_FILE="${PGDATA}/postgresql.conf"
+      NODE_CONFIG_FILE="/config/datanode.conf"
+      ;;
+    coordinator)
+      CONFIG_TARGET_FILE="${PGDATA}/postgresql.conf"
+      NODE_CONFIG_FILE="/config/coordinator.conf"
+      ;;
+    proxy)
+      CONFIG_TARGET_FILE="${PGDATA}/gtm_proxy.conf"
+      NODE_CONFIG_FILE="/config/gtm_proxy.conf"
+      ;;
+    *)
+      log:error "Node configuration does not exist for type ${NODE_TYPE}, error in config."
+      exit 1
+      ;;
+    esac
+    
+    cat "/config/global.conf" >>"${CONFIG_TARGET_FILE}"
+    assert $? "Failed to append internal global configuration to ${CONFIG_TARGET_FILE}" || exit $?
+    cat "${NODE_CONFIG_FILE}" >>"${CONFIG_TARGET_FILE}"
+    assert $? "Failed to append node configuration file ${NODE_CONFIG_FILE} to ${CONFIG_TARGET_FILE}" || exit $?
+    
+    log:info "Node configuration added to ${CONFIG_TARGET_FILE}"
+    
+  initialize_postgres_db: |-
+    #!/usr/bin/env bash
+    # Initialize the postgres database.
+    CUR_PATH="$(dirname "${BASH_SOURCE[0]}")"
+    # shellcheck source=./common.sh
+    source "${CUR_PATH}/common.sh"
+    log:info "Initializing database on node ${PG_NODE}"
+    
+    if [ "${RESET_DB}" == "true" ] && [ -d "${PGDATA}" ]; then
+      rm -R "${PGDATA}"
+    fi
+    
+    if [ ! -f "${PGDATA}/postgresql.conf" ]; then
+    
+      if ((POD_INDEX > 0)); then
+    
+        # restore nodes from first one otherwise when creating new nodes they will not have required data
+        case "${NODE_TYPE}" in
+        datanode)
+          log:info "Database configuration not found, restoring from first datanode"
+          # waiting for first datanode.
+          if [ "${KB_DN_LEADER}" == "" ]; then
+            log:warning "No primary found, waiting for first datanode."
+            KB_DN_LEADER="${KB_CLUSTER_COMP_NAME}-0"
+          fi
+          MASTER_SERVICE="${KB_DN_LEADER}.${KB_CLUSTER_COMP_NAME}-headless"
+          "${CUR_PATH}/wait_for_connection" "${MASTER_SERVICE}" "${PG_PORT}"
+          assert $? "Error while waiting for connection. Deployment not ready." || exit $?
+          # wait for the first datanode to be ready
+          while true; do
+            pg_isready -h "${MASTER_SERVICE}" -p "${PG_PORT}" -U "${PGUSER}" -d "postgres"
+            if [ $? -eq 0 ]; then
+              break
+            fi
+            log:info "Waiting for first datanode to be ready."
+            sleep 5
+          done
+          pg_basebackup -d "postgresql://${PGUSER}:${PGPASSWORD}@${MASTER_SERVICE}:${PG_PORT}" -D "${PGDATA}" -P --wal-method=stream
+          sed -i "s|pgxc_node_name = 'DN_0'|pgxc_node_name = 'dn_${POD_INDEX}'|" "${PGDATA}/postgresql.conf"
+          ;;
+        coordinator)
+          log:info "Database configuration not found, restoring from first coordinator"
+          # waiting for first coordinator.
+          if [ "${KB_CN_LEADER}" == "" ]; then
+            log:warning "No leader found, waiting for first datanode."
+            KB_CN_LEADER="${KB_CLUSTER_COMP_NAME}-0"
+          fi
+          MASTER_SERVICE="${KB_CN_LEADER}.${KB_CLUSTER_COMP_NAME}-headless"
+          "${CUR_PATH}/wait_for_connection" "${MASTER_SERVICE}" "${PG_PORT}"
+          assert $? "Error while waiting for connection. Deployment not ready." || exit $?
+          while true; do
+            pg_isready -h "${MASTER_SERVICE}" -p "${PG_PORT}" -U "${PGUSER}" -d "postgres"
+            if [ $? -eq 0 ]; then
+              break
+            fi
+            log:info "Waiting for first coordinate node to be ready."
+            sleep 5
+          done
+          pg_basebackup -d "postgresql://${PGUSER}:${PGPASSWORD}@${MASTER_SERVICE}:${PG_PORT}" -D "${PGDATA}" -P --wal-method=stream
+          sed -i "s|pgxc_node_name = 'CN_0'|pgxc_node_name = 'cn_${POD_INDEX}'|" "${PGDATA}/postgresql.conf"
+          ;;
+        esac
+    
+      else
+        # if it's the first coordinator or any datanode then init
+        log:info "Database configuration not found, calling initdb"
+    
+        if [ -z "${PGPASSWORD}" ]; then
+          log:warning "Database superuser password not found, DB is insecure."
+          initdb \
+            -D "${PGDATA}" \
+            -U "${PGUSER}" \
+            --nodename="${PG_NODE}" \
+            --nodetype="${NODE_TYPE}" \
+            --master_gtm_nodename="a_one" \
+            --master_gtm_ip="${PG_GTM_HOST}" \
+            --master_gtm_port="${PG_GTM_PORT}"
+          assert $? "Postgres init db failed, postgres database cannot be started." || exit $?
+        else
+          log:info "Database superuser password found, initializing db with password."
+          echo "${PGPASSWORD}" > "/tmp/${PGUSER}"
+          initdb \
+            -A "${AUTH_TYPE}" \
+            -D "${PGDATA}" \
+            -U "${PGUSER}" \
+            --nodename="${PG_NODE}" \
+            --nodetype="${NODE_TYPE}" \
+            --master_gtm_nodename="a_one" \
+            --master_gtm_ip="${PG_GTM_HOST}" \
+            --master_gtm_port="${PG_GTM_PORT}" \
+            --pwfile="/tmp/${PGUSER}"
+          assert $? "Postgres init db failed, postgres database cannot be started." || exit $?
+        fi
+    
+      fi
+    
+      # shellcheck source=./initialize_networks
+      source "${CUR_PATH}/initialize_networks" || exit $?
+      # shellcheck source=./initialize_node_config
+      source "${CUR_PATH}/initialize_node_config" || exit $?
+    
+      log:info "Database configuration initialized."
+    else
+      log:info "Database configuration found, init skipped."
+    fi
+    
+    # if its currently a standby convert it back to master
+    rm -rf "${PGDATA}/recovery.conf"
+    sed -i '/hot_standby = on/d' "${PGDATA}/postgresql.conf"
+    
+    # required for postgres permissions.
+    # the loaded values are actually set by kubernetes. :(
+    log:info "Set data folder permissions 0700"
+    chmod -R 0700 "${PGDATA}"
+    assert $? "Failed to change data folder permissions" || exit $?
+    
+    # cleanup pid if it still exists
+    rm -rf "${PGDATA}/postmaster.pid"
+    
+    # check for proxy.
+    if [ "${PROXY_ENABLED}" = "true" ]; then
+      export PG_GTM_HOST="${PROXY_SERVICE}"
+      log:info "looking for GTM proxy host @ ${PG_GTM_HOST}..."
+    else
+      log:info "looking for GTM host @ ${PG_GTM_HOST}..."
+    fi
+    
+    # waiting for GTM.
+    "${CUR_PATH}/wait_for_connection" "${PG_GTM_HOST}" "${PG_GTM_PORT}"
+    assert $? "Error while waiting for connection. Deployment not ready." || exit $?
+    
+  initialize_standby_coordinator: |-
+    #!/usr/bin/env bash
+    
+    if [ "${KB_CN_LEADER}" == "" ]; then
+      log:warning "No primary found, waiting for first coordinate."
+      KB_CN_LEADER="${KB_CLUSTER_COMP_NAME}-0"
+    fi
+    
+    MASTER_SERVICE="${KB_CN_LEADER}.${KB_CLUSTER_COMP_NAME}-headless"
+    
+    # waiting for master coordinator.
+    "${CUR_PATH}/wait_for_connection" "${MASTER_SERVICE}" "${PG_PORT}"
+    assert $? "Error while waiting for connection. Deployment not ready." || exit $?
+    
+    if [ ! -f "${PGDATA}/postgresql.conf" ]; then
+      log:info "Database configuration not found, creating base backup and setting to standby"
+    
+      pg_basebackup -d "postgresql://${PGUSER}:${PGPASSWORD}@${MASTER_SERVICE}:${PG_PORT}" -D "${PGDATA}" -P --wal-method=stream
+    
+      echo "standby_mode          = 'on'" >"${PGDATA}/recovery.conf"
+      echo "primary_conninfo      = 'host=${MASTER_SERVICE} port=${PG_PORT} user=${PGUSER} password=${PGPASSWORD}'" >>"${PGDATA}/recovery.conf"
+      echo "trigger_file          = '/tmp/MasterNow'" >>"${PGDATA}/recovery.conf"
+      echo "hot_standby = on" >>"${PGDATA}/postgresql.conf"
+    fi
+    
+    # required for postgres permissions.
+    # the loaded values are actually set by kuberntes. :(
+    log:info "Set data folder permissions 0700"
+    chmod -R 0700 "${PGDATA}"
+    assert $? "Failed to change data folder permissions" || exit $?
+    
+  initialize_standby_datanode: |-
+    #!/usr/bin/env bash
+    
+    if [ "${KB_DN_LEADER}" == "" ]; then
+      log:warning "No primary found, waiting for first datanode."
+      KB_DN_LEADER="${KB_CLUSTER_COMP_NAME}-0"
+    fi
+    
+    MASTER_SERVICE="${KB_DN_LEADER}.${KB_CLUSTER_COMP_NAME}-headless"
+    
+    # waiting for master datanode.
+    "${CUR_PATH}/wait_for_connection" "${MASTER_SERVICE}" "${PG_PORT}"
+    assert $? "Error while waiting for connection. Deployment not ready." || exit $?
+    
+    if [ ! -f "${PGDATA}/postgresql.conf" ]; then
+      log:info "Database configuration not found, creating base backup and setting to standby"
+    
+      pg_basebackup -d "postgresql://${PGUSER}:${PGPASSWORD}@${MASTER_SERVICE}:${PG_PORT}" -D "${PGDATA}" -P --wal-method=stream
+    
+      echo "standby_mode          = 'on'" >"${PGDATA}/recovery.conf"
+      echo "primary_conninfo      = 'host=${MASTER_SERVICE} port=${PG_PORT} user=${PGUSER} password=${PGPASSWORD}'" >>"${PGDATA}/recovery.conf"
+      echo "trigger_file          = '/tmp/MasterNow'" >>"${PGDATA}/recovery.conf"
+      echo "hot_standby = on" >>"${PGDATA}/postgresql.conf"
+    fi
+    
+    # required for postgres permissions.
+    # the loaded values are actually set by kubernetes. :(
+    log:info "Set data folder permissions 0700"
+    chmod -R 0700 "${PGDATA}"
+    assert $? "Failed to change data folder permissions" || exit $?
+    
+  initialize_standby_gtm: |-
+    #!/usr/bin/env bash
+    
+    if [ -z "${KB_GTM_LEADER}" ]; then
+      log:info "Starting postgres as master gtm"
+      sed -i "s|startup = STANDBY|#startup = ACT|" "${PGDATA}/gtm.conf"
+      sed -i "s|active_host = '*|#active_host = ''|" "${PGDATA}/gtm.conf"
+      sed -i "s|active_port = 6666|#active_port =|" "${PGDATA}/gtm.conf"
+    else
+      log:info "Starting postgres as standby gtm"
+      if [ "${KB_GTM_LEADER}" == "" ]; then
+        log:warning "No primary found, waiting for first datanode."
+        KB_GTM_LEADER="${KB_CLUSTER_COMP_NAME}-0"
+      fi
+      MASTER_SERVICE="${KB_GTM_LEADER}.${KB_CLUSTER_COMP_NAME}-headless"
+      sed -i "s|#startup = ACT|startup = STANDBY|" "${PGDATA}/gtm.conf"
+      sed -i "s|#active_host = ''|active_host = '${MASTER_SERVICE}'|" "${PGDATA}/gtm.conf"
+      sed -i "s|#active_port =|active_port = 6666|" "${PGDATA}/gtm.conf"
+    fi
+    
+  methods_recovery: |-
+    #!/usr/bin/env bash
+    
+    # loads as library.
+    CUR_PATH="$(dirname "${BASH_SOURCE[0]}")"
+    # shellcheck source=./common.sh
+    source "${CUR_PATH}/common.sh"
+    
+    DATA_RECOVERY_PATH="${STORAGE_MOUNT_PATH}/recovery"
+    export DATA_RECOVERY_PATH
+    
+    function backup_data_state() {
+      # this method should be called in parallel.
+      # back up, continusly, every GTM_BACKUP_INTERVAL the gtm state.
+    
+      : ${GTM_BACKUP_INTERVAL:="1"}
+    
+      mkdir -p "${DATA_RECOVERY_PATH}"
+      assert $? "Failed to create or validate recovery path. Recovery is inactive." || return $?
+    
+      while true; do
+        sleep ${GTM_BACKUP_INTERVAL}
+        cp -R "${PGDATA}"/* "${DATA_RECOVERY_PATH}"
+        assert_warn $? "Failed to store gtm state. If this persists, node is at risk."
+      done
+    }
+    
+    function recover_if_needed() {
+      # call to prepare the gtm for restart.
+      # copies from recovery to data folder.
+    
+      local DATA_RECOVERY_PATH="${STORAGE_MOUNT_PATH}/recovery"
+    
+      if [ ! -d "${DATA_RECOVERY_PATH}" ]; then
+        return 0
+      fi
+    
+      if [ -z "$(ls -A "${DATA_RECOVERY_PATH}")" ]; then
+        return 0
+      fi
+    
+      log:info "Recovery data found @ ${DATA_RECOVERY_PATH}, copy to data directory if newer..."
+      cp -R -f -v -u "${DATA_RECOVERY_PATH}"/* "${PGDATA}"
+      assert $? "Failed to copy recovery data, node is at risk." || return $?
+    }
+    
+  proxy_entrypoint: |-
+    #!/usr/bin/env bash
+    # proxy startup bash script
+    
+    CUR_PATH="$(dirname "${BASH_SOURCE[0]}")"
+    # shellcheck source=./common.sh
+    source "${CUR_PATH}/common.sh"
+    
+    log:info "Starting node as transaction manager proxy"
+    
+    # shellcheck source=./initialize_env_dependencies
+    source "${CUR_PATH}/initialize_env_dependencies"
+    
+    # initialize the gtm_proxy manager
+    initgtm -D "${PGDATA}" -Z gtm_proxy
+    assert $? "Failed to initialize gtm proxy" || exit $?
+    
+    # config
+    # shellcheck source=./initialize_networks
+    source "${CUR_PATH}/initialize_networks" || exit $?
+    # shellcheck source=./initialize_node_config
+    source "${CUR_PATH}/initialize_node_config" || exit $?
+    
+    # start the proxy.
+    PROXY_ID="${POD_CLUSTER_INDEX}"
+    PROXY_HOST="${POD_IP}"
+    
+    log:info "looking for GTM..."
+    "${CUR_PATH}/wait_for_connection" "${PG_GTM_HOST}" "${PG_GTM_PORT}"
+    assert $? "Timed out while waiting for GTM. Database not ready, cannot start proxy." || exit $?
+    
+    log:info "Starting proxy ${PROXY_ID} @ ${PROXY_HOST}:${PG_GTM_PORT} -> ${PG_GTM_HOST}:${PG_GTM_PORT} .."
+    gtm_proxy \
+      -D "${PGDATA}" \
+      -h "${PROXY_HOST}" \
+      -p "${PG_GTM_PORT}" \
+      -i "${PROXY_ID}" \
+      -s "${PG_GTM_HOST}" \
+      -t "${PG_GTM_PORT}" \
+      -n "${PROXY_THREAD_COUNT}" \
+      -l /dev/stdout
+    assert $? "Cannot start GTM proxy" || exit $?
+    
+  register_node: |-
+    #!/usr/bin/env bash
+    # Script to register the nodes in postgres
+    CUR_PATH="$(dirname "${BASH_SOURCE[0]}")"
+    
+    # shellcheck source=./common.sh
+    source "${CUR_PATH}/common.sh"
+    
+    # shellcheck source=./initialize_env_dependencies
+    source "${CUR_PATH}/initialize_env_dependencies"
+    
+    if [ "${PORT_WAIT_INTERVAL}" = "" ]; then
+      PORT_WAIT_INTERVAL=3
+    fi
+    
+    TARGET_HOST=$PG_HOST
+    
+    function wait_for_postgres() {
+      while true; do
+        pg_isready -h "${TARGET_HOST}" &>/dev/null
+        if [ $? -eq 0 ]; then
+          break
+        else
+          log:info "Waiting for database to be ready.."
+          sleep "${PORT_WAIT_INTERVAL}"
+        fi
+      done
+    }
+    
+    log:info "Registering cluster nodes on ${POD_NAME}.."
+    
+    function register_node() {
+      local LOCAL_NODE_TYPE=$1
+      local LOCAL_NODE_IDX=$2
+      case "${LOCAL_NODE_TYPE}" in
+      datanode)
+        NODE_HOST="${KB_CLUSTER_NAME}-dn-${LOCAL_NODE_IDX}"
+        NODE_NAME="dn_${LOCAL_NODE_IDX}"
+        ;;
+      coordinator)
+        NODE_HOST="${KB_CLUSTER_NAME}-cn-${LOCAL_NODE_IDX}"
+        NODE_NAME="cn_${LOCAL_NODE_IDX}"
+        ;;
+      *)
+        assert 1 "Register node is defined only for datanodes and coordinators" || exit $?
+        ;;
+      esac
+    
+      wait_for_postgres || return $?
+    
+      while true; do
+        LOCAL_HOST_IP=$(getent hosts "${NODE_HOST}" | awk '{ print $1 }')
+        if [ -z "${LOCAL_HOST_IP}" ]; then
+          log:info "Waiting for host to be ready @ ${NODE_HOST} ..."
+          sleep "${PORT_WAIT_INTERVAL}"
+        else
+          break
+        fi
+      done
+    
+      log:info "Resolved ${NODE_HOST} -> ${LOCAL_HOST_IP}, registering node on local as ${LOCAL_NODE_TYPE}:"
+    
+      local CREATE_SCRIPT="CREATE NODE $NODE_NAME WITH (TYPE = '${LOCAL_NODE_TYPE}', HOST = '${NODE_HOST}', PORT = ${PG_PORT});"
+      log:script "$CREATE_SCRIPT"
+      psql -h "$TARGET_HOST" -c "$CREATE_SCRIPT" || true
+      local ALTER_SCRIPT="ALTER NODE $NODE_NAME WITH (TYPE = '${LOCAL_NODE_TYPE}', HOST = '${NODE_HOST}', PORT = ${PG_PORT});"
+      log:script "$ALTER_SCRIPT"
+      psql -h "$TARGET_HOST" -c "$ALTER_SCRIPT" || true
+      #  assert_warn $? "Failed executing sql script. Is node already defined? Node register skipped."
+    }
+    
+    function register_all_dn() {
+      for i in $(seq "0" "${DATANODE_COUNT}"); do
+        if [ "${i}" -eq "${DATANODE_COUNT}" ]; then break; fi
+        register_node datanode "${i}"
+        assert $? "Failed to register datanodes" || return $?
+      done
+    }
+    
+    function register_all_cn() {
+      for i in $(seq "0" "${COORDINATOR_COUNT}"); do
+        if [ "${i}" -eq "${COORDINATOR_COUNT}" ]; then break; fi
+        register_node coordinator "${i}"
+        assert $? "Failed to register coordinator" || return $?
+      done
+    }
+    
+    function main() {
+      # must be in a function so it can be called in parallel
+      # (will not affect main script)
+    
+      export PGDATABASE=postgres
+    
+      # traverse all datanodes and register all datanodes and coordinators on every node.
+      for n in $(seq "0" "${DATANODE_COUNT}"); do
+        if [ "${n}" -eq "${DATANODE_COUNT}" ]; then break; fi
+        TARGET_HOST="${KB_CLUSTER_NAME}-dn-$n"
+        log:info "target host: ${TARGET_HOST}"
+        register_all_dn
+        register_all_cn
+      done
+    
+      # traverse all coordinators and register all datanodes and coordinators on every node.
+      for n in $(seq "0" "${COORDINATOR_COUNT}"); do
+        if [ "${n}" -eq "${COORDINATOR_COUNT}" ]; then break; fi
+        TARGET_HOST="${KB_CLUSTER_NAME}-cn-$n"
+        log:info "target host: ${TARGET_HOST}"
+        register_all_dn
+        register_all_cn
+      done
+    
+      log:info "Reloading pool...  "
+      psql -q -c "SELECT pgxc_pool_reload();"
+      assert $? "Failed to reload node pool" || return $?
+      log:info "Registered node list:  "
+      psql -q -c "SELECT * FROM pgxc_node"
+      assert $? "Failed to reload node pool" || return $?
+    
+      log:info "Setting state to active."
+      echo "$(date)" >> ~/service_activation_time
+      assert $? "Failed generate activation file stamp" || return $?
+      log:info "Node ready."
+    }
+    
+    main
+    
+  wait_for_connection: |-
+    #!/usr/bin/env bash
+    # Helper method, wait for connection.
+    # Usage: wait_for_connection [hostname] [port]
+    CUR_PATH="$(dirname "${BASH_SOURCE[0]}")"
+    # shellcheck source=./common.sh
+    source "${CUR_PATH}/common.sh"
+    
+    HOST=$1
+    PORT=$2
+    
+    : ${PORT_WAIT_INTERVAL:="1"}
+    : ${PORT_WAIT_TRIES:="60"}
+    : ${PORT_WAIT_TIMEOUT:="1"}
+    
+    log:info "Checking ${HOST}:${PORT} is open with an interval of ${PORT_WAIT_INTERVAL}, max ${PORT_WAIT_TRIES} times.."
+    WAIT_INDEX=0
+    while true; do
+      nc -w "${PORT_WAIT_TIMEOUT}" -zv "${HOST}" "${PORT}" &>/dev/null
+      if [ $? -ne 0 ]; then
+        if [ ${WAIT_INDEX} -gt ${PORT_WAIT_TRIES} ]; then
+          log:error "Timed out while waiting for port ${PORT} on ${HOST}"
+          exit 3
+        fi
+        log:info "Port ${PORT} not available on ${HOST}, retry in ${PORT_WAIT_INTERVAL}"
+      else
+        log:info "Port ${PORT} is open on ${HOST}"
+        break
+      fi
+      WAIT_INDEX=$((WAIT_INDEX + 1))
+      sleep "${PORT_WAIT_INTERVAL}"
+    done
+---
+# Source: opentenbase/templates/clusterDefintion.yaml
+apiVersion: apps.kubeblocks.io/v1alpha1
+kind: ClusterDefinition
+metadata:
+  name: opentenbase
+  labels:
+    helm.sh/chart: opentenbase-0.1.0
+    app.kubernetes.io/name: opentenbase
+    app.kubernetes.io/instance: my-opentenbase
+    app.kubernetes.io/version: "2.5.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  connectionCredential:
+    username: "opentenbase"
+    password: "$(RANDOM_PASSWD)"
+    endpoint: "$(SVC_FQDN):$(SVC_PORT_postgresql)"
+    host: "$(SVC_FQDN)"
+    port: "$(SVC_PORT_postgresql)"
+    metaDbPasswd: "$(RANDOM_PASSWD)"
+  componentDefs:
+    - name: gtm
+      scriptSpecs: &scriptSpecs
+        - name: opentenbase-scripts
+          templateRef: opentenbase-scripts
+          volumeName: scripts
+          namespace: default
+          defaultMode: 0555
+      configSpecs: &configSpecs
+        - name: config
+          templateRef: opentenbase-config
+          volumeName: cfg
+          namespace: default
+          defaultMode: 0555
+      workloadType: Stateful
+      characterType: postgresql
+      rsmSpec:
+        roles:
+          - name: primary
+            accessMode: ReadWrite
+            isLeader: true
+          - name: secondary
+            accessMode: Readonly
+            isLeader: false
+        roleProbe:
+          customHandler:
+            - image: docker.io/domainlau/opentenbase:v2.5.0
+              command:
+                - /bin/bash
+                - -c
+                - |
+                  is_primary=$(gtm_ctl status -P 50001 | grep primary)
+                  if [ "$is_primary" = "" ]; then
+                    echo -n "secondary"
+                  else
+                    echo -n "primary"
+                  fi
+      service:
+        ports:
+          - name: gtm
+            port: 50001
+            targetPort: 50001
+      volumeTypes:
+        - name: data
+          type: data
+      podSpec:
+        securityContext:
+          fsGroup: 1000
+          runAsGroup: 1000
+          runAsUser: 1000
+          fsGroupChangePolicy: OnRootMismatch
+        containers:
+          - name: gtm
+            command:
+              - bash
+              - /scripts/gtm_entrypoint
+            env:
+              - name: POD_IP
+                valueFrom:
+                  fieldRef:
+                    apiVersion: v1
+                    fieldPath: status.podIP
+              - name: POD_NAME
+                valueFrom:
+                  fieldRef:
+                    apiVersion: v1
+                    fieldPath: metadata.name
+              - name: PGPASSWORD
+                valueFrom:
+                  secretKeyRef:
+                    name: $(CONN_CREDENTIAL_SECRET_NAME)
+                    key: password
+                    optional: false
+              - name: PGUSER
+                value: "opentenbase"
+              - name: PG_GTM_PORT
+                value: "50001"
+              - name: PGDATA
+                value: /data/pgdata
+              - name: PGUSER
+                value: "opentenbase"
+              - name: PGDATABASE
+                value: "postgres"
+              - name: PG_HOST
+                value: "0.0.0.0"
+              - name: STORAGE_MOUNT_PATH
+                value: /data
+              - name: NODE_TYPE
+                value: gtm
+            ports:
+              - name: gtm
+                containerPort: 50001
+            volumeMounts: &volumeMounts
+              - name: data
+                mountPath: /data
+              - name: scripts
+                mountPath: /scripts
+              - name: cfg
+                mountPath: /config
+    - name: dn
+      scriptSpecs: *scriptSpecs
+      configSpecs: *configSpecs
+      workloadType: Stateful
+      characterType: postgresql
+      rsmSpec:
+        roles:
+          - name: primary
+            accessMode: ReadWrite
+            isLeader: true
+          - name: secondary
+            accessMode: Readonly
+            isLeader: false
+        roleProbe:
+          customHandler:
+            - image: docker.io/domainlau/opentenbase:v2.5.0
+              command:
+                - /bin/bash
+                - -c
+                - |
+                  is_recovery=$(psql -h127.0.0.1 postgres -t -c "select pg_is_in_recovery()" | xargs echo -n)
+                  if [ "$is_recovery" = "f" ]; then
+                    echo -n "primary"
+                  else
+                    echo -n "secondary"
+                  fi
+      componentDefRef: &componentDefRef
+        - componentDefName: gtm
+          componentRefEnv:
+            - name: PG_GTM_PORT
+              valueFrom:
+                type: FieldRef
+                fieldPath: $.componentDef.service.ports[?(@.name == "gtm")].port
+            - name: PG_GTM_HOST
+              valueFrom:
+                type: ServiceRef
+      service:
+        ports:
+          - name: postgresql
+            port: 5432
+            targetPort: 5432
+      volumeTypes:
+        - name: data
+          type: data
+      podSpec:
+        securityContext:
+          fsGroup: 1000
+          runAsGroup: 1000
+          runAsUser: 1000
+          fsGroupChangePolicy: OnRootMismatch
+        containers:
+          - name: dn
+            command:
+              - bash
+              - /scripts/dn_entrypoint
+            env:
+              - name: POD_IP
+                valueFrom:
+                  fieldRef:
+                    apiVersion: v1
+                    fieldPath: status.podIP
+              - name: POD_NAME
+                valueFrom:
+                  fieldRef:
+                    apiVersion: v1
+                    fieldPath: metadata.name
+              - name: PGPASSWORD
+                valueFrom:
+                  secretKeyRef:
+                    name: $(CONN_CREDENTIAL_SECRET_NAME)
+                    key: password
+                    optional: false
+              - name: PGUSER
+                value: "opentenbase"
+              - name: PGDATA
+                value: /data/pgdata
+              - name: PG_HOST
+                value: "0.0.0.0"
+              - name: PG_PORT
+                value: "5432"
+              - name: PGDATABASE
+                value: "postgres"
+              - name: NODE_TYPE
+                value: datanode
+              - name: STORAGE_MOUNT_PATH
+                value: /data
+            ports:
+              - name: dn
+                containerPort: 5432
+            livenessProbe:
+              exec:
+                command:
+                  - bash
+                  - -c
+                  - psql -h 127.0.0.1 -p 5432 postgres -c "select 1"
+              initialDelaySeconds: 5
+              periodSeconds: 5
+            readinessProbe:
+              exec:
+                command:
+                  - bash
+                  - -c
+                  - pg_isready -h 127.0.0.1 -p 5432
+              initialDelaySeconds: 5
+              periodSeconds: 5
+            volumeMounts: *volumeMounts
+    - name: cn
+      scriptSpecs: *scriptSpecs
+      configSpecs: *configSpecs
+      workloadType: Stateful
+      characterType: postgresql
+      rsmSpec:
+        roles:
+          - name: primary
+            accessMode: ReadWrite
+            isLeader: true
+          - name: secondary
+            accessMode: Readonly
+            isLeader: false
+        roleProbe:
+          customHandler:
+            - image: docker.io/domainlau/opentenbase:v2.5.0
+              command:
+                - /bin/bash
+                - -c
+                - |
+                  is_recovery=$(psql -h127.0.0.1 postgres -t -c "select pg_is_in_recovery()" | xargs echo -n)
+                  if [ "$is_recovery" = "f" ]; then
+                    echo -n "primary"
+                  else
+                    echo -n "secondary"
+                  fi
+      service:
+        ports:
+          - name: postgresql
+            port: 5432
+            targetPort: 5432
+      componentDefRef: *componentDefRef
+      volumeTypes:
+        - name: data
+          type: data
+      podSpec:
+        securityContext:
+          fsGroup: 1000
+          runAsGroup: 1000
+          runAsUser: 1000
+          fsGroupChangePolicy: OnRootMismatch
+        containers:
+          - name: cn
+            command:
+              - /bin/bash
+              - /scripts/cn_entrypoint
+            env:
+              - name: POD_IP
+                valueFrom:
+                  fieldRef:
+                    apiVersion: v1
+                    fieldPath: status.podIP
+              - name: POD_NAME
+                valueFrom:
+                  fieldRef:
+                    apiVersion: v1
+                    fieldPath: metadata.name
+              - name: PGPASSWORD
+                valueFrom:
+                  secretKeyRef:
+                    name: $(CONN_CREDENTIAL_SECRET_NAME)
+                    key: password
+                    optional: false
+              - name: PGUSER
+                value: "opentenbase"
+              - name: PGDATA
+                value: /data/pgdata
+              - name: PG_HOST
+                value: "0.0.0.0"
+              - name: PG_PORT
+                value: "5432"
+              - name: PGDATABASE
+                value: "postgres"
+              - name: NODE_TYPE
+                value: coordinator
+              - name: STORAGE_MOUNT_PATH
+                value: /data
+            ports:
+              - containerPort: 5432
+                name: cn
+                protocol: TCP
+            livenessProbe:
+              exec:
+                command:
+                  - bash
+                  - -c
+                  - psql -h 127.0.0.1 -p 5432 postgres -c "select 1"
+              initialDelaySeconds: 5
+              periodSeconds: 5
+            readinessProbe:
+              exec:
+                command:
+                  - bash
+                  - -c
+                  - pg_isready -h 127.0.0.1 -p 5432
+              initialDelaySeconds: 30
+              periodSeconds: 5
+            volumeMounts: *volumeMounts
+---
+# Source: opentenbase/templates/clusterVersion.yaml
+apiVersion: apps.kubeblocks.io/v1alpha1
+kind: ClusterVersion
+metadata:
+  name: opentenbase-2.5.0
+  labels:
+    helm.sh/chart: opentenbase-0.1.0
+    app.kubernetes.io/name: opentenbase
+    app.kubernetes.io/instance: my-opentenbase
+    app.kubernetes.io/version: "2.5.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  clusterDefinitionRef: opentenbase
+  componentVersions:
+    - componentDefRef: gtm
+      versionsContext:
+        containers:
+          - name: gtm
+            image: docker.io/domainlau/opentenbase:v2.5.0
+            imagePullPolicy: IfNotPresent
+    - componentDefRef: dn
+      versionsContext:
+        containers:
+          - name: dn
+            image: docker.io/domainlau/opentenbase:v2.5.0
+            imagePullPolicy: IfNotPresent
+    - componentDefRef: cn
+      versionsContext:
+        containers:
+          - name: cn
+            image: docker.io/domainlau/opentenbase:v2.5.0
+            imagePullPolicy: IfNotPresent

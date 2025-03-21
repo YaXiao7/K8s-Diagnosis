@@ -1,0 +1,71 @@
+---
+# Source: smokeping/templates/common.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-smokeping
+  labels:
+    helm.sh/chart: smokeping-0.1.24
+    app.kubernetes.io/name: smokeping
+    app.kubernetes.io/instance: my-smokeping
+    app.kubernetes.io/version: "2.7.3"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: smokeping
+    app.kubernetes.io/instance: my-smokeping
+---
+# Source: smokeping/templates/common.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-smokeping
+  labels:
+    helm.sh/chart: smokeping-0.1.24
+    app.kubernetes.io/name: smokeping
+    app.kubernetes.io/instance: my-smokeping
+    app.kubernetes.io/version: "2.7.3"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: smokeping
+      app.kubernetes.io/instance: my-smokeping
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: smokeping
+        app.kubernetes.io/instance: my-smokeping
+    spec:
+      serviceAccountName: default
+      dnsPolicy: ClusterFirst
+      containers:
+      - name: my-smokeping
+        image: "ghcr.io/linuxserver/smokeping:version-2.7.3-r5"
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 80
+          protocol: TCP
+        volumeMounts:
+        livenessProbe:
+          tcpSocket:
+            port: http
+          initialDelaySeconds: 30
+          failureThreshold: 5
+          timeoutSeconds: 10
+        readinessProbe:
+          tcpSocket:
+            port: http
+          initialDelaySeconds: 30
+          failureThreshold: 5
+          timeoutSeconds: 10

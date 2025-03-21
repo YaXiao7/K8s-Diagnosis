@@ -1,0 +1,357 @@
+---
+# Source: dgraph/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+automountServiceAccountToken: true
+metadata:
+  name: dgraph
+  namespace: default
+  labels:
+    app: dgraph
+    chart: dgraph-24.0.2
+    component: alpha
+    release: my-dgraph
+    heritage: Helm
+---
+# Source: dgraph/templates/alpha/svc-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-dgraph-dgraph-alpha-headless
+  namespace: default
+  labels:
+    app: dgraph
+    chart: dgraph-24.0.2
+    component: alpha
+    release: my-dgraph
+    heritage: Helm
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: grpc-alpha-int
+      port: 7080
+      targetPort: 7080
+  selector:
+    app: dgraph
+    chart: dgraph-24.0.2
+    component: alpha
+    release: my-dgraph
+  publishNotReadyAddresses: true
+---
+# Source: dgraph/templates/alpha/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-dgraph-dgraph-alpha
+  namespace: default
+  labels:
+    app: dgraph
+    chart: dgraph-24.0.2
+    component: alpha
+    release: my-dgraph
+    heritage: Helm
+    monitor: alpha-dgraph-io
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: 8080
+      name: http-alpha
+    - port: 9080
+      name: grpc-alpha
+  selector:
+    app: dgraph
+    chart: dgraph-24.0.2
+    component: alpha
+    release: my-dgraph
+---
+# Source: dgraph/templates/zero/svc-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-dgraph-dgraph-zero-headless
+  namespace: default
+  labels:
+    app: dgraph
+    chart: dgraph-24.0.2
+    component: zero
+    release: my-dgraph
+    heritage: Helm
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: grpc-zero
+      port: 5080
+      targetPort: 5080
+  selector:
+    app: dgraph
+    chart: dgraph-24.0.2
+    release: my-dgraph
+    component: zero
+  publishNotReadyAddresses: true
+---
+# Source: dgraph/templates/zero/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-dgraph-dgraph-zero
+  namespace: default
+  labels:
+    app: dgraph
+    chart: dgraph-24.0.2
+    component: zero
+    release: my-dgraph
+    heritage: Helm
+    monitor: zero-dgraph-io
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5080
+      targetPort: 5080
+      name: grpc-zero
+    - port: 6080
+      targetPort: 6080
+      name: http-zero
+  selector:
+    app: dgraph
+    chart: dgraph-24.0.2
+    release: my-dgraph
+    component: zero
+---
+# Source: dgraph/templates/alpha/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-dgraph-dgraph-alpha
+  namespace: default
+  labels:
+    app: dgraph
+    chart: dgraph-24.0.2
+    component: alpha
+    release: my-dgraph
+    heritage: Helm
+spec:
+  serviceName: my-dgraph-dgraph-alpha-headless
+  replicas: 3
+  podManagementPolicy: "Parallel"
+  updateStrategy:
+    type: "RollingUpdate"
+  selector:
+    matchLabels:
+      app: dgraph
+      chart: dgraph-24.0.2
+      release: my-dgraph
+      component: alpha
+  template:
+    metadata:
+      name: my-dgraph-dgraph-alpha
+      annotations:
+        prometheus.io/path: /debug/prometheus_metrics
+        prometheus.io/port: "8080"
+        prometheus.io/scrape: "true"
+      labels:
+        app: dgraph
+        chart: dgraph-24.0.2
+        release: my-dgraph
+        component: alpha
+    spec:
+      serviceAccountName: dgraph
+      automountServiceAccountToken: true
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: component
+                  operator: In
+                  values:
+                  - alpha
+              topologyKey: kubernetes.io/hostname      
+      containers:
+      - name: my-dgraph-dgraph-alpha
+        image: docker.io/dgraph/dgraph:v24.0.2
+        ports:
+        - containerPort: 7080
+          name: grpc-alpha-int
+        - containerPort: 8080
+          name: http-alpha
+        - containerPort: 9080
+          name: grpc-alpha
+        imagePullPolicy: "IfNotPresent"
+        env:
+          - name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+        
+        command:
+          - bash
+          - "-c"
+          ## NOTE: awk gsub is needed to trim trailing period otherwise it causes
+          ##       crash for Kubernetes without the domain name
+          - |
+            set -ex
+            dgraph alpha --my=$(hostname -f | awk '{gsub(/\.$/,""); print $0}'):7080 --zero my-dgraph-dgraph-zero-0.my-dgraph-dgraph-zero-headless.${POD_NAMESPACE}.svc.cluster.local:5080,my-dgraph-dgraph-zero-1.my-dgraph-dgraph-zero-headless.${POD_NAMESPACE}.svc.cluster.local:5080,my-dgraph-dgraph-zero-2.my-dgraph-dgraph-zero-headless.${POD_NAMESPACE}.svc.cluster.local:5080 
+        resources:
+          requests:
+            memory: 100Mi
+        livenessProbe:
+          httpGet:
+            port: 8080
+            path: /health?live=1
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 6
+        readinessProbe:
+          httpGet:
+            port: 8080
+            path: /probe/graphql
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 6
+        volumeMounts:
+        - name: datadir
+          mountPath: /dgraph
+      terminationGracePeriodSeconds: 600
+      volumes:
+      - name: datadir
+        persistentVolumeClaim:
+          claimName: datadir
+  volumeClaimTemplates:
+    - metadata:
+        name: datadir
+        annotations:
+          volume.alpha.kubernetes.io/storage-class: anything
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "100Gi"
+---
+# Source: dgraph/templates/zero/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: "my-dgraph-dgraph-zero"
+  namespace: default
+  labels:
+    app: dgraph
+    chart: dgraph-24.0.2
+    component: zero
+    release: my-dgraph
+    heritage: Helm
+spec:
+  serviceName: my-dgraph-dgraph-zero-headless
+  replicas: 3
+  podManagementPolicy: "Parallel"
+  updateStrategy:
+    type: "RollingUpdate"
+  selector:
+    matchLabels:
+      app: dgraph
+      chart: dgraph-24.0.2
+      release: my-dgraph
+      component: zero
+  template:
+    metadata:
+      name: my-dgraph-dgraph-zero
+      annotations:
+        prometheus.io/path: /debug/prometheus_metrics
+        prometheus.io/port: "6080"
+        prometheus.io/scrape: "true"
+      labels:
+        app: dgraph
+        chart: dgraph-24.0.2
+        release: my-dgraph
+        component: zero
+    spec:
+      serviceAccountName: dgraph
+      automountServiceAccountToken: true
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: component
+                  operator: In
+                  values:
+                  - zero
+              topologyKey: kubernetes.io/hostname      
+      containers:
+      - name: my-dgraph-dgraph-zero
+        image: docker.io/dgraph/dgraph:v24.0.2
+        ports:
+        - containerPort: 5080
+          name: grpc-zero
+        - containerPort: 6080
+          name: http-zero
+        imagePullPolicy: "IfNotPresent"
+        env:
+          - name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+        command:
+          - bash
+          - "-c"
+          - |
+            set -ex
+            [[ `hostname` =~ -([0-9]+)$ ]] || exit 1
+              ordinal=${BASH_REMATCH[1]}
+              idx=$(($ordinal + 1))
+              if [[ $ordinal -eq 0 ]]; then
+                exec dgraph zero --my=$(hostname -f | awk '{gsub(/\.$/,""); print $0}'):5080 --raft idx=$idx --replicas 5 
+              else
+                exec dgraph zero --my=$(hostname -f | awk '{gsub(/\.$/,""); print $0}'):5080 --peer my-dgraph-dgraph-zero-0.my-dgraph-dgraph-zero-headless.${POD_NAMESPACE}.svc.cluster.local:5080 --raft idx=$idx --replicas 5 
+              fi
+        resources:
+          requests:
+            memory: 100Mi
+        livenessProbe:
+          httpGet:
+            port: 6080
+            path: /health
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 6
+        readinessProbe:
+          httpGet:
+            port: 6080
+            path: /state
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 6
+        volumeMounts:
+        - name: datadir
+          mountPath: /dgraph
+      terminationGracePeriodSeconds: 60
+      volumes:
+      - name: datadir
+        persistentVolumeClaim:
+          claimName: datadir
+  volumeClaimTemplates:
+    - metadata:
+        name: datadir
+        annotations:
+          volume.alpha.kubernetes.io/storage-class: anything
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "32Gi"

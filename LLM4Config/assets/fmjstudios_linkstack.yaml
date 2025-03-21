@@ -1,0 +1,188 @@
+---
+# Source: linkstack/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-linkstack
+  namespace: default
+  labels:
+    helm.sh/chart: linkstack-0.2.1
+    app.kubernetes.io/name: linkstack
+    app.kubernetes.io/instance: my-linkstack
+    app.kubernetes.io/version: "4.8.0"
+    app.kubernetes.io/managed-by: Helm
+automountServiceAccountToken: false
+---
+# Source: linkstack/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-linkstack
+  namespace: default
+  labels:
+    app.kubernetes.io/component: linkstack
+    helm.sh/chart: linkstack-0.2.1
+    app.kubernetes.io/name: linkstack
+    app.kubernetes.io/instance: my-linkstack
+    app.kubernetes.io/version: "4.8.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+  SERVER_ADMIN: admin@example.com
+  LOG_LEVEL: info
+  TZ: UTC
+  PHP_MEMORY_LIMIT: 256M
+  UPLOAD_MAX_FILESIZE: 8M
+---
+# Source: linkstack/templates/pvc.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: my-linkstack-pvc
+  namespace: default
+  labels:
+    helm.sh/chart: linkstack-0.2.1
+    app.kubernetes.io/name: linkstack
+    app.kubernetes.io/instance: my-linkstack
+    app.kubernetes.io/version: "4.8.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    meta.helm.sh/release-name: "my-linkstack"
+    meta.helm.sh/release-namespace: "default"
+    helm.sh/resource-policy: keep
+spec:
+  storageClassName: standard
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+---
+# Source: linkstack/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: my-linkstack
+  namespace: default
+  labels:
+    helm.sh/chart: linkstack-0.2.1
+    app.kubernetes.io/name: linkstack
+    app.kubernetes.io/instance: my-linkstack
+    app.kubernetes.io/version: "4.8.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: linkstack
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get"]
+---
+# Source: linkstack/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: my-linkstack
+  namespace: default
+  labels:
+    helm.sh/chart: linkstack-0.2.1
+    app.kubernetes.io/name: linkstack
+    app.kubernetes.io/instance: my-linkstack
+    app.kubernetes.io/version: "4.8.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: linkstack
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: my-linkstack
+subjects:
+  - kind: ServiceAccount
+    name: my-linkstack
+    namespace: default
+---
+# Source: linkstack/templates/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-linkstack
+  namespace: default
+  labels:
+    helm.sh/chart: linkstack-0.2.1
+    app.kubernetes.io/name: linkstack
+    app.kubernetes.io/instance: my-linkstack
+    app.kubernetes.io/version: "4.8.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: linkstack
+    app.kubernetes.io/instance: my-linkstack
+  internalTrafficPolicy: Cluster
+  sessionAffinity: None
+  ports:
+    - port: 8080
+      targetPort: 80
+      protocol: TCP
+      name: http
+    - port: 8443
+      targetPort: 443
+      protocol: TCP
+      name: https
+---
+# Source: linkstack/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-linkstack
+  namespace: default
+  labels:
+    helm.sh/chart: linkstack-0.2.1
+    app.kubernetes.io/name: linkstack
+    app.kubernetes.io/instance: my-linkstack
+    app.kubernetes.io/version: "4.8.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: linkstack
+      app.kubernetes.io/instance: my-linkstack
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: linkstack
+        app.kubernetes.io/instance: my-linkstack
+    spec:
+      serviceAccountName: my-linkstack
+      automountServiceAccountToken: false
+      containers:
+        - name: linkstack
+          image: docker.io/linkstackorg/linkstack:latest@sha256:abd691b4293b020a317de8794737671e0315159efcb868e8a4124d6f0611f7ae
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: my-linkstack
+          
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+            - name: https
+              containerPort: 443
+              protocol: TCP
+          volumeMounts:
+            - name: my-linkstack-pv
+              mountPath: /htdocs
+      volumes:
+        - name: my-linkstack-pv
+          persistentVolumeClaim:
+            claimName: my-linkstack-pvc
+      initContainers:
+        - name: linkstack-init
+          image: docker.io/linkstackorg/linkstack:latest@sha256:abd691b4293b020a317de8794737671e0315159efcb868e8a4124d6f0611f7ae
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh"]
+          args: ["-c", "cp -r /htdocs/. /data && chown -R 100: /data"]
+          volumeMounts:
+            - name: my-linkstack-pv
+              mountPath: "/data"
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain

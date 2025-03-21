@@ -1,0 +1,125 @@
+---
+# Source: adguard/templates/PersistentVolumeClaim.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: adguard-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: "5G"
+---
+# Source: adguard/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: adguard-svc
+  labels:
+    helm.sh/chart: adguard-0.12
+    app-name: adguard
+    component: "dns-server"
+    hostNetwork: "true"
+    internal-service: "false"
+    managed-by: chynten
+    created-by: chynten
+    version: "v0.108.0-b.7"
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8010
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app-name: adguard
+---
+# Source: adguard/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: adguard-deployment
+  labels:
+    helm.sh/chart: adguard-0.12
+    app-name: adguard
+    component: "dns-server"
+    hostNetwork: "true"
+    internal-service: "false"
+    managed-by: chynten
+    created-by: chynten
+    version: "v0.108.0-b.7"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app-name: adguard
+  template:
+    metadata:
+      labels:
+        app-name: adguard
+    spec:
+      hostNetwork: true
+      containers:
+        - name: adguard
+          securityContext:
+            {}
+          image: "adguard/adguardhome:v0.107.0-b.5"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: TZ
+              value: "UTC"
+          ports:
+            - name: http
+              containerPort: 8010
+              protocol: TCP
+            - name: dns-53-udp
+              containerPort: 53
+              protocol: UDP
+          volumeMounts:
+            - name: adguard-data
+              mountPath: /opt/adguardhome/work
+              subPath: adguard/data
+            - name: adguard-data
+              mountPath: /opt/adguardhome/conf
+              subPath: adguard/conf
+          resources:
+            {}
+      volumes:
+        - name: adguard-data
+          persistentVolumeClaim:
+            claimName: adguard-pvc
+---
+# Source: adguard/templates/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: adguard-ingress
+  labels:
+    helm.sh/chart: adguard-0.12
+    app-name: adguard
+    component: "dns-server"
+    hostNetwork: "true"
+    internal-service: "false"
+    managed-by: chynten
+    created-by: chynten
+    version: "v0.108.0-b.7"
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+    kubernetes.io/ingress.class: nginx
+spec:
+  tls:
+    - hosts:
+        - "dns.example.com"
+      secretName: adguard-letsencrypt-certificate
+  rules:
+    - host: "dns.example.com"
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: adguard-svc
+                port:
+                  number: 8010

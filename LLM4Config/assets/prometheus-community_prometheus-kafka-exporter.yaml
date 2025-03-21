@@ -1,0 +1,97 @@
+---
+# Source: prometheus-kafka-exporter/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-prometheus-kafka-exporter
+  labels:
+    app: prometheus-kafka-exporter
+    chart: prometheus-kafka-exporter-2.11.0
+    release: "my-prometheus-kafka-exporter"
+    heritage: "Helm"
+---
+# Source: prometheus-kafka-exporter/templates/role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: my-prometheus-kafka-exporter
+  labels:
+    app: prometheus-kafka-exporter
+    chart: prometheus-kafka-exporter-2.11.0
+    heritage: Helm
+    release: my-prometheus-kafka-exporter
+---
+# Source: prometheus-kafka-exporter/templates/rolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: my-prometheus-kafka-exporter
+  labels:
+    app: prometheus-kafka-exporter
+    chart: prometheus-kafka-exporter-2.11.0
+    heritage: Helm
+    release: my-prometheus-kafka-exporter
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: my-prometheus-kafka-exporter
+subjects:
+- kind: ServiceAccount
+  name: my-prometheus-kafka-exporter
+---
+# Source: prometheus-kafka-exporter/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-prometheus-kafka-exporter
+  labels:
+    app: prometheus-kafka-exporter
+    chart: prometheus-kafka-exporter-2.11.0
+    release: my-prometheus-kafka-exporter
+    heritage: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9308
+      targetPort: exporter-port
+      protocol: TCP
+      name: exporter-port
+  selector:
+    app: prometheus-kafka-exporter
+    release: my-prometheus-kafka-exporter
+---
+# Source: prometheus-kafka-exporter/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-prometheus-kafka-exporter
+  labels:
+    app: prometheus-kafka-exporter
+    chart: prometheus-kafka-exporter-2.11.0
+    release: my-prometheus-kafka-exporter
+    heritage: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus-kafka-exporter
+      release: my-prometheus-kafka-exporter
+  template:
+    metadata:
+      labels:
+        app: prometheus-kafka-exporter
+        release: my-prometheus-kafka-exporter
+    spec:
+      serviceAccountName: my-prometheus-kafka-exporter
+      containers:
+        - args:
+            - '--verbosity=0'
+            - '--kafka.server=kafka-server:9092'
+          env:
+          name: prometheus-kafka-exporter
+          image: "danielqsj/kafka-exporter:v1.8.0"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: exporter-port
+              containerPort: 9308
+              protocol: TCP

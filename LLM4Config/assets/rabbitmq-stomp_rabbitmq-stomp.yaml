@@ -1,0 +1,104 @@
+---
+# Source: rabbitmq-stomp/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-rabbitmq-stomp
+  namespace: default
+  labels:
+    helm.sh/chart: rabbitmq-stomp-0.1.1
+    app.kubernetes.io/name: rabbitmq-stomp
+    app.kubernetes.io/instance: my-rabbitmq-stomp
+    app.kubernetes.io/version: "3.10.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: rabbitmq-stomp/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-rabbitmq-stomp
+  namespace: default
+  labels:
+    helm.sh/chart: rabbitmq-stomp-0.1.1
+    app.kubernetes.io/name: rabbitmq-stomp
+    app.kubernetes.io/instance: my-rabbitmq-stomp
+    app.kubernetes.io/version: "3.10.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+  - name: amqp
+    port: 5672
+  - name: mgmt-ui
+    port: 15672
+  - name: stomp
+    port: 61613
+  selector:
+    app.kubernetes.io/name: rabbitmq-stomp
+    app.kubernetes.io/instance: my-rabbitmq-stomp
+---
+# Source: rabbitmq-stomp/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-rabbitmq-stomp
+  namespace: default
+  labels:
+    helm.sh/chart: rabbitmq-stomp-0.1.1
+    app.kubernetes.io/name: rabbitmq-stomp
+    app.kubernetes.io/instance: my-rabbitmq-stomp
+    app.kubernetes.io/version: "3.10.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: rabbitmq-stomp
+      app.kubernetes.io/instance: my-rabbitmq-stomp
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: rabbitmq-stomp
+        app.kubernetes.io/instance: my-rabbitmq-stomp
+    spec:
+      containers:
+        - name: rabbitmq-stomp
+          securityContext:
+            {}
+          image: "spy86/rabbitmq-stomp:latest"
+          imagePullPolicy: Always
+          ports:
+          - containerPort: 5672
+            name: amqp
+          - containerPort: 15672
+            name: mgmt-ui
+          - containerPort: 61613
+            name: stomp
+          resources:
+            limits:
+              cpu: 500m
+              memory: 2048M
+            requests:
+              cpu: 20m
+              memory: 512Mi
+---
+# Source: rabbitmq-stomp/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-rabbitmq-stomp-test-connection"
+  labels:
+    helm.sh/chart: rabbitmq-stomp-0.1.1
+    app.kubernetes.io/name: rabbitmq-stomp
+    app.kubernetes.io/instance: my-rabbitmq-stomp
+    app.kubernetes.io/version: "3.10.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-rabbitmq-stomp:']
+  restartPolicy: Never

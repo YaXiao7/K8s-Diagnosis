@@ -1,0 +1,86 @@
+---
+# Source: shlink-backend/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-shlink-backend
+  labels:
+    helm.sh/chart: shlink-backend-4.5.1
+    app.kubernetes.io/name: shlink-backend
+    app.kubernetes.io/instance: my-shlink-backend
+    app.kubernetes.io/version: "3.7.4"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: shlink-backend/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-shlink-backend
+  labels:
+    helm.sh/chart: shlink-backend-4.5.1
+    app.kubernetes.io/name: shlink-backend
+    app.kubernetes.io/instance: my-shlink-backend
+    app.kubernetes.io/version: "3.7.4"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: shlink-backend
+    app.kubernetes.io/instance: my-shlink-backend
+---
+# Source: shlink-backend/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-shlink-backend
+  labels:
+    helm.sh/chart: shlink-backend-4.5.1
+    app.kubernetes.io/name: shlink-backend
+    app.kubernetes.io/instance: my-shlink-backend
+    app.kubernetes.io/version: "3.7.4"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: shlink-backend
+      app.kubernetes.io/instance: my-shlink-backend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: shlink-backend
+        app.kubernetes.io/instance: my-shlink-backend
+    spec:
+      serviceAccountName: my-shlink-backend
+      containers:
+        - name: shlink-backend
+          image: "shlinkio/shlink:3.7.4"
+          imagePullPolicy: Always
+          env:
+            - name: DEFAULT_DOMAIN
+              value: doma.in
+            - name: IS_HTTPS_ENABLED
+              value: "false"
+            # MariaDB Settings
+            # MySQL Settings
+            # PostgreSQL Settings
+            # RabbitMQ Settings
+            # Redis Settings
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /rest/health
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /rest/health
+              port: http

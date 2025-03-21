@@ -1,0 +1,102 @@
+---
+# Source: prometheus-alerts/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    release: my-prometheus-alerts
+    chart: prometheus-alerts-0.1.0
+    heritage: Helm
+    app: prometheus
+    prometheus: null
+  name: my-prometheus-alerts-prometheus-alerts
+data:
+  alerts.rules: |-
+    # NOTE: These rules were kindly contributed by the Cloud Posse engineering team.
+
+    cluster:node_cpu_resources =
+      sum by (cluster) (machine_cpu_cores)
+
+    cluster:node_cpu_used =
+      sum by (cluster) (rate(node_cpu{mode!="idle"}[30s]))
+
+    cluster:node_cpu_idle:percent =
+      100 * (cluster:node_cpu_resources - cluster:node_cpu_used) / cluster:node_cpu_resources
+
+    ALERT ClusterCPULow
+      IF cluster:node_cpu_idle:percent <= 40
+      FOR 30s
+      LABELS {
+        service = "k8s",
+        severity = "warning",
+      }
+      ANNOTATIONS {
+        summary = "Cluster CPU high load",
+        description = "K8S cluster have high cpu load",
+      }
+
+    ALERT ClusterCPULow
+      IF cluster:node_cpu_idle:percent <= 20
+      FOR 30s
+      LABELS {
+        service = "k8s",
+        severity = "critical",
+      }
+      ANNOTATIONS {
+        summary = "Cluster CPU critical load",
+        description = "K8S cluster have critical cpu load",
+      }
+
+    cluster:memory_free:percent =
+      100 - cluster:memory_used:percent
+
+    ALERT ClusterMemoryLow
+      IF cluster:memory_free:percent <= 20
+      FOR 30s
+      LABELS {
+        service = "k8s",
+        severity = "warning",
+      }
+      ANNOTATIONS {
+        summary = "Cluster running out of memory",
+        description = "Cluster running out of memory",
+      }
+
+    ALERT ClusterMemoryLow
+      IF cluster:memory_free:percent <= 10
+      FOR 30s
+      LABELS {
+        service = "k8s",
+        severity = "critical",
+      }
+      ANNOTATIONS {
+        summary = "Cluster ran out of memory",
+        description = "Cluster ran out of memory",
+      }
+      
+    kube_pod_container_restarts_per_hour =
+      delta(kube_pod_container_status_restarts[1h])
+
+    ALERT PodRestartsTooOften
+      IF kube_pod_container_restarts_per_hour >= 5
+      FOR 30s
+      LABELS {
+        service = "k8s",
+        severity = "warning",
+      }
+      ANNOTATIONS {
+        summary = "Pod {{ $labels.pod }} restarts too often",
+        description = "Pod {{ $labels.pod }} restarts {{ $value }} during last 1 hour. Should be < 5",
+      }
+
+    ALERT PodRestartsTooOften
+      IF kube_pod_container_restarts_per_hour >= 10
+      FOR 30s
+      LABELS {
+        service = "k8s",
+        severity = "critical",
+      }
+      ANNOTATIONS {
+        summary = "Pod {{ $labels.pod }} restarts too often",
+        description = "Pod {{ $labels.pod }} restarts {{ $value }} during last 1 hour. This is critical level, should be < 10",
+      }

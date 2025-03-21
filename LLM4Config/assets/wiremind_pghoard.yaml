@@ -1,0 +1,258 @@
+---
+# Source: pghoard/templates/secret.yaml
+# XXX Not maintained, see wiremind/template/pghoard_secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-pghoard
+  labels:
+    app: pghoard
+    chart: pghoard-0.8.1
+    release: my-pghoard
+    heritage: Helm
+data:
+  PG_HOST: Q0hBTkdFTUU=
+  PG_PORT: "NTQzMg=="
+  PG_USER: Q0hBTkdFTUU=
+  PG_PASSWORD: "Q0hBTkdFTUU="
+---
+# Source: pghoard/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-pghoard
+  labels:
+    heritage: Helm
+    release: my-pghoard
+    chart: pghoard-0.8.1
+    app: pghoard
+data:
+  PGHOARD_STORAGE_TYPE: "local"
+  PGHOARD_BASEBACKUP_COUNT: "30"
+  PGHOARD_BASEBACKUP_HOUR: "4"
+  PGHOARD_BASEBACKUP_INTERVAL_HOURS: "24"
+  PGHOARD_DIRECTORY: /var/lib/pghoard
+  PGHOARD_ACTIVE_BACKUP_MODE: pg_receivexlog
+  # docker-pghoard creates a "site" (i.e backup) named $HOSTNAME, so we hijack it so that site name is stable
+  HOSTNAME: my-pghoard
+---
+# Source: pghoard/templates/service-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-pghoard-headless
+  labels:
+    app.kubernetes.io/name: pghoard
+    helm.sh/chart: pghoard-0.8.1
+    app.kubernetes.io/instance: my-pghoard
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: backup
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+  - name: pghoard
+    port: 16000
+    targetPort: pghoard
+  selector:
+    app.kubernetes.io/name: pghoard
+    app.kubernetes.io/instance: my-pghoard
+    app.kubernetes.io/component: backup
+---
+# Source: pghoard/templates/deployment-restore.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-pghoard-restore
+  labels:
+    app.kubernetes.io/name: pghoard
+    helm.sh/chart: pghoard-0.8.1
+    app.kubernetes.io/instance: my-pghoard
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: restore
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pghoard
+      app.kubernetes.io/instance: my-pghoard
+      app.kubernetes.io/component: restore
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pghoard
+        helm.sh/chart: pghoard-0.8.1
+        app.kubernetes.io/instance: my-pghoard
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/component: restore
+        my-pghoard-postgresql-client: "true"  # Allows postgresql netpol, from the postgresql helm chart, to accept pghoard
+      annotations:
+        checksum/config: 89f6d289cea5ccfcbfcbe18cf1e8fb5fedb9278c2a26f3efb1d725fb80dc1632
+    spec:
+      containers:
+        - name: pghoard-restore
+          image: "wiremind/pghoard:12-2019-11-26"
+          command: ['/bin/bash', '/restore.sh']
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: PGHOARD_RESTORE_SITE
+              value: my-pghoard
+          envFrom:
+          - secretRef:
+              name: my-pghoard
+          - configMapRef:
+              name: my-pghoard
+          resources:
+            {}
+          volumeMounts:
+            - name: pghoard
+              mountPath: /var/lib/pghoard
+      restartPolicy: Always
+      volumes:
+        - name: pghoard
+          # Note: see https://github.com/kubernetes/kubernetes/issues/60903
+          persistentVolumeClaim:
+            claimName: data-my-pghoard-0
+            # pghoard in restore mode will write a satusfile in the site directory.
+            # XXX for integrity reasons, this should be set to true. We do not want a restore to mess with our backup.
+            readOnly: false
+      affinity:
+        # Force to be on same node than backup in order to be able to mount Persistent Volume
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                app.kubernetes.io/name: pghoard
+                app.kubernetes.io/instance: my-pghoard
+                app.kubernetes.io/component: backup
+            topologyKey: kubernetes.io/hostname
+---
+# Source: pghoard/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-pghoard
+  labels:
+    app.kubernetes.io/name: pghoard
+    helm.sh/chart: pghoard-0.8.1
+    app.kubernetes.io/instance: my-pghoard
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: backup
+spec:
+  replicas: 1
+  serviceName: my-pghoard-headless
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pghoard
+      app.kubernetes.io/instance: my-pghoard
+      app.kubernetes.io/component: backup
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pghoard
+        helm.sh/chart: pghoard-0.8.1
+        app.kubernetes.io/instance: my-pghoard
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/component: backup
+        my-pghoard-postgresql-client: "true"  # Allows postgresql netpol, from the postgresql helm chart, to accept pghoard
+      annotations:
+        checksum/config: 89f6d289cea5ccfcbfcbe18cf1e8fb5fedb9278c2a26f3efb1d725fb80dc1632
+    spec:
+      containers:
+        - name: pghoard
+          image: "wiremind/pghoard:12-2019-11-26"
+          imagePullPolicy: IfNotPresent
+          envFrom:
+          - secretRef:
+              name: my-pghoard
+          - configMapRef:
+              name: my-pghoard
+          resources:
+            {}
+          volumeMounts:
+          - name: data
+            mountPath: /var/lib/pghoard
+          
+          ports:
+          - name: pghoard
+            containerPort: 16000
+      restartPolicy: Always
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "1Gi"
+---
+# Source: pghoard/templates/crontab-restore-autocheck.yaml
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: my-pghoard-check
+  labels:
+    app.kubernetes.io/name: pghoard
+    helm.sh/chart: pghoard-0.8.1
+    app.kubernetes.io/instance: my-pghoard
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: restore-autocheck
+spec:
+  schedule: 0 12 * * *
+  startingDeadlineSeconds: 600
+  concurrencyPolicy: "Forbid"
+  failedJobsHistoryLimit: 1
+  successfulJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: pghoard
+            helm.sh/chart: pghoard-0.8.1
+            app.kubernetes.io/instance: my-pghoard
+            app.kubernetes.io/managed-by: Helm
+            app.kubernetes.io/component: restore-autocheck
+            my-pghoard-postgresql-client: "true"  # Allows postgresql netpol, from the postgresql helm chart, to accept pghoard
+          annotations:
+            checksum/config: 89f6d289cea5ccfcbfcbe18cf1e8fb5fedb9278c2a26f3efb1d725fb80dc1632
+        spec:
+          containers:
+            - name: pghoard-restore
+              image: "wiremind/pghoard:12-2019-11-26"
+              command: ['/bin/bash', '/restore.sh']
+              imagePullPolicy: IfNotPresent
+              env:
+                - name: PGHOARD_RESTORE_SITE
+                  value: my-pghoard
+                - name: RESTORE_CHECK_COMMAND
+                  value: "SELECT * FROM my_table;"
+              envFrom:
+              - secretRef:
+                  name: my-pghoard
+              - configMapRef:
+                  name: my-pghoard
+              volumeMounts:
+                - name: pghoard
+                  mountPath: /var/lib/pghoard
+          restartPolicy: Never
+          volumes:
+            - name: pghoard
+              # Note: see https://github.com/kubernetes/kubernetes/issues/60903
+              persistentVolumeClaim:
+                claimName: data-my-pghoard-0
+                # pghoard in restore mode will write a satusfile in the site directory.
+                # XXX for integrity reasons, this should be set to true. We do not want a restore to mess with our backup.
+                readOnly: false
+          affinity:
+            # Force to be on same node than backup in order to be able to mount Persistent Volume
+            podAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+              - labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: pghoard
+                    app.kubernetes.io/instance: my-pghoard
+                    app.kubernetes.io/component: backup
+                topologyKey: kubernetes.io/hostname

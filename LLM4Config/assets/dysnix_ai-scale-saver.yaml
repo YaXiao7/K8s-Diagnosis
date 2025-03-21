@@ -1,0 +1,199 @@
+---
+# Source: ai-scale-saver/templates/base-resources.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-ai-scale-saver
+  labels:
+    app.kubernetes.io/name: ai-scale-saver
+    helm.sh/chart: ai-scale-saver-0.1.0
+    app.kubernetes.io/instance: my-ai-scale-saver
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: ai-scale-saver/templates/base-resources.yaml
+apiVersion: v1
+kind: ConfigMap
+immutable: false
+metadata:
+  name: my-ai-scale-saver
+  labels:
+    app.kubernetes.io/name: ai-scale-saver
+    helm.sh/chart: ai-scale-saver-0.1.0
+    app.kubernetes.io/instance: my-ai-scale-saver
+    app.kubernetes.io/managed-by: Helm
+data:
+  configs.yaml: |
+    debugMode: true
+    elasticsearch:
+      client:
+        address: http://localhost:9200
+        maxRetries: 7
+        password: ""
+        transport:
+          maxIdleConnDuration: 1m
+          readTimeout: 7s
+          writeTimeout: 7s
+        username: ""
+      processor:
+        batchTimeout: 1m
+        bulkTimeout: 10s
+        flushBytes: 4KiB
+        flushInterval: 30s
+        indexTemplatePatternName: ai-scale
+        workersCount: 10
+    grpc:
+      compression:
+        enabled: false
+        type: Zstd
+      connection:
+        host: 0.0.0.0
+        insecure: true
+        maxMessageSize: 30MiB
+        port: 8091
+        readBufferSize: 100MiB
+        timeout: 15s
+        writeBufferSize: 100MiB
+      enabled: true
+      keepalive:
+        enforcementPolicy:
+          minTime: 20m
+          permitWithoutStream: false
+        time: 5m
+        timeout: 5m
+      useReflection: true
+    monitoring:
+      enabled: true
+    profiling:
+      enabled: true
+    single:
+      buffer:
+        readBufferSize: 4MiB
+        writeBufferSize: 4MiB
+      concurrency: 100000
+      enabled: true
+      host: 0.0.0.0
+      httptransport:
+        maxIdleConnDuration: 15s
+        readTimeout: 7s
+        writeTimeout: 7s
+      name: pprof/monitoring server
+      port: 8097
+      tcpKeepalive:
+        enabled: true
+        period: 1s
+---
+# Source: ai-scale-saver/templates/base-resources.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-ai-scale-saver
+  labels:
+    app.kubernetes.io/name: ai-scale-saver
+    helm.sh/chart: ai-scale-saver-0.1.0
+    app.kubernetes.io/instance: my-ai-scale-saver
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - name: grpc
+      port: 8091
+      protocol: TCP
+      targetPort: grpc
+    - name: monitoring
+      port: 8097
+      protocol: TCP
+      targetPort: monitoring
+  selector:
+    app.kubernetes.io/name: ai-scale-saver
+    app.kubernetes.io/instance: my-ai-scale-saver
+---
+# Source: ai-scale-saver/templates/base-resources.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-ai-scale-saver
+  labels:
+    app.kubernetes.io/name: ai-scale-saver
+    helm.sh/chart: ai-scale-saver-0.1.0
+    app.kubernetes.io/instance: my-ai-scale-saver
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ai-scale-saver
+      app.kubernetes.io/instance: my-ai-scale-saver
+  template:
+    metadata:
+      annotations:
+        checksum/config: '6c6d59e9cf0bd27b1cbe346d1253da52dfae5ebed5005686cf3c0e0d20cb5263'
+      labels:
+        app.kubernetes.io/name: ai-scale-saver
+        helm.sh/chart: ai-scale-saver-0.1.0
+        app.kubernetes.io/instance: my-ai-scale-saver
+        app.kubernetes.io/managed-by: Helm
+    spec:      
+      serviceAccountName: my-ai-scale-saver
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: ai-scale-saver
+                    app.kubernetes.io/instance: my-ai-scale-saver
+                namespaces:
+                  - "default"
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+      securityContext: 
+        fsGroup: 1001
+      
+      containers:
+        -
+          name: ai-scale-saver
+          image: alex6021710/ai-scale-saver:latest
+          imagePullPolicy: Always
+          securityContext: 
+            runAsNonRoot: true
+            runAsUser: 1001
+          command:
+            - /app
+          args:
+            - -conf=/etc/saver/configs/configs.yaml
+          resources:
+            limits: {}
+            requests: {}
+          ports:  
+            - name: grpc
+              containerPort: 8091
+            - name: monitoring
+              containerPort: 8097
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /healthz
+              port: 8097
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /readyz
+              port: 8097
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+          volumeMounts:  
+            - mountPath: /etc/saver/configs
+              name: configs
+              readOnly: true
+      volumes:   
+        - configMap:
+            name: 'my-ai-scale-saver'
+          name: configs

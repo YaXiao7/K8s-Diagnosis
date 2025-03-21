@@ -1,0 +1,197 @@
+---
+# Source: skeleton-pip/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-skeleton-pip
+  labels:
+    helm.sh/chart: skeleton-pip-0.1.0
+    app.kubernetes.io/name: skeleton-pip
+    app.kubernetes.io/instance: my-skeleton-pip
+    app.kubernetes.io/part-of: skeleton-pip
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+---
+# Source: skeleton-pip/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-skeleton-pip
+  labels:
+    helm.sh/chart: skeleton-pip-0.1.0
+    app.kubernetes.io/name: skeleton-pip
+    app.kubernetes.io/instance: my-skeleton-pip
+    app.kubernetes.io/part-of: skeleton-pip
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+  gateway-location: example
+  properties: |-
+    export const GATSBY_API_URL= "https://backend-bisc-dev.commonground.nu/api"
+    export const GATSBY_ADMIN_URL= "https://backend-bisc-dev.commonground.nu/admin"
+    export const GATSBY_ME_URL= "https://backend-bisc-dev.commonground.nu/api/users/me"
+    export const GATSBY_BASE_URL= "https://backend-bisc-dev.commonground.nu"
+    export const GATSBY_FRONTEND_URL= "https://admin-bisc-dev.commonground.nu"
+    export const GATSBY_ORGANIZATION= ""
+    export const GATSBY_LOGIN_REDIRECT= "vault"
+---
+# Source: skeleton-pip/templates/pwa-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-skeleton-pip
+  labels:
+    helm.sh/chart: skeleton-pip-0.1.0
+    app.kubernetes.io/name: skeleton-pip-pwa
+    app.kubernetes.io/instance: my-skeleton-pip
+    app.kubernetes.io/part-of: skeleton-pip
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  ports:
+    - port: 80
+      targetPort: 80
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: skeleton-pip-pwa
+    app.kubernetes.io/instance: my-skeleton-pip
+    app.kubernetes.io/part-of: skeleton-pip
+---
+# Source: skeleton-pip/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-skeleton-pip
+  labels:
+    helm.sh/chart: skeleton-pip-0.1.0
+    app.kubernetes.io/name: skeleton-pip-pwa
+    app.kubernetes.io/instance: my-skeleton-pip
+    app.kubernetes.io/part-of: skeleton-pip
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: skeleton-pip-pwa
+      app.kubernetes.io/instance: my-skeleton-pip
+      app.kubernetes.io/part-of: skeleton-pip
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: skeleton-pip-pwa
+        app.kubernetes.io/instance: my-skeleton-pip
+        app.kubernetes.io/part-of: skeleton-pip
+    spec:
+      securityContext:
+        {}
+      volumes:
+          - name: env
+            configMap:
+                name: my-skeleton-pip
+                items:
+                    - key: "properties"
+                      path: "env.js"
+      containers:
+        - name: skeleton-pip-pwa
+          securityContext:
+            {}
+          image: "ghcr.io/conductionnl/skeleton-pip:dev"
+          imagePullPolicy: Always
+          volumeMounts:
+              -   name: env
+                  mountPath: "/usr/share/nginx/html/env.js"
+                  subPath: "env.js"
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+            {}
+---
+# Source: skeleton-pip/templates/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: my-skeleton-pip
+  labels:
+    helm.sh/chart: skeleton-pip-0.1.0
+    app.kubernetes.io/name: skeleton-pip
+    app.kubernetes.io/instance: my-skeleton-pip
+    app.kubernetes.io/part-of: skeleton-pip
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: admin-bisc-dev.commonground.nu
+      http:
+        paths:
+          - path: /api
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: my-skeleton-pip-commonground-gateway
+                port:
+                  number: 80
+          - path: /digid
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: my-skeleton-pip-commonground-gateway
+                port:
+                  number: 80
+          - path: /saml
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: my-skeleton-pip-commonground-gateway
+                port:
+                  number: 80
+          - path: /login
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: my-skeleton-pip-commonground-gateway
+                port:
+                  number: 80
+          - path: /
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: my-skeleton-pip
+                port:
+                  number: 80
+---
+# Source: skeleton-pip/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-skeleton-pip-test-connection"
+  labels:
+    helm.sh/chart: skeleton-pip-0.1.0
+    app.kubernetes.io/name: skeleton-pip
+    app.kubernetes.io/instance: my-skeleton-pip
+    app.kubernetes.io/part-of: skeleton-pip
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-skeleton-pip:80']
+  restartPolicy: Never

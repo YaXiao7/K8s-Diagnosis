@@ -1,0 +1,112 @@
+---
+# Source: sickchill/templates/common.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-sickchill
+  labels:
+    helm.sh/chart: sickchill-0.1.0
+    app.kubernetes.io/name: sickchill
+    app.kubernetes.io/instance: my-sickchill
+    app.kubernetes.io/version: "2021.5.10"
+    app.kubernetes.io/managed-by: Helm
+data:
+  TZ: America/Los_Angeles
+---
+# Source: sickchill/templates/common.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-sickchill
+  labels:
+    helm.sh/chart: sickchill-0.1.0
+    app.kubernetes.io/name: sickchill
+    app.kubernetes.io/instance: my-sickchill
+    app.kubernetes.io/version: "2021.5.10"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8081
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: sickchill
+    app.kubernetes.io/instance: my-sickchill
+---
+# Source: sickchill/templates/common.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-sickchill
+  labels:
+    helm.sh/chart: sickchill-0.1.0
+    app.kubernetes.io/name: sickchill
+    app.kubernetes.io/instance: my-sickchill
+    app.kubernetes.io/version: "2021.5.10"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sickchill
+      app.kubernetes.io/instance: my-sickchill
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: sickchill
+        app.kubernetes.io/instance: my-sickchill
+    spec:
+      serviceAccountName: default
+      dnsPolicy: ClusterFirst
+      containers:
+      - name: my-sickchill
+        image: "ghcr.io/linuxserver/sickchill:2021.5.10-1-ls63"
+        imagePullPolicy: IfNotPresent
+        envFrom:
+          - configMapRef:
+              name: my-sickchill
+        ports:
+        - name: http
+          containerPort: 8081
+          protocol: TCP
+        volumeMounts:
+        livenessProbe:
+          tcpSocket:
+            port: http
+          initialDelaySeconds: 30
+          failureThreshold: 5
+          timeoutSeconds: 10
+        readinessProbe:
+          tcpSocket:
+            port: http
+          initialDelaySeconds: 30
+          failureThreshold: 5
+          timeoutSeconds: 10
+---
+# Source: sickchill/templates/common.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: my-sickchill
+  labels:
+    helm.sh/chart: sickchill-0.1.0
+    app.kubernetes.io/name: sickchill
+    app.kubernetes.io/instance: my-sickchill
+    app.kubernetes.io/version: "2021.5.10"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  rules:
+    - host: "sickchill.192.168.1.203.nip.io"
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: my-sickchill
+                port:
+                  number: 8081

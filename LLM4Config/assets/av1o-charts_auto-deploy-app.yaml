@@ -1,0 +1,130 @@
+---
+# Source: auto-deploy-app/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-auto-deploy-app-auto-deploy
+  annotations:
+  labels:
+    app: my-auto-deploy-app
+    chart: "auto-deploy-app-0.15.4"
+    release: my-auto-deploy-app
+    heritage: Helm
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
+    name: web
+  selector:
+    app: my-auto-deploy-app
+    tier: "web"
+---
+# Source: auto-deploy-app/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-auto-deploy-app
+  annotations:
+    
+    
+  labels:
+    app: my-auto-deploy-app
+    track: "stable"
+    tier: "web"
+    chart: "auto-deploy-app-0.15.4"
+    release: my-auto-deploy-app
+    heritage: Helm
+spec:
+  selector:
+    matchLabels:
+      app: my-auto-deploy-app
+      track: "stable"
+      tier: "web"
+      release: my-auto-deploy-app
+  replicas: 1
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: "auto-deploy-app"
+        rollme: "ChPkq"
+        checksum/application-secrets: ""
+        
+        
+      labels:
+        app: my-auto-deploy-app
+        track: "stable"
+        tier: "web"
+        release: my-auto-deploy-app
+    spec:
+      volumes:
+      imagePullSecrets:
+          - name: gitlab-registry
+      automountServiceAccountToken: true
+      containers:
+      - name: auto-deploy-app
+        image: "gcr.io/google-containers/echoserver:1.9"
+        imagePullPolicy: Always
+        env:
+        - name: GITLAB_ENVIRONMENT_NAME
+          value: 
+        - name: GITLAB_ENVIRONMENT_URL
+          value: 
+        - name: KUBERNETES_SERVICE
+          value: my-auto-deploy-app-auto-deploy
+        - name: KUBERNETES_NAMESPACE
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+        ports:
+        - name: "web"
+          containerPort: 8080
+        volumeMounts:
+        livenessProbe:
+          httpGet:
+            path: /
+            scheme: HTTP
+            port: 8080
+          initialDelaySeconds: 15
+          timeoutSeconds: 15
+        readinessProbe:
+          httpGet:
+            path: /
+            scheme: HTTP
+            port: 8080
+          initialDelaySeconds: 5
+          timeoutSeconds: 3
+        resources:
+            {}
+---
+# Source: auto-deploy-app/templates/ingress.yaml
+apiVersion: networking.k8s.io/v1beta1
+kind: Ingress
+metadata:
+  name: my-auto-deploy-app-auto-deploy
+  labels:
+    app: my-auto-deploy-app
+    chart: "auto-deploy-app-0.15.4"
+    release: my-auto-deploy-app
+    heritage: Helm
+  annotations:
+    kubernetes.io/ingress.class: nginx
+spec:
+  tls:
+  - hosts:
+    - "my.host.com"
+    secretName: my-auto-deploy-app-auto-deploy-tls
+  rules:
+  - host: "my.host.com"
+    http:
+      &httpRule
+      paths:
+      - path: "/"
+        pathType: ImplementationSpecific
+        backend: &backend
+          service:
+            name: my-auto-deploy-app-auto-deploy
+            port:
+              number: 8080

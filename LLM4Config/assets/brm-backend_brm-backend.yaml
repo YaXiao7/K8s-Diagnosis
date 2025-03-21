@@ -1,0 +1,162 @@
+---
+# Source: brm-backend/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    app: brm-rest-api
+  name: brm-rest-api
+data:
+  version: "1.0"
+  app.version: "1.0.0"
+
+  #General Configuration
+  general.bank-name: ""
+  general.bank-code: ""
+  general.token-issuer: ""
+  spring.jackson.time-zone: ""
+
+  #General Session Configuration
+  general.session-timeout-in-hours: ""
+  general.auto-logoff-when-privilege-change: ""
+
+  #Default given password for users after creation.
+  general.default-user-secret: ""
+
+  #Logging Configuration
+  logger.log-properties-on-startup: ""
+  logging.not-log-request-addresses: ""
+
+  #Server Admin Configuration
+  server.admin.username: ""
+  server.admin.email: ""
+  server.admin.secret: ""
+
+  #API Endpoint Configuration
+  frontend.homepage: "https://server"
+  server.servlet.contextPath: "/api"
+  endpoints.cors.allowed-origins: "*"
+
+  #Cipher Configuration
+  jasypt.encryptor.password: ""
+  
+  #Authorization Configuration (simple, ldap)
+  authorization.login-type: ""
+  authorization.ldap-provider-url: ""
+  authorization.ldap-base: ""
+  authorization.ldap-dn: ""
+  authorization.ldap-password: ""
+  
+  #Database Configuration
+  spring.datasource.url: ""
+  spring.datasource.username: ""
+  spring.datasource.password-column-exists: ""
+  spring.datasource.password: ""
+  spring.datasource.driver-class-name: "com.microsoft.sqlserver.jdbc.SQLServerDriver"
+  spring.jdbc.template.fetch-size: "150"
+  spring.datasource.hikari.minimumIdle: "2"
+  spring.datasource.hikari.maximumPoolSize: "8"
+  spring.datasource.hikari.validation-timeout: "40000"
+  spring.datasource.hikari.connectionTimeout: "30000"
+  spring.datasource.hikari.idleTimeout: "35000"
+  spring.datasource.hikari.maxLifetime: "40000"
+  spring.datasource.hikari.connection-test-query: "SELECT 1"
+  spring.datasource.test-query: "SELECT 1"
+  
+  #Mail Server Configuration
+  spring.mail.host: "smtp.office365.com"
+  spring.mail.port: "587"
+  spring.mail.username: ""
+  spring.mail.password: ""
+  spring.mail.from: ""
+  spring.mail.feedback-to-list: ""
+  spring.mail.website-address: ""
+  spring.mail.properties.mail.protocol: "smtp"
+  spring.mail.properties.mail.smtp.connectiontimeout: "15000"
+  spring.mail.properties.mail.smtp.timeout: "15000"
+  spring.mail.properties.mail.smtp.writetimeout: "15000"
+  spring.mail.properties.mail.debug: "false"
+
+  #Cache Configuration
+  spring.cache.type: "Simple"
+
+
+  TZ: Europe/Istanbul
+---
+# Source: brm-backend/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: denizbank-brm-rest-api
+  labels:
+    app: denizbank-brm-rest-api
+spec:
+  selector:
+    app: denizbank-brm-rest-api
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080
+  type: LoadBalancer
+---
+# Source: brm-backend/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  labels:
+    app: denizbank-brm-rest-api
+  name: denizbank-brm-rest-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: denizbank-brm-rest-api
+  strategy: { }
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: denizbank-brm-rest-api
+    spec:
+      containers:
+        - image: 
+          name: 
+          envFrom:
+            - configMapRef:
+                name: brm-rest-api
+          resources:
+            limits:
+              cpu: 2
+              memory: "4Gi"
+            requests:
+              cpu: 1
+              memory: "2Gi"
+          ports:
+            - containerPort: 8080
+      restartPolicy: Always
+      imagePullSecrets:
+        - name: regcred
+status: { }
+---
+# Source: brm-backend/templates/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: 
+  namespace: brm
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  rules:
+    - host: 
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: brm-backend
+                port:
+                  number: 80

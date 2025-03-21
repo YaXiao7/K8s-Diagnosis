@@ -1,0 +1,193 @@
+---
+# Source: jupyterlab/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  # annotations:
+  #   template.openshift.io/expose-password: "{.data['application-password']}"
+  name: my-jupyterlab
+  labels:
+    helm.sh/chart: jupyterlab-0.1.38
+    app.kubernetes.io/name: jupyterlab
+    app.kubernetes.io/instance: my-jupyterlab
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+stringData:
+  application-password:
+---
+# Source: jupyterlab/templates/pvc.yaml
+kind: "PersistentVolumeClaim"
+apiVersion: "v1"
+metadata:
+  name: my-jupyterlab
+  labels:
+    helm.sh/chart: jupyterlab-0.1.38
+    app.kubernetes.io/name: jupyterlab
+    app.kubernetes.io/instance: my-jupyterlab
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  accessModes:
+    - "ReadWriteMany"
+  resources:
+    requests:
+      storage: 5Gi
+---
+# Source: jupyterlab/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-jupyterlab
+  labels:
+    helm.sh/chart: jupyterlab-0.1.38
+    app.kubernetes.io/name: jupyterlab
+    app.kubernetes.io/instance: my-jupyterlab
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8888
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: jupyterlab
+    app.kubernetes.io/instance: my-jupyterlab
+---
+# Source: jupyterlab/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-jupyterlab
+  labels:
+    helm.sh/chart: jupyterlab-0.1.38
+    app.kubernetes.io/name: jupyterlab
+    app.kubernetes.io/instance: my-jupyterlab
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: jupyterlab
+      app.kubernetes.io/instance: my-jupyterlab
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: jupyterlab
+        app.kubernetes.io/instance: my-jupyterlab
+    spec:
+      serviceAccountName: anyuid
+      securityContext:
+        {}
+      containers:
+        - name: jupyterlab
+          securityContext:
+            runAsUser: 0
+          image: "ghcr.io/maastrichtu-ids/jupyterlab:latest"
+          imagePullPolicy: Always
+          workingDir: /home/jovyan/work/persistent
+          env:
+            - name: JUPYTER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  key: application-password
+                  name: my-jupyterlab
+            - name: JUPYTER_ENABLE_LAB
+              value: "yes"
+            - name: GRANT_SUDO
+              value: "yes"
+            - name: GIT_URL
+              value: 
+            - name: GIT_NAME
+              value: Default user
+            - name: GIT_EMAIL
+              value: default@maastrichtuniversity.nl
+            # To enable updating the image: https://github.com/kubernetes/kubernetes/issues/33664
+            - name: RELEASE_DATE
+              value: "2024-09-16 17:41:38.775907856 +0930 ACST m=+1.374850918"
+          ports:
+            - name: http
+              containerPort: 8888
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 15 
+            failureThreshold: 40
+            periodSeconds: 10
+            timeoutSeconds: 2
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 15 
+            failureThreshold: 40
+            periodSeconds: 10
+            timeoutSeconds: 2
+          resources:
+            {}
+          volumeMounts:
+            - name: dshm
+              mountPath: /dev/shm
+            - name: data
+              mountPath: /home/jovyan/work/persistent
+      volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+        - name: data
+          persistentVolumeClaim:
+            claimName: my-jupyterlab
+---
+# Source: jupyterlab/templates/openshiftRoute.yaml
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: my-jupyterlab
+  labels:
+    helm.sh/chart: jupyterlab-0.1.38
+    app.kubernetes.io/name: jupyterlab
+    app.kubernetes.io/instance: my-jupyterlab
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+# Stub to solve ingress API validation issues
+status:
+  ingress:
+    - host: ""
+spec:
+  host: 
+  path: 
+  wildcardPolicy: None
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+  to:
+    kind: Service
+    name: my-jupyterlab
+    weight: 100
+---
+# Source: jupyterlab/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-jupyterlab-test-connection"
+  labels:
+    helm.sh/chart: jupyterlab-0.1.38
+    app.kubernetes.io/name: jupyterlab
+    app.kubernetes.io/instance: my-jupyterlab
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-jupyterlab:8888']
+  restartPolicy: Never

@@ -1,0 +1,349 @@
+---
+# Source: clamapi/charts/clamav/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: clamav
+  labels:
+    app.kubernetes.io/name: clamav
+    helm.sh/chart: clamav-2.7.0
+    app.kubernetes.io/instance: my-clamapi
+    app.kubernetes.io/version: "1.9.43"
+    app.kubernetes.io/managed-by: Helm
+automountServiceAccountToken: false
+---
+# Source: clamapi/charts/clamav/templates/clamd-configmap.yaml
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: clamav-clamd
+  labels:
+    app: clamav
+    chart: clamav-2.7.0
+    release: my-clamapi
+    heritage: Helm
+data:
+  clamd.conf:
+        |
+      ###############
+      # General
+      ###############
+    
+      DatabaseDirectory /data
+      TemporaryDirectory /tmp
+      LogTime yes
+      # CUSTOM: Use pid file in tmp
+      PidFile /tmp/clamd.pid
+      LocalSocket /tmp/clamd.sock
+      # CUSTOM: Set local socket group to defined group id
+      LocalSocketGroup 2000
+      TCPSocket 3310
+      Foreground yes
+    
+      ###############
+      # Results
+      ###############
+    
+      DetectPUA yes
+      ExcludePUA NetTool
+      ExcludePUA PWTool
+      HeuristicAlerts yes
+      Bytecode yes
+    
+      ###############
+      # Scan
+      ###############
+    
+      ScanPE yes
+      DisableCertCheck yes
+      ScanELF yes
+      AlertBrokenExecutables yes
+      ScanOLE2 yes
+      ScanPDF yes
+      ScanSWF yes
+      ScanMail yes
+      PhishingSignatures yes
+      PhishingScanURLs yes
+      ScanHTML yes
+      ScanArchive yes
+    
+      ###############
+      # Scan
+      ###############
+    
+      MaxScanSize 150M
+      MaxFileSize 30M
+      MaxRecursion 10
+      MaxFiles 15000
+      MaxEmbeddedPE 10M
+      MaxHTMLNormalize 10M
+      MaxHTMLNoTags 2M
+      MaxScriptNormalize 5M
+      MaxZipTypeRcg 1M
+      MaxPartitions 128
+      MaxIconsPE 200
+      PCREMatchLimit 10000
+      PCRERecMatchLimit 10000
+---
+# Source: clamapi/charts/clamav/templates/freshclam-configmap.yaml
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: clamav-freshclam
+  labels:
+    app: clamav
+    chart: clamav-2.7.0
+    release: my-clamapi
+    heritage: Helm
+data:
+  freshclam.conf:
+        |
+      ###############
+      # General
+      ###############
+    
+      DatabaseDirectory /data
+      UpdateLogFile /dev/stdout
+      LogTime yes
+      # CUSTOM: Use pid file in tmp
+      PidFile /tmp/freshclam.pid
+      # CUSTOM: Set defined user
+      DatabaseOwner 2000
+    
+      ###############
+      # Updates
+      ###############
+    
+      DatabaseMirror database.clamav.net
+      ScriptedUpdates yes
+      NotifyClamd /etc/clamav/clamd.conf
+      Bytecode yes
+---
+# Source: clamapi/charts/clamav/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: clamav
+  labels:
+    app.kubernetes.io/name: clamav
+    helm.sh/chart: clamav-2.7.0
+    app.kubernetes.io/instance: my-clamapi
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3310
+      targetPort: clamavport
+      protocol: TCP
+      name: clamavport
+  selector:
+    app.kubernetes.io/name: clamav
+    app.kubernetes.io/instance: my-clamapi
+---
+# Source: clamapi/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-clamapi
+  labels:
+    app.kubernetes.io/name: clamapi
+    helm.sh/chart: clamapi-2.0.5
+    app.kubernetes.io/instance: my-clamapi
+    release: my-clamapi
+    app.kubernetes.io/version: "2.1.6"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: clamapi
+    app.kubernetes.io/instance: my-clamapi
+---
+# Source: clamapi/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-clamapi
+  labels:
+    app.kubernetes.io/name: clamapi
+    helm.sh/chart: clamapi-2.0.5
+    app.kubernetes.io/instance: my-clamapi
+    release: my-clamapi
+    app.kubernetes.io/version: "2.1.6"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: clamapi
+      app.kubernetes.io/instance: my-clamapi
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: clamapi
+        app.kubernetes.io/instance: my-clamapi
+      annotations:
+        {}
+    spec:
+      containers:
+        - name: clamapi
+          image: "audig/clamapi:2.1.6"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: SERVICES_CLAMAV_HOST
+              value:  clamav
+            - name: SERVICES_CLAMAV_TIMEOUT
+              value: "1000"
+            - name: SERVICES_CLAMAV_PORT
+              value: "3310"
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            {}
+---
+# Source: clamapi/charts/clamav/templates/hpa.yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: clamav
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: StatefulSet
+    name: clamav
+  minReplicas: 1
+  maxReplicas: 5
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 80
+---
+# Source: clamapi/charts/clamav/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: clamav
+  labels:
+    app.kubernetes.io/name: clamav
+    helm.sh/chart: clamav-2.7.0
+    app.kubernetes.io/instance: my-clamapi
+    app.kubernetes.io/version: "1.9.43"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  serviceName: clamav
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: clamav
+      app.kubernetes.io/instance: my-clamapi
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: clamav
+        app.kubernetes.io/instance: my-clamapi
+    spec:
+      serviceAccountName: clamav
+      automountServiceAccountToken: false
+      securityContext:
+        runAsGroup: 2000
+        runAsNonRoot: true
+        runAsUser: 2000
+      containers:
+        - name: clamav
+          image: "ghcr.io/mailu/clamav:1.9.50"
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            runAsNonRoot: true
+          volumeMounts:
+          - name: freshclam-config-volume
+            mountPath: /etc/clamav/freshclam.conf
+            subPath: freshclam.conf
+          - name: clamd-config-volume
+            mountPath: /etc/clamav/clamd.conf
+            subPath: clamd.conf
+          - name: clamav-data
+            mountPath: /data
+          ports:
+            - name: clamavport
+              containerPort: 3310
+              protocol: TCP
+          startupProbe:
+            initialDelaySeconds: 60
+            failureThreshold: 3
+            periodSeconds: 30
+            tcpSocket:
+              port: clamavport
+            timeoutSeconds: 1
+          livenessProbe:
+            initialDelaySeconds: 300
+            failureThreshold: 3
+            periodSeconds: 10
+            tcpSocket:
+              port: clamavport
+            timeoutSeconds: 1
+          readinessProbe:
+            initialDelaySeconds: 90
+            failureThreshold: 3
+            periodSeconds: 10
+            tcpSocket:
+              port: clamavport
+            timeoutSeconds: 1
+          resources:
+            {}
+      volumes:
+        - name: freshclam-config-volume
+          configMap:
+            name: clamav-freshclam
+        - name: clamd-config-volume
+          configMap:
+            name: clamav-clamd
+        - name: clamav-data
+          emptyDir: {}
+---
+# Source: clamapi/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-clamapi-test-connection"
+  labels:
+    app.kubernetes.io/name: clamapi
+    helm.sh/chart: clamapi-2.0.5
+    app.kubernetes.io/instance: my-clamapi
+    release: my-clamapi
+    app.kubernetes.io/version: "2.1.6"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args:  ['my-clamapi:80/actuator/health']
+  restartPolicy: Never

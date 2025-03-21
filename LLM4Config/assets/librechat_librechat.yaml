@@ -1,0 +1,690 @@
+---
+# Source: librechat/charts/mongodb/templates/networkpolicy.yaml
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: my-librechat-mongodb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-librechat
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: mongodb
+    app.kubernetes.io/version: 7.0.12
+    helm.sh/chart: mongodb-15.6.18
+    app.kubernetes.io/component: mongodb
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: my-librechat
+      app.kubernetes.io/name: mongodb
+      app.kubernetes.io/component: mongodb
+  policyTypes:
+    - Ingress
+    - Egress
+  egress:
+    - {}
+  ingress:
+    - ports:
+        - port: 27017
+---
+# Source: librechat/charts/mongodb/templates/standalone/pdb.yaml
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: my-librechat-mongodb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-librechat
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: mongodb
+    app.kubernetes.io/version: 7.0.12
+    helm.sh/chart: mongodb-15.6.18
+    app.kubernetes.io/component: mongodb
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: my-librechat
+      app.kubernetes.io/name: mongodb
+      app.kubernetes.io/component: mongodb
+---
+# Source: librechat/charts/meilisearch/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-librechat-meilisearch
+  labels:
+    helm.sh/chart: meilisearch-0.7.0
+    app.kubernetes.io/name: meilisearch
+    app.kubernetes.io/instance: my-librechat
+    app.kubernetes.io/version: "v1.7.3"
+    app.kubernetes.io/component: search-engine
+    app.kubernetes.io/part-of: meilisearch
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: librechat/charts/mongodb/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-librechat-mongodb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-librechat
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: mongodb
+    app.kubernetes.io/version: 7.0.12
+    helm.sh/chart: mongodb-15.6.18
+secrets:
+  - name: my-librechat-mongodb
+automountServiceAccountToken: false
+---
+# Source: librechat/charts/meilisearch/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-librechat-meilisearch-environment
+  labels:
+    helm.sh/chart: meilisearch-0.7.0
+    app.kubernetes.io/name: meilisearch
+    app.kubernetes.io/instance: my-librechat
+    app.kubernetes.io/version: "v1.7.3"
+    app.kubernetes.io/component: search-engine
+    app.kubernetes.io/part-of: meilisearch
+    app.kubernetes.io/managed-by: Helm
+data:
+  MEILI_ENV: "development"
+  MEILI_NO_ANALYTICS: "true"
+---
+# Source: librechat/charts/mongodb/templates/common-scripts-cm.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-librechat-mongodb-common-scripts
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-librechat
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: mongodb
+    app.kubernetes.io/version: 7.0.12
+    helm.sh/chart: mongodb-15.6.18
+    app.kubernetes.io/component: mongodb
+data:
+  startup-probe.sh: |
+    #!/bin/bash
+    exec mongosh  $TLS_OPTIONS --port $MONGODB_PORT_NUMBER --eval 'if (!(db.hello().isWritablePrimary || db.hello().secondary)) { throw new Error("Not ready") }'
+  readiness-probe.sh: |
+    #!/bin/bash
+    # Run the proper check depending on the version
+    [[ $(mongod -version | grep "db version") =~ ([0-9]+\.[0-9]+\.[0-9]+) ]] && VERSION=${BASH_REMATCH[1]}
+    . /opt/bitnami/scripts/libversion.sh
+    VERSION_MAJOR="$(get_sematic_version "$VERSION" 1)"
+    VERSION_MINOR="$(get_sematic_version "$VERSION" 2)"
+    VERSION_PATCH="$(get_sematic_version "$VERSION" 3)"
+    readiness_test='db.isMaster().ismaster || db.isMaster().secondary'
+    if [[ ( "$VERSION_MAJOR" -ge 5 ) || ( "$VERSION_MAJOR" -ge 4 && "$VERSION_MINOR" -ge 4 && "$VERSION_PATCH" -ge 2 ) ]]; then
+        readiness_test='db.hello().isWritablePrimary || db.hello().secondary'
+    fi
+    exec mongosh  $TLS_OPTIONS --port $MONGODB_PORT_NUMBER --eval "if (!(${readiness_test})) { throw new Error(\"Not ready\") }"
+  ping-mongodb.sh: |
+    #!/bin/bash
+    exec mongosh  $TLS_OPTIONS --port $MONGODB_PORT_NUMBER --eval "db.adminCommand('ping')"
+---
+# Source: librechat/templates/configmap-env.yaml
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: my-librechat-librechat-configenv
+data:
+  CREDS_IV: ac028c86ba23f4cd48165e0ca9f2c683
+  CREDS_KEY: 9e95d9894da7e68dd69c0046caf5343c8b1e80c89609b5a1e40e6568b5b23ce6
+  DEBUG_PLUGINS: "true"
+  JWT_REFRESH_SECRET: eaa5191f2914e30b9387fd84e254e4ba6fc51b4654968a9b0803b456a54b8418
+  JWT_SECRET: 16f8c0ef4a5d391b26034086c628469d3f9f497f08163ab9b40137092f2909ef
+  PLUGIN_MODELS: gpt-4,gpt-4-turbo-preview,gpt-4-0125-preview,gpt-4-1106-preview,gpt-4-0613,gpt-3.5-turbo,gpt-3.5-turbo-0125,gpt-3.5-turbo-1106,gpt-3.5-turbo-0613
+  MEILI_HOST: http://my-librechat-meilisearch.default.svc.cluster.local:7700
+  MONGO_URI: mongodb://my-librechat-mongodb.default.svc.cluster.local:27017/LibreChat
+---
+# Source: librechat/charts/meilisearch/templates/pvc.yaml
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: my-librechat-meilisearch
+  labels:
+    helm.sh/chart: meilisearch-0.7.0
+    app.kubernetes.io/name: meilisearch
+    app.kubernetes.io/instance: my-librechat
+    app.kubernetes.io/version: "v1.7.3"
+    app.kubernetes.io/component: search-engine
+    app.kubernetes.io/part-of: meilisearch
+    app.kubernetes.io/managed-by: Helm
+spec:
+  accessModes:
+    - "ReadWriteOnce"
+  resources:
+    requests:
+      storage: "10Gi"
+---
+# Source: librechat/charts/mongodb/templates/standalone/pvc.yaml
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: my-librechat-mongodb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-librechat
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: mongodb
+    app.kubernetes.io/version: 7.0.12
+    helm.sh/chart: mongodb-15.6.18
+    app.kubernetes.io/component: mongodb
+  annotations:
+spec:
+  accessModes:
+    - "ReadWriteOnce"
+  resources:
+    requests:
+      storage: "8Gi"
+---
+# Source: librechat/templates/persistentvolumeclaim.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: my-librechat-librechat-images
+spec:
+  accessModes:
+    - ReadWriteOnce          
+  volumeMode: Filesystem
+  resources:
+    requests:
+      storage: 10G
+---
+# Source: librechat/charts/meilisearch/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-librechat-meilisearch
+  labels:
+    helm.sh/chart: meilisearch-0.7.0
+    app.kubernetes.io/name: meilisearch
+    app.kubernetes.io/instance: my-librechat
+    app.kubernetes.io/version: "v1.7.3"
+    app.kubernetes.io/component: search-engine
+    app.kubernetes.io/part-of: meilisearch
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 7700
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: meilisearch
+    app.kubernetes.io/instance: my-librechat
+---
+# Source: librechat/charts/mongodb/templates/standalone/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-librechat-mongodb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-librechat
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: mongodb
+    app.kubernetes.io/version: 7.0.12
+    helm.sh/chart: mongodb-15.6.18
+    app.kubernetes.io/component: mongodb
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+    - name: "mongodb"
+      port: 27017
+      targetPort: mongodb
+      nodePort: null
+  selector:
+    app.kubernetes.io/instance: my-librechat
+    app.kubernetes.io/name: mongodb
+    app.kubernetes.io/component: mongodb
+---
+# Source: librechat/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-librechat-librechat
+  labels:
+    helm.sh/chart: librechat-1.5.0
+    app.kubernetes.io/name: my-librechat-librechat
+    app.kubernetes.io/instance: my-librechat
+    app.kubernetes.io/version: "v0.7.4"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+      {}
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3080
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: my-librechat-librechat
+    app.kubernetes.io/instance: my-librechat
+---
+# Source: librechat/charts/mongodb/templates/standalone/dep-sts.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-librechat-mongodb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-librechat
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: mongodb
+    app.kubernetes.io/version: 7.0.12
+    helm.sh/chart: mongodb-15.6.18
+    app.kubernetes.io/component: mongodb
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: my-librechat
+      app.kubernetes.io/name: mongodb
+      app.kubernetes.io/component: mongodb
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: my-librechat
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: mongodb
+        app.kubernetes.io/version: 7.0.12
+        helm.sh/chart: mongodb-15.6.18
+        app.kubernetes.io/component: mongodb
+    spec:
+      
+      automountServiceAccountToken: false
+      serviceAccountName: my-librechat-mongodb
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/instance: my-librechat
+                    app.kubernetes.io/name: mongodb
+                    app.kubernetes.io/component: mongodb
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+        fsGroupChangePolicy: Always
+        supplementalGroups: []
+        sysctls: []
+      
+      enableServiceLinks: true
+      initContainers:
+        
+        - name: log-dir
+          image: docker.io/bitnami/mongodb:7.0.12-debian-12-r5
+          imagePullPolicy: "IfNotPresent"
+          command:
+            - /bin/bash
+          args:
+            - -ec
+            - |
+              ln -sf /dev/stdout "/opt/bitnami/mongodb/logs/mongodb.log"
+          securityContext:
+                    allowPrivilegeEscalation: false
+                    capabilities:
+                      drop:
+                      - ALL
+                    privileged: false
+                    readOnlyRootFilesystem: true
+                    runAsGroup: 1001
+                    runAsNonRoot: true
+                    runAsUser: 1001
+                    seLinuxOptions: {}
+                    seccompProfile:
+                      type: RuntimeDefault
+          resources:
+                    limits:
+                      cpu: 750m
+                      ephemeral-storage: 2Gi
+                      memory: 768Mi
+                    requests:
+                      cpu: 500m
+                      ephemeral-storage: 50Mi
+                      memory: 512Mi
+          volumeMounts:
+            - name: empty-dir
+              mountPath: /opt/bitnami/mongodb/logs
+              subPath: app-logs-dir
+      containers:
+        - name: mongodb
+          image: docker.io/bitnami/mongodb:7.0.12-debian-12-r5
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsGroup: 1001
+            runAsNonRoot: true
+            runAsUser: 1001
+            seLinuxOptions: {}
+            seccompProfile:
+              type: RuntimeDefault
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: ALLOW_EMPTY_PASSWORD
+              value: "yes"
+            - name: MONGODB_SYSTEM_LOG_VERBOSITY
+              value: "0"
+            - name: MONGODB_DISABLE_SYSTEM_LOG
+              value: "no"
+            - name: MONGODB_DISABLE_JAVASCRIPT
+              value: "no"
+            - name: MONGODB_ENABLE_JOURNAL
+              value: "yes"
+            - name: MONGODB_PORT_NUMBER
+              value: "27017"
+            - name: MONGODB_ENABLE_IPV6
+              value: "no"
+            - name: MONGODB_ENABLE_DIRECTORY_PER_DB
+              value: "no"
+          ports:
+            - name: mongodb
+              containerPort: 27017
+          livenessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            successThreshold: 1
+            timeoutSeconds: 10
+            exec:
+              command:
+                - /bitnami/scripts/ping-mongodb.sh
+          readinessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+            exec:
+              command:
+                - /bitnami/scripts/readiness-probe.sh
+          resources:
+            limits:
+              cpu: 750m
+              ephemeral-storage: 2Gi
+              memory: 768Mi
+            requests:
+              cpu: 500m
+              ephemeral-storage: 50Mi
+              memory: 512Mi
+          volumeMounts:
+            - name: empty-dir
+              mountPath: /tmp
+              subPath: tmp-dir
+            - name: empty-dir
+              mountPath: /opt/bitnami/mongodb/conf
+              subPath: app-conf-dir
+            - name: empty-dir
+              mountPath: /opt/bitnami/mongodb/tmp
+              subPath: app-tmp-dir
+            - name: empty-dir
+              mountPath: /opt/bitnami/mongodb/logs
+              subPath: app-logs-dir
+            - name: empty-dir
+              mountPath: /.mongodb
+              subPath: mongosh-home
+            - name: datadir
+              mountPath: /bitnami/mongodb
+              subPath: 
+            - name: common-scripts
+              mountPath: /bitnami/scripts
+      volumes:
+        - name: empty-dir
+          emptyDir: {}
+        - name: common-scripts
+          configMap:
+            name: my-librechat-mongodb-common-scripts
+            defaultMode: 0550
+        - name: datadir
+          persistentVolumeClaim:
+            claimName: my-librechat-mongodb
+---
+# Source: librechat/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-librechat-librechat
+  labels:
+    helm.sh/chart: librechat-1.5.0
+    app.kubernetes.io/name: my-librechat-librechat
+    app.kubernetes.io/instance: my-librechat
+    app.kubernetes.io/version: "v0.7.4"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: my-librechat-librechat
+      app.kubernetes.io/instance: my-librechat
+  template:
+    metadata:
+      annotations:
+        
+        checksum/configEnv: 1791b99bd6d30a4fbe4c6a3d2b03cbd6710ffb92346df739b4e91a7857c99cbb
+      labels:
+        helm.sh/chart: librechat-1.5.0
+        app.kubernetes.io/name: my-librechat-librechat
+        app.kubernetes.io/instance: my-librechat
+        app.kubernetes.io/version: "v0.7.4"
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      securityContext:
+        fsGroup: 2000
+      containers:
+        - name: my-librechat-librechat
+          securityContext:
+            capabilities:
+              drop:
+              - ALL
+            runAsNonRoot: true
+            runAsUser: 1000
+          image: "ghcr.io/danny-avila/librechat:v0.7.4"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3080
+              protocol: TCP
+          livenessProbe:
+            null
+          readinessProbe:
+            null
+          resources:
+            {}
+          volumeMounts:
+          - name: image-volume
+            mountPath: "/app/client/public/images"
+          envFrom:
+          - configMapRef:
+              name: my-librechat-librechat-configenv
+          - secretRef:
+              name: librechat-credentials-env
+              optional: true
+      volumes:
+      - name: image-volume
+        persistentVolumeClaim:
+          claimName: my-librechat-librechat-images
+---
+# Source: librechat/charts/meilisearch/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-librechat-meilisearch
+  labels:
+    helm.sh/chart: meilisearch-0.7.0
+    app.kubernetes.io/name: meilisearch
+    app.kubernetes.io/instance: my-librechat
+    app.kubernetes.io/version: "v1.7.3"
+    app.kubernetes.io/component: search-engine
+    app.kubernetes.io/part-of: meilisearch
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  serviceName: my-librechat-meilisearch
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: meilisearch
+      app.kubernetes.io/instance: my-librechat
+  template:
+    metadata:
+      labels:
+        helm.sh/chart: meilisearch-0.7.0
+        app.kubernetes.io/name: meilisearch
+        app.kubernetes.io/instance: my-librechat
+        app.kubernetes.io/version: "v1.7.3"
+        app.kubernetes.io/component: search-engine
+        app.kubernetes.io/part-of: meilisearch
+        app.kubernetes.io/managed-by: Helm
+      annotations:
+        checksum/config: 06991f4bf43d1a143dcee5152436e47dc3039bb1ebc68bd8d3257236b65c6257
+    spec:
+      serviceAccountName: my-librechat-meilisearch
+      securityContext:
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        runAsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 1000
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: data
+          persistentVolumeClaim:
+            claimName: my-librechat-meilisearch
+
+      
+            
+      containers:
+        - name: meilisearch
+          image: "getmeili/meilisearch:v1.7.3"
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: data
+              mountPath: /meili_data
+          envFrom:
+          - configMapRef:
+              name: my-librechat-meilisearch-environment
+          - secretRef:
+              name: librechat-credentials-env
+          ports:
+            - name: http
+              containerPort: 7700
+              protocol: TCP
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 1
+            initialDelaySeconds: 1
+            failureThreshold: 60
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+            initialDelaySeconds: 0
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+            initialDelaySeconds: 0
+          resources:
+            {}
+---
+# Source: librechat/templates/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: my-librechat-librechat
+  labels:
+    helm.sh/chart: librechat-1.5.0
+    app.kubernetes.io/name: my-librechat-librechat
+    app.kubernetes.io/instance: my-librechat
+    app.kubernetes.io/version: "v0.7.4"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  rules:
+    - host: "chart-example.local"
+      http:
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: my-librechat-librechat
+                port:
+                  number: 3080
+---
+# Source: librechat/charts/meilisearch/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-librechat-meilisearch-test-connection
+  labels:
+    app.kubernetes.io/name: meilisearch
+    helm.sh/chart: meilisearch-0.7.0
+    app.kubernetes.io/instance: my-librechat
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args:  ['my-librechat-meilisearch:7700']
+  restartPolicy: Never
+---
+# Source: librechat/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-librechat-librechat-test-connection"
+  labels:
+    helm.sh/chart: librechat-1.5.0
+    app.kubernetes.io/name: my-librechat-librechat
+    app.kubernetes.io/instance: my-librechat
+    app.kubernetes.io/version: "v0.7.4"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-librechat-librechat:3080']
+  restartPolicy: Never

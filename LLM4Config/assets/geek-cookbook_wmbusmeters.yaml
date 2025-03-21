@@ -1,0 +1,100 @@
+---
+# Source: wmbusmeters/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-wmbusmeters-config
+  labels:
+    helm.sh/chart: wmbusmeters-1.4.2
+    app.kubernetes.io/name: wmbusmeters
+    app.kubernetes.io/instance: my-wmbusmeters
+    app.kubernetes.io/version: "1.4.1"
+    app.kubernetes.io/managed-by: Helm
+data:
+  wmbusmeters.conf: |
+    loglevel=normal
+    device=rtlwmbus
+    listento=t1
+    logtelegrams=false
+    format=json
+    meterfiles=/wmbusmeters_data/logs/meter_readings
+    meterfilesaction=overwrite
+    logfile=/wmbusmeters_data/logs/wmbusmeters.log
+---
+# Source: wmbusmeters/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-wmbusmeters-watermeter
+  labels:
+    helm.sh/chart: wmbusmeters-1.4.2
+    app.kubernetes.io/name: wmbusmeters
+    app.kubernetes.io/instance: my-wmbusmeters
+    app.kubernetes.io/version: "1.4.1"
+    app.kubernetes.io/managed-by: Helm
+data:
+  device.conf: |
+    name=watermeter
+    type=multical21
+    id=1234567
+    key=000000000000000000000000
+---
+# Source: wmbusmeters/templates/common.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-wmbusmeters
+  labels:
+    app.kubernetes.io/instance: my-wmbusmeters
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: wmbusmeters
+    app.kubernetes.io/version: 1.4.1
+    helm.sh/chart: wmbusmeters-1.4.2
+spec:
+  revisionHistoryLimit: 3
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: wmbusmeters
+      app.kubernetes.io/instance: my-wmbusmeters
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: wmbusmeters
+        app.kubernetes.io/instance: my-wmbusmeters
+    spec:
+      
+      serviceAccountName: default
+      automountServiceAccountToken: true
+      dnsPolicy: ClusterFirst
+      enableServiceLinks: true
+      containers:
+        - name: my-wmbusmeters
+          image: "weetmuts/wmbusmeters:release-1.4.1-amd64"
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            privileged: true
+          env:
+            - name: TZ
+              value: UTC
+          ports:
+            
+          volumeMounts:
+            - name: device-watermeter
+              mountPath: /wmbusmeters_data/etc/wmbusmeters.d/watermeter.conf
+              subPath: device.conf
+            - name: wmbusmeters-config
+              mountPath: /wmbusmeters_data/etc/wmbusmeters.conf
+              subPath: wmbusmeters.conf
+          livenessProbe:
+          readinessProbe:
+          startupProbe:
+      volumes:
+        - name: device-watermeter
+          configMap:
+            name: my-wmbusmeters-watermeter
+        - name: wmbusmeters-config
+          configMap:
+            name: my-wmbusmeters-config

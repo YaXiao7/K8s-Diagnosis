@@ -1,0 +1,133 @@
+---
+# Source: mattermost-rtcd/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-mattermost-rtcd
+  labels:
+    helm.sh/chart: mattermost-rtcd-1.4.0
+    app.kubernetes.io/name: mattermost-rtcd
+    app.kubernetes.io/instance: my-mattermost-rtcd
+    app.kubernetes.io/version: "latest"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: mattermost-rtcd/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-mattermost-rtcd
+  labels:
+    helm.sh/chart: mattermost-rtcd-1.4.0
+    app.kubernetes.io/name: mattermost-rtcd
+    app.kubernetes.io/instance: my-mattermost-rtcd
+    app.kubernetes.io/version: "latest"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  clusterIP: None
+  ports:
+    - port: 8045
+      targetPort: api
+      protocol: TCP
+      name: api
+    - port: 8443
+      targetPort: rtc-udp
+      protocol: UDP
+      name: rtc-udp
+    - port: 8443
+      targetPort: rtc-tcp
+      protocol: TCP
+      name: rtc-tcp
+  selector:
+    app.kubernetes.io/name: mattermost-rtcd
+    app.kubernetes.io/instance: my-mattermost-rtcd
+---
+# Source: mattermost-rtcd/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-mattermost-rtcd
+  labels:
+    helm.sh/chart: mattermost-rtcd-1.4.0
+    app.kubernetes.io/name: mattermost-rtcd
+    app.kubernetes.io/instance: my-mattermost-rtcd
+    app.kubernetes.io/version: "latest"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mattermost-rtcd
+      app.kubernetes.io/instance: my-mattermost-rtcd
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 1
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mattermost-rtcd
+        app.kubernetes.io/instance: my-mattermost-rtcd
+    spec:
+      dnsPolicy: ClusterFirstWithHostNet
+      hostNetwork: true
+      serviceAccountName: my-mattermost-rtcd
+      terminationGracePeriodSeconds: 18000
+      securityContext:
+        {}
+      containers:
+        - name: mattermost-rtcd
+          securityContext:
+            {}
+          image: "mattermost/rtcd:latest"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: api
+              containerPort: 8045
+              hostPort: 8045
+              protocol: TCP              
+            - name: rtc-udp
+              containerPort: 8443
+              hostPort: 8443
+              protocol: UDP
+            - name: rtc-tcp
+              containerPort: 8443
+              hostPort: 8443
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /version
+              port: api
+            initialDelaySeconds: 30
+            failureThreshold: 3
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /version
+              port: api
+            initialDelaySeconds: 30
+            failureThreshold: 3
+            periodSeconds: 10
+            timeoutSeconds: 5
+          resources:
+            {}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app.kubernetes.io/name
+                  operator: In
+                  values:
+                  - mattermost-rtcd
+              topologyKey: topology.kubernetes.io/zone
+            weight: 100
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                - mattermost-rtcd
+            topologyKey: topology.kubernetes.io/zone

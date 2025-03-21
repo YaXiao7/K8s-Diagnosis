@@ -1,0 +1,77 @@
+---
+# Source: cluster-ui/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-cluster-ui
+  namespace: default
+  labels:
+    helm.sh/chart: cluster-ui-v2024.8.21
+    app.kubernetes.io/name: cluster-ui
+    app.kubernetes.io/instance: my-cluster-ui
+    app.kubernetes.io/version: "0.9.7"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: cluster-ui
+    app.kubernetes.io/instance: my-cluster-ui
+---
+# Source: cluster-ui/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-cluster-ui
+  namespace: default
+  labels:
+    helm.sh/chart: cluster-ui-v2024.8.21
+    app.kubernetes.io/name: cluster-ui
+    app.kubernetes.io/instance: my-cluster-ui
+    app.kubernetes.io/version: "0.9.7"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cluster-ui
+      app.kubernetes.io/instance: my-cluster-ui
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: cluster-ui
+        app.kubernetes.io/instance: my-cluster-ui
+    spec:
+      
+      securityContext:
+        {}
+      containers:
+        - name: cluster-ui
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          image: "ghcr.io/appscode/cluster-ui:0.9.7"
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+            {}

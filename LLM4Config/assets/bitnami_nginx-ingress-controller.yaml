@@ -1,0 +1,785 @@
+---
+# Source: nginx-ingress-controller/templates/controller-networkpolicy.yaml
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: my-nginx-ingress-controller
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-nginx-ingress-controller
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: nginx-ingress-controller
+    app.kubernetes.io/version: 1.11.2
+    helm.sh/chart: nginx-ingress-controller-11.4.1
+    app.kubernetes.io/component: controller
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: my-nginx-ingress-controller
+      app.kubernetes.io/name: nginx-ingress-controller
+      app.kubernetes.io/component: controller
+  policyTypes:
+    - Ingress
+    - Egress
+  egress:
+    - {}
+  ingress:
+    - ports:
+        - port: 8080
+        - port: 8443
+---
+# Source: nginx-ingress-controller/templates/default-backend-networkpolicy.yaml
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: my-nginx-ingress-controller-default-backend
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-nginx-ingress-controller
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: nginx-ingress-controller
+    app.kubernetes.io/version: 1.11.2
+    helm.sh/chart: nginx-ingress-controller-11.4.1
+    app.kubernetes.io/component: default-backend
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: my-nginx-ingress-controller
+      app.kubernetes.io/name: nginx-ingress-controller
+      app.kubernetes.io/component: default-backend
+  policyTypes:
+    - Ingress
+    - Egress
+  egress:
+    - {}
+  ingress:
+    - ports:
+        - port: 8080
+---
+# Source: nginx-ingress-controller/templates/controller-poddisruptionbudget.yaml
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: my-nginx-ingress-controller
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-nginx-ingress-controller
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: nginx-ingress-controller
+    app.kubernetes.io/version: 1.11.2
+    helm.sh/chart: nginx-ingress-controller-11.4.1
+    app.kubernetes.io/component: controller
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: my-nginx-ingress-controller
+      app.kubernetes.io/name: nginx-ingress-controller
+      app.kubernetes.io/component: controller
+---
+# Source: nginx-ingress-controller/templates/default-backend-poddisruptionbudget.yaml
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: my-nginx-ingress-controller-default-backend
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-nginx-ingress-controller
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: nginx-ingress-controller
+    app.kubernetes.io/version: 1.27.1
+    helm.sh/chart: nginx-ingress-controller-11.4.1
+    app.kubernetes.io/component: default-backend
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: my-nginx-ingress-controller
+      app.kubernetes.io/name: nginx-ingress-controller
+      app.kubernetes.io/component: default-backend
+---
+# Source: nginx-ingress-controller/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-nginx-ingress-controller
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-nginx-ingress-controller
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: nginx-ingress-controller
+    app.kubernetes.io/version: 1.11.2
+    helm.sh/chart: nginx-ingress-controller-11.4.1
+automountServiceAccountToken: false
+---
+# Source: nginx-ingress-controller/templates/controller-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-nginx-ingress-controller
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-nginx-ingress-controller
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: nginx-ingress-controller
+    app.kubernetes.io/version: 1.11.2
+    helm.sh/chart: nginx-ingress-controller-11.4.1
+    app.kubernetes.io/component: controller
+data:
+  allow-snippet-annotations: "false"
+---
+# Source: nginx-ingress-controller/templates/default-backend-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-nginx-ingress-controller-default-backend
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-nginx-ingress-controller
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: nginx-ingress-controller
+    app.kubernetes.io/version: 1.27.1
+    helm.sh/chart: nginx-ingress-controller-11.4.1
+    app.kubernetes.io/component: default-backend
+data:
+  defaultBackend.conf: |-
+    location /healthz {
+      return 200;
+    }
+    
+    location / {
+      return 404;
+    }
+---
+# Source: nginx-ingress-controller/templates/clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-nginx-ingress-controller
+  labels:
+    app.kubernetes.io/instance: my-nginx-ingress-controller
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: nginx-ingress-controller
+    app.kubernetes.io/version: 1.11.2
+    helm.sh/chart: nginx-ingress-controller-11.4.1
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+      - endpoints
+      - nodes
+      - pods
+      - secrets
+      - namespaces
+    verbs:
+      - list
+      - watch
+  - apiGroups:
+      - coordination.k8s.io
+    resources:
+      - leases
+    verbs:
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - nodes
+    verbs:
+      - get
+  - apiGroups:
+      - ""
+    resources:
+      - services
+    verbs:
+      - get
+      - list
+      - update
+      - watch
+  - apiGroups:
+      
+      - networking.k8s.io
+    resources:
+      - ingresses
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - create
+      - patch
+  - apiGroups:
+      
+      - networking.k8s.io
+    resources:
+      - ingresses/status
+    verbs:
+      - update
+  - apiGroups:
+      
+      - networking.k8s.io
+    resources:
+      - ingressclasses
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - discovery.k8s.io
+    resources:
+      - endpointslices
+    verbs:
+      - list
+      - watch
+      - get
+---
+# Source: nginx-ingress-controller/templates/clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-nginx-ingress-controller
+  labels:
+    app.kubernetes.io/instance: my-nginx-ingress-controller
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: nginx-ingress-controller
+    app.kubernetes.io/version: 1.11.2
+    helm.sh/chart: nginx-ingress-controller-11.4.1
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-nginx-ingress-controller
+subjects:
+  - kind: ServiceAccount
+    name: my-nginx-ingress-controller
+    namespace: "default"
+---
+# Source: nginx-ingress-controller/templates/role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: my-nginx-ingress-controller
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-nginx-ingress-controller
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: nginx-ingress-controller
+    app.kubernetes.io/version: 1.11.2
+    helm.sh/chart: nginx-ingress-controller-11.4.1
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - namespaces
+    verbs:
+      - get
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+      - pods
+      - secrets
+      - endpoints
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - services
+    verbs:
+      - get
+      - list
+      - update
+      - watch
+  - apiGroups:
+      
+      - networking.k8s.io
+    resources:
+      - ingresses
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      
+      - networking.k8s.io
+    resources:
+      - ingresses/status
+    verbs:
+      - update
+  - apiGroups:
+      - networking.k8s.io
+    resources:
+      - ingressclasses
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+    resourceNames:
+      - ingress-controller-leader
+    verbs:
+      - get
+      - update
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+    verbs:
+      - create
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - create
+      - patch
+  - apiGroups:
+      - discovery.k8s.io
+    resources:
+      - endpointslices
+    verbs:
+      - list
+      - watch
+      - get
+  - apiGroups:
+      - coordination.k8s.io
+    resources:
+      - leases
+    verbs:
+      - create
+  - apiGroups:
+      - coordination.k8s.io
+    resources:
+      - leases
+    resourceNames:
+      - ingress-controller-leader
+    verbs:
+      - get
+      - update
+---
+# Source: nginx-ingress-controller/templates/rolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: my-nginx-ingress-controller
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-nginx-ingress-controller
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: nginx-ingress-controller
+    app.kubernetes.io/version: 1.11.2
+    helm.sh/chart: nginx-ingress-controller-11.4.1
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: my-nginx-ingress-controller
+subjects:
+  - kind: ServiceAccount
+    name: my-nginx-ingress-controller
+    namespace: "default"
+---
+# Source: nginx-ingress-controller/templates/controller-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-nginx-ingress-controller
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-nginx-ingress-controller
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: nginx-ingress-controller
+    app.kubernetes.io/version: 1.11.2
+    helm.sh/chart: nginx-ingress-controller-11.4.1
+    app.kubernetes.io/component: controller
+spec:
+  type: LoadBalancer
+  sessionAffinity: None
+  externalTrafficPolicy: ""
+  ports:
+    - name: http
+      port: 80
+      protocol: TCP
+      targetPort: http
+    - name: https
+      port: 443
+      protocol: TCP
+      targetPort: https
+  selector:
+    app.kubernetes.io/instance: my-nginx-ingress-controller
+    app.kubernetes.io/name: nginx-ingress-controller
+    app.kubernetes.io/component: controller
+---
+# Source: nginx-ingress-controller/templates/default-backend-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-nginx-ingress-controller-default-backend
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-nginx-ingress-controller
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: nginx-ingress-controller
+    app.kubernetes.io/version: 1.27.1
+    helm.sh/chart: nginx-ingress-controller-11.4.1
+    app.kubernetes.io/component: default-backend
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      protocol: TCP
+      targetPort: http
+  selector:
+    app.kubernetes.io/instance: my-nginx-ingress-controller
+    app.kubernetes.io/name: nginx-ingress-controller
+    app.kubernetes.io/component: default-backend
+---
+# Source: nginx-ingress-controller/templates/controller-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-nginx-ingress-controller
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-nginx-ingress-controller
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: nginx-ingress-controller
+    app.kubernetes.io/version: 1.11.2
+    helm.sh/chart: nginx-ingress-controller-11.4.1
+    app.kubernetes.io/component: controller
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: my-nginx-ingress-controller
+      app.kubernetes.io/name: nginx-ingress-controller
+      app.kubernetes.io/component: controller
+  replicas: 1
+  revisionHistoryLimit: 10
+  minReadySeconds: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: my-nginx-ingress-controller
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: nginx-ingress-controller
+        app.kubernetes.io/version: 1.11.2
+        helm.sh/chart: nginx-ingress-controller-11.4.1
+        app.kubernetes.io/component: controller
+    spec:
+      
+      dnsPolicy: ClusterFirst
+      automountServiceAccountToken: true
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/instance: my-nginx-ingress-controller
+                    app.kubernetes.io/name: nginx-ingress-controller
+                    app.kubernetes.io/component: controller
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+        fsGroupChangePolicy: Always
+        supplementalGroups: []
+        sysctls: []
+      hostNetwork: false
+      serviceAccountName: my-nginx-ingress-controller
+      terminationGracePeriodSeconds: 60
+      initContainers:
+        - name: prepare-nginx-folder
+          image: docker.io/bitnami/nginx-ingress-controller:1.11.2-debian-12-r4
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              add:
+              - NET_BIND_SERVICE
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+            runAsGroup: 1001
+            runAsNonRoot: true
+            runAsUser: 1001
+            seLinuxOptions: null
+            seccompProfile:
+              type: RuntimeDefault
+          command:
+            - /bin/bash
+          args:
+            - -ec
+            - |
+              #!/bin/bash
+              cp -r /etc/nginx/* /nginx
+              cp -r /etc/ingress-controller/* /ingress-controller
+          volumeMounts:
+            - name: empty-dir
+              mountPath: /nginx
+              subPath: app-nginx-dir
+            - name: empty-dir
+              mountPath: /ingress-controller
+              subPath: app-controller-dir
+      containers:
+        - name: controller
+          image: docker.io/bitnami/nginx-ingress-controller:1.11.2-debian-12-r4
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              add:
+              - NET_BIND_SERVICE
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+            runAsGroup: 1001
+            runAsNonRoot: true
+            runAsUser: 1001
+            seLinuxOptions: null
+            seccompProfile:
+              type: RuntimeDefault
+          args:
+            - --default-backend-service=$(POD_NAMESPACE)/my-nginx-ingress-controller-default-backend
+            - --http-port=8080
+            - --https-port=8443
+            - --default-server-port=8181
+            - --healthz-port=10254
+            - --profiler-port=10245
+            - --status-port=10246
+            - --stream-port=10247
+            - --election-id=ingress-controller-leader
+            - --controller-class=k8s.io/ingress-nginx
+            - --configmap=$(POD_NAMESPACE)/my-nginx-ingress-controller
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          envFrom:
+          livenessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+            tcpSocket:
+              port: metrics
+          readinessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+            httpGet:
+              path: /healthz
+              port: metrics
+              scheme: HTTP
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: https
+              containerPort: 8443
+              protocol: TCP
+            - name: default-server
+              containerPort: 8181
+              protocol: TCP
+            - name: metrics
+              containerPort: 10254
+              protocol: TCP
+            - name: profiler
+              containerPort: 10245
+              protocol: TCP
+            - name: status
+              containerPort: 10246
+              protocol: TCP
+            - name: stream
+              containerPort: 10247
+              protocol: TCP
+          resources:
+            limits:
+              cpu: 150m
+              ephemeral-storage: 2Gi
+              memory: 192Mi
+            requests:
+              cpu: 100m
+              ephemeral-storage: 50Mi
+              memory: 128Mi
+          volumeMounts:
+            - name: empty-dir
+              mountPath: /etc/nginx
+              subPath: app-nginx-dir
+            - name: empty-dir
+              mountPath: /etc/ingress-controller
+              subPath: app-controller-dir
+            - name: empty-dir
+              mountPath: /tmp
+              subPath: tmp-dir
+            - name: empty-dir
+              mountPath: /tmp/nginx
+              subPath: app-tmp-dir
+            - name: empty-dir
+              mountPath: /etc/ingress-controller/telemetry
+              subPath: app-telemetry-dir
+      volumes:
+        - name: empty-dir
+          emptyDir: {}
+---
+# Source: nginx-ingress-controller/templates/default-backend-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-nginx-ingress-controller-default-backend
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-nginx-ingress-controller
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: nginx-ingress-controller
+    app.kubernetes.io/version: 1.27.1
+    helm.sh/chart: nginx-ingress-controller-11.4.1
+    app.kubernetes.io/component: default-backend
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: my-nginx-ingress-controller
+      app.kubernetes.io/name: nginx-ingress-controller
+      app.kubernetes.io/component: default-backend
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: my-nginx-ingress-controller
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: nginx-ingress-controller
+        app.kubernetes.io/version: 1.27.1
+        helm.sh/chart: nginx-ingress-controller-11.4.1
+        app.kubernetes.io/component: default-backend
+    spec:
+      
+      automountServiceAccountToken: true
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/instance: my-nginx-ingress-controller
+                    app.kubernetes.io/name: nginx-ingress-controller
+                    app.kubernetes.io/component: default-backend
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+        fsGroupChangePolicy: Always
+        supplementalGroups: []
+        sysctls: []
+      serviceAccountName: my-nginx-ingress-controller
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: default-backend
+          image: docker.io/bitnami/nginx:1.27.1-debian-12-r3
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+            runAsGroup: 1001
+            runAsNonRoot: true
+            runAsUser: 1001
+            seLinuxOptions: null
+            seccompProfile:
+              type: RuntimeDefault
+          args:
+          env:
+          envFrom:
+          livenessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+            tcpSocket:
+              port: http
+          readinessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 0
+            periodSeconds: 5
+            successThreshold: 1
+            timeoutSeconds: 5
+            httpGet:
+              path: /healthz
+              port: http
+              scheme: HTTP
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          resources:
+            limits:
+              cpu: 150m
+              ephemeral-storage: 2Gi
+              memory: 192Mi
+            requests:
+              cpu: 100m
+              ephemeral-storage: 50Mi
+              memory: 128Mi
+          volumeMounts:
+            - name: empty-dir
+              mountPath: /tmp
+              subPath: tmp-dir
+            - name: empty-dir
+              mountPath: /opt/bitnami/nginx/tmp
+              subPath: app-tmp-dir
+            - name: nginx-config-volume
+              mountPath: /opt/bitnami/nginx/conf/bitnami/defaultBackend.conf
+              subPath: defaultBackend.conf
+              readOnly: true
+      volumes:
+        - name: empty-dir
+          emptyDir: {}
+        - name: nginx-config-volume
+          configMap:
+            name: my-nginx-ingress-controller-default-backend
+            items:
+              - key: defaultBackend.conf
+                path: defaultBackend.conf
+---
+# Source: nginx-ingress-controller/templates/ingressclass.yaml
+apiVersion: networking.k8s.io/v1
+kind: IngressClass
+metadata:
+  name: nginx
+  labels:
+    app.kubernetes.io/instance: my-nginx-ingress-controller
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: nginx-ingress-controller
+    app.kubernetes.io/version: 1.11.2
+    helm.sh/chart: nginx-ingress-controller-11.4.1
+    app.kubernetes.io/component: controller
+spec:
+  controller: k8s.io/ingress-nginx

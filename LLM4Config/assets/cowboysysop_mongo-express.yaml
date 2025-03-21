@@ -1,0 +1,195 @@
+---
+# Source: mongo-express/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-mongo-express
+  labels:
+    helm.sh/chart: mongo-express-6.5.2
+    app.kubernetes.io/name: mongo-express
+    app.kubernetes.io/instance: my-mongo-express
+    app.kubernetes.io/version: "1.0.2"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: mongo-express/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-mongo-express
+  labels:
+    helm.sh/chart: mongo-express-6.5.2
+    app.kubernetes.io/name: mongo-express
+    app.kubernetes.io/instance: my-mongo-express
+    app.kubernetes.io/version: "1.0.2"
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  mongodb-auth-password: ""
+  site-cookie-secret: "UW9TRk1Rb3RBa3lNbmJHNGdURlc5V2prTzVVeWpnRVA="
+  site-session-secret: "Z2tVSU5TWXQ1QWdjQklYeDRMMk16OEVxY2hwR05DSDA="
+---
+# Source: mongo-express/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-mongo-express
+  labels:
+    helm.sh/chart: mongo-express-6.5.2
+    app.kubernetes.io/name: mongo-express
+    app.kubernetes.io/instance: my-mongo-express
+    app.kubernetes.io/version: "1.0.2"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8081
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: mongo-express
+    app.kubernetes.io/instance: my-mongo-express
+---
+# Source: mongo-express/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-mongo-express
+  labels:
+    helm.sh/chart: mongo-express-6.5.2
+    app.kubernetes.io/name: mongo-express
+    app.kubernetes.io/instance: my-mongo-express
+    app.kubernetes.io/version: "1.0.2"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mongo-express
+      app.kubernetes.io/instance: my-mongo-express
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mongo-express
+        app.kubernetes.io/instance: my-mongo-express
+      annotations:
+        checksum/secret: b6d9facfef94577a58344ffd6ee8cab9ac429a517648813dea866e2741f70d78
+    spec:
+      
+      serviceAccountName: my-mongo-express
+      securityContext:
+        {}
+      containers:
+        - name: mongo-express
+          securityContext:
+            {}
+          image: docker.io/mongo-express:1.0.2
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: PORT
+              value: "8081"
+            - name: MONGODB_SERVER
+              value: "mongodb"
+            - name: MONGODB_PORT
+              value: "27017"
+            - name: ME_CONFIG_MONGODB_ENABLE_ADMIN
+              value: "false"
+            - name: MONGODB_DATABASE
+              value: ""
+            - name: ME_CONFIG_MONGODB_URL
+              value: "mongodb://$(MONGODB_SERVER):$(MONGODB_PORT)/$(MONGODB_DATABASE)"
+            - name: ME_CONFIG_SITE_BASEURL
+              value: "/"
+            - name: ME_CONFIG_SITE_COOKIESECRET
+              valueFrom:
+                secretKeyRef:
+                  name: my-mongo-express
+                  key: site-cookie-secret
+            - name: ME_CONFIG_SITE_SESSIONSECRET
+              valueFrom:
+                secretKeyRef:
+                  name: my-mongo-express
+                  key: site-session-secret
+            - name: ME_CONFIG_BASICAUTH
+              value: "false"
+          ports:
+            - name: http
+              containerPort: 8081
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /status
+              port: http
+            initialDelaySeconds: 0
+            periodSeconds: 10
+            timeoutSeconds: 1
+            failureThreshold: 3
+            successThreshold: 1
+          readinessProbe:
+            httpGet:
+              path: /status
+              port: http
+            initialDelaySeconds: 0
+            periodSeconds: 10
+            timeoutSeconds: 1
+            failureThreshold: 3
+            successThreshold: 1
+          resources:
+            {}
+---
+# Source: mongo-express/templates/tests/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-mongo-express-tests
+  labels:
+    helm.sh/chart: mongo-express-6.5.2
+    app.kubernetes.io/name: mongo-express
+    app.kubernetes.io/instance: my-mongo-express
+    app.kubernetes.io/version: "1.0.2"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: tests
+  annotations:
+    helm.sh/hook: test
+data:
+  test_all.py: |
+    import requests
+
+
+    def test_service_connection():
+        url = "http://my-mongo-express:8081/"
+
+        response = requests.get(url)
+
+        assert response.status_code == 200
+---
+# Source: mongo-express/templates/tests/pod.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-mongo-express-tests
+  labels:
+    helm.sh/chart: mongo-express-6.5.2
+    app.kubernetes.io/name: mongo-express
+    app.kubernetes.io/instance: my-mongo-express
+    app.kubernetes.io/version: "1.0.2"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: tests
+  annotations:
+    helm.sh/hook: test
+spec:
+  
+  containers:
+    - name: tests
+      image: ghcr.io/cowboysysop/pytest:1.0.41
+      imagePullPolicy: IfNotPresent
+      volumeMounts:
+        - name: tests
+          mountPath: /tests
+          readOnly: true
+      workingDir: /tests
+  restartPolicy: Never
+  volumes:
+    - name: tests
+      configMap:
+        name: my-mongo-express-tests

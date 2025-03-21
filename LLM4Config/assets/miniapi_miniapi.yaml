@@ -1,0 +1,163 @@
+---
+# Source: miniapi/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-miniapi
+  labels:
+    helm.sh/chart: miniapi-1.3.1
+    app.kubernetes.io/name: miniapi
+    app.kubernetes.io/instance: my-miniapi
+    app.kubernetes.io/version: "1.3.1"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: miniapi/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-miniapi
+data:
+  ADDR: :8080
+  HEALTH: /health
+  ROUTE: /v1/hello;/v1/world;/card/{cardId}
+---
+# Source: miniapi/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-miniapi
+  labels:
+    helm.sh/chart: miniapi-1.3.1
+    app.kubernetes.io/name: miniapi
+    app.kubernetes.io/instance: my-miniapi
+    app.kubernetes.io/version: "1.3.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: miniapi
+    app.kubernetes.io/instance: my-miniapi
+---
+# Source: miniapi/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-miniapi
+  labels:
+    helm.sh/chart: miniapi-1.3.1
+    app.kubernetes.io/name: miniapi
+    app.kubernetes.io/instance: my-miniapi
+    app.kubernetes.io/version: "1.3.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: miniapi
+      app.kubernetes.io/instance: my-miniapi
+  template:
+    metadata:
+      annotations:
+        rollme: "yeLpB"
+        sidecar.istio.io/inject: "false"
+      labels:
+        app.kubernetes.io/name: miniapi
+        app.kubernetes.io/instance: my-miniapi
+        app: miniapi
+    spec:
+      serviceAccountName: my-miniapi
+      securityContext:
+        {}
+      containers:
+        - name: miniapi
+          securityContext:
+            {}
+          image: "udhos/miniapi:1.3.1"
+          imagePullPolicy: IfNotPresent
+          envFrom:
+          - configMapRef:
+              name: my-miniapi
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          startupProbe:
+            # must initialize within 3*100=300 seconds
+            httpGet:
+              path: /health
+              port: 8080
+            periodSeconds: 3
+            failureThreshold: 100
+          readinessProbe:
+            # not ready after 10*6=60 seconds without success
+            httpGet:
+              path: /health
+              port: 8080
+              scheme: HTTP
+            periodSeconds: 10
+            failureThreshold: 6
+            successThreshold: 1
+            timeoutSeconds: 5
+          livenessProbe:
+            # kill after 20*6=120 seconds without success
+            httpGet:
+              path: /health
+              port: 8080
+              scheme: HTTP
+            periodSeconds: 20
+            failureThreshold: 6
+            successThreshold: 1
+            timeoutSeconds: 10
+          resources:
+            limits:
+              cpu: 2000m
+              ephemeral-storage: 200Mi
+              memory: 300Mi
+            requests:
+              cpu: 300m
+              ephemeral-storage: 100Mi
+              memory: 100Mi
+---
+# Source: miniapi/templates/hpa.yaml
+apiVersion: autoscaling/v1
+kind: HorizontalPodAutoscaler
+metadata:
+  name: my-miniapi
+  labels:
+    helm.sh/chart: miniapi-1.3.1
+    app.kubernetes.io/name: miniapi
+    app.kubernetes.io/instance: my-miniapi
+    app.kubernetes.io/version: "1.3.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: my-miniapi
+  minReplicas: 1
+  maxReplicas: 100
+---
+# Source: miniapi/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-miniapi-test-connection"
+  labels:
+    helm.sh/chart: miniapi-1.3.1
+    app.kubernetes.io/name: miniapi
+    app.kubernetes.io/instance: my-miniapi
+    app.kubernetes.io/version: "1.3.1"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-miniapi:8080']
+  restartPolicy: Never

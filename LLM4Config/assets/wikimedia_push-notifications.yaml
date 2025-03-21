@@ -1,0 +1,303 @@
+---
+# Source: push-notifications/templates/networkpolicy.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: push-notifications-my-push-notifications
+  labels:
+    app: push-notifications
+    chart: push-notifications-0.1.15
+    release: my-push-notifications
+    heritage: Helm
+spec:
+  podSelector:
+    matchLabels:
+      app: push-notifications
+      release: my-push-notifications
+  policyTypes:
+    - Ingress
+  ingress:
+    - ports:
+      - port: 8900
+        protocol: TCP
+      - port: 9102
+        protocol: TCP
+---
+# Source: push-notifications/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: push-notifications-my-push-notifications-secret-config
+  labels:
+    app: push-notifications
+    chart: push-notifications-0.1.15
+    release: my-push-notifications
+    heritage: Helm
+type: Opaque
+---
+# Source: push-notifications/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: config-my-push-notifications
+data:
+  config.yaml: |- 
+    # Number of worker processes to spawn.
+    # Set to 0 to run everything in a single process without clustering.
+    # Use 'ncpu' to run as many workers as there are CPU units
+    num_workers: 2
+    
+    # Number of workers to start in parallel after the first worker.
+    # The first worker is always started independently. After it has completed
+    # its start-up, this number controls the number of workers to start in
+    # parallel until `num_workers` have been started. Note that setting this
+    # number to a too high a value might lead to high resource consumption
+    # (especially of CPU) during the start-up process.
+    startup_concurrency: 1
+    
+    # Log error messages and gracefully restart a worker if v8 reports that it
+    # uses more heap (note: not RSS) than this many mb.
+    worker_heap_limit_mb: 750
+    
+    # The maximum interval in ms that can pass between two beat messages
+    # sent by each worker to the master before it is killed
+    worker_heartbeat_timeout: 15000
+    
+    # Logger info
+    logging:
+      level: warn
+      name: push-notifications
+      streams:
+        - type: stdout
+          named_levels: true
+    # Statsd metrics reporter
+    metrics:
+      port: 9102
+      type: prometheus
+    
+    services:
+      - name: push-notifications
+        # a relative path or the name of an npm package, if different from name
+        module: ./dist/app.js
+        # per-service config
+        conf:
+          port: 8900
+          # interface: localhost # uncomment to only listen on localhost
+          # more per-service config settings
+          # the location of the spec, defaults to spec.yaml if not specified
+          # spec: ./spec.template.yaml
+          # allow cross-domain requests to the API (default '*')
+          cors: '*'
+          # to disable use:
+          # cors: false
+          # to restrict to a particular domain, use:
+          # cors: restricted.domain.org
+          # content for the CSP headers
+          # csp: false  # uncomment this line to disable sending them
+          # URL of the outbound proxy to use (complete with protocol)
+          proxy: 
+          # the list of domains for which not to use the proxy defined above
+          # no_proxy_list:
+          #   - domain1.com
+          #   - domain2.org
+          # the list of incoming request headers that can be logged; if left empty,
+          # the following headers are allowed: cache-control, content-length,
+          # content-type, if-match, user-agent, x-request-id
+          # log_header_whitelist:
+          #   - cache-control
+          #   - content-length
+          #   - content-type
+          #   - if-match
+          #   - user-agent
+          #   - x-request-id
+          # User-Agent HTTP header to use for requests
+          user_agent: "PushNotifications/WMF"
+          queueing:
+            flushTimeoutMs: random
+            flushTimeoutMin: 60000
+            flushTimeoutMax: 300000
+            verbose: false
+          # Apple Push Notification Service (APNS) config
+          apns:
+            debug_topics: [org.wikimedia.Notifications-Utility]
+            mock: false
+            production: true
+            token:
+              key: /etc/push-notifications/apns.p8
+              keyId: KEY_ID
+              teamId: TEAM_ID
+          # the template used for contacting the MW API
+          mwapi_req:
+            method: post
+            uri: https://api-rw.discovery.wmnet/w/api.php
+            headers:
+              host: meta.wikimedia.org
+              user-agent: '{{user-agent}}'
+              x-forwarded-proto: https
+            body: '{{ default(request.query, {}) }}'
+          mw_subscription_manager_username: PushSubscriptionManager2
+          mw_subscription_manager_password: snakeoil
+          debug: true
+  google-service.json: |- 
+    {
+    "type": "service_account",
+    "project_id": "dummyproject",
+    "private_key_id": "1111111111111111111111111111111111111111",
+    "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEogIBAAKCAQEA2ZUlwz6geaDZweWLH1yLjiRQ3l5oDl4gJBylCHE4XO3BTzVO\n3uvwduq9AvRVHBPhzWlBRzFMb9q8n6jlIdTkixdCE+LcJc2DYUfL58uiPtYP5fub\nbdkT8D9qtRkw/E8XL6zYltsLCajFMn96CgIywRMNb362ewpRrzz0jKpJjacPjgoV\nbH/68GImhRnD4gtdfzQ2J2gQ1rgnABHOZUgcw5aN1st71eqwEdJZqlbaJsaL64fG\nRv0SZFvXrbHPrWipSMv4nMlhCPD+OdvJwE0zQ3CVkORrm545E7GE+meEXEjFVzge\nfulrPWSnZgxFIwrNBNehk9+0MwTd9fbk8CpInwIDAQABAoIBACgBhmn5z+PNMXy3\nSfdAOuCtyLi6PwO1Rs+c/LMqriRYCt0XfiL62sHis1Ihvqxk83WjTr9aTyWZ4Giy\n0z5/OG5inmGtqrDAstFmNBWwmWpYTaAJvTBbY5Ee9+3IbftWR3samtBSAhuKjoeU\nbMn+UXqymBvR/pds9Ev2NzjN7qw+nn1gcupPNw0fpcEk7U4HT85oe2XmDOaCaoXB\n4ovLxzdRVnkHdNfp3tDMqVHLZrPP4bXbLi1+Tt4yF/JbDDXbY1pu+tebLW+xL5Zr\niLD5NZV2GH+EHj1oWB5utfVO2c+FDjJAvnceWnfEYuJ+p5g6nzV/C7o2lw7qnmpd\nHT0v5MECgYEA9jq/FjPMd+GRXMYV6rp9B9MGisRSA08lt0hDs5iKU2r5TB3c0hAq\nz3+suKJ7/8VxBxNmtduUt4r4rvAyB8gG5hWQtNSgis8COVC2QLBRRcvecjTcUhhA\nbOS8O0Sg8zVdfzeSaTMbQLFVtOYcBCvP7RYVXFn3CGOjgQZ64axfCdECgYEA4jdm\nWqSfQgqjAhIRWbU0DDbF/7iLZGiyUv3G4AA7XUWRMbItjO91jCE4feywT3SyaVEJ\nJEpXI4849sNMkZ4XwylTCCgO5WBqQmQWeHAuxp4H4LOW9Hjmy1Ev6lIJChy0AD4t\nZ6DEZwHdLZWIcyCRWmKfZyYPOYYB8g2em5VvV28CgYBbO9svw9OgG8E7qd3XEnBf\nZM6IvkNRHJNx/OGw+vVOAVYL4QjAAOOL7Ne3teTSGXtOzt6AxbKt611HnJI9Fd2Q\nhS8QAbTWmetOB1zwTSRgAzESCgoUlQ3SC1K/dydX1k8lYxbpydjwOIT0OUrqNL2f\nME6L4H3K6vhbR2ZilfbE8QKBgER6nsprsSYt0CCtVYFBgEr+PbvmopO3uduzpQNk\nLpRSndxcYruaNYxA9jfwcYLsAaIt/MV2l6BVF9pjTod6Qxk6Jj9+2NuI70G/yKmW\n1CId7qaP1u+UtdDwd7/IK6JbBAZazCXlne7Muqa08IRhZH7nAfgYpl00etxKUSwp\n9XWTAoGAFoJENS2q5k0b86blOYiBBTXQo2SreC8Uidr3PjRSR1koamhsnbNz9vZ+\nMhXeq4puvrUxw10zqmogho81HuYJrSsm3K8cIrRcFx7Tq+8G/Lnp0vNKya04GMDI\nNEqE55cyBebb+KpQILZU1ZZY32W7/5xys6sZcJVkiGhmCdLEMmY=\n-----END PRIVATE KEY-----\n",
+    "client_email": "fffffffffffffffffffffff@g111111111111111111111111.com",
+    "client_id": "111111111111111111111",
+    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+    "token_uri": "https://oauth2.googleapis.com/token",
+    "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+    "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/1111111111111111111111111111111111111111111111111111111111111111111111111"
+    }
+  apns.p8: |- 
+    -----BEGIN PRIVATE KEY-----
+    MIIEogIBAAKCAQEA2ZUlwz6geaDZweWLH1yLjiRQ3l5oDl4gJBylCHE4XO3BTzVO
+    3uvwduq9AvRVHBPhzWlBRzFMb9q8n6jlIdTkixdCE+LcJc2DYUfL58uiPtYP5fub
+    bdkT8D9qtRkw/E8XL6zYltsLCajFMn96CgIywRMNb362ewpRrzz0jKpJjacPjgoV
+    bH/68GImhRnD4gtdfzQ2J2gQ1rgnABHOZUgcw5aN1st71eqwEdJZqlbaJsaL64fG
+    Rv0SZFvXrbHPrWipSMv4nMlhCPD+OdvJwE0zQ3CVkORrm545E7GE+meEXEjFVzge
+    fulrPWSnZgxFIwrNBNehk9+0MwTd9fbk8CpInwIDAQABAoIBACgBhmn5z+PNMXy3
+    SfdAOuCtyLi6PwO1Rs+c/LMqriRYCt0XfiL62sHis1Ihvqxk83WjTr9aTyWZ4Giy
+    0z5/OG5inmGtqrDAstFmNBWwmWpYTaAJvTBbY5Ee9+3IbftWR3samtBSAhuKjoeU
+    bMn+UXqymBvR/pds9Ev2NzjN7qw+nn1gcupPNw0fpcEk7U4HT85oe2XmDOaCaoXB
+    4ovLxzdRVnkHdNfp3tDMqVHLZrPP4bXbLi1+Tt4yF/JbDDXbY1pu+tebLW+xL5Zr
+    iLD5NZV2GH+EHj1oWB5utfVO2c+FDjJAvnceWnfEYuJ+p5g6nzV/C7o2lw7qnmpd
+    HT0v5MECgYEA9jq/FjPMd+GRXMYV6rp9B9MGisRSA08lt0hDs5iKU2r5TB3c0hAq
+    z3+suKJ7/8VxBxNmtduUt4r4rvAyB8gG5hWQtNSgis8COVC2QLBRRcvecjTcUhhA
+    bOS8O0Sg8zVdfzeSaTMbQLFVtOYcBCvP7RYVXFn3CGOjgQZ64axfCdECgYEA4jdm
+    WqSfQgqjAhIRWbU0DDbF/7iLZGiyUv3G4AA7XUWRMbItjO91jCE4feywT3SyaVEJ
+    JEpXI4849sNMkZ4XwylTCCgO5WBqQmQWeHAuxp4H4LOW9Hjmy1Ev6lIJChy0AD4t
+    Z6DEZwHdLZWIcyCRWmKfZyYPOYYB8g2em5VvV28CgYBbO9svw9OgG8E7qd3XEnBf
+    ZM6IvkNRHJNx/OGw+vVOAVYL4QjAAOOL7Ne3teTSGXtOzt6AxbKt611HnJI9Fd2Q
+    hS8QAbTWmetOB1zwTSRgAzESCgoUlQ3SC1K/dydX1k8lYxbpydjwOIT0OUrqNL2f
+    ME6L4H3K6vhbR2ZilfbE8QKBgER6nsprsSYt0CCtVYFBgEr+PbvmopO3uduzpQNk
+    LpRSndxcYruaNYxA9jfwcYLsAaIt/MV2l6BVF9pjTod6Qxk6Jj9+2NuI70G/yKmW
+    1CId7qaP1u+UtdDwd7/IK6JbBAZazCXlne7Muqa08IRhZH7nAfgYpl00etxKUSwp
+    9XWTAoGAFoJENS2q5k0b86blOYiBBTXQo2SreC8Uidr3PjRSR1koamhsnbNz9vZ+
+    MhXeq4puvrUxw10zqmogho81HuYJrSsm3K8cIrRcFx7Tq+8G/Lnp0vNKya04GMDI
+    NEqE55cyBebb+KpQILZU1ZZY32W7/5xys6sZcJVkiGhmCdLEMmY=
+    -----END PRIVATE KEY-----
+---
+# Source: push-notifications/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: push-notifications-my-push-notifications
+  labels:
+    app: push-notifications
+    chart: push-notifications-0.1.15
+    release: my-push-notifications
+    heritage: Helm
+spec:
+  type: NodePort
+  selector:
+    app: push-notifications
+    release: my-push-notifications
+    routed_via: my-push-notifications
+  ports:
+    - name: http
+      targetPort: 8900
+      port: 8900
+---
+# Source: push-notifications/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: push-notifications-my-push-notifications
+  labels:
+    app: push-notifications
+    chart: push-notifications-0.1.15
+    release: my-push-notifications
+    heritage: Helm
+spec:
+  selector:
+    matchLabels:
+      app: push-notifications
+      release: my-push-notifications
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: push-notifications
+        release: my-push-notifications
+        routed_via: my-push-notifications
+      annotations:
+        checksum/config: 800c539fc64483cd92a6359da2c1bff3a7c17c6884c6a627de24c943ec0883ba
+        checksum/secrets: f04ebe3c4396a5448077f46ec23ba404cc495e8984e08b88aeedd107313e1894
+        prometheus.io/port: "9102"
+        prometheus.io/scrape: "true"        
+    spec:
+      containers:
+        # The main application container
+        - name: push-notifications-my-push-notifications
+          image: "docker-registry.wikimedia.org/wikimedia/mediawiki-services-push-notifications:latest"
+          imagePullPolicy: IfNotPresent
+          command:
+            - nodejs
+          args:
+            - ./dist/server.js
+            - -c
+            - /etc/push-notifications/config.yaml
+          ports:
+            - containerPort: 8900
+          livenessProbe:
+            tcpSocket:
+              port: 8900
+          readinessProbe:
+            httpGet:
+              path: /_info
+              port: 8900
+          env:
+            - name: SERVICE_IDENTIFIER
+              value: push-notifications-my-push-notifications
+            - name: GOOGLE_APPLICATION_CREDENTIALS
+              value: "/etc/push-notifications/google-service.json"
+          resources:
+            requests:
+              cpu: 700m
+              memory: 450Mi
+            limits:
+              cpu: 1000m
+              memory: 500Mi
+          volumeMounts:
+            - name: config-volume
+              mountPath: /etc/push-notifications          
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+               drop:
+               - ALL
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault        
+      volumes:        
+        - name: config-volume
+          configMap:
+            name: config-my-push-notifications
+---
+# Source: push-notifications/templates/tests/test-service-checker.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: 'push-notifications-my-push-notifications-service-checker'
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  containers:
+  - name: 'push-notifications-my-push-notifications-service-checker'
+    image: "docker-registry.wikimedia.org/service-checker"
+    imagePullPolicy: IfNotPresent
+    args: ["-t", "5", '$(PUSH_NOTIFICATIONS_MY_PUSH_NOTIFICATIONS_SERVICE_HOST)', 'http://push-notifications-my-push-notifications:8900']    
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+         drop:
+         - ALL
+      runAsNonRoot: true
+      seccompProfile:
+        type: RuntimeDefault
+  dnsPolicy: ClusterFirst
+  restartPolicy: Never

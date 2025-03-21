@@ -1,0 +1,312 @@
+---
+# Source: haproxy-ingress/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+automountServiceAccountToken: true
+metadata:
+  labels:
+    helm.sh/chart: haproxy-ingress-0.14.7
+    app.kubernetes.io/name: haproxy-ingress
+    app.kubernetes.io/instance: my-haproxy-ingress
+    app.kubernetes.io/version: "v0.14.7"
+    app.kubernetes.io/managed-by: Helm
+  name: my-haproxy-ingress
+  namespace: default
+---
+# Source: haproxy-ingress/templates/controller-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    helm.sh/chart: haproxy-ingress-0.14.7
+    app.kubernetes.io/name: haproxy-ingress
+    app.kubernetes.io/instance: my-haproxy-ingress
+    app.kubernetes.io/version: "v0.14.7"
+    app.kubernetes.io/managed-by: Helm
+  name: my-haproxy-ingress
+  namespace: default
+data:
+  healthz-port: "10253"
+  stats-port: "1936"
+---
+# Source: haproxy-ingress/templates/clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    helm.sh/chart: haproxy-ingress-0.14.7
+    app.kubernetes.io/name: haproxy-ingress
+    app.kubernetes.io/instance: my-haproxy-ingress
+    app.kubernetes.io/version: "v0.14.7"
+    app.kubernetes.io/managed-by: Helm
+  name: my-haproxy-ingress
+rules:
+  - apiGroups:
+      - "discovery.k8s.io"
+    resources:
+      - endpointslices
+    verbs:
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+      - endpoints
+      - nodes
+      - secrets
+    verbs:
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - namespaces
+      - nodes
+    verbs:
+      - get
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+      - services
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - extensions
+      - networking.k8s.io
+    resources:
+      - ingresses
+      - ingressclasses
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - gateway.networking.k8s.io
+      - networking.x-k8s.io
+    resources:
+      - gateways
+      - gatewayclasses
+      - httproutes
+      - tlsroutes
+      - tcproutes
+      - udproutes
+      - backendpolicies
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - create
+      - patch
+  - apiGroups:
+      - extensions
+      - networking.k8s.io
+    resources:
+      - ingresses/status
+    verbs:
+      - update
+---
+# Source: haproxy-ingress/templates/clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    helm.sh/chart: haproxy-ingress-0.14.7
+    app.kubernetes.io/name: haproxy-ingress
+    app.kubernetes.io/instance: my-haproxy-ingress
+    app.kubernetes.io/version: "v0.14.7"
+    app.kubernetes.io/managed-by: Helm
+  name: my-haproxy-ingress
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-haproxy-ingress
+subjects:
+  - kind: ServiceAccount
+    name: my-haproxy-ingress
+    namespace: default
+  - apiGroup: rbac.authorization.k8s.io
+    kind: User
+    name: my-haproxy-ingress
+---
+# Source: haproxy-ingress/templates/role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  labels:
+    helm.sh/chart: haproxy-ingress-0.14.7
+    app.kubernetes.io/name: haproxy-ingress
+    app.kubernetes.io/instance: my-haproxy-ingress
+    app.kubernetes.io/version: "v0.14.7"
+    app.kubernetes.io/managed-by: Helm
+  name: my-haproxy-ingress
+  namespace: default
+rules:
+  - apiGroups:
+      - coordination.k8s.io
+    resources:
+      - leases
+    verbs:
+      - get
+      - create
+      - update
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+      - secrets
+      - namespaces
+    verbs:
+      - get
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+      - endpoints
+    verbs:
+      - get
+      - create
+      - update
+---
+# Source: haproxy-ingress/templates/rolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    helm.sh/chart: haproxy-ingress-0.14.7
+    app.kubernetes.io/name: haproxy-ingress
+    app.kubernetes.io/instance: my-haproxy-ingress
+    app.kubernetes.io/version: "v0.14.7"
+    app.kubernetes.io/managed-by: Helm
+  name: my-haproxy-ingress
+  namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: my-haproxy-ingress
+subjects:
+  - kind: ServiceAccount
+    name: my-haproxy-ingress
+    namespace: default
+  - apiGroup: rbac.authorization.k8s.io
+    kind: User
+    name: my-haproxy-ingress
+---
+# Source: haproxy-ingress/templates/controller-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    helm.sh/chart: haproxy-ingress-0.14.7
+    app.kubernetes.io/name: haproxy-ingress
+    app.kubernetes.io/instance: my-haproxy-ingress
+    app.kubernetes.io/version: "v0.14.7"
+    app.kubernetes.io/managed-by: Helm
+  name: my-haproxy-ingress
+  namespace: default
+spec:
+  externalTrafficPolicy: "Local"
+  ports:
+    - name: "http-80"
+      port: 80
+      protocol: TCP
+      targetPort: http
+    - name: "https-443"
+      port: 443
+      protocol: TCP
+      targetPort: https
+  selector:
+    app.kubernetes.io/name: haproxy-ingress
+    app.kubernetes.io/instance: my-haproxy-ingress
+  type: "LoadBalancer"
+---
+# Source: haproxy-ingress/templates/controller-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    helm.sh/chart: haproxy-ingress-0.14.7
+    app.kubernetes.io/name: haproxy-ingress
+    app.kubernetes.io/instance: my-haproxy-ingress
+    app.kubernetes.io/version: "v0.14.7"
+    app.kubernetes.io/managed-by: Helm
+  name: my-haproxy-ingress
+  namespace: default
+spec:
+  replicas: 1
+  revisionHistoryLimit: 
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 1
+    type: RollingUpdate
+  minReadySeconds: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: haproxy-ingress
+      app.kubernetes.io/instance: my-haproxy-ingress
+  template:
+    metadata:
+      annotations:
+      labels:
+        app.kubernetes.io/name: haproxy-ingress
+        app.kubernetes.io/instance: my-haproxy-ingress
+    spec:
+      serviceAccountName: my-haproxy-ingress
+      automountServiceAccountToken: true
+      containers:
+        - name: haproxy-ingress
+          image: "quay.io/jcmoraisjr/haproxy-ingress:v0.14.7"
+          imagePullPolicy: "IfNotPresent"
+          args:
+            - --configmap=default/my-haproxy-ingress
+            - --ingress-class=haproxy
+            - --sort-backends
+          ports:        
+            - name: http
+              containerPort: 80
+            - name: https
+              containerPort: 443
+            - name: healthz
+              containerPort: 10253      
+          livenessProbe:
+            httpGet:
+              path: "/healthz"
+              port: 10253
+              scheme: HTTP
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 1
+            successThreshold: 1
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: "/healthz"
+              port: 10253
+              scheme: HTTP
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 1
+            successThreshold: 1
+            failureThreshold: 3
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          resources:
+            {}
+      terminationGracePeriodSeconds: 60
+      dnsPolicy: ClusterFirst
+      hostNetwork: false

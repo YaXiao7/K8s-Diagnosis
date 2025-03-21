@@ -1,0 +1,508 @@
+---
+# Source: zabbix/templates/secret-db-access.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: zabbixdb-pguser-zabbix
+  labels:
+    app: my-zabbix-db-access
+    app.kubernetes.io/name: db-access
+    helm.sh/chart: zabbix-3.1.3
+    app.kubernetes.io/instance: my-zabbix-db-access
+    app.kubernetes.io/managed-by: Helm-db-access
+type: Opaque
+data:
+  host: "bXktemFiYml4LXBvc3RncmVzcWw="
+  port: "NTQzMg=="
+  dbname: "emFiYml4"
+  user: "emFiYml4"
+  password: "SlNGY1VnQTZXRFEydFMySQ=="
+---
+# Source: zabbix/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-zabbix-zabbix-server
+  labels:
+    app: my-zabbix-zabbix-server
+    app.kubernetes.io/name: zabbix-server
+    helm.sh/chart: zabbix-3.1.3
+    app.kubernetes.io/instance: my-zabbix-zabbix-server
+    app.kubernetes.io/managed-by: Helm-zabbix-server
+spec:
+  type: ClusterIP
+  ports:
+    - port: 10051
+      targetPort: 10051
+      name: zabbix-server
+      protocol: TCP
+    - port: 10052
+      targetPort: 10052
+      protocol: TCP
+      name: zabbix-jmx
+  selector:
+    app: my-zabbix-zabbix-server
+---
+# Source: zabbix/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-zabbix-zabbix-agent
+  labels:
+    app: my-zabbix-zabbix-agent
+    app.kubernetes.io/name: zabbix-agent
+    helm.sh/chart: zabbix-3.1.3
+    app.kubernetes.io/instance: my-zabbix-zabbix-agent
+    app.kubernetes.io/managed-by: Helm-zabbix-agent
+spec:
+  type: ClusterIP
+  ports:
+    - port: 10050
+      targetPort: 10050
+      protocol: TCP
+      name: zabbix-agent
+  selector:
+    app: my-zabbix-zabbix-server
+---
+# Source: zabbix/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-zabbix-zabbix-web
+  labels:
+    app: my-zabbix-zabbix-web
+    app.kubernetes.io/name: zabbix-web
+    helm.sh/chart: zabbix-3.1.3
+    app.kubernetes.io/instance: my-zabbix-zabbix-web
+    app.kubernetes.io/managed-by: Helm-zabbix-web
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 8080
+      protocol: TCP
+      name: zabbix-web
+  selector:
+    app: my-zabbix-zabbix-web
+---
+# Source: zabbix/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-zabbix-zabbix-webservice
+  labels:
+    app: my-zabbix-zabbix-webservice
+    app.kubernetes.io/name: zabbix-webservice
+    helm.sh/chart: zabbix-3.1.3
+    app.kubernetes.io/instance: my-zabbix-zabbix-webservice
+    app.kubernetes.io/managed-by: Helm-zabbix-webservice
+spec:
+  type: ClusterIP
+  ports:
+    - port: 10053
+      targetPort: 10053
+      protocol: TCP
+      name: webservice
+  selector:
+    app: my-zabbix-zabbix-webservice
+---
+# Source: zabbix/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-zabbix-postgresql
+  labels:
+    app: my-zabbix-postgresql
+    app.kubernetes.io/name: postgresql
+    helm.sh/chart: zabbix-3.1.3
+    app.kubernetes.io/instance: my-zabbix-postgresql
+    app.kubernetes.io/managed-by: Helm-postgresql
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5432
+      targetPort: 5432
+      protocol: TCP
+      name: db
+  selector:
+    app: my-zabbix-postgresql
+---
+# Source: zabbix/templates/deployment-zabbix-server.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-zabbix-zabbix-server
+  labels:
+    app: my-zabbix-zabbix-server
+    app.kubernetes.io/name: zabbix-server
+    helm.sh/chart: zabbix-3.1.3
+    app.kubernetes.io/instance: my-zabbix-zabbix-server
+    app.kubernetes.io/managed-by: Helm-zabbix-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: my-zabbix-zabbix-server
+  template:
+    metadata:
+      labels:
+        app: my-zabbix-zabbix-server
+        app.kubernetes.io/name: zabbix-server
+        helm.sh/chart: zabbix-3.1.3
+        app.kubernetes.io/instance: my-zabbix-zabbix-server
+        app.kubernetes.io/managed-by: Helm-zabbix-server
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 1
+            podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/instance: my-zabbix-zabbix-server
+      initContainers:
+      containers:
+        - name: zabbix-server
+          resources:
+            {}
+          image: "zabbix/zabbix-server-pgsql:ubuntu-6.0.8"
+          ports:
+            - containerPort: 10051
+              name: zabbix-server
+            - containerPort: 10052
+              name: zabbix-jmx
+          env:
+            
+            
+            - name: DB_SERVER_HOST
+              value: my-zabbix-postgresql
+            - name: DB_SERVER_PORT
+              value: "5432"
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: zabbixdb-pguser-zabbix
+                  key: user
+                  optional: true
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: zabbixdb-pguser-zabbix
+                  key: password
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: zabbixdb-pguser-zabbix
+                  key: dbname
+                  optional: true
+            - name: ZBX_AUTOHANODENAME
+              value: "hostname"
+            - name: ZBX_NODEADDRESS
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: ZBX_WEBSERVICEURL
+              value: "http://my-zabbix-zabbix-webservice:10053/report"
+            - name: ZBX_STARTREPORTWRITERS
+              value: "1"
+        - name: zabbix-agent
+          resources:
+            {}
+          securityContext:
+            null
+          image: "zabbix/zabbix-agent2:ubuntu-6.0.8"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: ZBX_HOSTNAME
+              value: "Zabbix server"
+            - name: ZBX_SERVER_HOST
+              value: "127.0.0.1"
+            - name: ZBX_SERVER_PORT
+              value: "10051"
+            - name: ZBX_PASSIVE_ALLOW
+              value: "true"
+            - name: ZBX_PASSIVESERVERS
+              value: "127.0.0.1"
+            - name: ZBX_ACTIVE_ALLOW
+              value: "true"
+            - name: ZBX_ACTIVESERVERS
+              value: 
+            - name: ZBX_DEBUGLEVEL
+              value: 
+            - name: ZBX_TIMEOUT
+              value: 
+            - name: ZBX_LOADMODULE
+              value: 
+          ports:
+            - name: zabbix-agent
+              containerPort: 10050
+              protocol: TCP
+      imagePullSecrets:
+      volumes:
+---
+# Source: zabbix/templates/deployment-zabbix-web.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-zabbix-zabbix-web
+  labels:
+    app: my-zabbix-zabbix-web
+    app.kubernetes.io/name: zabbix-web
+    helm.sh/chart: zabbix-3.1.3
+    app.kubernetes.io/instance: my-zabbix-zabbix-web
+    app.kubernetes.io/managed-by: Helm-zabbix-web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app:  my-zabbix-zabbix-web
+  template:
+    metadata:
+      labels:
+        app: my-zabbix-zabbix-web
+        app.kubernetes.io/name: zabbix-web
+        helm.sh/chart: zabbix-3.1.3
+        app.kubernetes.io/instance: my-zabbix-zabbix-web
+        app.kubernetes.io/managed-by: Helm-zabbix-web
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 1
+            podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/instance: my-zabbix-zabbix-web
+      containers:
+      - name: zabbix-web
+        resources:
+          {}
+        securityContext:
+            null
+        image: "zabbix/zabbix-web-nginx-pgsql:ubuntu-6.0.8"
+        imagePullPolicy: IfNotPresent
+        env:
+          
+          
+          - name: DB_SERVER_HOST
+            value: my-zabbix-postgresql
+          - name: DB_SERVER_PORT
+            value: "5432"
+          - name: POSTGRES_USER
+            valueFrom:
+              secretKeyRef:
+                name: zabbixdb-pguser-zabbix
+                key: user
+                optional: true
+          - name: POSTGRES_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: zabbixdb-pguser-zabbix
+                key: password
+          - name: POSTGRES_DB
+            valueFrom:
+              secretKeyRef:
+                name: zabbixdb-pguser-zabbix
+                key: dbname
+                optional: true
+        ports:
+          - name: zabbix-web
+            containerPort: 8080
+            protocol: TCP
+        volumeMounts:
+        livenessProbe:
+          httpGet:
+            path: /
+            port: zabbix-web
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 6
+        readinessProbe:
+          httpGet:
+            path: /
+            port: zabbix-web
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 6
+      imagePullSecrets:
+      volumes:
+---
+# Source: zabbix/templates/deployment-zabbix-webservice.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-zabbix-zabbix-webservice
+  labels:
+    app: my-zabbix-zabbix-webservice
+    app.kubernetes.io/name: zabbix-webservice
+    helm.sh/chart: zabbix-3.1.3
+    app.kubernetes.io/instance: my-zabbix-zabbix-webservice
+    app.kubernetes.io/managed-by: Helm-zabbix-webservice
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app:  my-zabbix-zabbix-webservice
+  template:
+    metadata:
+      labels:
+        app: my-zabbix-zabbix-webservice
+        app.kubernetes.io/name: zabbix-webservice
+        helm.sh/chart: zabbix-3.1.3
+        app.kubernetes.io/instance: my-zabbix-zabbix-webservice
+        app.kubernetes.io/managed-by: Helm-zabbix-webservice
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 1
+            podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/instance: my-zabbix-zabbix-webservice
+      containers:
+      - name: zabbix-webservice
+        resources:
+          {}
+        securityContext:
+            null
+        image: "zabbix/zabbix-web-service:ubuntu-6.0.8"
+        imagePullPolicy: IfNotPresent
+        env:
+          - name: ZBX_ALLOWEDIP
+            value: "::/0"
+        ports:
+          - name: webservice
+            containerPort: 10053
+            protocol: TCP
+      imagePullSecrets:
+---
+# Source: zabbix/templates/statefulset-postgresql.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-zabbix-postgresql
+  labels:
+    app: my-zabbix-postgresql
+    app.kubernetes.io/name: postgresql
+    helm.sh/chart: zabbix-3.1.3
+    app.kubernetes.io/instance: my-zabbix-postgresql
+    app.kubernetes.io/managed-by: Helm-postgresql
+spec:
+  replicas: 1
+  serviceName: my-zabbix
+  selector:
+    matchLabels:
+      app: my-zabbix-postgresql
+  template:
+    metadata:
+      labels:
+        app: my-zabbix-postgresql
+        app.kubernetes.io/name: postgresql
+        helm.sh/chart: zabbix-3.1.3
+        app.kubernetes.io/instance: my-zabbix-postgresql
+        app.kubernetes.io/managed-by: Helm-postgresql
+    spec:
+      containers:
+        - name: postgresql
+          resources:
+            null
+          securityContext:
+            null
+          image: "postgres:14"
+          imagePullPolicy: IfNotPresent
+          args:
+            - "-c"
+            - "max_connections=50"
+          env:
+            
+            
+            - name: DB_SERVER_HOST
+              value: my-zabbix-postgresql
+            - name: DB_SERVER_PORT
+              value: "5432"
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: zabbixdb-pguser-zabbix
+                  key: user
+                  optional: true
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: zabbixdb-pguser-zabbix
+                  key: password
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: zabbixdb-pguser-zabbix
+                  key: dbname
+                  optional: true
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+          ports:
+            - name: db
+              containerPort: 5432
+              protocol: TCP
+      volumes:
+      imagePullSecrets:
+---
+# Source: zabbix/templates/cronjob-hanodes-autoclean.yaml
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: my-zabbix-nodesclean
+  labels:
+    app: my-zabbix-nodesclean
+    app.kubernetes.io/name: nodesclean
+    helm.sh/chart: zabbix-3.1.3
+    app.kubernetes.io/instance: my-zabbix-nodesclean
+    app.kubernetes.io/managed-by: Helm-nodesclean
+spec:
+  schedule: "0 1 * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: hanodes-autoclean
+            image: postgres:14
+            imagePullPolicy: IfNotPresent
+            command:
+            - /bin/bash
+            - -c
+            - echo "deleting all stopped and unavailable HANodes older than 3600 seconds..." && psql -c "delete from ha_node where status in (1,2) and extract(epoch from now())-lastaccess>3600"
+            env:
+            
+            
+            - name: PGHOST
+              value: my-zabbix-postgresql
+            - name: PGPORT
+              value: "5432"
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: zabbixdb-pguser-zabbix
+                  key: user
+                  optional: true
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: zabbixdb-pguser-zabbix
+                  key: password
+            - name: PGDATABASE
+              valueFrom:
+                secretKeyRef:
+                  name: zabbixdb-pguser-zabbix
+                  key: dbname
+                  optional: true
+          imagePullSecrets:
+          restartPolicy: OnFailure

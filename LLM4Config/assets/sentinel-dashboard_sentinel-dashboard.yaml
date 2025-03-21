@@ -1,0 +1,146 @@
+---
+# Source: sentinel-dashboard/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-sentinel-dashboard
+  labels:
+    helm.sh/chart: sentinel-dashboard-0.1.0
+    app.kubernetes.io/name: sentinel-dashboard
+    app.kubernetes.io/instance: my-sentinel-dashboard
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: sentinel-dashboard/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-sentinel-dashboard
+data:
+  sentinel.server.host: sentinel
+  sentinel.server.port: "8858"
+  sentinel.dashboard.auth.username: sentinel
+  sentinel.dashboard.auth.password: sentinel
+---
+# Source: sentinel-dashboard/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-sentinel-dashboard
+  labels:
+    helm.sh/chart: sentinel-dashboard-0.1.0
+    app.kubernetes.io/name: sentinel-dashboard
+    app.kubernetes.io/instance: my-sentinel-dashboard
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8858
+      targetPort: http
+      protocol: TCP
+      name: http
+    - port: 8719
+      targetPort: api
+      protocol: TCP
+      name: api
+  selector:
+    app.kubernetes.io/name: sentinel-dashboard
+    app.kubernetes.io/instance: my-sentinel-dashboard
+---
+# Source: sentinel-dashboard/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-sentinel-dashboard
+  labels:
+    helm.sh/chart: sentinel-dashboard-0.1.0
+    app.kubernetes.io/name: sentinel-dashboard
+    app.kubernetes.io/instance: my-sentinel-dashboard
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  serviceName: my-sentinel-dashboard
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sentinel-dashboard
+      app.kubernetes.io/instance: my-sentinel-dashboard
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: sentinel-dashboard
+        app.kubernetes.io/instance: my-sentinel-dashboard
+    spec:
+      serviceAccountName: my-sentinel-dashboard
+      securityContext:
+        {}
+      containers:
+        - name: sentinel-dashboard
+          securityContext:
+            {}
+          image: "royalwang/sentinel-dashboard:1.8.4"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8858
+              protocol: TCP
+            - name: api
+              containerPort: 8719
+              protocol: TCP
+          env:
+            - name: TZ
+              value: Asia/Shanghai
+            - name: JAVA_OPT_EXT
+              value: "-Dserver.servlet.session.timeout=7200 "
+            - name: SERVER_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: my-sentinel-dashboard
+                  key: sentinel.server.host
+            - name: SERVER_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: my-sentinel-dashboard
+                  key: sentinel.server.port
+            - name: USERNAME
+              valueFrom:
+                  configMapKeyRef:
+                    name: my-sentinel-dashboard
+                    key: sentinel.dashboard.auth.username
+            - name: PASSWORD
+              valueFrom:
+                  configMapKeyRef:
+                    name: my-sentinel-dashboard
+                    key: sentinel.dashboard.auth.password
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+            {}
+---
+# Source: sentinel-dashboard/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-sentinel-dashboard-test-connection"
+  labels:
+    helm.sh/chart: sentinel-dashboard-0.1.0
+    app.kubernetes.io/name: sentinel-dashboard
+    app.kubernetes.io/instance: my-sentinel-dashboard
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-sentinel-dashboard:8858']
+  restartPolicy: Never

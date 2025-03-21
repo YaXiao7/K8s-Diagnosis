@@ -1,0 +1,134 @@
+---
+# Source: smtp/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-smtp
+  labels:
+
+    helm.sh/chart: smtp-2.1.1
+    app.kubernetes.io/name: smtp
+    app.kubernetes.io/instance: my-smtp
+    app.kubernetes.io/version: "v0.5.2"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: smtp/templates/config.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-smtp-secrets
+  labels:
+    helm.sh/chart: smtp-2.1.1
+    app.kubernetes.io/name: smtp
+    app.kubernetes.io/instance: my-smtp
+    app.kubernetes.io/version: "v0.5.2"
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  DISABLE_IPV6: "MQ=="
+---
+# Source: smtp/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-smtp
+  labels:
+    helm.sh/chart: smtp-2.1.1
+    app.kubernetes.io/name: smtp
+    app.kubernetes.io/instance: my-smtp
+    app.kubernetes.io/version: "v0.5.2"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 25
+      targetPort: smtp
+      protocol: TCP
+      name: smtp
+  selector:
+    app.kubernetes.io/name: smtp
+    app.kubernetes.io/instance: my-smtp
+---
+# Source: smtp/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-smtp
+  labels:
+    helm.sh/chart: smtp-2.1.1
+    app.kubernetes.io/name: smtp
+    app.kubernetes.io/instance: my-smtp
+    app.kubernetes.io/version: "v0.5.2"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: smtp
+      app.kubernetes.io/instance: my-smtp
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: smtp
+        app.kubernetes.io/instance: my-smtp
+      annotations:
+        checksum/config: fb9072c6341de182edaa040a164a903c9828dbef96f78281d7a40403e91f4f27
+    spec:
+      serviceAccountName: my-smtp
+      securityContext:
+        {}
+      containers:
+        - name: smtp
+          securityContext:
+            {}
+          image: "ghcr.io/ix-ai/smtp:v0.5.2"
+          imagePullPolicy: IfNotPresent
+          envFrom:
+          - secretRef:
+              name: my-smtp-secrets    
+          ports:
+            - name: smtp
+              containerPort: 25
+              protocol: TCP
+            - name: submission
+              containerPort: 587
+              protocol: TCP
+          readinessProbe:
+            tcpSocket:
+              port: smtp
+            initialDelaySeconds: 5
+            periodSeconds: 30
+          livenessProbe:
+            tcpSocket:
+              port: smtp
+            initialDelaySeconds: 15
+            periodSeconds: 60
+          resources:
+            limits:
+              cpu: 200m
+              memory: 50Mi
+            requests:
+              cpu: 10m
+              memory: 10Mi
+---
+# Source: smtp/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-smtp-test-connection"
+  labels:
+
+    helm.sh/chart: smtp-2.1.1
+    app.kubernetes.io/name: smtp
+    app.kubernetes.io/instance: my-smtp
+    app.kubernetes.io/version: "v0.5.2"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args:  ['my-smtp:25']
+  restartPolicy: Never

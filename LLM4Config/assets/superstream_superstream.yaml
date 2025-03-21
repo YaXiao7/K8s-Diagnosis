@@ -1,0 +1,895 @@
+---
+# Source: superstream/charts/nats/templates/pod-disruption-budget.yaml
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  labels:
+    app.kubernetes.io/component: nats
+    app.kubernetes.io/instance: my-superstream
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: nats
+    app.kubernetes.io/version: 2.10.16
+    helm.sh/chart: nats-1.1.12
+  name: nats
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: nats
+      app.kubernetes.io/instance: my-superstream
+      app.kubernetes.io/name: nats
+---
+# Source: superstream/charts/telegraf/templates/pdb.yaml
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: telegraf
+  labels:
+    helm.sh/chart: telegraf-1.8.48
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: telegraf
+    app.kubernetes.io/instance: my-superstream
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: telegraf
+      app.kubernetes.io/instance: my-superstream
+---
+# Source: superstream/charts/telegraf/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: telegraf
+  labels:
+    helm.sh/chart: telegraf-1.8.48
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: telegraf
+    app.kubernetes.io/instance: my-superstream
+---
+# Source: superstream/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: superstream
+  labels:
+    helm.sh/chart: superstream-0.4.17
+    app.kubernetes.io/name: superstream
+    app.kubernetes.io/instance: my-superstream
+    app.kubernetes.io/version: "1.0.404"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: superstream/templates/secret-data-plane.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: superstream-creds
+  namespace: default
+type: Opaque
+data:
+  ENCRYPTION_SECRET_KEY: "Y0xCdlZQeTZvRzExTldVYW5WNHpKcmtmS1pSYW80aEM="
+  ACTIVATION_TOKEN: ""
+---
+# Source: superstream/charts/nats/templates/config-map.yaml
+apiVersion: v1
+data:
+  nats.conf: |
+    {
+      "accounts": {
+        "SYS": {
+          "users": [
+            {
+              "password": "no-auth",
+              "user": "superstream_sys"
+            }
+          ]
+        },
+        "internal": {
+          "jetstream": "enable",
+          "users": [
+            {
+              "password": "no-auth",
+              "user": "superstream_internal"
+            }
+          ]
+        }
+      },
+      "cluster": {
+        "name": "nats",
+        "no_advertise": true,
+        "port": 6222,
+        "routes": [
+          "nats://nats-0.nats-headless:6222",
+          "nats://nats-1.nats-headless:6222",
+          "nats://nats-2.nats-headless:6222"
+        ]
+      },
+      "http_port": 8222,
+      "jetstream": {
+        "max_file_store": 10Gi,
+        "max_memory_store": 0,
+        "store_dir": "/data"
+      },
+      "lame_duck_duration": "30s",
+      "lame_duck_grace_period": "10s",
+      "max_connections": 131072,
+      "max_payload": 8MB,
+      "pid_file": "/var/run/nats/nats.pid",
+      "port": 4222,
+      "remote_syslog": "udp://superstream-syslog.default:5514",
+      "server_name": $SERVER_NAME,
+      "system_account": "SYS"
+    }
+kind: ConfigMap
+metadata:
+  labels:
+    app.kubernetes.io/component: nats
+    app.kubernetes.io/instance: my-superstream
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: nats
+    app.kubernetes.io/version: 2.10.16
+    helm.sh/chart: nats-1.1.12
+  name: nats-config
+---
+# Source: superstream/charts/telegraf/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: telegraf
+  labels:
+    helm.sh/chart: telegraf-1.8.48
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: telegraf
+    app.kubernetes.io/instance: my-superstream
+data:
+  telegraf.conf: |
+    [agent]
+      collection_jitter = "0s"
+      debug = false
+      flush_interval = "10s"
+      flush_jitter = "0s"
+      hostname = "$HOSTNAME"
+      interval = "10s"
+      logfile = "/tmp/telegraf.log"
+      logfile_rotation_max_archives = 5
+      logfile_rotation_max_size = "10MB"
+      metric_batch_size = 1000
+      metric_buffer_limit = 10000
+      omit_hostname = false
+      precision = ""
+      quiet = false
+      round_interval = true
+    [[processors.enum]]
+      [[processors.enum.mapping]]
+        dest = "status_code"
+        field = "status"
+        [processors.enum.mapping.value_mappings]
+            critical = 3
+            healthy = 1
+            problem = 2
+    [[processors.starlark]]
+      namepass = [
+        "syslog"
+      ]
+      source = "def apply(metric):\n    unique_str = metric.name + str(metric.fields) + str(metric.tags)\n    random_value = str(hash(unique_str))[-8:]\n    metric.tags['eventId'] = random_value\n    return metric                                         \n"
+    [[processors.starlark]]
+      source = '''
+    def apply(metric):
+        level = metric.fields.get('level')
+        if level == "I":
+            metric.fields['level'] = "info"
+        elif level == "W":
+            metric.fields['level'] = "warning"
+        elif level == "E":
+            metric.fields['level'] = "error"
+        return metric
+      '''
+    [[processors.starlark]]
+      namepass = [
+        "syslog"
+      ]    
+      source = '''
+    def apply(metric):
+        severity = metric.tags.get('severity')
+        if severity == "err":
+            metric.tags['level'] = "error" 
+        elif severity == "warning":
+            metric.tags['level'] = "warning"            
+        elif severity == "notice":
+            metric.tags['level'] = "info"
+        return metric
+      '''      
+    [[outputs.loki]]
+      domain = "https://loki.mgmt.superstream.ai"
+      endpoint = "/loki/api/v1/push"
+      namepass = [
+        "syslog",
+        "telegraf_logs"
+      ]
+      fielddrop = [
+        "SDID@0_eventSource",
+        "facility_code",
+        "severity_code",
+        "version",
+        "timestamp",
+        "procid"
+      ]
+      [outputs.loki.http_headers]
+        Authorization = "$TOKEN"
+    [[outputs.http]]
+      data_format = "prometheusremotewrite"
+      method = "POST"
+      namedrop = [
+        "syslog",
+        "telegraf_logs",
+        "internal"
+      ]
+      url = "https://prometheus.mgmt.superstream.ai/api/v1/write"
+      [outputs.http.headers]
+        Authorization = "$TOKEN"    
+    [[inputs.syslog]]
+      server = "udp://:6514"
+      [inputs.syslog.tags]
+        accountId = ""
+        engineName = ""
+    [[inputs.prometheus]]
+      kubernetes_label_selector = "app.kubernetes.io/name in (nats, superstream)"
+      monitor_kubernetes_pods = true
+      monitor_kubernetes_pods_method = "settings+annotations"
+      monitor_kubernetes_pods_namespace = "default"
+      monitor_kubernetes_pods_port = 7777
+      [inputs.prometheus.tags]
+        accountId = ""
+        engineName = ""
+
+    [[inputs.tail]]
+      files = ["/tmp/telegraf.log"]
+      from_beginning = false
+      name_override = "telegraf_logs"
+      data_format = "grok"
+      grok_custom_patterns = '''
+    LOGLEVEL [IWE]
+    COMPONENT \[(.*?)\]
+      '''
+      grok_patterns = [
+        "%{TIMESTAMP_ISO8601:timestamp} %{LOGLEVEL:level}! %{COMPONENT:component} %{GREEDYDATA:message}",
+      ]
+      [inputs.tail.tags]
+        accountId = ""
+        engineName = ""
+        appname = "telegraf"
+
+    [[inputs.internal]]
+      collect_memstats = true
+      [inputs.internal.tags]
+        accountId = ""
+        engineName = ""
+---
+# Source: superstream/templates/configmap-syslog.yaml
+# templates/configmap.yaml
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: syslog-config
+data:
+  syslog-ng.conf: |
+    @version: 4.2
+    @include "scl.conf"
+
+    # Define source for incoming logs
+    source s_local {
+      internal();
+    };
+
+    source s_network {
+      syslog(transport(UDP) port(5514));
+    };
+
+    # Define RFC5424 template
+    template t_rfc5424 {
+    #    template("<${PRI}>1 ${ISODATE} ${HOST} ${PROGRAM} ${PID} ${MSGID} [exampleSDID@0 iut=\"3\" eventSource=\"Application\" eventID=\"1011\"] ${MSG}\n");
+        template("<${PRI}>1 ${ISODATE} ${HOST} ${PROGRAM} 1 - [SDID@0 eventSource=\"Application\"] ${MSG}\n");
+        template_escape(no);
+    };
+
+    # Define destination where the formatted logs will be sent
+    destination d_local {
+        file("/tmp/rfc5424.log" template(t_rfc5424));
+    };
+    # Define destination for forwarding logs to a remote syslog server
+    destination d_remote_syslog {
+        network("telegraf.default" port(6514) transport("udp") template(t_rfc5424));
+        # Change "remote-syslog-server-address" to your remote syslog server's IP or hostname
+        # Adjust the port if your remote server listens on a different port
+        # Change transport to "udp" if your remote server expects UDP
+    };
+
+    # Log path to process and route the logs
+    log {
+      source(s_local);
+      source(s_network);
+      destination(d_local); # Local file destination
+      destination(d_remote_syslog); # Remote syslog server destination
+    };
+---
+# Source: superstream/charts/telegraf/templates/role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: telegraf
+  namespace: default
+  labels:
+    helm.sh/chart: telegraf-1.8.48
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: telegraf
+    app.kubernetes.io/instance: my-superstream
+rules:
+  - apiGroups:
+    - ""
+    resources:
+    - services
+    - endpoints
+    - pods
+    verbs:
+    - get
+    - list
+    - watch
+---
+# Source: superstream/charts/telegraf/templates/rolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: telegraf
+  labels:
+    helm.sh/chart: telegraf-1.8.48
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: telegraf
+    app.kubernetes.io/instance: my-superstream
+subjects:
+  - kind: ServiceAccount
+    name: telegraf
+    namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: telegraf
+---
+# Source: superstream/charts/nats/templates/headless-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/component: nats
+    app.kubernetes.io/instance: my-superstream
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: nats
+    app.kubernetes.io/version: 2.10.16
+    helm.sh/chart: nats-1.1.12
+  name: nats-headless
+spec:
+  clusterIP: None
+  ports:
+  - appProtocol: tcp
+    name: nats
+    port: 4222
+    targetPort: nats
+  - appProtocol: tcp
+    name: cluster
+    port: 6222
+    targetPort: cluster
+  - appProtocol: http
+    name: monitor
+    port: 8222
+    targetPort: monitor
+  publishNotReadyAddresses: true
+  selector:
+    app.kubernetes.io/component: nats
+    app.kubernetes.io/instance: my-superstream
+    app.kubernetes.io/name: nats
+---
+# Source: superstream/charts/nats/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/component: nats
+    app.kubernetes.io/instance: my-superstream
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: nats
+    app.kubernetes.io/version: 2.10.16
+    helm.sh/chart: nats-1.1.12
+  name: nats
+spec:
+  ports:
+  - appProtocol: tcp
+    name: nats
+    port: 4222
+    targetPort: nats
+  selector:
+    app.kubernetes.io/component: nats
+    app.kubernetes.io/instance: my-superstream
+    app.kubernetes.io/name: nats
+---
+# Source: superstream/charts/telegraf/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: telegraf
+  labels:
+    helm.sh/chart: telegraf-1.8.48
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: telegraf
+    app.kubernetes.io/instance: my-superstream
+spec:
+  type: ClusterIP
+  ports:
+  - port: 6514
+    targetPort: 6514
+    protocol: UDP
+    name: "syslog"
+  selector:
+    app.kubernetes.io/name: telegraf
+    app.kubernetes.io/instance: my-superstream
+---
+# Source: superstream/templates/service-data-plane.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: superstream-data-plane
+  labels:
+    helm.sh/chart: superstream-0.4.17
+    app.kubernetes.io/name: superstream
+    app.kubernetes.io/instance: my-superstream
+    app.kubernetes.io/version: "1.0.404"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 7777
+      targetPort: data-plane
+      protocol: TCP
+      name: data-plane
+  selector:
+    app.kubernetes.io/name: superstream
+    app.kubernetes.io/instance: my-superstream-data-plane
+---
+# Source: superstream/templates/service-syslog.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: superstream-syslog
+  labels:
+    helm.sh/chart: superstream-0.4.17
+    app.kubernetes.io/name: superstream
+    app.kubernetes.io/instance: my-superstream
+    app.kubernetes.io/version: "1.0.404"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5514
+      targetPort: syslog
+      protocol: UDP
+      name: syslog
+  selector:
+    app.kubernetes.io/name: superstream
+    app.kubernetes.io/instance: my-superstream-syslog
+---
+# Source: superstream/charts/telegraf/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: telegraf
+  labels:
+    helm.sh/chart: telegraf-1.8.48
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: telegraf
+    app.kubernetes.io/instance: my-superstream
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: telegraf
+      app.kubernetes.io/instance: my-superstream
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: telegraf
+        app.kubernetes.io/instance: my-superstream
+        helm.sh/chart: telegraf-1.8.48
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: telegraf
+        app.kubernetes.io/instance: my-superstream
+      annotations:
+        checksum/config: 81f748e305dcb4796fb3455e477c21182c92dbf07f76bf58f3ef1ca0ee2e884d
+    spec:
+      serviceAccountName: telegraf
+      containers:
+      - name: telegraf
+        #image: "library/telegraf:1.30-alpine"
+        #imagePullPolicy: "IfNotPresent"
+        
+        image: library/telegraf:1.30-alpine
+        imagePullPolicy: IfNotPresent
+        resources:
+          limits:
+            memory: 1Gi
+          requests:
+            cpu: 50m
+        env:
+        - name: HOSTNAME
+          value: telegraf-polling-service
+        - name: TOKEN
+          valueFrom:
+            secretKeyRef:
+              key: ACTIVATION_TOKEN
+              name: superstream-creds
+        volumeMounts:
+        - name: config
+          mountPath: /etc/telegraf
+      volumes:
+      - name: config
+        configMap:
+          name: telegraf
+---
+# Source: superstream/templates/deployment-data-plane.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: superstream-data-plane
+  labels:
+    helm.sh/chart: superstream-0.4.17
+    app.kubernetes.io/name: superstream
+    app.kubernetes.io/instance: my-superstream
+    app.kubernetes.io/version: "1.0.404"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: superstream
+      app.kubernetes.io/instance: my-superstream-data-plane
+  template:
+    metadata:
+      annotations:
+        prometheus.io/path: /monitoring/metrics
+        prometheus.io/port: "7777"
+        prometheus.io/scrape: "true"
+      labels:
+        helm.sh/chart: superstream-0.4.17
+        app.kubernetes.io/name: superstream
+        app.kubernetes.io/instance: my-superstream
+        app.kubernetes.io/version: "1.0.404"
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: superstream
+        app.kubernetes.io/instance: my-superstream-data-plane
+    spec:
+      initContainers:
+      - name: check-nats-readiness
+        image: curlimages/curl:8.6.0
+        imagePullPolicy: IfNotPresent
+        env:
+          - name: NATS_HOST
+            value: nats.default    
+        command: 
+          - "sh"
+          - "-c"
+          - |
+            until nc -z $NATS_HOST.svc.cluster.local 4222 ; do
+              echo waiting for $NATS_HOST
+              sleep 2
+            done
+      serviceAccountName: superstream
+      securityContext:
+        {}
+      containers:
+        - name: superstream-data-plane
+          
+          image: superstreamlabs/superstream-data-plane-be:latest
+          imagePullPolicy: Always
+          securityContext:
+            {}
+          ports:
+          - name: data-plane
+            containerPort: 7777
+            protocol: TCP
+          env:
+            - name: ENV_NAME
+              value: 
+            - name: IS_HA
+              value: "true"
+            - name: SKIP_LOCAL_AUTHENTICATION
+              value: "true"
+            - name: ACTIVATION_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: superstream-creds
+                  key: ACTIVATION_TOKEN
+            - name: PORT
+              value: "7777"
+            - name: ENCRYPTION_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: superstream-creds
+                  key: ENCRYPTION_SECRET_KEY
+            - name: NATS_HOST
+              value: nats.default
+            - name: NATS_PORT
+              value: "4222"
+            - name: NATS_MONITORING_PORT
+              value: "8222"  
+            - name: CONTROL_PLANE_HOST
+              value: broker.superstream.ai
+            - name: CONTROL_PLANE_PORT
+              value: "4222"
+            - name: SYSLOG
+              value: "true"
+            - name: SYSLOG_HOST
+              value: superstream-syslog.default
+            - name: SYSLOG_PROTOCOL
+              value: udp
+            - name: SYSLOG_PORT
+              value: "5514"
+          resources:
+            limits:
+              cpu: "8"
+              memory: 8Gi
+            requests:
+              cpu: "2"
+              memory: 2Gi
+---
+# Source: superstream/templates/deployment-syslog.yaml
+# templates/deployment.yaml
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name:  superstream-syslog
+  labels:
+    helm.sh/chart: superstream-0.4.17
+    app.kubernetes.io/name: superstream
+    app.kubernetes.io/instance: my-superstream
+    app.kubernetes.io/version: "1.0.404"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: superstream
+      app.kubernetes.io/instance: my-superstream-syslog
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "false"
+      labels:
+        helm.sh/chart: superstream-0.4.17
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: superstream
+        app.kubernetes.io/instance: my-superstream
+        app.kubernetes.io/name: superstream
+        app.kubernetes.io/instance: my-superstream-syslog
+    spec:    
+      securityContext:
+        fsGroup: 911
+      containers:
+      - name: syslog-ng
+        
+        image: linuxserver/syslog-ng:4.7.1
+        imagePullPolicy: IfNotPresent
+        ports:
+          - name: syslog
+            containerPort: 5514
+            protocol: UDP
+        command: ["/usr/sbin/syslog-ng", "-F", "-f", "/tmp/syslog-ng.conf", "--persist-file", "/config/syslog-ng.persist", "--pidfile=/config/syslog-ng.pid", "--control=/config/syslog-ng.ctl", "--stderr", "--no-caps"]
+        volumeMounts:
+        - name: config-volume
+          mountPath: /tmp/syslog-ng.conf
+          subPath: syslog-ng.conf
+        resources:
+            limits:
+              memory: 256Mi
+            requests:
+              cpu: 50m 
+      volumes:
+      - name: config-volume
+        configMap:
+          name: syslog-config
+---
+# Source: superstream/templates/hpa-data-plane.yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: superstream-data-plane
+  labels:
+    helm.sh/chart: superstream-0.4.17
+    app.kubernetes.io/name: superstream
+    app.kubernetes.io/instance: my-superstream
+    app.kubernetes.io/version: "1.0.404"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: superstream-data-plane
+  minReplicas: 2
+  maxReplicas: 5
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 180
+      selectPolicy: Max
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 60
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 75
+---
+# Source: superstream/charts/nats/templates/stateful-set.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  labels:
+    app.kubernetes.io/component: nats
+    app.kubernetes.io/instance: my-superstream
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: nats
+    app.kubernetes.io/version: 2.10.16
+    helm.sh/chart: nats-1.1.12
+  name: nats
+spec:
+  podManagementPolicy: Parallel
+  replicas: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: nats
+      app.kubernetes.io/instance: my-superstream
+      app.kubernetes.io/name: nats
+  serviceName: nats-headless
+  template:
+    metadata:
+      annotations:
+        checksum/config: 50f855aa35db6d94046457f6ed352cc1aaaa9e3260dd0afa0784d56684d3c10e
+      labels:
+        app.kubernetes.io/component: nats
+        app.kubernetes.io/instance: my-superstream
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: nats
+        app.kubernetes.io/version: 2.10.16
+        helm.sh/chart: nats-1.1.12
+    spec:
+      containers:
+      - args:
+        - --config
+        - /etc/nats-config/nats.conf
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: SERVER_NAME
+          value: $(POD_NAME)
+        - name: ACTIVATION_TOKEN
+          valueFrom:
+            secretKeyRef:
+              key: ACTIVATION_TOKEN
+              name: superstream-creds
+        image: nats:2.10.16-alpine
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - nats-server
+              - -sl=ldm=/var/run/nats/nats.pid
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /healthz?js-enabled-only=true
+            port: monitor
+          initialDelaySeconds: 10
+          periodSeconds: 30
+          successThreshold: 1
+          timeoutSeconds: 5
+        name: nats
+        ports:
+        - containerPort: 4222
+          name: nats
+        - containerPort: 6222
+          name: cluster
+        - containerPort: 8222
+          name: monitor
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /healthz?js-server-only=true
+            port: monitor
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 5
+        resources:
+          limits:
+            memory: 4Gi
+          requests:
+            cpu: 100m
+            memory: 100Mi
+        startupProbe:
+          failureThreshold: 90
+          httpGet:
+            path: /healthz
+            port: monitor
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 5
+        volumeMounts:
+        - mountPath: /etc/nats-config
+          name: config
+        - mountPath: /var/run/nats
+          name: pid
+        - mountPath: /data
+          name: nats-js
+      - args:
+        - -pid
+        - /var/run/nats/nats.pid
+        - -config
+        - /etc/nats-config/nats.conf
+        image: natsio/nats-server-config-reloader:0.14.2
+        name: reloader
+        resources:
+          limits:
+            memory: 100Mi
+          requests:
+            cpu: 1m
+        volumeMounts:
+        - mountPath: /var/run/nats
+          name: pid
+        - mountPath: /etc/nats-config
+          name: config
+      - args:
+        - -port=7777
+        - -connz
+        - -routez
+        - -subz
+        - -varz
+        - -prefix=nats
+        - -use_internal_server_id
+        - -jsz=all
+        - http://localhost:8222/
+        image: natsio/prometheus-nats-exporter:0.15.0
+        name: prom-exporter
+        ports:
+        - containerPort: 7777
+          name: prom-metrics
+        resources:
+          limits:
+            memory: 100Mi
+          requests:
+            cpu: 1m
+      enableServiceLinks: false
+      shareProcessNamespace: true
+      volumes:
+      - configMap:
+          name: nats-config
+        name: config
+      - emptyDir: {}
+        name: pid
+  volumeClaimTemplates:
+  - metadata:
+      name: nats-js
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 10Gi

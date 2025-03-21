@@ -1,0 +1,83 @@
+---
+# Source: apid-helper/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-apid-helper
+  namespace: default
+  labels:
+    helm.sh/chart: apid-helper-0.1.4
+    app.kubernetes.io/name: apid-helper
+    app.kubernetes.io/instance: my-apid-helper
+    app.kubernetes.io/version: "v0.2.3"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: apid-helper
+    app.kubernetes.io/instance: my-apid-helper
+---
+# Source: apid-helper/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-apid-helper
+  namespace: default
+  labels:
+    helm.sh/chart: apid-helper-0.1.4
+    app.kubernetes.io/name: apid-helper
+    app.kubernetes.io/instance: my-apid-helper
+    app.kubernetes.io/version: "v0.2.3"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: apid-helper
+      app.kubernetes.io/instance: my-apid-helper
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: apid-helper
+        app.kubernetes.io/instance: my-apid-helper
+    spec:
+      serviceAccountName: default
+      securityContext:
+        {}
+      containers:
+        - env:
+          - name: LISTEN_PORT
+            value: "80"
+          - name: APP_MODE
+            value: debug
+          - name: ARGOCD_NAMESPACE
+            value: argocd
+          name: apid-helper
+          securityContext:
+            {}
+          image: "quay.io/gkarthics/apid-helper:v0.2.3"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /v1/ping
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /v1/ping
+              port: http
+          resources:
+            limits:
+              cpu: 100m
+              memory: 128Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi

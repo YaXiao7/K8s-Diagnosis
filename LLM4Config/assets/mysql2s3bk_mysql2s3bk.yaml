@@ -1,0 +1,70 @@
+---
+# Source: mysql2s3bk/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: mysql2s3
+  labels:
+    helm.sh/chart: mysql2s3bk-0.1.0
+    app.kubernetes.io/version: "alpha"
+    app.kubernetes.io/managed-by: Helm
+    cron: mysql2s3
+---
+# Source: mysql2s3bk/templates/secrets.yaml
+apiVersion: v1
+data:
+  MYSQL_USER: bXlzcWw=
+  MYSQL_PASSWORD: bXlzcWwtcGFzc3dvcmQ=
+  MYSQL_PORT: MzMwNg==
+  MYSQL_HOST: bG9jYWxob3N0
+  BUCKET_NAME: czNidWNrZXQ=
+  AWS_ACCESS_KEY_ID: YXdzYWNlc3NpZA==
+  AWS_SECRET_ACCESS_KEY: YXdzYWNjZXNza2V5
+  AWS_DEFAULT_REGION: YXAtc291dGhlYXN0LTE=
+kind: Secret
+metadata:
+  creationTimestamp: null
+  name: "my-mysql2s3bk-mysql2s3-secret"
+---
+# Source: mysql2s3bk/templates/cronjob.yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: "my-mysql2s3bk-mysql2s3"
+  labels:
+    helm.sh/chart: mysql2s3bk-0.1.0
+    app.kubernetes.io/version: "alpha"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  suspend: true
+  concurrencyPolicy: Forbid
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: my-mysql2s3bk
+            cron: mysql2s3
+        spec:
+          containers:
+          - image: "pyaephyohein/mysql2s3bk:alpha"
+            imagePullPolicy: IfNotPresent
+            name: mysql2s3
+            envFrom:
+            - secretRef:
+                name: <release-name>-mysql2s3-secret
+            command: [/bin/sh]
+            args:
+            - -c
+            - /apps/src/backup.sh
+            resources:
+              limits:
+                cpu: 50m
+                memory: 256Mi
+              requests:
+                cpu: 50m
+                memory: 256Mi
+          restartPolicy: OnFailure
+  schedule: "* * * * *"
+  successfulJobsHistoryLimit: 3

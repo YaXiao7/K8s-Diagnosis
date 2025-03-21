@@ -1,0 +1,128 @@
+---
+# Source: dask-kubernetes-operator/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-dask-kubernetes-operator
+  labels:
+    helm.sh/chart: dask-kubernetes-operator-2024.8.0
+    app.kubernetes.io/name: dask-kubernetes-operator
+    app.kubernetes.io/instance: my-dask-kubernetes-operator
+    app.kubernetes.io/version: "2022.4.1"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: dask-kubernetes-operator/templates/clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-dask-kubernetes-operator-role-cluster
+rules:
+  # Framework: knowing which other operators are running (i.e. peering).
+  - apiGroups: [kopf.dev]
+    resources: [clusterkopfpeerings]
+    verbs: [list, watch, patch, get]
+
+  # Framework: runtime observation of namespaces & CRDs (addition/deletion).
+  - apiGroups: [apiextensions.k8s.io]
+    resources: [customresourcedefinitions]
+    verbs: [list, watch]
+  - apiGroups: [""]
+    resources: [namespaces]
+    verbs: [list, watch]
+
+  # Framework: admission webhook configuration management.
+  - apiGroups:
+      [admissionregistration.k8s.io/v1, admissionregistration.k8s.io/v1beta1]
+    resources: [validatingwebhookconfigurations, mutatingwebhookconfigurations]
+    verbs: [create, patch]
+
+  # Application: watching & handling for the custom resource we declare.
+  - apiGroups: [kubernetes.dask.org]
+    resources: [daskclusters, daskworkergroups, daskjobs, daskjobs/status, daskautoscalers, daskworkergroups/scale]
+    verbs: [get, list, watch, patch, create, delete]
+
+  # Application: other resources it produces and manipulates.
+  # Here, we create/delete Pods.
+  - apiGroups: [""]
+    resources: [pods, pods/status]
+    verbs: ["*"]
+
+  - apiGroups: [""]
+    resources: [services, services/status]
+    verbs: ["*"]
+
+  - apiGroups: ["apps"]
+    resources: [deployments, deployments/status]
+    verbs: ["*"]
+
+  - apiGroups: ["", events.k8s.io]
+    resources: [events]
+    verbs: ["*"]
+---
+# Source: dask-kubernetes-operator/templates/clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-dask-kubernetes-operator-rolebinding-cluster
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-dask-kubernetes-operator-role-cluster
+subjects:
+  - kind: ServiceAccount
+    name: my-dask-kubernetes-operator
+    namespace: default
+---
+# Source: dask-kubernetes-operator/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-dask-kubernetes-operator
+  labels:
+    helm.sh/chart: dask-kubernetes-operator-2024.8.0
+    app.kubernetes.io/name: dask-kubernetes-operator
+    app.kubernetes.io/instance: my-dask-kubernetes-operator
+    app.kubernetes.io/version: "2022.4.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: dask-kubernetes-operator
+      app.kubernetes.io/instance: my-dask-kubernetes-operator
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: dask-kubernetes-operator
+        app.kubernetes.io/instance: my-dask-kubernetes-operator
+    spec:
+      serviceAccountName: my-dask-kubernetes-operator
+      securityContext:
+        {}
+      containers:
+        - name: dask-kubernetes-operator
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+          image: "ghcr.io/dask/dask-kubernetes-operator:2024.8.0"
+          imagePullPolicy: IfNotPresent
+          env:
+          args:
+            - --liveness=http://0.0.0.0:8080/healthz
+            - --all-namespaces
+          resources:
+            {}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+          volumeMounts:
+            []
+      volumes:
+        []

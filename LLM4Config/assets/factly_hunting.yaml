@@ -1,0 +1,134 @@
+---
+# Source: hunting/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: hunting
+  labels:
+    helm.sh/chart: hunting-0.4.11
+    app.kubernetes.io/name: hunting
+    app.kubernetes.io/instance: my-hunting
+    app.kubernetes.io/version: "0.2.0-stagv1.2"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: hunting/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-hunting
+  labels:
+    helm.sh/chart: hunting-0.4.11
+    app.kubernetes.io/name: hunting
+    app.kubernetes.io/instance: my-hunting
+    app.kubernetes.io/version: "0.2.0-stagv1.2"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+    - port: 8000
+      targetPort: 8000
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: hunting
+    app.kubernetes.io/instance: my-hunting
+---
+# Source: hunting/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-hunting
+  labels:
+    helm.sh/chart: hunting-0.4.11
+    app.kubernetes.io/name: hunting
+    app.kubernetes.io/instance: my-hunting
+    app.kubernetes.io/version: "0.2.0-stagv1.2"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: hunting
+      app.kubernetes.io/instance: my-hunting
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: hunting
+        app.kubernetes.io/instance: my-hunting
+    spec:
+      serviceAccountName: hunting
+      securityContext:
+        {}
+      containers:
+        - name: hunting
+          args:
+            - poetry
+            - run
+            - uvicorn
+            - app.main:app
+            - --host
+            - 0.0.0.0      
+          securityContext:
+            {}
+          image: "factly/hunting:0.2.0-stagv1.2"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: PROJECT_NAME
+              value: Hunting Server
+            - name: API_V1_STR
+              value: /api/v1
+            - name: MODE
+              value: production
+            - name: EXAMPLE_URL
+              value: https://raw.githubusercontent.com/datasciencedojo/datasets/master/titanic.csv
+            - name: MONGODB_HOST
+              value: hunting-mongodb.default.svc.cluster.local
+            - name: MONGODB_PORT
+              value: "27017"
+            - name: MONGODB_DATABASE
+              value: hunting
+            - name: MONGODB_USER
+              value: root
+            - name: MONGODB_PASSWORD
+              value: password           
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /api/v1
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /api/v1
+              port: http
+          resources:
+            limits:
+              cpu: 1
+              memory: 2048Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+---
+# Source: hunting/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-hunting-test-connection"
+  labels:
+    helm.sh/chart: hunting-0.4.11
+    app.kubernetes.io/name: hunting
+    app.kubernetes.io/instance: my-hunting
+    app.kubernetes.io/version: "0.2.0-stagv1.2"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-hunting:8000']
+  restartPolicy: Never

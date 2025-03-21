@@ -1,0 +1,109 @@
+---
+# Source: spot-termination-handler/templates/rbac.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  namespace: default
+  name: my-spot-termination-handler-spot-termination-handler
+  labels:
+    app: spot-termination-handler
+    chart: spot-termination-handler
+    heritage: Helm
+    release: my-spot-termination-handler
+---
+# Source: spot-termination-handler/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-spot-termination-handler-spot-termination-handler
+subjects:
+- kind: ServiceAccount
+  name: my-spot-termination-handler-spot-termination-handler
+  namespace: default
+roleRef:
+  kind: ClusterRole
+  apiGroup: rbac.authorization.k8s.io
+  name: cluster-admin
+---
+# Source: spot-termination-handler/templates/daemonset.yaml
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: "my-spot-termination-handler-spot-termination-handler"
+  labels:
+    app: "my-spot-termination-handler-spot-termination-handler"
+    chart: "spot-termination-handler-0.0.5"
+    release: "my-spot-termination-handler"
+    heritage: "Helm"
+spec:
+  template:
+    metadata:
+      labels:
+        heritage: "Helm"
+        release: "my-spot-termination-handler"
+        app: my-spot-termination-handler-spot-termination-handler
+        component: "my-spot-termination-handler-spot-termination-handler"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: my-spot-termination-handler-spot-termination-handler
+      containers:
+      - name: spot-termination-handler
+        image: "banzaicloud/spot-termination-handler:0.0.2"
+        imagePullPolicy: "IfNotPresent"
+        env:
+          - name: STH_HTTP_LISTENPORT
+            value: :8081
+          - name: STH_LOG_FORMAT
+            value: "logfmt"
+          - name: STH_LOG_LEVEL
+            value: "info"
+          - name: STH_METRICS_ENABLED
+            value: "true"
+          - name: STH_METRICS_ENDPOINT
+            value: "/metrics"
+          - name: STH_TERMDETECT_DEFAULTSECONDSUNTILTERMINATION
+            value: "30"
+          - name: STH_DRAINER_ENABLED
+            value: "true"
+          - name: STH_DRAINER_DRAINWITHTAINT
+            value: "true"
+          - name: STH_DRAINER_GRACEPERIODSECONDS
+            value: "-1"
+          - name: STH_DRAINER_TIMEOUT
+            value: "0"
+          - name: STH_TERMNOTIFIER_TRIGGERENABLED
+            value: "true"
+          - name: STH_TERMNOTIFIER_TRIGGERENDPOINT
+            value: "/terminate"
+          - name: MY_NODE_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: spec.nodeName
+          - name: MY_POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+        ports:
+        - name: http
+          containerPort: 8081
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: http
+          initialDelaySeconds: 120
+          timeoutSeconds: 5
+          failureThreshold: 6
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: http
+            httpHeaders:
+          initialDelaySeconds: 30
+          timeoutSeconds: 3
+          periodSeconds: 5
+        resources:
+          requests:
+            cpu: 120m
+            memory: 256Mi

@@ -1,0 +1,162 @@
+---
+# Source: function-orchestrator/templates/networkpolicy.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: function-orchestrator-my-function-orchestrator
+  labels:
+    app: function-orchestrator
+    chart: function-orchestrator-0.3.6
+    release: my-function-orchestrator
+    heritage: Helm
+spec:
+  podSelector:
+    matchLabels:
+      app: function-orchestrator
+      release: my-function-orchestrator
+  policyTypes:
+    - Egress
+    - Ingress
+  ingress:
+    - ports:
+      - port: 6254
+        protocol: TCP
+      - port: 9100
+        protocol: TCP      
+  egress:
+    - ports:
+      - port: 6927
+        protocol: TCP
+      to:
+      - podSelector:
+          matchLabels:
+            app: function-evaluator
+---
+# Source: function-orchestrator/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: function-orchestrator-my-function-orchestrator-secret-config
+  labels:
+    app: function-orchestrator
+    chart: function-orchestrator-0.3.6
+    release: my-function-orchestrator
+    heritage: Helm
+type: Opaque
+---
+# Source: function-orchestrator/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: function-orchestrator-my-function-orchestrator
+  labels:
+    app: function-orchestrator
+    chart: function-orchestrator-0.3.6
+    release: my-function-orchestrator
+    heritage: Helm
+spec:
+  type: NodePort
+  selector:
+    app: function-orchestrator
+    routed_via: my-function-orchestrator
+  ports:
+    - name: http
+      targetPort: 6254
+      port: 6254
+---
+# Source: function-orchestrator/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: function-orchestrator-my-function-orchestrator
+  labels:
+    app: function-orchestrator
+    chart: function-orchestrator-0.3.6
+    release: my-function-orchestrator
+    heritage: Helm
+spec:
+  selector:
+    matchLabels:
+      app: function-orchestrator
+      release: my-function-orchestrator
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: function-orchestrator
+        release: my-function-orchestrator
+        routed_via: my-function-orchestrator
+      annotations:
+        container.apparmor.security.beta.kubernetes.io/function-orchestrator-my-function-orchestrator: localhost/wikifunctions-orchestrator
+        checksum/secrets: 2d4fbb3cb49aefbee7987ac66bd5e12ae00e66721497a6f94de4f155fc72c81c
+        prometheus.io/port: "9100"
+        prometheus.io/scrape: "true"        
+    spec:
+      automountServiceAccountToken: false
+      containers:        
+        # The main application container
+        - name: function-orchestrator-my-function-orchestrator
+          image: "docker-registry.wikimedia.org/repos/abstract-wiki/wikifunctions/function-orchestrator:versionNumberGoesHere"
+          imagePullPolicy: IfNotPresent  
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+               drop:
+               - ALL
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+            readOnlyRootFilesystem: true
+          ports:
+            - containerPort: 6254
+          livenessProbe:
+            tcpSocket:
+              port: 6254
+          readinessProbe:
+            httpGet:
+              path: /_info
+              port: 6254
+          env:
+            - name: SERVICE_IDENTIFIER
+              value: function-orchestrator-my-function-orchestrator
+          
+          resources:
+            requests:
+              cpu: 100m
+              memory: 200Mi
+            limits:
+              cpu: 400m
+              memory: 400Mi
+                  
+      volumes:        
+          
+        
+        []
+---
+# Source: function-orchestrator/templates/ingress.yaml
+---
+---
+# Source: function-orchestrator/templates/tests/test-service-checker.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: 'function-orchestrator-my-function-orchestrator-service-checker'
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  containers:
+  - name: 'function-orchestrator-my-function-orchestrator-service-checker'
+    image: "docker-registry.wikimedia.org/service-checker"
+    imagePullPolicy: IfNotPresent
+    args: ["-t", "5", '$(FUNCTION_ORCHESTRATOR_MY_FUNCTION_ORCHESTRATOR_SERVICE_HOST)', 'http://function-orchestrator-my-function-orchestrator:6254']    
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+         drop:
+         - ALL
+      runAsNonRoot: true
+      seccompProfile:
+        type: RuntimeDefault
+  dnsPolicy: ClusterFirst
+  restartPolicy: Never

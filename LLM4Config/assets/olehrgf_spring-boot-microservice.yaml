@@ -1,0 +1,203 @@
+---
+# Source: spring-boot-microservice/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-spring-boot-microservice
+  labels:
+    helm.sh/chart: spring-boot-microservice-1.0.5
+    app.kubernetes.io/name: spring-boot-microservice
+    app.kubernetes.io/instance: my-spring-boot-microservice
+    app.kubernetes.io/version: "0.0.1"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: spring-boot-microservice/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-spring-boot-microservice
+  labels:
+    helm.sh/chart: spring-boot-microservice-1.0.5
+    app.kubernetes.io/name: spring-boot-microservice
+    app.kubernetes.io/instance: my-spring-boot-microservice
+    app.kubernetes.io/version: "0.0.1"
+    app.kubernetes.io/managed-by: Helm
+data:
+  logging.yaml: >-
+    Configuration:
+      Appenders:
+        Console:
+          name: Console
+          target: SYSTEM_OUT
+          JsonLayout:
+            compact: true
+            eventEol: true
+            includeTimeMillis: true
+    
+      Loggers:
+        Root:
+          level: INFO
+          AppenderRef:
+            - ref: Console
+---
+# Source: spring-boot-microservice/templates/serviceaccount.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: my-spring-boot-microservice
+  labels:
+    helm.sh/chart: spring-boot-microservice-1.0.5
+    app.kubernetes.io/name: spring-boot-microservice
+    app.kubernetes.io/instance: my-spring-boot-microservice
+    app.kubernetes.io/version: "0.0.1"
+    app.kubernetes.io/managed-by: Helm
+rules:
+  - apiGroups: ["", "extensions", "apps"]
+    resources: ["configmaps", "pods", "services", "endpoints", "secrets"]
+    verbs: ["get", "list", "watch"]
+---
+# Source: spring-boot-microservice/templates/serviceaccount.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: my-spring-boot-microservice
+  labels:
+    helm.sh/chart: spring-boot-microservice-1.0.5
+    app.kubernetes.io/name: spring-boot-microservice
+    app.kubernetes.io/instance: my-spring-boot-microservice
+    app.kubernetes.io/version: "0.0.1"
+    app.kubernetes.io/managed-by: Helm
+subjects:
+  - kind: ServiceAccount
+    name: my-spring-boot-microservice
+    apiGroup: ""
+roleRef:
+  kind: Role
+  name: my-spring-boot-microservice
+  apiGroup: ""
+---
+# Source: spring-boot-microservice/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-spring-boot-microservice
+  labels:
+    helm.sh/chart: spring-boot-microservice-1.0.5
+    app.kubernetes.io/name: spring-boot-microservice
+    app.kubernetes.io/instance: my-spring-boot-microservice
+    app.kubernetes.io/version: "0.0.1"
+    app.kubernetes.io/managed-by: Helm
+    prometheus.io/target: spring-boot-actuator-instance
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+    - port: 9090
+      targetPort: http-management
+      protocol: TCP
+      name: http-management
+  selector:
+    app.kubernetes.io/name: spring-boot-microservice
+    app.kubernetes.io/instance: my-spring-boot-microservice
+---
+# Source: spring-boot-microservice/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-spring-boot-microservice
+  labels:
+    helm.sh/chart: spring-boot-microservice-1.0.5
+    app.kubernetes.io/name: spring-boot-microservice
+    app.kubernetes.io/instance: my-spring-boot-microservice
+    app.kubernetes.io/version: "0.0.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: spring-boot-microservice
+      app.kubernetes.io/instance: my-spring-boot-microservice
+  template:
+    metadata:
+      annotations:
+        checksum/config: aa8c4000e0c91a0169c7d7fe1343c74d1c7aed6ccf926a9a73a86de59e02550a
+      labels:
+        app.kubernetes.io/name: spring-boot-microservice
+        app.kubernetes.io/instance: my-spring-boot-microservice
+    spec:
+      restartPolicy: Always
+      serviceAccountName: my-spring-boot-microservice
+      securityContext:
+        {}
+      containers:
+        - name: spring-boot-microservice
+          securityContext:
+            {}
+          image: "amazoncorretto:17"
+          imagePullPolicy: IfNotPresent
+
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: http-management
+              containerPort: 9090
+              protocol: TCP
+
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /actuator/health/liveness
+              port: '9090'
+            periodSeconds: 15
+
+          readinessProbe:
+            failureThreshold: 10
+            httpGet:
+              path: /actuator/health/readiness
+              port: '9090'
+            periodSeconds: 15
+
+          startupProbe:
+            failureThreshold: 10
+            httpGet:
+              path: /actuator/health/readiness
+              port: '9090'
+            initialDelaySeconds: 15
+            periodSeconds: 15
+
+          resources:
+            {}
+
+          env:
+            - name: LOG4J_CONFIGURATION_FILE
+              value: /etc/config/app/logging.yaml
+            - name: JAVA_TOOL_OPTIONS
+              value: -XX:+UseContainerSupport -XX:MaxRAMPercentage=80.0 -Djava.net.preferIPv4Stack=true -Djava.awt.headless=true -Dspring.config.additional-location=/etc/config/app/application.yaml
+
+          volumeMounts:
+            - name: logging
+              mountPath: /etc/config/app/logging.yaml
+              readOnly: true
+              subPath: logging.yaml
+            - name: application
+              mountPath: /etc/config/app/application.yaml
+              readOnly: true
+              subPath: application.yaml
+
+      volumes:
+        - name: logging
+          configMap:
+            name: my-spring-boot-microservice
+            items:
+              - key: "logging.yaml"
+                path: logging.yaml
+        - name: application
+          configMap:
+            name: my-spring-boot-microservice
+            items:
+              - key: "application.yaml"
+                path: application.yaml

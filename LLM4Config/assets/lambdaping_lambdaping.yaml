@@ -1,0 +1,94 @@
+---
+# Source: lambdaping/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-lambdaping
+data:
+  DEBUG: "true"
+  LAMBDA_ARN: '["arn:aws:lambda:us-east-1:100010001000:function:funcname"]'
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger-collector:14268
+  OTEL_PROPAGATORS: b3multi
+  OTEL_TRACES_EXPORTER: jaeger
+  OTELCONFIG_EXPORTER: jaeger
+---
+# Source: lambdaping/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-lambdaping
+  labels:
+    helm.sh/chart: lambdaping-1.0.1
+    app.kubernetes.io/name: lambdaping
+    app.kubernetes.io/instance: my-lambdaping
+    app.kubernetes.io/version: "1.0.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: lambdaping
+      app.kubernetes.io/instance: my-lambdaping
+  template:
+    metadata:
+      annotations:
+        rollme: "DBfcy"
+        prometheus.io/path: /metrics
+        prometheus.io/port: "3000"
+        prometheus.io/scrape: "true"
+        sidecar.istio.io/inject: "true"
+      labels:
+        app.kubernetes.io/name: lambdaping
+        app.kubernetes.io/instance: my-lambdaping
+        app: lambdaping
+    spec:
+      serviceAccountName: default
+      securityContext:
+        {}
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      containers:
+        - name: my-lambdaping
+          securityContext:
+            {}
+          image: "udhos/lambdaping:1.0.1"
+          imagePullPolicy: IfNotPresent
+          envFrom:
+          - configMapRef:
+              name: my-lambdaping
+          startupProbe:
+            # must initialize within 3*100=300 seconds
+            httpGet:
+              path: /health
+              port: 8888
+            periodSeconds: 3
+            failureThreshold: 100
+          readinessProbe:
+            # not ready after 10*6=60 seconds without success
+            httpGet:
+              path: /health
+              port: 8888
+              scheme: HTTP
+            periodSeconds: 10
+            failureThreshold: 6
+            successThreshold: 1
+            timeoutSeconds: 5
+          livenessProbe:
+            # kill after 20*6=120 seconds without success
+            httpGet:
+              path: /health
+              port: 8888
+              scheme: HTTP
+            periodSeconds: 20
+            failureThreshold: 6
+            successThreshold: 1
+            timeoutSeconds: 10            
+          resources:
+            limits:
+              cpu: 2000m
+              ephemeral-storage: 200Mi
+              memory: 300Mi
+            requests:
+              cpu: 300m
+              ephemeral-storage: 100Mi
+              memory: 100Mi

@@ -1,0 +1,281 @@
+---
+# Source: keto/templates/rbac.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-keto
+  namespace: default
+  labels:
+    helm.sh/chart: keto-0.47.0
+    app.kubernetes.io/name: keto
+    app.kubernetes.io/instance: my-keto
+    app.kubernetes.io/version: "v0.12.0"
+    app.kubernetes.io/managed-by: Helm
+automountServiceAccountToken: false
+---
+# Source: keto/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-keto-config
+  namespace: default
+  labels:
+    helm.sh/chart: keto-0.47.0
+    app.kubernetes.io/name: keto
+    app.kubernetes.io/instance: my-keto
+    app.kubernetes.io/version: "v0.12.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+  "keto.yaml": |
+    namespaces:
+    - id: 0
+      name: sample
+    serve:
+      metrics:
+        port: 4468
+      read:
+        port: 4466
+      write:
+        port: 4467
+---
+# Source: keto/templates/service-read.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-keto-read
+  namespace: default
+  labels:
+    app.kubernetes.io/component: read
+    helm.sh/chart: keto-0.47.0
+    app.kubernetes.io/name: keto
+    app.kubernetes.io/instance: my-keto
+    app.kubernetes.io/version: "v0.12.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: grpc-read
+      protocol: TCP
+      name: grpc-read
+      appProtocol: grpc
+  selector:
+    app.kubernetes.io/name: keto
+    app.kubernetes.io/instance: my-keto
+---
+# Source: keto/templates/service-write.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-keto-write
+  namespace: default
+  labels:
+    app.kubernetes.io/component: write
+    helm.sh/chart: keto-0.47.0
+    app.kubernetes.io/name: keto
+    app.kubernetes.io/instance: my-keto
+    app.kubernetes.io/version: "v0.12.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: grpc-write
+      protocol: TCP
+      name: grpc-write
+      appProtocol: grpc
+  selector:
+    app.kubernetes.io/name: keto
+    app.kubernetes.io/instance: my-keto
+---
+# Source: keto/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-keto
+  namespace: default
+  labels:
+    helm.sh/chart: keto-0.47.0
+    app.kubernetes.io/name: keto
+    app.kubernetes.io/instance: my-keto
+    app.kubernetes.io/version: "v0.12.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+spec:
+  minReadySeconds: 0
+  replicas: 1
+  revisionHistoryLimit: 5
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: keto
+      app.kubernetes.io/instance: my-keto
+  template:
+    metadata:
+      annotations:        
+        checksum/keto-config: 4c0131598da271e58d297083daeba0ff9eb3b18fcab7d5492c153a8c13f62369
+        checksum/keto-secrets: 4aa9b17e978844de5bf0b40e38c32e54596c718b3ce3704c553bf35a192dab43
+      labels:
+        app.kubernetes.io/name: keto
+        app.kubernetes.io/instance: my-keto
+    spec:
+      initContainers:
+      serviceAccountName: my-keto
+      automountServiceAccountToken: true
+      securityContext:
+        fsGroup: 65534
+        fsGroupChangePolicy: OnRootMismatch
+        runAsGroup: 65534
+        runAsNonRoot: true
+        runAsUser: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: keto
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsGroup: 65534
+            runAsNonRoot: true
+            runAsUser: 65534
+            seLinuxOptions:
+              level: s0:c123,c456
+            seccompProfile:
+              type: RuntimeDefault
+          image: "oryd/keto:v0.12.0"
+          imagePullPolicy: IfNotPresent
+          command:
+            - keto
+          args:
+            - serve
+            - --config
+            - /etc/config/keto.yaml
+          ports:
+            - name: grpc-read
+              containerPort: 4466
+              protocol: TCP
+            - name: grpc-write
+              containerPort: 4467
+              protocol: TCP
+            - name: http-metrics
+              containerPort: 4468
+              protocol: TCP
+          lifecycle:
+            {}
+          livenessProbe:
+            httpGet:
+              path: /health/alive
+              port: 4467
+              httpHeaders:
+                - name: Host
+                  value: '127.0.0.1'
+            failureThreshold: 5
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 4467
+              httpHeaders:
+                - name: Host
+                  value: '127.0.0.1'
+            failureThreshold: 5
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          startupProbe:
+            httpGet:
+              path: /health/ready
+              port: 4467
+              httpHeaders:
+                - name: Host
+                  value: '127.0.0.1'
+            failureThreshold: 60
+            periodSeconds: 1
+            successThreshold: 1
+            timeoutSeconds: 1
+          resources:
+            null
+          env:
+            - name: DSN
+              valueFrom:
+                secretKeyRef:
+                  name: my-keto
+                  key: dsn
+          volumeMounts:
+            - name: keto-config-volume
+              mountPath: /etc/config
+              readOnly: true
+      volumes:
+        - name: keto-config-volume
+          configMap:
+            name: my-keto-config
+---
+# Source: keto/templates/job-rbac.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-keto-job
+  namespace: default
+  labels:
+    helm.sh/chart: keto-0.47.0
+    app.kubernetes.io/name: keto
+    app.kubernetes.io/instance: my-keto
+    app.kubernetes.io/version: "v0.12.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    helm.sh/hook: pre-install, pre-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation
+    helm.sh/hook-weight: "0"
+automountServiceAccountToken: false
+---
+# Source: keto/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-keto
+  namespace: default
+  labels:
+    helm.sh/chart: keto-0.47.0
+    app.kubernetes.io/name: keto
+    app.kubernetes.io/instance: my-keto
+    app.kubernetes.io/version: "v0.12.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    helm.sh/hook: pre-install, pre-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation
+    helm.sh/hook-weight: "0"
+    helm.sh/resource-policy: keep
+type: Opaque
+data:
+  dsn: "bWVtb3J5"
+---
+# Source: keto/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-keto-test-connection"
+  namespace: default
+  labels:
+    helm.sh/chart: keto-0.47.0
+    app.kubernetes.io/name: keto
+    app.kubernetes.io/instance: my-keto
+    app.kubernetes.io/version: "v0.12.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    helm.sh/hook: test-success
+spec:
+  containers:
+    - name: wget
+      image: "busybox:1"
+      command: ['wget']
+      args: ['my-keto-write:80/health/ready']
+  restartPolicy: Never

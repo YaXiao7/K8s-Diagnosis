@@ -1,0 +1,134 @@
+---
+# Source: kube-bind-server/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-kube-bind-server
+  namespace: default
+  labels:
+    helm.sh/chart: kube-bind-server-v2023.03.23
+    app.kubernetes.io/name: kube-bind-server
+    app.kubernetes.io/instance: my-kube-bind-server
+    app.kubernetes.io/version: "v0.0.1"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: kube-bind-server/templates/cluster-role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-kube-bind-server
+  labels:
+    helm.sh/chart: kube-bind-server-v2023.03.23
+    app.kubernetes.io/name: kube-bind-server
+    app.kubernetes.io/instance: my-kube-bind-server
+    app.kubernetes.io/version: "v0.0.1"
+    app.kubernetes.io/managed-by: Helm
+rules:
+- apiGroups:
+  - kube-bind-server.appscode.com
+  resources: ["*"]
+  verbs: ["*"]
+- apiGroups:
+  - kubedb.com
+  resources: ["*"]
+  verbs: ["get", "list", "watch"]
+- apiGroups:
+  - kubevault.com
+  resources: ["*"]
+  verbs: ["get", "list", "watch"]
+---
+# Source: kube-bind-server/templates/cluster-role-binding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-kube-bind-server
+  labels:
+    helm.sh/chart: kube-bind-server-v2023.03.23
+    app.kubernetes.io/name: kube-bind-server
+    app.kubernetes.io/instance: my-kube-bind-server
+    app.kubernetes.io/version: "v0.0.1"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-kube-bind-server
+subjects:
+- kind: ServiceAccount
+  name: my-kube-bind-server
+  namespace: default
+---
+# Source: kube-bind-server/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-kube-bind-server
+  namespace: default
+  labels:
+    helm.sh/chart: kube-bind-server-v2023.03.23
+    app.kubernetes.io/name: kube-bind-server
+    app.kubernetes.io/instance: my-kube-bind-server
+    app.kubernetes.io/version: "v0.0.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  ports:
+  # Port used to expose admission webhook apiserver
+  - name: api
+    port: 443
+    targetPort: 8443
+  selector:
+    app.kubernetes.io/name: kube-bind-server
+    app.kubernetes.io/instance: my-kube-bind-server
+---
+# Source: kube-bind-server/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-kube-bind-server
+  namespace: default
+  labels:
+    helm.sh/chart: kube-bind-server-v2023.03.23
+    app.kubernetes.io/name: kube-bind-server
+    app.kubernetes.io/instance: my-kube-bind-server
+    app.kubernetes.io/version: "v0.0.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kube-bind-server
+      app.kubernetes.io/instance: my-kube-bind-server
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kube-bind-server
+        app.kubernetes.io/instance: my-kube-bind-server
+    spec:
+      
+      serviceAccountName: my-kube-bind-server
+      securityContext:
+        {}
+      containers:
+        - name: kube-bind-server
+          securityContext:
+            {}
+          image: ghcr.io/appscode/kube-bind-server:v0.0.1
+          imagePullPolicy: Always
+          args:
+            - run
+          ports:
+            - name: metrics
+              containerPort: 8080
+              protocol: TCP
+            - name: http
+              containerPort: 8081
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+          resources:
+            {}

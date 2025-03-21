@@ -1,0 +1,170 @@
+---
+# Source: mc-router/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-mc-router
+  namespace: default
+  labels:
+    helm.sh/chart: mc-router-1.2.3
+    app.kubernetes.io/name: mc-router
+    app.kubernetes.io/instance: my-mc-router
+    app.kubernetes.io/version: "1.20.0"
+    app.kubernetes.io/managed-by: Helm
+automountServiceAccountToken: true
+---
+# Source: mc-router/templates/clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-mc-router
+  labels:
+    helm.sh/chart: mc-router-1.2.3
+    app.kubernetes.io/name: mc-router
+    app.kubernetes.io/instance: my-mc-router
+    app.kubernetes.io/version: "1.20.0"
+    app.kubernetes.io/managed-by: Helm
+rules:
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["watch","list"]
+---
+# Source: mc-router/templates/clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-mc-router
+  labels:
+    helm.sh/chart: mc-router-1.2.3
+    app.kubernetes.io/name: mc-router
+    app.kubernetes.io/instance: my-mc-router
+    app.kubernetes.io/version: "1.20.0"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-mc-router
+subjects:
+- kind: ServiceAccount
+  name: my-mc-router
+  namespace: default
+---
+# Source: mc-router/templates/router-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-mc-router
+  namespace: default
+  labels:
+    helm.sh/chart: mc-router-1.2.3
+    app.kubernetes.io/name: mc-router
+    app.kubernetes.io/instance: my-mc-router
+    app.kubernetes.io/version: "1.20.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    null
+spec:
+  type: NodePort
+  ports:
+    - port: 25565
+      targetPort: minecraft
+      protocol: TCP
+      name: minecraft
+  selector:
+    app.kubernetes.io/name: mc-router
+    app.kubernetes.io/instance: my-mc-router
+---
+# Source: mc-router/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-mc-router
+  namespace: default
+  labels:
+    helm.sh/chart: mc-router-1.2.3
+    app.kubernetes.io/name: mc-router
+    app.kubernetes.io/instance: my-mc-router
+    app.kubernetes.io/version: "1.20.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mc-router
+      app.kubernetes.io/instance: my-mc-router
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        helm.sh/chart: mc-router-1.2.3
+        app.kubernetes.io/name: mc-router
+        app.kubernetes.io/instance: my-mc-router
+        app.kubernetes.io/version: "1.20.0"
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      serviceAccountName: my-mc-router
+      securityContext:
+        {}
+      containers:
+        - name: mc-router
+          securityContext:
+            {}
+          image: "itzg/mc-router:1.20.0"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: IN_KUBE_CLUSTER
+              value: "true"
+            - name: API_BINDING
+              value: ":8080"
+            - name: PORT
+              value: "25565"
+            - name: AUTO_SCALE_UP
+              value: "false"
+            - name: CONNECTION_RATE_LIMIT
+              value: "1"
+            - name: DEBUG
+              value: "false"
+            - name: METRICS_BACKEND
+              value: "discard"
+            - name: SIMPLIFY_SRV
+              value: "false"
+            - name: USE_PROXY_PROTOCOL
+              value: "false"
+            - name: VERSION
+              value: "false"
+          ports:
+            - name: api
+              containerPort: 8080
+              protocol: TCP
+            - name: minecraft
+              containerPort: 25565
+              protocol: TCP
+          livenessProbe:
+            initialDelaySeconds: 30
+            failureThreshold: 20
+            httpGet:
+              path: /routes
+              httpHeaders:
+                - name: Accept
+                  value: application/json
+              port: 8080
+          readinessProbe:
+            initialDelaySeconds: 30
+            failureThreshold: 20
+            httpGet:
+              path: /routes
+              httpHeaders:
+                - name: Accept
+                  value: application/json
+              port: 8080
+          startupProbe:
+            failureThreshold: 30
+            httpGet:
+              path: /routes
+              httpHeaders:
+                - name: Accept
+                  value: application/json
+              port: 8080
+          resources:
+            {}

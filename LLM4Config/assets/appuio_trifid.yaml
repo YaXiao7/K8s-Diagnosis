@@ -1,0 +1,148 @@
+---
+# Source: trifid/templates/pdb.yaml
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: my-trifid
+  labels:
+    helm.sh/chart: trifid-2.0.2
+    app.kubernetes.io/name: trifid
+    app.kubernetes.io/instance: my-trifid
+    app.kubernetes.io/version: "2.3.7"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: trifid
+      app.kubernetes.io/instance: my-trifid
+---
+# Source: trifid/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-trifid
+  labels:
+    helm.sh/chart: trifid-2.0.2
+    app.kubernetes.io/name: trifid
+    app.kubernetes.io/instance: my-trifid
+    app.kubernetes.io/version: "2.3.7"
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  username: dXNlcg==
+  password: cGFzcw==
+---
+# Source: trifid/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-trifid
+  labels:
+    helm.sh/chart: trifid-2.0.2
+    app.kubernetes.io/name: trifid
+    app.kubernetes.io/instance: my-trifid
+    app.kubernetes.io/version: "2.3.7"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: trifid
+    app.kubernetes.io/instance: my-trifid
+---
+# Source: trifid/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-trifid
+  labels:
+    helm.sh/chart: trifid-2.0.2
+    app.kubernetes.io/name: trifid
+    app.kubernetes.io/instance: my-trifid
+    app.kubernetes.io/version: "2.3.7"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: trifid
+      app.kubernetes.io/instance: my-trifid
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: trifid
+        app.kubernetes.io/instance: my-trifid
+    spec:
+      serviceAccountName: default
+      securityContext:
+        null
+      containers:
+        - name: trifid
+          securityContext:
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+          image: "docker.io/zazuko/trifid:2.3.7"
+          imagePullPolicy: IfNotPresent
+          env:
+          - name: SPARQL_ENDPOINT_URL
+            value: https://appuio.ch
+          - name: SPARQL_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: my-trifid
+                key: username
+          - name: SPARQL_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: my-trifid
+                key: password
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+          resources:
+            limits:
+              cpu: 1000m
+              memory: 512Mi
+            requests:
+              cpu: 500m
+              memory: 256Mi
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app.kubernetes.io/name
+                    operator: In
+                    values:
+                      - "trifid"
+                  - key: app.kubernetes.io/instance
+                    operator: In
+                    values:
+                      - "my-trifid"
+              topologyKey: kubernetes.io/hostname

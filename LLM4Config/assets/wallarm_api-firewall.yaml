@@ -1,0 +1,200 @@
+---
+# Source: api-firewall/templates/pdb.yaml
+apiVersion: extensions/v1beta1
+kind: PodDisruptionBudget
+metadata:
+  name: my-api-firewall
+  labels:
+    app: api-firewall
+    chart: api-firewall-0.8.1
+    component: api-firewall
+    heritage: Helm
+    release: my-api-firewall
+spec:
+  selector:
+    matchLabels:
+      app: api-firewall
+      release: my-api-firewall
+      component: api-firewall
+  maxUnavailable: 1
+---
+# Source: api-firewall/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-api-firewall
+  labels:
+    app: api-firewall
+    chart: api-firewall-0.8.1
+    component: api-firewall
+    heritage: Helm
+    release: my-api-firewall
+---
+# Source: api-firewall/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-api-firewall-manifest
+  labels:
+    app: api-firewall
+    chart: api-firewall-0.8.1
+    component: openapi-manifest
+    heritage: Helm
+    release: my-api-firewall
+data:
+  openapi-manifest.json: |-
+    ## OpenAPI 3.0 specification in the JSON format
+    ## https://swagger.io/specification/
+    ##
+    # {
+    #   "openapi": "3.0.1",
+    #   "tags": [
+    #     {
+    #       "name": "HTTP Methods",
+    #       "description": "Testing different HTTP verbs"
+    #     }
+    #   ],
+    #   "paths": {
+    #     "/get": {
+    #       "get": {
+    #         "tags": [
+    #           "HTTP Methods"
+    #         ],
+    #         "summary": "The request's query parameters.",
+    #         "responses": {
+    #           "200": {
+    #             "description": "The request's query parameters.",
+    #             "content": {}
+    #           }
+    #         },
+    #         "parameters": [
+    #           {
+    #             "in": "query",
+    #             "name": "test",
+    #             "schema": {
+    #               "type": "integer",
+    #               "minimum": 10,
+    #               "maximum": 100
+    #             },
+    #             "required": true
+    #           }
+    #         ]
+    #       }
+    #     }
+    #   },
+    #   "components": {}
+    # }
+---
+# Source: api-firewall/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-api-firewall
+  labels:
+    app: api-firewall
+    chart: api-firewall-0.8.1
+    component: api-firewall
+    heritage: Helm
+    release: my-api-firewall
+spec:
+  type: ClusterIP
+  selector:
+    app: api-firewall
+    component: api-firewall
+    release: my-api-firewall
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+    protocol: TCP
+---
+# Source: api-firewall/templates/deployment.yaml
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: my-api-firewall
+  labels:
+    app: api-firewall
+    chart: api-firewall-0.8.1
+    component: api-firewall
+    heritage: Helm
+    release: my-api-firewall
+spec:
+  replicas: 3
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: api-firewall
+      component: api-firewall
+      release: my-api-firewall
+  template:
+    metadata:
+      labels:
+        app: api-firewall
+        component: api-firewall
+        release: my-api-firewall
+    spec:
+      serviceAccountName: my-api-firewall
+      terminationGracePeriodSeconds: 60
+      containers:
+      - name: api-firewall
+        image: wallarm/api-firewall:v0.8.1
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: APIFW_MODE
+          value: "proxy"
+        - name: APIFW_URL
+          value: http://0.0.0.0:8080
+        - name: APIFW_API_SPECS
+          value: /etc/api-firewall/manifests/openapi-manifest.json
+        - name: APIFW_SERVER_URL
+          value: http://backend:80
+        - name: APIFW_SERVER_MAX_CONNS_PER_HOST
+          value: "512"
+        - name: APIFW_SERVER_DIAL_TIMEOUT
+          value: "200ms"
+        - name: APIFW_READ_TIMEOUT
+          value: "5s"
+        - name: APIFW_WRITE_TIMEOUT
+          value: "5s"
+        - name: APIFW_REQUEST_VALIDATION
+          value: BLOCK
+        - name: APIFW_RESPONSE_VALIDATION
+          value: BLOCK
+        - name: APIFW_PASS_OPTIONS
+          value: "false"
+        - name: APIFW_SHADOW_API_EXCLUDE_LIST
+          value: "404"
+        - name: APIFW_SHADOW_API_UNKNOWN_PARAMETERS_DETECTION
+          value: "true"
+        livenessProbe: 
+          failureThreshold: 3
+          httpGet:
+            path: /v1/liveness
+            port: 9667
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 1
+        readinessProbe: 
+          failureThreshold: 3
+          httpGet:
+            path: /v1/readiness
+            port: 9667
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 1
+        ports:
+        - name: http
+          containerPort: 80
+          protocol: TCP
+        volumeMounts:
+        - name: openapi-manifest
+          mountPath: /etc/api-firewall/manifests
+      volumes:
+      - name: openapi-manifest
+        configMap:
+          name: my-api-firewall-manifest

@@ -1,0 +1,125 @@
+---
+# Source: baget/templates/apikey-secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-baget-apikey-secret
+  labels:
+    helm.sh/chart: baget-1.0.5
+    app.kubernetes.io/name: baget
+    app.kubernetes.io/instance: my-baget
+    app.kubernetes.io/version: "0.3.0"
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+stringData:
+  apiKey: "Sukp58NKrO0qaKOzk9ZquBFD"
+---
+# Source: baget/templates/pvc.yaml
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: my-baget-data
+  labels:
+    helm.sh/chart: baget-1.0.5
+    app.kubernetes.io/name: baget
+    app.kubernetes.io/instance: my-baget
+    app.kubernetes.io/version: "0.3.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  accessModes:
+    - "ReadWriteOnce"
+  resources:
+    requests:
+      storage: "10Gi"
+---
+# Source: baget/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-baget
+  labels:
+    helm.sh/chart: baget-1.0.5
+    app.kubernetes.io/name: baget
+    app.kubernetes.io/instance: my-baget
+    app.kubernetes.io/version: "0.3.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: baget
+    app.kubernetes.io/instance: my-baget
+---
+# Source: baget/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-baget
+  labels:
+    helm.sh/chart: baget-1.0.5
+    app.kubernetes.io/name: baget
+    app.kubernetes.io/instance: my-baget
+    app.kubernetes.io/version: "0.3.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: baget
+      app.kubernetes.io/instance: my-baget
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: baget
+        app.kubernetes.io/instance: my-baget
+    spec:
+      serviceAccountName: default
+      securityContext:
+        {}
+      containers:
+        - name: baget
+          securityContext:
+            {}
+          image: "loicsharma/baget:0b46f0ec87216e1dc6839277712ee07c1c2b611a"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: ApiKey
+              valueFrom:
+                secretKeyRef:
+                  name: my-baget-apikey-secret
+                  key: apiKey
+            - name: ASPNETCORE_URLS
+              value: "http://+:8080"
+            - name: PackageDeletionBehavior
+              value: "HardDelete"
+            - name: AllowPackageOverrides
+              value: "true"
+            - name: Database__Type
+              value: "Sqlite"
+            - name: Database__ConnectionString
+              value: "Data Source=baget.db"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          volumeMounts:
+            - name: my-baget-data
+              mountPath: /app/packages
+          resources:
+            {}
+      volumes:
+        - name: my-baget-data
+          persistentVolumeClaim:
+            claimName: my-baget-data

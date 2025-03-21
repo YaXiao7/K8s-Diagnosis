@@ -1,0 +1,1838 @@
+---
+# Source: geonode/charts/rabbitmq/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-geonode-rabbitmq
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: rabbitmq
+    helm.sh/chart: rabbitmq-8.6.4
+    app.kubernetes.io/instance: my-geonode
+    app.kubernetes.io/managed-by: Helm
+secrets:
+  - name: my-geonode-rabbitmq
+---
+# Source: geonode/charts/postgresql/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-geonode-postgresql
+  labels:
+    app.kubernetes.io/name: postgresql
+    helm.sh/chart: postgresql-10.1.4
+    app.kubernetes.io/instance: my-geonode
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  postgresql-postgres-password: "Wk9ueHlIbXIzNQ=="
+  postgresql-password: "YWRtaW4="
+---
+# Source: geonode/charts/rabbitmq/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-geonode-rabbitmq
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: rabbitmq
+    helm.sh/chart: rabbitmq-8.6.4
+    app.kubernetes.io/instance: my-geonode
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  rabbitmq-password: "M2FzZ0RsZ3dONw=="
+  rabbitmq-erlang-cookie: "aml4WUJzaVo5Uml2YUxYQzAycFR3R2p2SW8wbkh0VnU="
+---
+# Source: geonode/templates/geonode-secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-geonode-secrets
+  namespace: default
+data:
+  ADMIN_PASSWORD: Z2Vvbm9kZQ==
+  GEOSERVER_ADMIN_PASSWORD: Z2Vvc2VydmVy
+  POSTGRES_PASSWORD: YWRtaW4=
+  GEONODE_DATABASE_PASSWORD: VXh1M1VoeEZtSw==
+  GEONODE_GEODATABASE_PASSWORD: VXh1M1VoeEZtSw==
+  BROKER_URL: YW1xcDovL3VzZXI6M2FzZ0RsZ3dON0BteS1nZW9ub2RlLXJhYmJpdG1xOjU2NzIv
+  DATABASE_URL: cG9zdGdpczovL2dlb25vZGU6VXh1M1VoeEZtS0BteS1nZW9ub2RlLXBvc3RncmVzcWw6NTQzMi9nZW9ub2Rl
+  GEODATABASE_URL: cG9zdGdpczovL2dlb25vZGVfZGF0YTpVeHUzVWh4Rm1LQG15LWdlb25vZGUtcG9zdGdyZXNxbDo1NDMyL2dlb25vZGVfZGF0YQ==
+  DJANGO_EMAIL_HOST_PASSWORD: Y2hhbmdlbWU=
+---
+# Source: geonode/templates/postgres-init.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-geonode-postgres-init
+  namespace: default
+stringData:
+  init.sql: |
+    CREATE USER "geonode" WITH PASSWORD 'Uxu3UhxFmK';
+    CREATE USER "geonode_data" WITH PASSWORD 'Uxu3UhxFmK';
+
+    ALTER USER "geonode" WITH SUPERUSER;
+    ALTER USER "geonode_data" WITH SUPERUSER;
+
+    CREATE DATABASE "geonode" OWNER "geonode";
+    \c "geonode"
+    CREATE EXTENSION postgis;
+    CREATE EXTENSION postgis_topology;
+
+    CREATE DATABASE "geonode_data" OWNER "geonode_data";
+    \c "geonode_data"
+    CREATE EXTENSION postgis;
+    CREATE EXTENSION postgis_topology;
+---
+# Source: geonode/charts/rabbitmq/templates/configuration.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-geonode-rabbitmq-config
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: rabbitmq
+    helm.sh/chart: rabbitmq-8.6.4
+    app.kubernetes.io/instance: my-geonode
+    app.kubernetes.io/managed-by: Helm
+data:
+  rabbitmq.conf: |-
+    ## Username and password
+    default_user = user
+    default_pass = CHANGEME
+    ## Clustering
+    cluster_formation.peer_discovery_backend  = rabbit_peer_discovery_k8s
+    cluster_formation.k8s.host = kubernetes.default.svc.cluster.local
+    cluster_formation.node_cleanup.interval = 10
+    cluster_formation.node_cleanup.only_log_warning = true
+    cluster_partition_handling = autoheal
+    # queue master locator
+    queue_master_locator = min-masters
+    # enable guest user
+    loopback_users.guest = false
+    #default_vhost = default-vhost
+    #disk_free_limit.absolute = 50MB
+    #load_definitions = /app/load_definition.json
+---
+# Source: geonode/templates/geonode-geonode-conf.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-geonode-geonode-conf
+  namespace: default
+data:
+  local_settings.py: |
+    # From helm chart basic conf
+    
+    import ast
+    import os
+    try:  # python2
+        from urlparse import urlparse, urlunparse, urlsplit, urljoin
+    except ImportError:
+        # Python 3 fallback
+        from urllib.parse import urlparse, urlunparse, urlsplit, urljoin
+    from geonode.settings import *
+    
+    EXTRA_BASE_LAYERS = [
+      {
+        "type": "tileprovider",
+        "title": "OpenStreetMap Terrain",
+        "thumbURL": "https://a.tile-cyclosm.openstreetmap.fr/cyclosm/10/594/518.png",
+        "provider": "custom",
+        "name": "cyclosm",
+        "group": "background",
+        "visibility": False,
+        "url": "https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png",
+        "options": {
+          "subdomains": [ "a", "b", "c" ]
+        }
+      },
+      {
+        "type": "tileprovider",
+        "title": "CartoDB Light",
+        "thumbURL": "https://a.basemaps.cartocdn.com/light_all/0/0/0.png",
+        "provider": "CartoDB.Positron",
+        "name": "cartol",
+        "group": "background",
+        "visibility": False
+      },
+      {
+        "type": "tileprovider",
+        "title": "Stamen Watercolor",
+        "provider": "Stamen.Watercolor",
+        "name": "Stamen.Watercolor",
+        "source": "Stamen",
+        "group": "background",
+        "thumbURL": "https://stamen-tiles-c.a.ssl.fastly.net/watercolor/0/0/0.jpg",
+        "visibility": False
+      }
+    ]
+    
+    MAPSTORE_BASELAYERS =  EXTRA_BASE_LAYERS + MAPSTORE_BASELAYERS
+    
+
+    # From helm chart extra conf
+    
+    # Add Google provider
+    SOCIALACCOUNT_PROVIDERS['google'] = {
+      'SCOPE': [
+        'profile',
+        'email',
+      ],
+      'AUTH_PARAMS': {
+        'access_type': 'online',
+      }
+    }
+    
+    if os.getenv('AUTH_DOMAIN'):
+      SOCIALACCOUNT_PROVIDERS['google']['AUTH_PARAMS']['hd'] = os.getenv('AUTH_DOMAIN')
+    
+    INSTALLED_APPS += ('allauth.socialaccount.providers.google',)
+    SOCIALACCOUNT_PROFILE_EXTRACTORS['google'] = "geonode.people.profileextractors.OpenIDExtractor"
+    
+binaryData:
+  favicon.ico: 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k/+y7vn/su75/7Lu+f+y7vn/su75/7Hs9/8uLi3/ncUs/57GLP+exiz/nsYs/57GLP+exiv/cowr/ywsLf8sLCz/25tP/92dUP/dnVD/3Z1Q/92dUP/dnVD/3J1Q/y4uLf/bnE//3Z1Q/92dUP/dnVD/3Z1Q/92dUP+FZT7/b42T/7Lu+f+y7vn/su75/7Lu+f+y7vn/sez3/y4uLf+dxSz/nsYs/57GLP+exiz/mb8r/1ZmLP9IPjL/LCws/ywsLP/bm0//3Z1Q/92dUP/dnVD/3Z1Q/92dUP/cnVD/Li4t/9ucT//dnVD/3Z1Q/92dUP/dnVD/3Z1Q/4VlPv9vjZP/su75/7Lu+f+y7vn/su75/7Lu+f+x7Pf/Li4t/53FLP+exiz/nsYs/4qsK/8/Riz/b1Y5/9OWTv8sLCz/LCws/9ubT//dnVD/3Z1Q/92dUP/dnVD/3Z1Q/9ydUP8uLi3/25xP/92dUP/dnVD/3Z1Q/92dUP/dnVD/hWU+/2+Nk/+y7vn/su75/7Lu+f+y7vn/su75/7Hs9/8uLi3/ncUs/57GK/9zjCz/ODcu/5tyQv/dnVD/25tP/ywsLP8sLCz/25tP/92dUP/dnVD/3Z1Q/92dUP/dnVD/3J1Q/y4uLf/bnE//3Z1Q/92dUP/dnVD/3Z1Q/92dUP+FZT7/b42T/7Lu+f+y7vn/su75/7Lu+f+y7vn/sez3/y4uLf+Yvyv/VmYs/0k/Mv+/ikn/3Z1Q/92dUP/bm0//LCws/ywsLP/bm0//3Z1Q/92dUP/dnVD/3Z1Q/92dUP/cnVD/Li4t/9ucT//dnVD/3Z1Q/82STP+edUP/blY5/zw2L/8zNTb/RVFT/1dqbf9og4j/epyj/4u1vf+cztf/LS0t/z9GLP9vVjn/1ZhO/92dUP/dnVD/3Z1Q/9ubT/8sLCz/LCws/9ubT//dnVD/3Z1Q/92dUP/dnVD/3Z1Q/9ydUP8uLi3/qnxF/3xfPP9NQTP/NDc3/1Vna/95nKL/YHh8/11vLP+CoSv/dI0s/2V5LP9WZSz/R1Es/zk9LP8tLS3/m3JC/92dUP/dnVD/3Z1Q/92dUP/dnVD/25tP/ywsLP8sLCz/25tP/92dUP/dnVD/3Z1Q/92dUP/cnE//lnBB/y0tLf9LWVv/b42S/5PByf+v6vX/su75/7Lu+f9vjZP/ZXks/57GLP+exiz/nsYs/57GLP+exiz/ncUr/y4uLf/cnVD/3Z1Q/92dUP/dnVD/3Z1Q/92dUP/bm0//LCws/ywsLP/bm0//3Z1Q/92dUP/dnVD/y5FM/19NNv9ETSz/LS0t/7Hs9/+y7vn/su75/7Lu+f+y7vn/su75/2+Nk/9leSz/nsYs/57GLP+exiz/nsYs/57GLP+dxSz/Li4t/9ydUP/dnVD/3Z1Q/92dUP/dnVD/3Z1Q/9ubT/8sLCz/LCws/9ubT//dnVD/3Z1Q/6F2Q/87Ny7/Znsr/5vDK/8uLi3/sez3/7Lu+f+y7vn/su75/7Lu+f+y7vn/b42T/2V5LP+exiz/nsYs/57GLP+exiz/nsYs/53FLP8uLi3/3J1Q/92dUP/dnVD/3Z1Q/92dUP/CjEr/dVs6/ywsLP8sLCz/25tP/9CVTf9pUzj/P0Ys/4enK/+exiz/ncUs/y4uLf+x7Pf/su75/7Lu+f+y7vn/su75/7Lu+f9vjZP/ZXks/57GLP+exiz/nsYs/57GLP+exiz/ncUs/y4uLf/cnVD/3Z1Q/9ycT/+vf0b/YU43/zxCQ/9ykZf/LCws/ywsLP+oe0X/Pzkw/2ByLP+awSv/nsYs/57GLP+dxSz/Li4t/7Hs9/+y7vn/su75/7Lu+f+y7vn/su75/2+Nk/9leSz/nsYs/57GLP+exiz/nsYs/57GLP+dxSz/Li4t/9ydUP/dnVD/jGk//0JLTf+CqbD/r+r1/7Dr9v8sLCz/LCwt/zxBLP+CoSv/nsYs/57GLP+exiz/nsYs/53FLP8uLi3/sez3/7Lu+f+y7vn/su75/7Lu+f+x7Pf/UmRn/05aLP+dxSv/nsYs/57GLP+exiz/nsYs/53FLP8uLi3/3J1Q/92dUP+DYz7/cY+V/7Lu+f+y7vn/sOv2/ywsLP8sLC3/l70r/57GLP+exiz/nsYs/57GLP+exiz/ncUs/y4uLf+x7Pf/su75/7Lu+f+y7vn/su75/2qGjP80NFz/MzNX/2V5K/+exiz/nsYs/57GLP+exiz/ncUs/y4uLf/cnVD/3Z1Q/4NjPv9xj5X/su75/7Lu+f+w6/b/LCws/ywsLf+cxCz/nsYs/57GLP+exiz/nsYs/57GLP+dxSz/Li4t/7Hs9/+y7vn/su75/7Lu+f+CqbD/MDFI/0hI2/9ISNj/MDFE/3iT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cP+CqK//p9/o/7Lu+f+y7vn/su75/7Ht+P9ujJH/Li8t/53FLP+exiz/nsYs/57GLP+dxSv/jbAr/3CJLP9RXyz/PkUs/zc7LP8vMSz/Kysr0iwsLP9kTzf/sIBG/82STP/cnE//3Z1Q/92dUP/dnVD/3Z1Q/92dUP/dnVD/3J1Q/y8uLf+DZD7/3JxP/92dUP/dnVD/3Z1Q/92dUP/dnVD/3Z1Q/9OWTf+zgkf/RDwx/zg9Pv+NuMD/pdzm/7Lu+f+y7vn/su75/7Lu+f+y7vn/su75/7Ht+P9ujJH/Li8t/53FLP+exiz/nsYs/57GLP+exiz/nsYs/57GLP+dxSv/lLgr/4KgLP9QXCz/LCwt/ywsLP+CYz3/3JxP/92dUP/dnVD/3Z1Q/92dUP/dnVD/3Z1Q/92dUP/dnVD/3J1Q/y8uLf+DZD7/3JxP/92dUP/dnVD/3Z1Q/92dUP/dnVD/3Z1Q/92dUP/cnE//TkIz/z5FSP+x7fj/su75/7Lu+f+y7vn/su75/7Lu+f+y7vn/su75/7Ht+P9ujJH/Li8t/53FLP+exiz/nsYs/57GLP+exiz/nsYs/57GLP+exiz/nsYs/53FLP9jdyz/LCwt/ywsLP+CYz3/3JxP/92dUP/dnVD/3Z1Q/92dUP/dnVD/3Z1Q/92dUP/dnVD/3J1Q/y8uLf+DZD7/3JxP/92dUP/dnVD/3Z1Q/92dUP/dnVD/3Z1Q/92dUP/cnE//TkIz/z5FSP+x7fj/su75/7Lu+f+y7vn/su75/7Lu+f+y7vn/su75/7Ht+P9ujJH/Li8t/53FLP+exiz/nsYs/57GLP+exiz/nsYs/57GLP+exiz/nsYr/5K2K/9SYCz/LCwt/ywsLP+CYz3/3JxP/92dUP/dnVD/3Z1Q/92dUP/dnVD/3Z1Q/92dUP/dnVD/3J1Q/y8uLf+DZD7/3JxP/92dUP/dnVD/3Z1Q/92dUP/dnVD/3Z1Q/92dUP/cnE//TkIz/z5FSP+x7fj/su75/7Lu+f+y7vn/su75/7Lu+f+y7vn/su75/7Ht+P9ujJH/Li8t/53FLP+exiz/nsYs/57GLP+exiz/nsYs/57GLP+cxCv/gJ4r/0tWLP8tLiz/LS0t/ywsLP+CYz3/3JxP/92dUP/dnVD/3Z1Q/92dUP/dnVD/3Z1Q/92dUP/dnVD/3J1Q/y8uLf+DZD7/3JxP/92dUP/dnVD/3Z1Q/92dUP/dnVD/3Z1Q/92dUP/cnE//TkIz/z5FSP+x7fj/su75/7Lu+f+y7vn/su75/7Lu+f+y7vn/su75/7Ht+P9ujJH/Li8t/53FLP+exiz/nsYs/57GLP+exiz/nsYs/5vDK/9rgiv/Njos/z03L/9aSTX/LCws/ywsLP+CYz3/3JxP/92dUP/dnVD/3Z1Q/92dUP/dnVD/3Z1Q/92dUP/dnVD/3J1Q/y8uLf+DZD7/3JxP/92dUP/dnVD/3Z1Q/92dUP/dnVD/3Z1Q/92dUP/cnE//TkIz/z5FSP+x7fj/su75/7Lu+f+y7vn/su75/7Lu+f+y7vn/su75/7Ht+P9ujJH/Li8t/53FLP+exiz/nsYs/57GLP+dxSv/krcr/15xK/80My3/XEo1/8ePS/+CYz3/LCws/ywsLP+CYz3/3JxP/92dUP/dnVD/3Z1Q/92dUP/dnVD/3Z1Q/92dUP/dnVD/3J1Q/y8uLf+DZD7/3JxP/92dUP/dnVD/3Z1Q/92dUP/dnVD/3Z1Q/92dUP/cnE//TkIz/z5FSP+x7fj/su75/7Lu+f+y7vn/su75/7Lu+f+y7vn/su75/7Ht+P9ujJH/Li8t/53FLP+exiz/nsYs/5zEK/+Aniv/SVQs/zYyLv+EZD7/z5RN/9ycT/+CYz3/LCws/ywsLP+CYz3/3JxP/92dUP/dnVD/3Z1Q/92dUP/dnVD/3Z1Q/92dUP/dnVD/3J1Q/y8uLf+DZD7/3JxP/92dUP/dnVD/3Z1Q/92dUP/dnVD/3Z1Q/92dUP/cnE//TkIz/z5FSP+x7fj/su75/7Lu+f+y7vn/su75/7Lu+f+y7vn/su75/7Ht+P9ujJH/Li8t/53FLP+exiz/nsYr/3CJLP81OSz/Qjow/7OBR//Ymk//3Z1Q/9ycT/+CYz3/LCws/ywsLP+CYz3/3JxP/92dUP/dnVD/3Z1Q/92dUP/dnVD/3Z1Q/92dUP/dnVD/3J1Q/y8uLf+DZD7/3JxP/92dUP/dnVD/3Z1Q/92dUP/dnVD/3Z1Q/92dUP/cnE//TkIz/z5FSP+x7fj/su75/7Lu+f+y7vn/su75/7Lu+f+y7vn/su75/7Ht+P9ujJH/Li8t/5zEK/+RtSv/WWks/y8uLf9iTjb/x45L/92dUP/dnVD/3Z1Q/9ycT/+CYz3/LCws/ywsLP+CYz3/3JxP/92dUP/dnVD/3Z1Q/92dUP/dnVD/3Z1Q/92dUP/dnVD/3J1Q/y8uLf+DZD7/3JxP/92dUP/dnVD/3Z1Q/92dUP/dnVD/3Z1Q/9CUTP+vf0b/Qzsx/zc7PP9/pav/irW9/5bGzv+i1+H/rejy/7Lu+f+y7vn/su75/7Ht+P9ujJH/Li8t/4KhLP9KVCz/OjYu/4JiPf/Mkkz/3Z1Q/92dUP/dnVD/3Z1Q/9ycT/+CYz3/LCws/ywsLP+CYz3/3JxP/92dUP/dnVD/3Z1Q/92dUP/dnVD/3Z1Q/92dUP/dnVD/3J1Q/y8uLf+DZD7/3JxP/92dUP/dnVD/3Z1Q/8+UTP+ZcUL/Yk43/z44MP83My//Li0t/y0tLf8xMjP/Mzc3/zY7O/85P0D/PENE/0pXWv9fdXr/cpKY/4evt/9gd3v/LS0t/zM2LP9JPjL/soFG/9maT//dnVD/3Z1Q/92dUP/dnVD/3Z1Q/9ycT/+CYz3/LCws/ywsLP+CYz3/3JxP/92dUP/dnVD/3Z1Q/92dUP/dnVD/3Z1Q/92dUP/dnVD/3J1Q/y8uLf98Xzz/x49L/7eER/+HZj7/VUY0/y8uLv81OTr/PUVG/0xbXv9ykpj/PERG/zg8LP99miv/bYUr/15wLP9NWiz/QUks/z1DLP85Piz/Njks/zI0LP8uLyz/LS0t/1lINf/Ci0r/3Z1Q/92dUP/dnVD/3Z1Q/92dUP/dnVD/3Z1Q/9ycT/+CYz3/LCws/ywsLP+CYz3/3JxP/92dUP/dnVD/3Z1Q/92dUP/dnVD/3Z1Q/92dUP/dnVD/0JVN/y4uLf9GPDH/TEAy/zEwLv8+Rkj/Vmhr/22Kj/+GrrX/ndDZ/7Dr9v+x7fj/RlFU/ztALP+dxSz/nsYs/57GLP+dxiv/m8Ir/5K2K/+HqCv/fZsr/3SOK/9NWCz/Li4t/8+UTf/dnVD/3Z1Q/92dUP/dnVD/3Z1Q/92dUP/dnVD/3Z1Q/9ycT/+CYz3/LCws/ywsLP+CYz3/3JxP/92dUP/dnVD/3Z1Q/92dUP/dnVD/3Z1Q/9ycT/+5hkj/U0Uz/y0tLf8/SEn/bIiN/5PCyv+l3Ob/q+Tv/7Ds9/+y7vn/su75/7Lu+f+x7fj/RlFU/ztALP+dxSz/nsYs/57GLP+exiz/nsYs/57GLP+exiz/nsYs/53FK/9keCz/Ly4t/9ydUP/dnVD/3Z1Q/92dUP/dnVD/3Z1Q/92dUP/dnVD/3Z1Q/9ycT/+CYz3/LCws/ywsLP+CYz3/3JxP/92dUP/dnVD/3Z1Q/92dUP/cnE//0pZN/591Q/8+ODD/OT4s/y0tLf9ujJH/se34/7Lu+f+y7vn/su75/7Lu+f+y7vn/su75/7Lu+f+x7fj/RlFU/ztALP+dxSz/nsYs/57GLP+exiz/nsYs/57GLP+exiz/nsYs/53FLP9keCz/Ly4t/9ydUP/dnVD/3Z1Q/92dUP/dnVD/3Z1Q/92dUP/dnVD/3Z1Q/9ycT/+CYz3/LCws/ywsLP+CYz3/3JxP/92dUP/dnVD/3Z1Q/9ucT/+5hkj/bVU5/zMyLf9UYyz/hqcr/y4vLf9ujJH/se34/7Lu+f+y7vn/su75/7Lu+f+y7vn/su75/7Lu+f+x7fj/RlFU/ztALP+dxSz/nsYs/57GLP+exiz/nsYs/57GLP+exiz/nsYs/53FLP9keCz/Ly4t/9ydUP/dnVD/3Z1Q/92dUP/dnVD/3Z1Q/92dUP/dnVD/3Z1Q/9WYTv9yWDr/LCws/ywsLP+CYz3/3JxP/92dUP/dnVD/3Z1Q/510Qv8/ODD/NDYs/3SOK/+Zvyv/ncQr/y4vLf9ujJH/se34/7Lu+f+y7vn/su75/7Lu+f+y7vn/su75/7Lu+f+x7fj/RlFU/ztALP+dxSz/nsYs/57GLP+exiz/nsYs/57GLP+exiz/nsYs/53FLP9keCz/Ly4t/9ydUP/dnVD/3Z1Q/92dUP/dnVD/3Z1Q/92dUP/WmE7/m3JB/0xAMv8zMS7/LCws/ywsLP+CYz3/3JxP/9ucT//EjUr/blY5/y4vLP9LViz/i6wr/57GLP+exiz/ncUs/y4vLf9ujJH/se34/7Lu+f+y7vn/su75/7Lu+f+y7vn/su75/7Lu+f+x7fj/RlFU/ztALP+dxSz/nsYs/57GLP+exiz/nsYs/57GLP+exiz/nsYs/53FLP9keCz/Ly4t/9ydUP/dnVD/3Z1Q/9ycT//XmU7/x49L/5lxQv9JPzL/NTk5/0VRU/9HU1X/LCws/ywsLP+CYz3/2ZpP/6B2Q/9QQzP/Oj0s/2Z6K/+Ttyv/ncUr/57GLP+exiz/ncUs/y4vLf9ujJH/se34/7Lu+f+y7vn/su75/7Lu+f+y7vn/su75/7Lu+f+x7fj/RlFU/ztALP+dxSz/nsYs/57GLP+exiz/nsYs/57GLP+exiz/nsYs/53FLP9keCz/Ly4t/9ydUP/dnVD/3Z1Q/9OWTf9/YTz/Sj8y/zY7O/9ddHj/hKyz/6jf6f9tipD/LCws/ywsLP9wVzn/aFI4/zUyLv9KVCz/iqsr/5zDK/+exiz/nsYs/57GLP+exiz/ncUs/y4vLf9ujJH/se34/7Lu+f+y7vn/su75/7Lu+f+y7vn/su75/7Lu+f+x7fj/RlFU/ztALP+dxSz/nsYs/57GLP+exiz/nsYs/57GLP+exiz/nsYs/53FLP9keCz/Ly4t/9ydUP/dnVD/3Z1Q/8WNSv8vLi3/aIOI/6DV3/+t5/H/se34/7Ht+P9tipD/LCws/ywsLf8tLC3/NTgs/1ttK/+WvCv/nsYs/57GLP+exiz/nsYs/57GLP+exiz/ncUs/y4vLf9ujJH/se34/7Lu+f+y7vn/su75/7Lu+f+y7vn/su75/7Ht+P+j2OL/QElL/zg8LP+Stiv/ncUr/57GLP+exiz/nsYs/57GLP+exiz/nsYs/53FLP9keCz/Ly4t/9ydUP/dnVD/3Z1Q/8SNSv8uLi//mcrT/7Lu+f+y7vn/su75/7Ht+P9tipD/LCws/ywsLf9DSyz/epYr/53EK/+exiz/nsYs/57GLP+exiz/nsYs/57GLP+exiz/ncUs/y4vLf9ujJH/se34/7Lu+f+y7vn/su75/7Lu+f+y7vn/su75/6vl8P9gd3z/MDI6/y8wM/9bbSz/l70r/57GLP+exiz/nsYs/57GLP+exiz/nsYs/53FLP9keCz/Ly4t/9ydUP/dnVD/3Z1Q/8SNSv8uLi//mcrT/7Lu+f+y7vn/su75/7Ht+P9tipD/LCws/ywsLf9idSz/nMQr/57GLP+exiz/nsYs/57GLP+exiz/nsYs/57GLP+exiz/ncUs/y4vLf9ujJH/se34/7Lu+f+y7vn/su75/7Lu+f+y7vn/su75/3COlP8vMTX/Pj6f/z4+oP8vMTD/Z30r/57GLP+exiz/nsYs/57GLP+exiz/nsYs/53FLP9keCz/Ly4t/9ydUP/dnVD/3Z1Q/8SNSv8uLi//mcrT/7Lu+f+y7vn/su75/7Ht+P9tipD/LCws/ywsLf9jdyz/ncUs/57GLP+exiz/nsYs/57GLP+exiz/nsYs/57GLP+exiz/ncUs/y4vLf9ujJH/se34/7Lu+f+y7vn/su75/7Lu+f+v6/X/gqiw/y0uMP85OYD/SUng/0lJ4f84OHr/Li4w/3eRK/+cxCv/nsYs/57GLP+exiz/nsYs/53FLP9keCz/Ly4t/9ydUP/dnVD/3Z1Q/8SNSv8uLi//mcrT/7Lu+f+y7vn/su75/7Ht+P9tipD/LCws/ywsLf9jdyz/ncUs/57GLP+exiz/nsYs/57GLP+exiz/nsYs/57GLP+exiz/ncUs/y4vLf9ujJH/se34/7Lu+f+y7vn/su75/7Ht+P+Pu8P/O0JE/zQ0Xv9HR9T/S0vo/0tL6P9HRtH/NDRg/zc8LP+CoSv/ncUr/57GLP+exiz/nsYs/53FLP9keCz/Ly4t/9ydUP/dnVD/3Z1Q/8SNSv8uLi//mcrT/7Lu+f+y7vn/su75/7Ht+P9tipD/LCws/ywsLf9jdyz/ncUs/57GLP+exiz/nsYs/57GLP+exiz/nsYs/57GLP+exiz/ncUs/y4vLf9ujJH/se34/7Lu+f+y7vn/su75/6jg6v9LWVz/MTFH/0hH1v9LSuj/S0vo/0tL6P9KSuf/R0fU/zAwQ/9JUyz/krcr/57GLP+exiz/nsYs/53FLP9keCz/Ly4t/9ydUP/dnVD/3Z1Q/8SNSv8uLi//mcrT/7Lu+f+y7vn/su75/7Ht+P9tipD/LCws/ywsLf9cbSz/k7cr/5rBK/+dxSv/nsYs/57GLP+exiz/nsYs/57GLP+exiz/ncUs/y4vLf9ujJH/se34/7Lu+f+y7vn/sOv2/22Kj/8uLjv/QkK4/0tL6P9LS+j/S0vo/0tL6P9LS+j/S0vo/0NDvf8uLjr/YXQs/5zDK/+exiz/nsYs/53FLP9keCz/Ly4t/9ydUP/dnVD/3Z1Q/8SNSv8uLi//mcrT/7Lu+f+y7vn/r+r1/6jf6f9mgIT/LCws/ywsLOI1OCz+SVMs/1tsK/9vhyv/gqAr/5S5K/+dxSv/nsYs/57GLP+exiz/ncUs/y4vLf9ujJH/se34/7Ht+P+h1t//eJuh/zEzN/86Oob/SUnh/0tL6P9LS+j/S0vo/0tL6P9LS+j/S0vo/0pK4/86OoX/MTIx/2uCK/+Psyv/ncUr/53FLP9keCz/Ly4t/9ydUP/dnVD/3Z1Q/8SNSv8uLi//ksDI/5bGzv+Apq3/aoeM/1Voa/85QEH/LCws5ycnJxorKytNKioqlisrK90vMCz+NDYs/zg9LP9NWCv/bYQr/42vK/+dxSv/ncUs/y4vLf9ujJH/otji/2iDif88Q0T/MDIy/zAwRv9HR9b/S0rn/0tL6P9LS+j/S0vo/0tL6P9LS+j/S0vo/0pK5/9HR9b/MjJP/y8wLP85Piz/XW4s/4+zK/9keCz/Ly4t/9ydUP/cnE//yZBL/49rQP8sLC3/OD0+/zY7O/8xMzP/LCws7CsrK6soKCheJycnIAAAAAAAAAAAAAAAAAAAAAIkJCQqKioqbSsrK7ArKyvYKysr6CwsLPc9RCz+W2wr/y0uLf87QkP/MjQ1/CwsLOosLCzyLS0w/0BAqf9LS+j/S0vo/0tL6P9LS+j/S0vo/0tL6P9LS+j/S0vo/0tL6P9LS+j/QECt/y0tMP8sLCzyKysr6S8wLPw5PSz/Li0t/3ldO/9KPzL/LSws+ywsLO0sLCzcLCwsvysrK4EoKCg5AAAABQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEnJycaKSkpQywsLG0rKyuZLCwswywsLOcsLCzOKioqiSoqKlUrKyvSNTVi/0pK5f9LS+j/S0vo/0tL6P9LS+j/Skrn/0pK5/9LS+j/S0vo/0tL6P9LS+j/Skrl/zU1Zv8rKyvSKioqWSoqKoMrKyvMLCws7ywsLM8rKyujLCwseSkpKU8kJCQjAAAAAwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAqKioGHx8fECcnJxooKCgTAAAAAyoqKkIsLDH7QkK5/0tL6P9LS+j/S0vo/0lJ4P87O4v/MTFO/zExTP87O4v/SUjc/0tL6P9LS+j/S0vo/0REw/8sLDH7KSkpTwAAAAIoKCgTJCQkHCgoKBMfHx8IAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACsrK5kzM1b/R0fU/0tL6P9LS+j/SUjd/zU1Y/4rKyvvKysr0isrK9ErKyvvNDRf/klI3P9LS+j/S0vo/0hI2v8zM1b/KysroAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACsrK9c4OHX/SUng/0tL6P9LS+j/PDyT/ysrK/QsLCxuJycnDRkZGQosLCxuKysr7zs7jf9LS+j/S0vo/0pK4v84OHX/LCws2gAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACsrK/Y7Oof/Skrm/0tL6P9KSuf/MzNZ/ywsLOEVFRUMAAAAAAAAAAAVFRUMKysr0zExTv9KSuf/S0vo/0pK5/87Oof/LCws9wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACwsLPE6OoT/Skrl/0tL6P9KSuf/NDRb/ywsLOIfHx8QAAAAAAAAAAAfHx8QKysr1DIyUP9KSuf/S0vo/0pK5v86OoT/LCws8gAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACsrK8s3N3H/SUne/0tL6P9LS+j/PT2W/ywsK/UqKipzHh4eESIiIg8qKipzLCwr8Dw8kP9LS+j/S0vo/0lJ4f83N3H/KysrzwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACsrK4ExMUv/R0bQ/0tL6P9LS+j/SUni/zY2bf4rLCv1LCws4ywsLOIrLCv1NjZo/klJ4f9LS+j/S0vo/0hI2P8xMUv/LCwsigAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACsrKyksLCzwPT2a/0pK5/9LS+j/S0vo/0lJ4v89PZf/NDRd/zQ0XP89PZf/SUnf/0tL6P9LS+j/Skrn/z8/o/8sLCzwKSkpNwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABkZGQosLCyhLy8//ENDvP9LS+j/S0vo/0tL6P9LS+j/S0vo/0tL6P9LS+j/S0vo/0tL6P9LS+j/Q0O//y8vQP0sLCyhIiIiDwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAoKCgsLCws2zAwQ/9DQ73/Skrn/0tL6P9LS+j/S0vo/0tL6P9LS+j/S0vo/0pK5/9DQ73/MTFJ/ywsLOYoKCgsAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAJiYmOywsLNwvL0D8Pj6d/0dH0f9JSd//Skrl/0pK5v9JSd//R0fS/z8/o/8vL0D8LCwr3igoKD8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACYmJi4rKyukLCwt8jExTv83N3L/OjqE/zo6hP83N3L/MTFQ/ysrLPUrKyukKCgoMwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAZGRkKKCgoLCsrK4YsLCzNKysr9SsrK/YsLCzNLCwsiiYmJi4ZGRkKAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==
+---
+# Source: geonode/templates/geonode-geoserver-conf.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-geonode-geoserver-conf
+  namespace: default
+data:
+  notifier.xml: |
+    <notificationConfiguration>
+      <queueSize>1000</queueSize>
+      <notificator>
+        <queueSize>1000</queueSize>
+        <processorThreads>1</processorThreads>
+        <messageFilter>type='Catalog'</messageFilter>
+        <genericProcessor>
+          <geonodeEncoder />
+          <topicSender>
+            <username>user</username>
+            <password>3asgDlgwN7</password>
+            <host>my-geonode-rabbitmq</host>
+            <port>5672</port>
+            <virtualHost>/</virtualHost>
+            <exchangeName>geonode</exchangeName>
+            <routingKey>geoserver.catalog</routingKey>
+          </topicSender>
+        </genericProcessor>
+      </notificator>
+      <notificator>
+        <queueSize>1000</queueSize>
+        <processorThreads>10</processorThreads>
+        <messageFilter>type='Data'</messageFilter>
+        <genericProcessor>
+          <geonodeEncoder />
+          <topicSender>
+            <username>user</username>
+            <password>3asgDlgwN7</password>
+            <host>my-geonode-rabbitmq</host>
+            <port>5672</port>
+            <virtualHost>/</virtualHost>
+            <exchangeName>geonode</exchangeName>
+            <routingKey>geoserver.data</routingKey>
+          </topicSender>
+        </genericProcessor>
+      </notificator>
+    </notificationConfiguration>
+---
+# Source: geonode/templates/nginx-conf.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-geonode-nginx-confd
+  namespace: default
+data:
+  geonode.conf: |
+    server {
+      listen 80 default_server;
+      listen [::]:80 default_server;
+    
+      # resolver is required because we use variables as upstream
+      # resolver kube-dns.kube-system.svc 8.8.8.8 8.8.4.4 valid=300s;
+    
+      include /etc/nginx/mime.types;
+    
+      # This is the main geonode conf
+      charset     utf-8;
+    
+      # max upload size
+      client_max_body_size 100G;
+      client_body_buffer_size 256K;
+      large_client_header_buffers 4 64k;
+      proxy_read_timeout 600s;
+    
+      fastcgi_hide_header Set-Cookie;
+    
+      etag on;
+    
+      # compression
+      gzip on;
+      gzip_vary on;
+      gzip_proxied any;
+      gzip_http_version 1.1;
+      gzip_disable "MSIE [1-6]\.";
+      gzip_buffers 16 8k;
+      gzip_min_length 1100;
+      gzip_comp_level 6;
+      gzip_types
+        text/css
+        text/javascript
+        text/xml
+        text/plain
+        application/xml
+        application/xml+rss
+        application/javascript
+        application/x-javascript
+        application/json;
+    
+      location = /favicon.ico {
+        alias /mnt/volumes/statics/static/favicon.ico;
+      }
+    
+      # GeoServer
+      location /geoserver {
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    
+        proxy_pass http://localhost:8080;
+      }
+    
+      # GeoNode
+      location /static/ {
+        alias /mnt/volumes/statics/static/;
+    
+        location ~* \.(?:html|js|jpg|jpeg|gif|png|css|tgz|gz|rar|bz2|doc|pdf|ppt|tar|wav|bmp|ttf|rtf|swf|ico|flv|txt|woff|woff2|svg|xml)$ {
+          gzip_static always;
+          expires 30d;
+          access_log off;
+          add_header Pragma "public";
+          add_header Cache-Control "max-age=31536000, public";
+        }
+      }
+    
+      location /uploaded/ {
+        alias /mnt/volumes/statics/uploaded/;
+    
+        location ~* \.(?:html|js|jpg|jpeg|gif|png|css|tgz|gz|rar|bz2|doc|pdf|ppt|tar|wav|bmp|ttf|rtf|swf|ico|flv|txt|woff|woff2|svg|xml)$ {
+          gzip_static always;
+          expires 30d;
+          access_log off;
+          add_header Pragma "public";
+          add_header Cache-Control "max-age=31536000, public";
+        }
+      }
+    
+      location ~ ^/celery-monitor/? {
+        # Using a variable is a trick to let Nginx start even if upstream host is not up yet
+        # (see https://sandro-keil.de/blog/2017/07/24/let-nginx-start-if-upstream-host-is-unavailable-or-down/)
+        set $upstream localhost:5555;
+    
+        rewrite ^/celery-monitor/?(.*)$ /$1 break;
+    
+        sub_filter '="/' '="/celery-monitor/';
+        sub_filter_last_modified on;
+        sub_filter_once off;
+    
+        # proxy_pass http://unix:/tmp/flower.sock:/;
+        proxy_pass http://$upstream;
+        proxy_redirect off;
+        proxy_set_header Host $host;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_http_version 1.1;
+      }
+    
+      location / {
+        # FIXME: Work around /proxy sometimes using a mix of public/internal URL to geonode...
+        rewrite_log on;
+        rewrite ^/proxy/(.*)url=https?://example.com(:\d+)?/geoserver(.*) /proxy/$1url=http://localhost/geoserver$3 last;
+    
+        if ($request_method = OPTIONS) {
+          add_header Access-Control-Allow-Methods "GET, POST, PUT, PATCH, OPTIONS";
+          add_header Access-Control-Allow-Headers "Authorization, Content-Type, Accept";
+          add_header Access-Control-Allow-Credentials true;
+          add_header Content-Length 0;
+          add_header Content-Type text/plain;
+          add_header Access-Control-Max-Age 1728000;
+          return 200;
+        }
+    
+        add_header Access-Control-Allow-Credentials false;
+        add_header Access-Control-Allow-Headers "Content-Type, Accept, Authorization, Origin, User-Agent";
+        add_header Access-Control-Allow-Methods "GET, POST, PUT, PATCH, OPTIONS";
+    
+        proxy_connect_timeout       600;
+        proxy_send_timeout          600;
+        proxy_read_timeout          600;
+        send_timeout                600;
+        proxy_redirect              off;
+        proxy_set_header            Host $host;
+        proxy_set_header            X-Real-IP $remote_addr;
+        proxy_set_header            X-Forwarded-Host $server_name;
+        proxy_set_header            X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header            X-Forwarded-Proto $scheme;
+    
+        # uwsgi_params
+        include /etc/nginx/uwsgi_params;
+    
+        # proxy_pass http://$upstream;
+        uwsgi_pass localhost:8000;
+    
+        # when a client closes the connection then keep the channel to uwsgi open. Otherwise uwsgi throws an IOError
+        uwsgi_ignore_client_abort on;
+    
+        # uwsgi_params
+        include /etc/nginx/uwsgi_params;
+    
+        location ~* \.(?:js|jpg|jpeg|gif|png|tgz|gz|rar|bz2|doc|pdf|ppt|tar|wav|bmp|ttf|rtf|swf|ico|flv|woff|woff2|svg|xml)$ {
+          gzip_static always;
+          expires 30d;
+          access_log off;
+          add_header Pragma "public";
+          add_header Cache-Control "max-age=31536000, public";
+        }
+      }
+    }
+---
+# Source: geonode/templates/geonode-pvc.yaml
+# PVC for mariadb and nextcloud disk
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: my-geonode-geonode
+  namespace: default
+spec:
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: standard
+  resources:
+    requests:
+      storage: 10Gi
+---
+# Source: geonode/charts/rabbitmq/templates/role.yaml
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-geonode-rabbitmq-endpoint-reader
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: rabbitmq
+    helm.sh/chart: rabbitmq-8.6.4
+    app.kubernetes.io/instance: my-geonode
+    app.kubernetes.io/managed-by: Helm
+rules:
+  - apiGroups: [""]
+    resources: ["endpoints"]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create"]
+---
+# Source: geonode/charts/rabbitmq/templates/rolebinding.yaml
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-geonode-rabbitmq-endpoint-reader
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: rabbitmq
+    helm.sh/chart: rabbitmq-8.6.4
+    app.kubernetes.io/instance: my-geonode
+    app.kubernetes.io/managed-by: Helm
+subjects:
+  - kind: ServiceAccount
+    name: my-geonode-rabbitmq
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: my-geonode-rabbitmq-endpoint-reader
+---
+# Source: geonode/charts/postgresql/templates/svc-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-geonode-postgresql-headless
+  labels:
+    app.kubernetes.io/name: postgresql
+    helm.sh/chart: postgresql-10.1.4
+    app.kubernetes.io/instance: my-geonode
+    app.kubernetes.io/managed-by: Helm
+    # Use this annotation in addition to the actual publishNotReadyAddresses
+    # field below because the annotation will stop being respected soon but the
+    # field is broken in some versions of Kubernetes:
+    # https://github.com/kubernetes/kubernetes/issues/58662
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+spec:
+  type: ClusterIP
+  clusterIP: None
+  # We want all pods in the StatefulSet to have their addresses published for
+  # the sake of the other Postgresql pods even before they're ready, since they
+  # have to be able to talk to each other in order to become ready.
+  publishNotReadyAddresses: true
+  ports:
+    - name: tcp-postgresql
+      port: 5432
+      targetPort: tcp-postgresql
+  selector:
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/instance: my-geonode
+---
+# Source: geonode/charts/postgresql/templates/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-geonode-postgresql
+  labels:
+    app.kubernetes.io/name: postgresql
+    helm.sh/chart: postgresql-10.1.4
+    app.kubernetes.io/instance: my-geonode
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+spec:
+  type: ClusterIP
+  ports:
+    - name: tcp-postgresql
+      port: 5432
+      targetPort: tcp-postgresql
+  selector:
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/instance: my-geonode
+    role: primary
+---
+# Source: geonode/charts/rabbitmq/templates/svc-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-geonode-rabbitmq-headless
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: rabbitmq
+    helm.sh/chart: rabbitmq-8.6.4
+    app.kubernetes.io/instance: my-geonode
+    app.kubernetes.io/managed-by: Helm
+spec:
+  clusterIP: None
+  ports:
+    - name: epmd
+      port: 4369
+      targetPort: epmd
+    - name: amqp
+      port: 5672
+      targetPort: amqp
+    - name: dist
+      port: 25672
+      targetPort: dist
+    - name: http-stats
+      port: 15672
+      targetPort: stats
+  selector: 
+    app.kubernetes.io/name: rabbitmq
+    app.kubernetes.io/instance: my-geonode
+---
+# Source: geonode/charts/rabbitmq/templates/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-geonode-rabbitmq
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: rabbitmq
+    helm.sh/chart: rabbitmq-8.6.4
+    app.kubernetes.io/instance: my-geonode
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - name: amqp
+      port: 5672
+      targetPort: amqp
+      nodePort: null
+    - name: epmd
+      port: 4369
+      targetPort: epmd
+      nodePort: null
+    - name: dist
+      port: 25672
+      targetPort: dist
+      nodePort: null
+    - name: http-stats
+      port: 15672
+      targetPort: stats
+      nodePort: null
+  selector: 
+    app.kubernetes.io/name: rabbitmq
+    app.kubernetes.io/instance: my-geonode
+---
+# Source: geonode/templates/geonode-svc.yaml
+# Load-balancer for SGW
+kind: Service
+apiVersion: v1
+metadata:
+  name: my-geonode-geonode
+  namespace: default
+spec:
+  selector:
+    org.geonode.instance: my-geonode-geonode
+  ports:
+  - targetPort: 80
+    port: 80
+    name: www
+  - targetPort: 8080
+    port: 8080
+    name: geoserver
+  type: ClusterIP
+---
+# Source: geonode/templates/geonode-deploy.yaml
+# Sync gateway pod
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-geonode-geonode
+  namespace: default
+spec:
+  # This pod can NOT be scaled, because it persists local files
+  replicas: 1
+  strategy:
+    # Need to kill previous pods before running new ones to avoid double-attaching volumes...
+    type: Recreate
+  selector:
+    matchLabels:
+      org.geonode.instance: my-geonode-geonode
+  template:
+    metadata:
+      annotations:
+        # Add a checksum to force the re-creation of the pods on every config update
+        checksum/conf: ee8ef1179af5ff25a155a33a58362ee384fc8d2497ed667aaf51333a06c00f37
+        checksum/conf2: c972f4645dd0b2101d2d6f06bac3d22729ca0a738cb5db393111e55c8ff02e43
+        checksum/nginx: 0d9c78cc80b5d5a0679208169c23231d4f05d090f8f969b7e6fc008fe18b7b31
+      labels:
+        org.geonode.instance: my-geonode-geonode
+    spec:
+      # Resolving some hardcoded links...
+      hostAliases:
+      - ip: "127.0.0.1"
+        hostnames:
+        - geonode
+        - geoserver
+
+      initContainers:
+      # Initialize default data
+      # The tag NEEDS to match with the geoserver tag
+      # See https://hub.docker.com/r/geonode/geoserver
+      - name: data-dir-conf
+        image: geonode/geoserver_data:2.18.2
+        command:
+        - sh
+        - -c
+        - |
+          # Copy defaults from data container
+          cp -r /tmp/geonode/downloaded/data /geoserver_data
+
+          # Copy overrides from ConfigMap
+          cp /overrides/notifier.xml /geoserver_data/data/notifier/
+
+          # Update custom EPSG codes
+          cat /geoserver_data/data/user_projections/epsg.properties > /tmp/epsg.properties
+          echo '1=PROJCS["TM_Rwanda",GEOGCS["GCS_ITRF_2005",DATUM["D_ITRF_2005",SPHEROID["GRS_1980",6378137.0,298.257222101]],PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]],PROJECTION["Transverse_Mercator"],PARAMETER["False_Easting",500000.0],PARAMETER["False_Northing",5000000.0],PARAMETER["Central_Meridian",30.0],PARAMETER["Scale_Factor",0.9999],PARAMETER["Latitude_Of_Origin",0.0],UNIT["Meter",1.0]]' >> /tmp/epsg.properties
+          sort -u /tmp/epsg.properties > /geoserver_data/data/user_projections/epsg.properties
+        volumeMounts:
+        - name: persistence
+          mountPath: /geoserver_data/data
+          subPath: geoserver-data-dir
+        - name: geoserver-conf
+          mountPath: /overrides
+
+      # Wait for Postgres and rabbit
+      - name: wait-db
+        image: jwilder/dockerize
+        imagePullPolicy: IfNotPresent
+        args:
+        - -timeout=120s
+        - -wait
+        - tcp://my-geonode-postgresql:5432
+        - -wait
+        - tcp://my-geonode-rabbitmq:5672
+        # Copy dockerize binary for later use in containers
+        # Doesn't seem to work for some reason?
+        # - sh
+        # - -c
+        # - cp /usr/local/bin/dockerize /tmp/ && ls -la /tmp/
+        # volumeMounts:
+        # - name: cache-volume
+        #   mountPath: /tmp
+
+      # All containers need to be in the same pod since they share volumes!
+      # This also means they probably can't be scaled up... (?)
+      containers:
+      # This is the django app server
+      - name: geonode
+        image: "geonode/geonode:3.1"
+        env:
+        
+        
+        - name: "ACCOUNT_APPROVAL_REQUIRED"
+          value: "False"
+        - name: "ACCOUNT_AUTHENTICATION_METHOD"
+          value: "username_email"
+        - name: "ACCOUNT_CONFIRM_EMAIL_ON_GET"
+          value: "False"
+        - name: "ACCOUNT_EMAIL_CONFIRMATION_EMAIL"
+          value: "False"
+        - name: "ACCOUNT_EMAIL_CONFIRMATION_REQUIRED"
+          value: "False"
+        - name: "ACCOUNT_EMAIL_REQUIRED"
+          value: "True"
+        - name: "ACCOUNT_EMAIL_VERIFICATION"
+          value: "none"
+        - name: "ALLOWED_HOSTS"
+          value: "['django', '*', '{{ .Values.general.externalDomain }}']"
+        - name: "API_LIMIT_PER_PAGE"
+          value: "1000"
+        - name: "API_LOCKDOWN"
+          value: "False"
+        - name: "ASYNC_SIGNALS"
+          value: "True"
+        - name: "AUTO_ASSIGN_REGISTERED_MEMBERS_TO_REGISTERED_MEMBERS_GROUP_NAME"
+          value: "True"
+        - name: "AVATAR_DEFAULT_URL"
+          value: "/geonode/img/avatar.png"
+        - name: "AVATAR_GRAVATAR_SSL"
+          value: "True"
+        - name: "CACHE_BUSTING_MEDIA_ENABLED"
+          value: "False"
+        - name: "CACHE_BUSTING_STATIC_ENABLED"
+          value: "False"
+        - name: "CELERY_BEAT_SCHEDULER"
+          value: "celery.beat:PersistentScheduler"
+        - name: "CENTRALIZED_DASHBOARD_ENABLED"
+          value: "False"
+        - name: "CLIENT_RESULTS_LIMIT"
+          value: "25"
+        - name: "CORS_ORIGIN_ALLOW_ALL"
+          value: "True"
+        - name: "CREATE_LAYER"
+          value: "True"
+        - name: "C_FORCE_ROOT"
+          value: "1"
+        - name: "DEBUG"
+          value: "False"
+        - name: "DEFAULT_ANONYMOUS_DOWNLOAD_PERMISSION"
+          value: "True"
+        - name: "DEFAULT_ANONYMOUS_VIEW_PERMISSION"
+          value: "True"
+        - name: "DEFAULT_BACKEND_DATASTORE"
+          value: "datastore"
+        - name: "DEFAULT_BACKEND_UPLOADER"
+          value: "geonode.importer"
+        - name: "DEFAULT_FROM_EMAIL"
+          value: "GeoNode <no-reply@geonode.org>"
+        - name: "DJANGO_EMAIL_BACKEND"
+          value: "django.core.mail.backends.smtp.EmailBackend"
+        - name: "DJANGO_EMAIL_HOST"
+          value: "localhost"
+        - name: "DJANGO_EMAIL_HOST_USER"
+          value: "user@example.com"
+        - name: "DJANGO_EMAIL_PORT"
+          value: "25"
+        - name: "DJANGO_EMAIL_USE_SSL"
+          value: "False"
+        - name: "DJANGO_EMAIL_USE_TLS"
+          value: "False"
+        - name: "DJANGO_SETTINGS_MODULE"
+          value: "geonode.local_settings"
+        - name: "DOCKER_ENV"
+          value: "production"
+        - name: "EMAIL_ENABLE"
+          value: "False"
+        - name: "ENABLE_JSONP"
+          value: "true"
+        - name: "EXIF_ENABLED"
+          value: "True"
+        - name: "FAVORITE_ENABLED"
+          value: "True"
+        - name: "FORCE_REINIT"
+          value: "False"
+        - name: "GEONODE_CLIENT_LAYER_PREVIEW_LIBRARY"
+          value: "mapstore"
+        - name: "GEONODE_DB_CONN_MAX_AGE"
+          value: "0"
+        - name: "GEONODE_DB_CONN_TOUT"
+          value: "5"
+        - name: "GEONODE_INSTANCE_NAME"
+          value: "geonode"
+        - name: "GEOSERVER_JAVA_OPTS"
+          value: "-Djava.awt.headless=true -Xms2G -Xmx4G -XX:+UnlockDiagnosticVMOptions -XX:+LogVMOutput -XX:LogFile=/var/log/jvm.log -XX:PerfDataSamplingInterval=500 -XX:SoftRefLRUPolicyMSPerMB=36000 -XX:-UseGCOverheadLimit -XX:+UseConcMarkSweepGC -XX:+UseParNewGC -XX:ParallelGCThreads=4 -Dfile.encoding=UTF8 -Djavax.servlet.request.encoding=UTF-8 -Djavax.servlet.response.encoding=UTF-8 -Duser.timezone=GMT -Dorg.geotools.shapefile.datetime=false -DGEOSERVER_CSRF_DISABLED=true -DPRINT_BASE_URL=http://geoserver:8080/geoserver/pdf -DALLOW_ENV_PARAMETRIZATION=true -Xbootclasspath/a:/usr/local/tomcat/webapps/geoserver/WEB-INF/lib/marlin-0.9.3-Unsafe.jar -Dsun.java2d.renderer=org.marlin.pisces.MarlinRenderingEngine"
+        - name: "HAYSTACK_ENGINE_INDEX_NAME"
+          value: "haystack"
+        - name: "HAYSTACK_ENGINE_URL"
+          value: "http://elasticsearch:9200/"
+        - name: "HAYSTACK_SEARCH"
+          value: "False"
+        - name: "HAYSTACK_SEARCH_RESULTS_PER_PAGE"
+          value: "200"
+        - name: "INVOKE_LOG_STDOUT"
+          value: "True"
+        - name: "IS_FIRST_START"
+          value: "True"
+        - name: "LOCKDOWN_GEONODE"
+          value: "False"
+        - name: "MAX_DOCUMENT_SIZE"
+          value: "2"
+        - name: "MEMCACHED_BACKEND"
+          value: "django.core.cache.backends.memcached.MemcachedCache"
+        - name: "MEMCACHED_ENABLED"
+          value: "False"
+        - name: "MEMCACHED_LOCATION"
+          value: "127.0.0.1:11211"
+        - name: "MEMCACHED_LOCK_EXPIRE"
+          value: "3600"
+        - name: "MEMCACHED_LOCK_TIMEOUT"
+          value: "10"
+        - name: "MODIFY_TOPICCATEGORY"
+          value: "True"
+        - name: "MONITORING_DATA_TTL"
+          value: "365"
+        - name: "MONITORING_ENABLED"
+          value: "False"
+        - name: "MONITORING_HOST_NAME"
+          value: "geonode"
+        - name: "MONITORING_SERVICE_NAME"
+          value: "local-geonode"
+        - name: "MOSAIC_ENABLED"
+          value: "False"
+        - name: "OGC_REQUEST_BACKOFF_FACTOR"
+          value: "0.3"
+        - name: "OGC_REQUEST_MAX_RETRIES"
+          value: "1"
+        - name: "OGC_REQUEST_POOL_CONNECTIONS"
+          value: "10"
+        - name: "OGC_REQUEST_POOL_MAXSIZE"
+          value: "10"
+        - name: "OGC_REQUEST_TIMEOUT"
+          value: "30"
+        - name: "PROXY_ALLOWED_HOSTS"
+          value: "localhost,django,geonode,geoserver,spatialreference.org,nominatim.openstreetmap.org,dev.openlayers.org"
+        - name: "SESSION_EXPIRED_CONTROL_ENABLED"
+          value: "True"
+        - name: "SOCIALACCOUNT_WITH_GEONODE_LOCAL_SINGUP"
+          value: "False"
+        - name: "TASTYPIE_APIKEY"
+          value: ""
+        - name: "TIME_ENABLED"
+          value: "True"
+        - name: "USER_ANALYTICS_ENABLED"
+          value: "True"
+        - name: "USER_ANALYTICS_GZIP"
+          value: "True"
+        - name: "X_FRAME_OPTIONS"
+          value: "ALLOW-FROM ALL"
+        - name: "outFormat"
+          value: "text/javascript"
+        
+        - name: DATABASE_HOST
+          value: my-geonode-postgresql
+        - name: GEONODE_LB_HOST_IP
+          value: "example.com"
+        - name: GEONODE_LB_PORT
+          value: "443"
+        - name: PUBLIC_PORT
+          value: "443"
+        - name: NGINX_BASE_URL
+          value: "https://example.com/"
+        - name: GEONODE_HOST_IP
+          value: localhost
+        - name: DJANGO_URL
+          value: http://localhost/
+        
+        - name: POSTGRES_USER
+          value: postgres
+        - name: GEONODE_DATABASE
+          value: "geonode"
+        - name: GEONODE_GEODATABASE
+          value: "geonode_data"
+        - name: GEONODE_DATABASE_SCHEMA
+          value: public
+        - name: GEONODE_GEODATABASE_SCHEMA
+          value: public
+        - name: DATABASE_PORT
+          value: '5432'
+        
+        - name: SITEURL
+          value: "https://example.com/"
+        - name: SITE_HOST_SCHEMA
+          value: "https"
+        
+        - name: STATIC_ROOT
+          value: /mnt/volumes/statics/static/
+        - name: MEDIA_ROOT
+          value: /mnt/volumes/statics/uploaded/
+        - name: GEOIP_PATH
+          value: /mnt/volumes/statics/geoip.db
+        
+        # GIS Server
+        - name: GEOSERVER_WEB_UI_LOCATION
+          value: "https://example.com/geoserver/"
+        - name: GEOSERVER_PUBLIC_LOCATION
+          value: "https://example.com/geoserver/"
+        - name: GEOSERVER_PUBLIC_SCHEMA
+          value: "https"
+        - name: GEOSERVER_LOCATION
+          value: http://localhost:8080/geoserver/
+        - name: GEOSERVER_ADMIN_USER
+          value: admin
+        
+        # #################
+        # Security
+        # #################
+        # Admin Settings
+        - name: ADMIN_USERNAME
+          value: admin
+        - name: ADMIN_EMAIL
+          value: "support@example.com"
+        - name: IS_CELERY
+          value: 'False'
+        envFrom:
+          - secretRef:
+              name: my-geonode-secrets
+        command:
+        - bash
+        - -c
+        - |
+          # Disable file logging if any
+          sed -i 's/^logto/#logto/ig' /usr/src/geonode/uwsgi.ini
+          # Run
+          /usr/src/geonode/entrypoint.sh uwsgi --ini /usr/src/geonode/uwsgi.ini
+        ports:
+        - containerPort: 8000
+        volumeMounts:
+        - name: geonode-conf
+          mountPath: /usr/src/geonode/geonode/local_settings.py
+          subPath: local_settings.py
+        - name: persistence
+          mountPath: /mnt/volumes/statics
+          subPath: statics
+        - name: persistence
+          mountPath: /geoserver_data/data
+          subPath: geoserver-data-dir
+        - name: persistence
+          mountPath: /backup_restore
+          subPath: backup-restore
+        - name: persistence
+          mountPath: /data
+          subPath: data
+        - name: cache-volume
+          mountPath: /tmp
+        # This one is HORRIBLY SLOW!!!
+        # Disabling readiness probe...
+        # readinessProbe:
+        #   tcpSocket:
+        #     port: 8000
+        #   initialDelaySeconds: 60
+        #   periodSeconds: 10
+        #   failureThreshold: 15
+
+        livenessProbe:
+          tcpSocket:
+            port: 8000
+          initialDelaySeconds: 1200
+          periodSeconds: 10
+          failureThreshold: 15
+
+      # # Celery is the task worker
+      - name: celery
+        image: "geonode/geonode:3.1"
+        env:
+        
+        
+        - name: "ACCOUNT_APPROVAL_REQUIRED"
+          value: "False"
+        - name: "ACCOUNT_AUTHENTICATION_METHOD"
+          value: "username_email"
+        - name: "ACCOUNT_CONFIRM_EMAIL_ON_GET"
+          value: "False"
+        - name: "ACCOUNT_EMAIL_CONFIRMATION_EMAIL"
+          value: "False"
+        - name: "ACCOUNT_EMAIL_CONFIRMATION_REQUIRED"
+          value: "False"
+        - name: "ACCOUNT_EMAIL_REQUIRED"
+          value: "True"
+        - name: "ACCOUNT_EMAIL_VERIFICATION"
+          value: "none"
+        - name: "ALLOWED_HOSTS"
+          value: "['django', '*', '{{ .Values.general.externalDomain }}']"
+        - name: "API_LIMIT_PER_PAGE"
+          value: "1000"
+        - name: "API_LOCKDOWN"
+          value: "False"
+        - name: "ASYNC_SIGNALS"
+          value: "True"
+        - name: "AUTO_ASSIGN_REGISTERED_MEMBERS_TO_REGISTERED_MEMBERS_GROUP_NAME"
+          value: "True"
+        - name: "AVATAR_DEFAULT_URL"
+          value: "/geonode/img/avatar.png"
+        - name: "AVATAR_GRAVATAR_SSL"
+          value: "True"
+        - name: "CACHE_BUSTING_MEDIA_ENABLED"
+          value: "False"
+        - name: "CACHE_BUSTING_STATIC_ENABLED"
+          value: "False"
+        - name: "CELERY_BEAT_SCHEDULER"
+          value: "celery.beat:PersistentScheduler"
+        - name: "CENTRALIZED_DASHBOARD_ENABLED"
+          value: "False"
+        - name: "CLIENT_RESULTS_LIMIT"
+          value: "25"
+        - name: "CORS_ORIGIN_ALLOW_ALL"
+          value: "True"
+        - name: "CREATE_LAYER"
+          value: "True"
+        - name: "C_FORCE_ROOT"
+          value: "1"
+        - name: "DEBUG"
+          value: "False"
+        - name: "DEFAULT_ANONYMOUS_DOWNLOAD_PERMISSION"
+          value: "True"
+        - name: "DEFAULT_ANONYMOUS_VIEW_PERMISSION"
+          value: "True"
+        - name: "DEFAULT_BACKEND_DATASTORE"
+          value: "datastore"
+        - name: "DEFAULT_BACKEND_UPLOADER"
+          value: "geonode.importer"
+        - name: "DEFAULT_FROM_EMAIL"
+          value: "GeoNode <no-reply@geonode.org>"
+        - name: "DJANGO_EMAIL_BACKEND"
+          value: "django.core.mail.backends.smtp.EmailBackend"
+        - name: "DJANGO_EMAIL_HOST"
+          value: "localhost"
+        - name: "DJANGO_EMAIL_HOST_USER"
+          value: "user@example.com"
+        - name: "DJANGO_EMAIL_PORT"
+          value: "25"
+        - name: "DJANGO_EMAIL_USE_SSL"
+          value: "False"
+        - name: "DJANGO_EMAIL_USE_TLS"
+          value: "False"
+        - name: "DJANGO_SETTINGS_MODULE"
+          value: "geonode.local_settings"
+        - name: "DOCKER_ENV"
+          value: "production"
+        - name: "EMAIL_ENABLE"
+          value: "False"
+        - name: "ENABLE_JSONP"
+          value: "true"
+        - name: "EXIF_ENABLED"
+          value: "True"
+        - name: "FAVORITE_ENABLED"
+          value: "True"
+        - name: "FORCE_REINIT"
+          value: "False"
+        - name: "GEONODE_CLIENT_LAYER_PREVIEW_LIBRARY"
+          value: "mapstore"
+        - name: "GEONODE_DB_CONN_MAX_AGE"
+          value: "0"
+        - name: "GEONODE_DB_CONN_TOUT"
+          value: "5"
+        - name: "GEONODE_INSTANCE_NAME"
+          value: "geonode"
+        - name: "GEOSERVER_JAVA_OPTS"
+          value: "-Djava.awt.headless=true -Xms2G -Xmx4G -XX:+UnlockDiagnosticVMOptions -XX:+LogVMOutput -XX:LogFile=/var/log/jvm.log -XX:PerfDataSamplingInterval=500 -XX:SoftRefLRUPolicyMSPerMB=36000 -XX:-UseGCOverheadLimit -XX:+UseConcMarkSweepGC -XX:+UseParNewGC -XX:ParallelGCThreads=4 -Dfile.encoding=UTF8 -Djavax.servlet.request.encoding=UTF-8 -Djavax.servlet.response.encoding=UTF-8 -Duser.timezone=GMT -Dorg.geotools.shapefile.datetime=false -DGEOSERVER_CSRF_DISABLED=true -DPRINT_BASE_URL=http://geoserver:8080/geoserver/pdf -DALLOW_ENV_PARAMETRIZATION=true -Xbootclasspath/a:/usr/local/tomcat/webapps/geoserver/WEB-INF/lib/marlin-0.9.3-Unsafe.jar -Dsun.java2d.renderer=org.marlin.pisces.MarlinRenderingEngine"
+        - name: "HAYSTACK_ENGINE_INDEX_NAME"
+          value: "haystack"
+        - name: "HAYSTACK_ENGINE_URL"
+          value: "http://elasticsearch:9200/"
+        - name: "HAYSTACK_SEARCH"
+          value: "False"
+        - name: "HAYSTACK_SEARCH_RESULTS_PER_PAGE"
+          value: "200"
+        - name: "INVOKE_LOG_STDOUT"
+          value: "True"
+        - name: "IS_FIRST_START"
+          value: "True"
+        - name: "LOCKDOWN_GEONODE"
+          value: "False"
+        - name: "MAX_DOCUMENT_SIZE"
+          value: "2"
+        - name: "MEMCACHED_BACKEND"
+          value: "django.core.cache.backends.memcached.MemcachedCache"
+        - name: "MEMCACHED_ENABLED"
+          value: "False"
+        - name: "MEMCACHED_LOCATION"
+          value: "127.0.0.1:11211"
+        - name: "MEMCACHED_LOCK_EXPIRE"
+          value: "3600"
+        - name: "MEMCACHED_LOCK_TIMEOUT"
+          value: "10"
+        - name: "MODIFY_TOPICCATEGORY"
+          value: "True"
+        - name: "MONITORING_DATA_TTL"
+          value: "365"
+        - name: "MONITORING_ENABLED"
+          value: "False"
+        - name: "MONITORING_HOST_NAME"
+          value: "geonode"
+        - name: "MONITORING_SERVICE_NAME"
+          value: "local-geonode"
+        - name: "MOSAIC_ENABLED"
+          value: "False"
+        - name: "OGC_REQUEST_BACKOFF_FACTOR"
+          value: "0.3"
+        - name: "OGC_REQUEST_MAX_RETRIES"
+          value: "1"
+        - name: "OGC_REQUEST_POOL_CONNECTIONS"
+          value: "10"
+        - name: "OGC_REQUEST_POOL_MAXSIZE"
+          value: "10"
+        - name: "OGC_REQUEST_TIMEOUT"
+          value: "30"
+        - name: "PROXY_ALLOWED_HOSTS"
+          value: "localhost,django,geonode,geoserver,spatialreference.org,nominatim.openstreetmap.org,dev.openlayers.org"
+        - name: "SESSION_EXPIRED_CONTROL_ENABLED"
+          value: "True"
+        - name: "SOCIALACCOUNT_WITH_GEONODE_LOCAL_SINGUP"
+          value: "False"
+        - name: "TASTYPIE_APIKEY"
+          value: ""
+        - name: "TIME_ENABLED"
+          value: "True"
+        - name: "USER_ANALYTICS_ENABLED"
+          value: "True"
+        - name: "USER_ANALYTICS_GZIP"
+          value: "True"
+        - name: "X_FRAME_OPTIONS"
+          value: "ALLOW-FROM ALL"
+        - name: "outFormat"
+          value: "text/javascript"
+        
+        - name: DATABASE_HOST
+          value: my-geonode-postgresql
+        - name: GEONODE_LB_HOST_IP
+          value: "example.com"
+        - name: GEONODE_LB_PORT
+          value: "443"
+        - name: PUBLIC_PORT
+          value: "443"
+        - name: NGINX_BASE_URL
+          value: "https://example.com/"
+        - name: GEONODE_HOST_IP
+          value: localhost
+        - name: DJANGO_URL
+          value: http://localhost/
+        
+        - name: POSTGRES_USER
+          value: postgres
+        - name: GEONODE_DATABASE
+          value: "geonode"
+        - name: GEONODE_GEODATABASE
+          value: "geonode_data"
+        - name: GEONODE_DATABASE_SCHEMA
+          value: public
+        - name: GEONODE_GEODATABASE_SCHEMA
+          value: public
+        - name: DATABASE_PORT
+          value: '5432'
+        
+        - name: SITEURL
+          value: "https://example.com/"
+        - name: SITE_HOST_SCHEMA
+          value: "https"
+        
+        - name: STATIC_ROOT
+          value: /mnt/volumes/statics/static/
+        - name: MEDIA_ROOT
+          value: /mnt/volumes/statics/uploaded/
+        - name: GEOIP_PATH
+          value: /mnt/volumes/statics/geoip.db
+        
+        # GIS Server
+        - name: GEOSERVER_WEB_UI_LOCATION
+          value: "https://example.com/geoserver/"
+        - name: GEOSERVER_PUBLIC_LOCATION
+          value: "https://example.com/geoserver/"
+        - name: GEOSERVER_PUBLIC_SCHEMA
+          value: "https"
+        - name: GEOSERVER_LOCATION
+          value: http://localhost:8080/geoserver/
+        - name: GEOSERVER_ADMIN_USER
+          value: admin
+        
+        # #################
+        # Security
+        # #################
+        # Admin Settings
+        - name: ADMIN_USERNAME
+          value: admin
+        - name: ADMIN_EMAIL
+          value: "support@example.com"
+        - name: IS_CELERY
+          value: 'True'
+        - name: CELERY__LOG_FILE
+          value: /dev/stdout
+        envFrom:
+          - secretRef:
+              name: my-geonode-secrets
+        command:
+        - bash
+        - -c
+        - |
+          # Run celery
+          /usr/src/geonode/entrypoint.sh celery-cmd
+        volumeMounts:
+        - name: geonode-conf
+          mountPath: /usr/src/geonode/geonode/local_settings.py
+          subPath: local_settings.py
+        # To persist uploaded media
+        - name: persistence
+          mountPath: /mnt/volumes/statics
+          subPath: statics
+        # Mount statics as emptydir to recreate them on pod recreation (e.g. upgrades) but not on container restart
+        - name: static
+          mountPath: /mnt/volumes/statics/static
+        - name: persistence
+          mountPath: /geoserver_data/data
+          subPath: geoserver-data-dir
+        - name: persistence
+          mountPath: /backup_restore
+          subPath: backup-restore
+        - name: persistence
+          mountPath: /data
+          subPath: data
+        - name: cache-volume
+          mountPath: /tmp
+        # healthcheck: curl --fail --silent --write-out 'HTTP CODE : %{http_code}\n' --output /dev/null http://127.0.0.1:8001/
+
+      - name: nginx
+        image: nginx:1.19
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - name: persistence
+          mountPath: /mnt/volumes/statics
+          subPath: statics
+        - name: geonode-conf
+          mountPath: /mnt/volumes/statics/static/geonode/img/favicon.ico
+          subPath: favicon.ico
+        - name: nginx-confd
+          mountPath: /etc/nginx/conf.d
+
+      # Geoserver backend
+      # TODO: route logs to console
+      - name: geoserver
+        image: "geonode/geoserver:2.18.2"
+        ports:
+        - containerPort: 8080
+        env:
+        
+        
+        - name: "ACCOUNT_APPROVAL_REQUIRED"
+          value: "False"
+        - name: "ACCOUNT_AUTHENTICATION_METHOD"
+          value: "username_email"
+        - name: "ACCOUNT_CONFIRM_EMAIL_ON_GET"
+          value: "False"
+        - name: "ACCOUNT_EMAIL_CONFIRMATION_EMAIL"
+          value: "False"
+        - name: "ACCOUNT_EMAIL_CONFIRMATION_REQUIRED"
+          value: "False"
+        - name: "ACCOUNT_EMAIL_REQUIRED"
+          value: "True"
+        - name: "ACCOUNT_EMAIL_VERIFICATION"
+          value: "none"
+        - name: "ALLOWED_HOSTS"
+          value: "['django', '*', '{{ .Values.general.externalDomain }}']"
+        - name: "API_LIMIT_PER_PAGE"
+          value: "1000"
+        - name: "API_LOCKDOWN"
+          value: "False"
+        - name: "ASYNC_SIGNALS"
+          value: "True"
+        - name: "AUTO_ASSIGN_REGISTERED_MEMBERS_TO_REGISTERED_MEMBERS_GROUP_NAME"
+          value: "True"
+        - name: "AVATAR_DEFAULT_URL"
+          value: "/geonode/img/avatar.png"
+        - name: "AVATAR_GRAVATAR_SSL"
+          value: "True"
+        - name: "CACHE_BUSTING_MEDIA_ENABLED"
+          value: "False"
+        - name: "CACHE_BUSTING_STATIC_ENABLED"
+          value: "False"
+        - name: "CELERY_BEAT_SCHEDULER"
+          value: "celery.beat:PersistentScheduler"
+        - name: "CENTRALIZED_DASHBOARD_ENABLED"
+          value: "False"
+        - name: "CLIENT_RESULTS_LIMIT"
+          value: "25"
+        - name: "CORS_ORIGIN_ALLOW_ALL"
+          value: "True"
+        - name: "CREATE_LAYER"
+          value: "True"
+        - name: "C_FORCE_ROOT"
+          value: "1"
+        - name: "DEBUG"
+          value: "False"
+        - name: "DEFAULT_ANONYMOUS_DOWNLOAD_PERMISSION"
+          value: "True"
+        - name: "DEFAULT_ANONYMOUS_VIEW_PERMISSION"
+          value: "True"
+        - name: "DEFAULT_BACKEND_DATASTORE"
+          value: "datastore"
+        - name: "DEFAULT_BACKEND_UPLOADER"
+          value: "geonode.importer"
+        - name: "DEFAULT_FROM_EMAIL"
+          value: "GeoNode <no-reply@geonode.org>"
+        - name: "DJANGO_EMAIL_BACKEND"
+          value: "django.core.mail.backends.smtp.EmailBackend"
+        - name: "DJANGO_EMAIL_HOST"
+          value: "localhost"
+        - name: "DJANGO_EMAIL_HOST_USER"
+          value: "user@example.com"
+        - name: "DJANGO_EMAIL_PORT"
+          value: "25"
+        - name: "DJANGO_EMAIL_USE_SSL"
+          value: "False"
+        - name: "DJANGO_EMAIL_USE_TLS"
+          value: "False"
+        - name: "DJANGO_SETTINGS_MODULE"
+          value: "geonode.local_settings"
+        - name: "DOCKER_ENV"
+          value: "production"
+        - name: "EMAIL_ENABLE"
+          value: "False"
+        - name: "ENABLE_JSONP"
+          value: "true"
+        - name: "EXIF_ENABLED"
+          value: "True"
+        - name: "FAVORITE_ENABLED"
+          value: "True"
+        - name: "FORCE_REINIT"
+          value: "False"
+        - name: "GEONODE_CLIENT_LAYER_PREVIEW_LIBRARY"
+          value: "mapstore"
+        - name: "GEONODE_DB_CONN_MAX_AGE"
+          value: "0"
+        - name: "GEONODE_DB_CONN_TOUT"
+          value: "5"
+        - name: "GEONODE_INSTANCE_NAME"
+          value: "geonode"
+        - name: "GEOSERVER_JAVA_OPTS"
+          value: "-Djava.awt.headless=true -Xms2G -Xmx4G -XX:+UnlockDiagnosticVMOptions -XX:+LogVMOutput -XX:LogFile=/var/log/jvm.log -XX:PerfDataSamplingInterval=500 -XX:SoftRefLRUPolicyMSPerMB=36000 -XX:-UseGCOverheadLimit -XX:+UseConcMarkSweepGC -XX:+UseParNewGC -XX:ParallelGCThreads=4 -Dfile.encoding=UTF8 -Djavax.servlet.request.encoding=UTF-8 -Djavax.servlet.response.encoding=UTF-8 -Duser.timezone=GMT -Dorg.geotools.shapefile.datetime=false -DGEOSERVER_CSRF_DISABLED=true -DPRINT_BASE_URL=http://geoserver:8080/geoserver/pdf -DALLOW_ENV_PARAMETRIZATION=true -Xbootclasspath/a:/usr/local/tomcat/webapps/geoserver/WEB-INF/lib/marlin-0.9.3-Unsafe.jar -Dsun.java2d.renderer=org.marlin.pisces.MarlinRenderingEngine"
+        - name: "HAYSTACK_ENGINE_INDEX_NAME"
+          value: "haystack"
+        - name: "HAYSTACK_ENGINE_URL"
+          value: "http://elasticsearch:9200/"
+        - name: "HAYSTACK_SEARCH"
+          value: "False"
+        - name: "HAYSTACK_SEARCH_RESULTS_PER_PAGE"
+          value: "200"
+        - name: "INVOKE_LOG_STDOUT"
+          value: "True"
+        - name: "IS_FIRST_START"
+          value: "True"
+        - name: "LOCKDOWN_GEONODE"
+          value: "False"
+        - name: "MAX_DOCUMENT_SIZE"
+          value: "2"
+        - name: "MEMCACHED_BACKEND"
+          value: "django.core.cache.backends.memcached.MemcachedCache"
+        - name: "MEMCACHED_ENABLED"
+          value: "False"
+        - name: "MEMCACHED_LOCATION"
+          value: "127.0.0.1:11211"
+        - name: "MEMCACHED_LOCK_EXPIRE"
+          value: "3600"
+        - name: "MEMCACHED_LOCK_TIMEOUT"
+          value: "10"
+        - name: "MODIFY_TOPICCATEGORY"
+          value: "True"
+        - name: "MONITORING_DATA_TTL"
+          value: "365"
+        - name: "MONITORING_ENABLED"
+          value: "False"
+        - name: "MONITORING_HOST_NAME"
+          value: "geonode"
+        - name: "MONITORING_SERVICE_NAME"
+          value: "local-geonode"
+        - name: "MOSAIC_ENABLED"
+          value: "False"
+        - name: "OGC_REQUEST_BACKOFF_FACTOR"
+          value: "0.3"
+        - name: "OGC_REQUEST_MAX_RETRIES"
+          value: "1"
+        - name: "OGC_REQUEST_POOL_CONNECTIONS"
+          value: "10"
+        - name: "OGC_REQUEST_POOL_MAXSIZE"
+          value: "10"
+        - name: "OGC_REQUEST_TIMEOUT"
+          value: "30"
+        - name: "PROXY_ALLOWED_HOSTS"
+          value: "localhost,django,geonode,geoserver,spatialreference.org,nominatim.openstreetmap.org,dev.openlayers.org"
+        - name: "SESSION_EXPIRED_CONTROL_ENABLED"
+          value: "True"
+        - name: "SOCIALACCOUNT_WITH_GEONODE_LOCAL_SINGUP"
+          value: "False"
+        - name: "TASTYPIE_APIKEY"
+          value: ""
+        - name: "TIME_ENABLED"
+          value: "True"
+        - name: "USER_ANALYTICS_ENABLED"
+          value: "True"
+        - name: "USER_ANALYTICS_GZIP"
+          value: "True"
+        - name: "X_FRAME_OPTIONS"
+          value: "ALLOW-FROM ALL"
+        - name: "outFormat"
+          value: "text/javascript"
+        
+        - name: DATABASE_HOST
+          value: my-geonode-postgresql
+        - name: GEONODE_LB_HOST_IP
+          value: "example.com"
+        - name: GEONODE_LB_PORT
+          value: "443"
+        - name: PUBLIC_PORT
+          value: "443"
+        - name: NGINX_BASE_URL
+          value: "https://example.com/"
+        - name: GEONODE_HOST_IP
+          value: localhost
+        - name: DJANGO_URL
+          value: http://localhost/
+        
+        - name: POSTGRES_USER
+          value: postgres
+        - name: GEONODE_DATABASE
+          value: "geonode"
+        - name: GEONODE_GEODATABASE
+          value: "geonode_data"
+        - name: GEONODE_DATABASE_SCHEMA
+          value: public
+        - name: GEONODE_GEODATABASE_SCHEMA
+          value: public
+        - name: DATABASE_PORT
+          value: '5432'
+        
+        - name: SITEURL
+          value: "https://example.com/"
+        - name: SITE_HOST_SCHEMA
+          value: "https"
+        
+        - name: STATIC_ROOT
+          value: /mnt/volumes/statics/static/
+        - name: MEDIA_ROOT
+          value: /mnt/volumes/statics/uploaded/
+        - name: GEOIP_PATH
+          value: /mnt/volumes/statics/geoip.db
+        
+        # GIS Server
+        - name: GEOSERVER_WEB_UI_LOCATION
+          value: "https://example.com/geoserver/"
+        - name: GEOSERVER_PUBLIC_LOCATION
+          value: "https://example.com/geoserver/"
+        - name: GEOSERVER_PUBLIC_SCHEMA
+          value: "https"
+        - name: GEOSERVER_LOCATION
+          value: http://localhost:8080/geoserver/
+        - name: GEOSERVER_ADMIN_USER
+          value: admin
+        
+        # #################
+        # Security
+        # #################
+        # Admin Settings
+        - name: ADMIN_USERNAME
+          value: admin
+        - name: ADMIN_EMAIL
+          value: "support@example.com"
+        envFrom:
+          - secretRef:
+              name: my-geonode-secrets
+        volumeMounts:
+        # - name: persistence
+        #   mountPath: /mnt/volumes/statics
+        #   subPath: statics
+        - name: persistence
+          mountPath: /geoserver_data/data
+          subPath: geoserver-data-dir
+        # - name: persistence
+        #   mountPath: /backup_restore
+        #   subPath: backup-restore
+        # - name: persistence
+        #   mountPath: /data
+        #   subPath: data
+        # - name: cache-volume
+        #   mountPath: /tmp
+        readinessProbe:
+          tcpSocket:
+          # httpGet:
+            # path: /
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 5
+          failureThreshold: 15
+
+        livenessProbe:
+          tcpSocket:
+          # httpGet:
+            # path: /
+            port: 8080
+          initialDelaySeconds: 180
+          periodSeconds: 5
+          failureThreshold: 15
+
+      volumes:
+      - name: nginx-confd
+        configMap:
+          name: my-geonode-nginx-confd
+      - name: geoserver-conf
+        configMap:
+          name: my-geonode-geoserver-conf
+      - name: geonode-conf
+        configMap:
+          name: my-geonode-geonode-conf
+      - name: persistence
+        persistentVolumeClaim:
+          claimName: my-geonode-geonode
+      # Using an emptyDir to cache compiled statics... it will survive container crashes, but not pod restarts
+      - name: cache-volume
+        emptyDir: {}
+      - name: static
+        emptyDir: {}
+---
+# Source: geonode/charts/postgresql/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-geonode-postgresql
+  labels:
+    app.kubernetes.io/name: postgresql
+    helm.sh/chart: postgresql-10.1.4
+    app.kubernetes.io/instance: my-geonode
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+spec:
+  serviceName: my-geonode-postgresql-headless
+  replicas: 1
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgresql
+      app.kubernetes.io/instance: my-geonode
+      role: primary
+  template:
+    metadata:
+      name: my-geonode-postgresql
+      labels:
+        app.kubernetes.io/name: postgresql
+        helm.sh/chart: postgresql-10.1.4
+        app.kubernetes.io/instance: my-geonode
+        app.kubernetes.io/managed-by: Helm
+        role: primary
+    spec:      
+      securityContext:
+        fsGroup: 1001
+      containers:
+        - name: my-geonode-postgresql
+          image: docker.io/bitnami/postgresql:11.10.0-debian-10-r24
+          imagePullPolicy: "IfNotPresent"
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+          securityContext:
+            runAsUser: 1001
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: POSTGRESQL_PORT_NUMBER
+              value: "5432"
+            - name: POSTGRESQL_VOLUME_DIR
+              value: "/bitnami/postgresql"
+            - name: PGDATA
+              value: "/bitnami/postgresql/data"
+            - name: POSTGRES_USER
+              value: "postgres"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-geonode-postgresql
+                  key: postgresql-password
+            - name: POSTGRESQL_ENABLE_LDAP
+              value: "no"
+            - name: POSTGRESQL_ENABLE_TLS
+              value: "no"
+            - name: POSTGRESQL_LOG_HOSTNAME
+              value: "false"
+            - name: POSTGRESQL_LOG_CONNECTIONS
+              value: "false"
+            - name: POSTGRESQL_LOG_DISCONNECTIONS
+              value: "false"
+            - name: POSTGRESQL_PGAUDIT_LOG_CATALOG
+              value: "off"
+            - name: POSTGRESQL_CLIENT_MIN_MESSAGES
+              value: "error"
+            - name: POSTGRESQL_SHARED_PRELOAD_LIBRARIES
+              value: "pgaudit"
+          ports:
+            - name: tcp-postgresql
+              containerPort: 5432
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - exec pg_isready -U "postgres" -h 127.0.0.1 -p 5432
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - -e
+                - |
+                  exec pg_isready -U "postgres" -h 127.0.0.1 -p 5432
+                  [ -f /opt/bitnami/postgresql/tmp/.initialized ] || [ -f /bitnami/postgresql/.initialized ]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          volumeMounts:
+            - name: custom-init-scripts-secret
+              mountPath: /docker-entrypoint-initdb.d/secret
+            - name: dshm
+              mountPath: /dev/shm
+            - name: data
+              mountPath: /bitnami/postgresql
+              subPath: 
+      volumes:
+        - name: custom-init-scripts-secret
+          secret:
+            secretName: my-geonode-postgres-init
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Gi
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "8Gi"
+        storageClassName: standard
+---
+# Source: geonode/charts/rabbitmq/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-geonode-rabbitmq
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: rabbitmq
+    helm.sh/chart: rabbitmq-8.6.4
+    app.kubernetes.io/instance: my-geonode
+    app.kubernetes.io/managed-by: Helm
+spec:
+  serviceName: my-geonode-rabbitmq-headless
+  podManagementPolicy: OrderedReady
+  replicas: 1
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: rabbitmq
+      app.kubernetes.io/instance: my-geonode
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: rabbitmq
+        helm.sh/chart: rabbitmq-8.6.4
+        app.kubernetes.io/instance: my-geonode
+        app.kubernetes.io/managed-by: Helm
+      annotations:
+        checksum/config: 3c3409764bd2c20b9bfa20251f4036a3a4f84c31b61eb2e10fb43b55a9921d23
+        checksum/secret: e6385a759e02fcd58a7044d96e59cf027acbf9e657d05aab3d713650a7adce6f
+    spec:
+      
+      serviceAccountName: my-geonode-rabbitmq
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: rabbitmq
+                    app.kubernetes.io/instance: my-geonode
+                namespaces:
+                  - default
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+        runAsUser: 1001
+      terminationGracePeriodSeconds: 120
+      containers:
+        - name: rabbitmq
+          image: docker.io/bitnami/rabbitmq:3.8.9-debian-10-r82
+          imagePullPolicy: "IfNotPresent"
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: MY_POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: MY_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: MY_POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: K8S_SERVICE_NAME
+              value: "my-geonode-rabbitmq-headless"
+            - name: K8S_ADDRESS_TYPE
+              value: hostname
+            - name: RABBITMQ_FORCE_BOOT
+              value: "no"
+            - name: RABBITMQ_NODE_NAME
+              value: "rabbit@$(MY_POD_NAME).$(K8S_SERVICE_NAME).$(MY_POD_NAMESPACE).svc.cluster.local"
+            - name: K8S_HOSTNAME_SUFFIX
+              value: ".$(K8S_SERVICE_NAME).$(MY_POD_NAMESPACE).svc.cluster.local"
+            - name: RABBITMQ_MNESIA_DIR
+              value: "/bitnami/rabbitmq/mnesia/$(RABBITMQ_NODE_NAME)"
+            - name: RABBITMQ_LDAP_ENABLE
+              value: "no"
+            - name: RABBITMQ_LOGS
+              value: "-"
+            - name: RABBITMQ_ULIMIT_NOFILES
+              value: "65536"
+            - name: RABBITMQ_USE_LONGNAME
+              value: "true"
+            - name: RABBITMQ_ERL_COOKIE
+              valueFrom:
+                secretKeyRef:
+                  name: my-geonode-rabbitmq
+                  key: rabbitmq-erlang-cookie
+            - name: RABBITMQ_USERNAME
+              value: "user"
+            - name: RABBITMQ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-geonode-rabbitmq
+                  key: rabbitmq-password
+            - name: RABBITMQ_PLUGINS
+              value: "rabbitmq_management, rabbitmq_peer_discovery_k8s, rabbitmq_auth_backend_ldap"
+          ports:
+            - name: amqp
+              containerPort: 5672
+            - name: dist
+              containerPort: 25672
+            - name: stats
+              containerPort: 15672
+            - name: epmd
+              containerPort: 4369
+          livenessProbe:
+            exec:
+              command:
+                - /bin/bash
+                - -ec
+                - rabbitmq-diagnostics -q ping
+            initialDelaySeconds: 120
+            periodSeconds: 30
+            timeoutSeconds: 20
+            successThreshold: 1
+            failureThreshold: 6
+          readinessProbe:
+            exec:
+              command:
+                - /bin/bash
+                - -ec
+                - rabbitmq-diagnostics -q check_running && rabbitmq-diagnostics -q check_local_alarms
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 20
+            successThreshold: 1
+            failureThreshold: 3
+          resources:
+            limits: {}
+            requests: {}
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - /bin/bash
+                  - -ec
+                  - |
+                    if [[ -f /opt/bitnami/scripts/rabbitmq/nodeshutdown.sh ]]; then
+                        /opt/bitnami/scripts/rabbitmq/nodeshutdown.sh -t "120" -d  "false"
+                    else
+                        rabbitmqctl stop_app
+                    fi
+          volumeMounts:
+            - name: configuration
+              mountPath: /bitnami/rabbitmq/conf
+            - name: data
+              mountPath: /bitnami/rabbitmq/mnesia
+      volumes:
+        - name: configuration
+          configMap:
+            name: my-geonode-rabbitmq-config
+            items:
+              - key: rabbitmq.conf
+                path: rabbitmq.conf
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          app.kubernetes.io/name: rabbitmq
+          app.kubernetes.io/instance: my-geonode
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "8Gi"
+        storageClassName: standard
+---
+# Source: geonode/templates/tests/test-geonode.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-geonode-test-geonode
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  containers:
+    - image: jwilder/dockerize
+      imagePullPolicy: IfNotPresent
+      name: test-connections
+      args:
+        - -timeout=20m
+        # Postgres
+        - -wait=tcp://my-geonode-postgresql:5432
+        # RabbitMQ
+        - -wait=tcp://my-geonode-rabbitmq:5672
+        # Nginx
+        - -wait=http://my-geonode-geonode/static/geonode/img/favicon.ico
+        # Geoserver
+        - -wait=http://my-geonode-geonode/geoserver
+  restartPolicy: Never

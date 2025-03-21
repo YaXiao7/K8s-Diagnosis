@@ -1,0 +1,157 @@
+---
+# Source: webapp/templates/pvc.yaml
+kind: "PersistentVolumeClaim"
+apiVersion: "v1"
+metadata:
+  name: my-webapp
+  labels:
+    helm.sh/chart: webapp-0.1.18
+    app.kubernetes.io/name: webapp
+    app.kubernetes.io/instance: my-webapp
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  accessModes:
+    - "ReadWriteMany"
+  resources:
+    requests:
+      storage: 5Gi
+---
+# Source: webapp/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-webapp
+  labels:
+    helm.sh/chart: webapp-0.1.18
+    app.kubernetes.io/name: webapp
+    app.kubernetes.io/instance: my-webapp
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: webapp
+    app.kubernetes.io/instance: my-webapp
+---
+# Source: webapp/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-webapp
+  labels:
+    helm.sh/chart: webapp-0.1.18
+    app.kubernetes.io/name: webapp
+    app.kubernetes.io/instance: my-webapp
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: webapp
+      app.kubernetes.io/instance: my-webapp
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: webapp
+        app.kubernetes.io/instance: my-webapp
+    spec:
+      serviceAccountName: anyuid
+      securityContext:
+        {}
+      containers:
+        - name: webapp
+          securityContext:
+            {}
+          image: "ghcr.io/maastrichtu-ids/code-server:latest"
+          imagePullPolicy: Always
+          workingDir: /home/coder/project
+          env:
+            # To enable updating the image: https://github.com/kubernetes/kubernetes/issues/33664
+            - name: RELEASE_DATE
+              value: "2024-09-16 17:42:33.105887305 +0930 ACST m=+1.617668551"
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 15 
+            failureThreshold: 40
+            periodSeconds: 10
+            timeoutSeconds: 2
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 15 
+            failureThreshold: 40
+            periodSeconds: 10
+            timeoutSeconds: 2
+          resources:
+            {}
+          volumeMounts:
+            - name: data
+              mountPath: /home/coder/project
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: my-webapp
+---
+# Source: webapp/templates/openshiftRoute.yaml
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: my-webapp
+  labels:
+    helm.sh/chart: webapp-0.1.18
+    app.kubernetes.io/name: webapp
+    app.kubernetes.io/instance: my-webapp
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+# Stub to solve ingress API validation issues
+status:
+  ingress:
+    - host: ""
+spec:
+  host: 
+  path: 
+  wildcardPolicy: None
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+  to:
+    kind: Service
+    name: my-webapp
+    weight: 100
+---
+# Source: webapp/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-webapp-test-connection"
+  labels:
+    helm.sh/chart: webapp-0.1.18
+    app.kubernetes.io/name: webapp
+    app.kubernetes.io/instance: my-webapp
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-webapp:8080']
+  restartPolicy: Never

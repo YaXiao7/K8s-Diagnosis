@@ -1,0 +1,120 @@
+---
+# Source: prometheus-rabbitmq-exporter/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-prometheus-rabbitmq-exporter
+  labels:
+    app: prometheus-rabbitmq-exporter
+    chart: prometheus-rabbitmq-exporter-1.12.1
+    release: my-prometheus-rabbitmq-exporter
+    heritage: Helm
+---
+# Source: prometheus-rabbitmq-exporter/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-prometheus-rabbitmq-exporter-config
+  labels:
+    app: prometheus-rabbitmq-exporter
+    chart: prometheus-rabbitmq-exporter-1.12.1
+    release: my-prometheus-rabbitmq-exporter
+    heritage: Helm
+data:
+    RABBIT_URL: "http://myrabbit:15672"
+    RABBIT_USER: "guest"
+    PUBLISH_PORT: "9419"
+    LOG_LEVEL: "info"
+    RABBIT_CAPABILITIES: "bert,no_sort"
+    INCLUDE_QUEUES: ".*"
+    INCLUDE_VHOST: ".*"
+    SKIP_QUEUES: "^$"
+    SKIPVERIFY: "false"
+    SKIP_VHOST: "^$"
+    RABBIT_EXPORTERS: "exchange,node,overview,queue"
+    OUTPUT_FORMAT: "TTY"
+    RABBIT_TIMEOUT: "30"
+    MAX_QUEUES: "0"
+    EXCLUDE_METRICS: ""
+    RABBIT_CONNECTION: "direct"
+---
+# Source: prometheus-rabbitmq-exporter/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-prometheus-rabbitmq-exporter
+  labels:
+    app: prometheus-rabbitmq-exporter
+    chart: prometheus-rabbitmq-exporter-1.12.1
+    release: my-prometheus-rabbitmq-exporter
+    heritage: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9419
+      targetPort: publish
+      protocol: TCP
+      name: rabbitmq-exporter
+  selector:
+    app: prometheus-rabbitmq-exporter
+    release: my-prometheus-rabbitmq-exporter
+---
+# Source: prometheus-rabbitmq-exporter/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-prometheus-rabbitmq-exporter
+  labels:
+    app: prometheus-rabbitmq-exporter
+    chart: prometheus-rabbitmq-exporter-1.12.1
+    release: my-prometheus-rabbitmq-exporter
+    heritage: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus-rabbitmq-exporter
+      release: my-prometheus-rabbitmq-exporter
+  template:
+    metadata:
+      labels:
+        app: prometheus-rabbitmq-exporter
+        release: my-prometheus-rabbitmq-exporter
+      annotations:
+        checksum/exporter-config: 2848acd81452555ff5d115f409f1344924103cb7a51053e10a84f2e3d62e613f
+    spec:
+      serviceAccountName: my-prometheus-rabbitmq-exporter
+      containers:
+        - name: prometheus-rabbitmq-exporter
+          image: "kbudde/rabbitmq-exporter:v0.29.0"
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: my-prometheus-rabbitmq-exporter-config
+          env:
+            - name: RABBIT_PASSWORD
+              value: guest
+            - name: RABBIT_USER
+              value: guest
+            - name: RABBIT_URL
+              value: http://myrabbit:15672
+          ports:
+            - containerPort: 9419
+              name: publish
+          livenessProbe:
+            httpGet:
+              path: /
+              port: publish
+          readinessProbe:
+            httpGet:
+              path: /
+              port: publish
+          resources:
+            {}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["all"]
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 10002

@@ -1,0 +1,352 @@
+---
+# Source: cnpg-monitoring/charts/kube-state-metrics/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+automountServiceAccountToken: true
+metadata:
+  labels:    
+    helm.sh/chart: kube-state-metrics-5.25.1
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: metrics
+    app.kubernetes.io/part-of: kube-state-metrics
+    app.kubernetes.io/name: kube-state-metrics
+    app.kubernetes.io/instance: my-cnpg-monitoring
+    app.kubernetes.io/version: "2.13.0"
+  name: my-cnpg-monitoring-kube-state-metrics
+  namespace: default
+---
+# Source: cnpg-monitoring/charts/kube-state-metrics/templates/crs-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-cnpg-monitoring-kube-state-metrics-customresourcestate-config
+  namespace: default
+  labels:    
+    helm.sh/chart: kube-state-metrics-5.25.1
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: metrics
+    app.kubernetes.io/part-of: kube-state-metrics
+    app.kubernetes.io/name: kube-state-metrics
+    app.kubernetes.io/instance: my-cnpg-monitoring
+    app.kubernetes.io/version: "2.13.0"
+data:
+  config.yaml: |
+    spec:
+      resources:
+      - groupVersionKind:
+          group: postgresql.cnpg.io
+          kind: Cluster
+          version: v1
+        labelsFromPath:
+          cnpg_cluster:
+          - metadata
+          - name
+          name:
+          - metadata
+          - name
+          namespace:
+          - metadata
+          - namespace
+        metricNamePrefix: cnpg_resource_cluster
+        metrics:
+        - each:
+            info:
+              labelsFromPath:
+                cnpg_commit_hash:
+                - status
+                - cloudNativePGCommitHash
+                primary_update_method:
+                - spec
+                - primaryUpdateMethod
+                primary_update_strategy:
+                - spec
+                - primaryUpdateStrategy
+            type: Info
+          help: Information about CNPG Cluster
+          name: info
+        - each:
+            gauge:
+              labelsFromPath:
+                reason:
+                - reason
+                type:
+                - type
+              path:
+              - status
+              - conditions
+              valueFrom:
+              - status
+            type: Gauge
+          help: The condition of a CNPG Cluster
+          name: condition
+        - each:
+            gauge:
+              path:
+              - spec
+              - instances
+            type: Gauge
+          help: Number of desired instances for a CNPG Cluster
+          name: spec_instances
+        - each:
+            gauge:
+              path:
+              - status
+              - instances
+            type: Gauge
+          help: Number of instances per CNPG Cluster
+          name: status_instances
+        - each:
+            gauge:
+              path:
+              - status
+              - readyInstances
+            type: Gauge
+          help: Number of ready instances per CNPG Cluster
+          name: status_ready_instances
+      - groupVersionKind:
+          group: postgresql.cnpg.io
+          kind: Pooler
+          version: v1
+        labelsFromPath:
+          cnpg_cluster:
+          - spec
+          - cluster
+          - name
+          name:
+          - metadata
+          - name
+          namespace:
+          - metadata
+          - namespace
+        metricNamePrefix: cnpg_resource_pooler
+        metrics:
+        - each:
+            info:
+              labelsFromPath:
+                paused:
+                - spec
+                - pgbouncer
+                - paused
+                pool_mode:
+                - spec
+                - pgbouncer
+                - poolMode
+                type:
+                - spec
+                - type
+            type: Info
+          help: Information about CNPG Pooler
+          name: info
+        - each:
+            gauge:
+              path:
+              - spec
+              - instances
+            type: Gauge
+          help: Number of desired instances for a CNPG Pooler
+          name: spec_instances
+        - each:
+            gauge:
+              path:
+              - status
+              - instances
+            type: Gauge
+          help: Number of instances per CNPG Pooler
+          name: status_instances
+---
+# Source: cnpg-monitoring/charts/kube-state-metrics/templates/role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:    
+    helm.sh/chart: kube-state-metrics-5.25.1
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: metrics
+    app.kubernetes.io/part-of: kube-state-metrics
+    app.kubernetes.io/name: kube-state-metrics
+    app.kubernetes.io/instance: my-cnpg-monitoring
+    app.kubernetes.io/version: "2.13.0"
+  name: my-cnpg-monitoring-kube-state-metrics
+rules:
+
+- apiGroups: ["apiextensions.k8s.io"]
+  resources:
+    - customresourcedefinitions
+  verbs: ["list", "watch"]
+
+- apiGroups:
+  - postgresql.cnpg.io
+  resources:
+  - clusters
+  - poolers
+  - scheduledbackups
+  verbs:
+  - list
+  - watch
+---
+# Source: cnpg-monitoring/charts/kube-state-metrics/templates/clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:    
+    helm.sh/chart: kube-state-metrics-5.25.1
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: metrics
+    app.kubernetes.io/part-of: kube-state-metrics
+    app.kubernetes.io/name: kube-state-metrics
+    app.kubernetes.io/instance: my-cnpg-monitoring
+    app.kubernetes.io/version: "2.13.0"
+  name: my-cnpg-monitoring-kube-state-metrics
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-cnpg-monitoring-kube-state-metrics
+subjects:
+- kind: ServiceAccount
+  name: my-cnpg-monitoring-kube-state-metrics
+  namespace: default
+---
+# Source: cnpg-monitoring/charts/kube-state-metrics/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-cnpg-monitoring-kube-state-metrics
+  namespace: default
+  labels:    
+    helm.sh/chart: kube-state-metrics-5.25.1
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: metrics
+    app.kubernetes.io/part-of: kube-state-metrics
+    app.kubernetes.io/name: kube-state-metrics
+    app.kubernetes.io/instance: my-cnpg-monitoring
+    app.kubernetes.io/version: "2.13.0"
+  annotations:
+    prometheus.io/scrape: 'true'
+spec:
+  type: "ClusterIP"
+  ports:
+  - name: "http"
+    protocol: TCP
+    port: 8080
+    targetPort: 8080
+  
+  selector:    
+    app.kubernetes.io/name: kube-state-metrics
+    app.kubernetes.io/instance: my-cnpg-monitoring
+---
+# Source: cnpg-monitoring/charts/kube-state-metrics/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-cnpg-monitoring-kube-state-metrics
+  namespace: default
+  labels:    
+    helm.sh/chart: kube-state-metrics-5.25.1
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: metrics
+    app.kubernetes.io/part-of: kube-state-metrics
+    app.kubernetes.io/name: kube-state-metrics
+    app.kubernetes.io/instance: my-cnpg-monitoring
+    app.kubernetes.io/version: "2.13.0"
+spec:
+  selector:
+    matchLabels:      
+      app.kubernetes.io/name: kube-state-metrics
+      app.kubernetes.io/instance: my-cnpg-monitoring
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  revisionHistoryLimit: 10
+  template:
+    metadata:
+      labels:        
+        helm.sh/chart: kube-state-metrics-5.25.1
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/component: metrics
+        app.kubernetes.io/part-of: kube-state-metrics
+        app.kubernetes.io/name: kube-state-metrics
+        app.kubernetes.io/instance: my-cnpg-monitoring
+        app.kubernetes.io/version: "2.13.0"
+    spec:
+      automountServiceAccountToken: true
+      hostNetwork: false
+      serviceAccountName: my-cnpg-monitoring-kube-state-metrics
+      securityContext:
+        fsGroup: 65534
+        runAsGroup: 65534
+        runAsNonRoot: true
+        runAsUser: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: kube-state-metrics
+        args:
+        - --custom-resource-state-only=true
+        - --port=8080
+        - --custom-resource-state-config-file=/etc/customresourcestate/config.yaml
+        volumeMounts:
+        - name: customresourcestate-config
+          mountPath: /etc/customresourcestate
+          readOnly: true
+        imagePullPolicy: IfNotPresent
+        image: registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.13.0
+        ports:
+        - containerPort: 8080
+          name: "http"
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            httpHeaders:
+            path: /livez
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 5
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            httpHeaders:
+            path: /readyz
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 5
+        resources:
+          {}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+      volumes:
+        - name: customresourcestate-config
+          configMap:
+            name: my-cnpg-monitoring-kube-state-metrics-customresourcestate-config
+---
+# Source: cnpg-monitoring/charts/kube-state-metrics/templates/servicemonitor.yaml
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: my-cnpg-monitoring-kube-state-metrics
+  namespace: default
+  labels:    
+    helm.sh/chart: kube-state-metrics-5.25.1
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: metrics
+    app.kubernetes.io/part-of: kube-state-metrics
+    app.kubernetes.io/name: kube-state-metrics
+    app.kubernetes.io/instance: my-cnpg-monitoring
+    app.kubernetes.io/version: "2.13.0"
+spec:
+  jobLabel: app.kubernetes.io/instance  
+  selector:
+    matchLabels:      
+      app.kubernetes.io/name: kube-state-metrics
+      app.kubernetes.io/instance: my-cnpg-monitoring
+  endpoints:
+    - port: http

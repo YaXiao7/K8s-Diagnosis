@@ -1,0 +1,483 @@
+---
+# Source: zabbix-server/charts/postgresql/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-zabbix-server-postgresql
+  labels:
+    app.kubernetes.io/name: postgresql
+    helm.sh/chart: postgresql-10.3.18
+    app.kubernetes.io/instance: my-zabbix-server
+    app.kubernetes.io/managed-by: Helm
+  namespace: default
+type: Opaque
+data:
+  postgresql-postgres-password: "emFiYml4X3B3ZA=="
+  postgresql-password: "emFiYml4X3B3ZA=="
+---
+# Source: zabbix-server/charts/postgresql/templates/extended-config-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-zabbix-server-postgresql-extended-configuration
+  labels:
+    app.kubernetes.io/name: postgresql
+    helm.sh/chart: postgresql-10.3.18
+    app.kubernetes.io/instance: my-zabbix-server
+    app.kubernetes.io/managed-by: Helm
+  namespace: default
+data:
+
+  override.conf: |
+    checkpoint_completion_target = 0.9
+    default_statistics_target = '100'
+    effective_cache_size = '6GB'
+    effective_io_concurrency = '2'
+    maintenance_work_mem = '512MB'
+    max_connections = '40'
+    max_parallel_maintenance_workers = '4'
+    max_parallel_workers = '8'
+    max_parallel_workers_per_gather = '4'
+    max_wal_size = '4GB'
+    max_worker_processes = '8'
+    min_wal_size = '1GB'
+    random_page_cost = '4'
+    shared_buffers = '2GB'
+    wal_buffers = '16MB'
+    work_mem = '13107kB'
+---
+# Source: zabbix-server/charts/postgresql/templates/svc-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-zabbix-server-postgresql-headless
+  labels:
+    app.kubernetes.io/name: postgresql
+    helm.sh/chart: postgresql-10.3.18
+    app.kubernetes.io/instance: my-zabbix-server
+    app.kubernetes.io/managed-by: Helm
+    # Use this annotation in addition to the actual publishNotReadyAddresses
+    # field below because the annotation will stop being respected soon but the
+    # field is broken in some versions of Kubernetes:
+    # https://github.com/kubernetes/kubernetes/issues/58662
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+  namespace: default
+spec:
+  type: ClusterIP
+  clusterIP: None
+  # We want all pods in the StatefulSet to have their addresses published for
+  # the sake of the other Postgresql pods even before they're ready, since they
+  # have to be able to talk to each other in order to become ready.
+  publishNotReadyAddresses: true
+  ports:
+    - name: tcp-postgresql
+      port: 5432
+      targetPort: tcp-postgresql
+  selector:
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/instance: my-zabbix-server
+---
+# Source: zabbix-server/charts/postgresql/templates/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-zabbix-server-postgresql
+  labels:
+    app.kubernetes.io/name: postgresql
+    helm.sh/chart: postgresql-10.3.18
+    app.kubernetes.io/instance: my-zabbix-server
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+  namespace: default
+spec:
+  type: ClusterIP
+  ports:
+    - name: tcp-postgresql
+      port: 5432
+      targetPort: tcp-postgresql
+  selector:
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/instance: my-zabbix-server
+    role: primary
+---
+# Source: zabbix-server/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: zabbix-server
+  labels:
+    app: zabbix-server
+    app.kubernetes.io/name: zabbix-server
+    chart: "zabbix-server-1.0.6"
+    release: "my-zabbix-server"
+    heritage: "Helm"
+spec:
+  type: ClusterIP
+  ports:
+    - port: 10051
+      targetPort: 10051
+      name: zabbix-server
+    - port: 10052
+      targetPort: 10052
+      name: zabbix-jmx
+  selector:
+    app: zabbix-server
+---
+# Source: zabbix-server/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: zabbix-agent
+  labels:
+    app: zabbix-agent
+    app.kubernetes.io/name: zabbix-agent
+    helm.sh/chart: zabbix-server-1.0.6
+    app.kubernetes.io/instance: my-zabbix-server-agent
+    app.kubernetes.io/managed-by: Helm-agent
+spec:
+  type: ClusterIP
+  ports:
+    - port: 10050
+      targetPort: 10050
+      protocol: TCP
+      name: zabbix-agent
+  selector:
+    app: zabbix-agent
+---
+# Source: zabbix-server/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: zabbix-web
+  labels:
+      app: zabbix-web
+      app.kubernetes.io/name: zabbix-web
+      helm.sh/chart: zabbix-server-1.0.6
+      app.kubernetes.io/instance: my-zabbix-server-web
+      app.kubernetes.io/managed-by: Helm-web
+spec:
+  type: NodePort
+  ports:
+    - port: 80
+      targetPort: 8080
+      protocol: TCP
+      name: zabbix-web
+  selector:
+    app: zabbix-web
+---
+# Source: zabbix-server/templates/Web-deplyment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zabbix-web
+  labels:
+    app: zabbix-web
+    chart: "zabbix-server-1.0.6"
+    release: "my-zabbix-server"
+    heritage: "Helm"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app:  zabbix-web
+      release: my-zabbix-server
+  template:
+    metadata:
+      labels:
+        app: zabbix-web
+        chart: "zabbix-server-1.0.6"
+        release: "my-zabbix-server"
+        heritage: "Helm"
+    spec:
+      containers:
+      - name: zabbix-web
+        resources:
+          null
+        securityContext:
+            null
+        image: "zabbix/zabbix-web-nginx-pgsql:ubuntu-5.4.6"
+        imagePullPolicy: IfNotPresent
+        env:
+          - name: ZBX_SERVER_HOST
+            value: "zabbix-server"
+          - name: ZBX_SERVER_PORT
+            value: "10051"
+          - name: DB_SERVER_HOST
+            value: "zabbix-postgresql"
+          - name: DB_SERVER_PORT
+            value: "5432"
+          - name: POSTGRES_USER
+            value: "zabbix"
+          - name: POSTGRES_PASSWORD
+            value: "zabbix_pwd"
+          - name: POSTGRES_DB
+            value: zabbix
+          # - name: POSTGRES_USER_FILE
+          #  value: value: 
+          #- name: POSTGRES_PASSWORD_FILE
+          #  value: value: 
+        ports:
+          - name: zabbix-web
+            containerPort: 8080
+            protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /
+            port: zabbix-web
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 6
+        readinessProbe:
+          httpGet:
+            path: /
+            port: zabbix-web
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 6
+      imagePullSecrets:
+---
+# Source: zabbix-server/charts/postgresql/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-zabbix-server-postgresql
+  labels:
+    app.kubernetes.io/name: postgresql
+    helm.sh/chart: postgresql-10.3.18
+    app.kubernetes.io/instance: my-zabbix-server
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: primary
+  annotations:
+  namespace: default
+spec:
+  serviceName: my-zabbix-server-postgresql-headless
+  replicas: 1
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgresql
+      app.kubernetes.io/instance: my-zabbix-server
+      role: primary
+  template:
+    metadata:
+      name: my-zabbix-server-postgresql
+      labels:
+        app.kubernetes.io/name: postgresql
+        helm.sh/chart: postgresql-10.3.18
+        app.kubernetes.io/instance: my-zabbix-server
+        app.kubernetes.io/managed-by: Helm
+        role: primary
+        app.kubernetes.io/component: primary
+    spec:      
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: postgresql
+                    app.kubernetes.io/instance: my-zabbix-server
+                    app.kubernetes.io/component: primary
+                namespaces:
+                  - "default"
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+      containers:
+        - name: my-zabbix-server-postgresql
+          image: docker.io/bitnami/postgresql:11.11.0-debian-10-r71
+          imagePullPolicy: "IfNotPresent"
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+          securityContext:
+            runAsUser: 1001
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: POSTGRESQL_PORT_NUMBER
+              value: "5432"
+            - name: POSTGRESQL_VOLUME_DIR
+              value: "/bitnami/postgresql"
+            - name: PGDATA
+              value: "/bitnami/postgresql/data"
+            - name: POSTGRES_POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-zabbix-server-postgresql
+                  key: postgresql-postgres-password
+            - name: POSTGRES_USER
+              value: "zabbix"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-zabbix-server-postgresql
+                  key: postgresql-password
+            - name: POSTGRES_DB
+              value: "zabbix"
+            - name: POSTGRESQL_ENABLE_LDAP
+              value: "no"
+            - name: POSTGRESQL_ENABLE_TLS
+              value: "no"
+            - name: POSTGRESQL_LOG_HOSTNAME
+              value: "false"
+            - name: POSTGRESQL_LOG_CONNECTIONS
+              value: "false"
+            - name: POSTGRESQL_LOG_DISCONNECTIONS
+              value: "false"
+            - name: POSTGRESQL_PGAUDIT_LOG_CATALOG
+              value: "off"
+            - name: POSTGRESQL_CLIENT_MIN_MESSAGES
+              value: "error"
+            - name: POSTGRESQL_SHARED_PRELOAD_LIBRARIES
+              value: "pgaudit"
+          ports:
+            - name: tcp-postgresql
+              containerPort: 5432
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - exec pg_isready -U "zabbix" -d "dbname=zabbix" -h 127.0.0.1 -p 5432
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - -e
+                - |
+                  exec pg_isready -U "zabbix" -d "dbname=zabbix" -h 127.0.0.1 -p 5432
+                  [ -f /opt/bitnami/postgresql/tmp/.initialized ] || [ -f /bitnami/postgresql/.initialized ]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          volumeMounts:
+            - name: postgresql-extended-config
+              mountPath: /bitnami/postgresql/conf/conf.d/
+            - name: dshm
+              mountPath: /dev/shm
+            - name: data
+              mountPath: /bitnami/postgresql
+              subPath: 
+      volumes:
+        - name: postgresql-extended-config
+          configMap:
+            name: my-zabbix-server-postgresql-extended-configuration
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Gi
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "8Gi"
+---
+# Source: zabbix-server/templates/StatefulSet.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-zabbix-server
+  labels:
+    app: zabbix-server
+    chart: "zabbix-server-1.0.6"
+    release: "my-zabbix-server"
+    heritage: "Helm"
+spec:
+  replicas: 1
+  serviceName: my-zabbix-server
+  selector:
+    matchLabels:
+      app:  zabbix-server
+      release: my-zabbix-server
+  template:
+    metadata:
+      labels:
+        app: zabbix-server
+        chart: "zabbix-server-1.0.6"
+        release: "my-zabbix-server"
+        heritage: "Helm"
+    spec:
+      containers:
+        - name: zabbix-server
+          resources:
+            {}
+          image: zabbix/zabbix-server-pgsql:ubuntu-5.4.6
+          ports:
+            - containerPort: 10051
+              name: zabbix-trapper    
+            - containerPort: 10052
+              name: zabbix-jmx    
+          env:
+            - name: DB_SERVER_HOST
+              value: zabbix-postgresql
+            - name: POSTGRES_USER
+              value: zabbix
+            - name: POSTGRES_PASSWORD
+              value: zabbix_pwd
+            - name: POSTGRES_DB
+              value: zabbix
+            - name: ZBX_CACHESIZE
+              value: 8M
+            - name: ZBX_STARTPOLLERS
+              value: "5"
+            - name: ZBX_STARTTRAPPERS
+              value: "5"
+            - name: ZBX_STARTPINGERS
+              value: "1"
+        - name: zabbix-agent
+          resources:
+            {}
+          securityContext:
+            null
+          image: "zabbix/zabbix-agent:ubuntu-5.4.6"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: ZBX_HOSTNAME
+              value: zabbix-agent
+            - name: ZBX_SERVER_HOST
+              value: "127.0.0.1"
+            - name: ZBX_SERVER_PORT
+              value: "10051"
+            - name: ZBX_PASSIVE_ALLOW
+              value: "true"
+            - name: ZBX_PASSIVESERVERS
+              value: "127.0.0.1"
+            - name: ZBX_ACTIVE_ALLOW
+              value: "true"
+            - name: ZBX_ACTIVESERVERS
+              value: 
+            - name: ZBX_DEBUGLEVEL
+              value: 
+            - name: ZBX_TIMEOUT
+              value: 
+            - name: ZBX_LOADMODULE
+              value: 
+          ports:
+            - name: zabbix-agent
+              containerPort: 10050
+              protocol: TCP
+      imagePullSecrets:

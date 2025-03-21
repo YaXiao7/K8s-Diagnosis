@@ -1,0 +1,88 @@
+---
+# Source: swaggerui/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-swaggerui
+  labels:
+    app: swaggerui
+    chart: swaggerui-0.3.6
+    release: my-swaggerui
+    heritage: Helm
+spec:
+  type: "NodePort"
+  
+  ports:
+    - name: http
+      port: 8080
+      protocol: TCP
+      targetPort: http
+  selector:
+    app: swaggerui
+    release: my-swaggerui
+---
+# Source: swaggerui/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-swaggerui
+  labels:
+    app: swaggerui
+    chart: swaggerui-0.3.6
+    release: my-swaggerui
+    heritage: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: swaggerui
+      release: my-swaggerui
+  template:
+    metadata:
+      labels:
+        app: swaggerui
+        release: my-swaggerui
+    spec:
+      containers:
+        - name: swaggerui
+          image: "swaggerapi/swagger-ui:v3.24.3"
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh","-c"]
+          args : ["mkdir /api-doc && wget http://petstore.swagger.io/v2/swagger.json -O /api-doc/openapi.json && apk update && apk add jq && jq '.servers += [{\"url\":\"http://www.google.be\",\"description\":\"helm-online\"}]' /api-doc/openapi.json > json.tmp && mv json.tmp /api-doc/openapi.json && /usr/share/nginx/run.sh"]
+          env:
+          - name: SWAGGER_JSON
+            value: /api-doc/openapi.json
+          livenessProbe:
+            tcpSocket:
+              port: http
+          ports:
+          - name: http
+            containerPort: 8080
+            protocol: TCP
+          resources:
+            {}
+---
+# Source: swaggerui/templates/hpa.yaml
+apiVersion: autoscaling/v2beta2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: my-swaggerui
+  labels:
+    app: swaggerui
+    chart: swaggerui-0.3.6
+    release: my-swaggerui
+    heritage: Helm
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: my-swaggerui
+  minReplicas: 1
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 80

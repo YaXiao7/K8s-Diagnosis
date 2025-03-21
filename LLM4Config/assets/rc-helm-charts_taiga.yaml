@@ -1,0 +1,1621 @@
+---
+# Source: taiga/charts/async-rabbitmq/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-taiga-async-rabbitmq
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: async-rabbitmq
+    helm.sh/chart: async-rabbitmq-8.29.0
+    app.kubernetes.io/instance: my-taiga
+    app.kubernetes.io/managed-by: Helm
+automountServiceAccountToken: true
+secrets:
+  - name: my-taiga-async-rabbitmq
+---
+# Source: taiga/charts/events-rabbitmq/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-taiga-events-rabbitmq
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: events-rabbitmq
+    helm.sh/chart: events-rabbitmq-8.29.0
+    app.kubernetes.io/instance: my-taiga
+    app.kubernetes.io/managed-by: Helm
+automountServiceAccountToken: true
+secrets:
+  - name: my-taiga-events-rabbitmq
+---
+# Source: taiga/charts/async-rabbitmq/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-taiga-async-rabbitmq
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: async-rabbitmq
+    helm.sh/chart: async-rabbitmq-8.29.0
+    app.kubernetes.io/instance: my-taiga
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  rabbitmq-password: "dGFpZ2FfcmFiYml0bXFfcGFzc3dvcmQ="
+  rabbitmq-erlang-cookie: "dGFpZ2Ffc2VjcmV0X2VybGFuZ19jb29raWU="
+---
+# Source: taiga/charts/events-rabbitmq/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-taiga-events-rabbitmq
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: events-rabbitmq
+    helm.sh/chart: events-rabbitmq-8.29.0
+    app.kubernetes.io/instance: my-taiga
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  rabbitmq-password: "dGFpZ2FfcmFiYml0bXFfcGFzc3dvcmQ="
+  rabbitmq-erlang-cookie: "dGFpZ2Ffc2VjcmV0X2VybGFuZ19jb29raWU="
+---
+# Source: taiga/charts/postgresql/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-taiga-postgresql
+  labels:
+    app.kubernetes.io/name: postgresql
+    helm.sh/chart: postgresql-10.16.2
+    app.kubernetes.io/instance: my-taiga
+    app.kubernetes.io/managed-by: Helm
+  namespace: default
+type: Opaque
+data:
+  postgresql-postgres-password: "dkQ1bmJubXduVQ=="
+  postgresql-password: "dHhha3ZNTFA0cA=="
+---
+# Source: taiga/charts/async-rabbitmq/templates/configuration.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-taiga-async-rabbitmq-config
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: async-rabbitmq
+    helm.sh/chart: async-rabbitmq-8.29.0
+    app.kubernetes.io/instance: my-taiga
+    app.kubernetes.io/managed-by: Helm
+data:
+  rabbitmq.conf: |-
+    ## Username and password
+    ##
+    default_user = taiga_rabbitmq_user
+    default_pass = CHANGEME
+    ## Clustering
+    ##
+    cluster_formation.peer_discovery_backend  = rabbit_peer_discovery_k8s
+    cluster_formation.k8s.host = kubernetes.default.svc.cluster.local
+    cluster_formation.node_cleanup.interval = 10
+    cluster_formation.node_cleanup.only_log_warning = true
+    cluster_partition_handling = autoheal
+    # queue master locator
+    queue_master_locator = min-masters
+    # enable guest user
+    loopback_users.guest = false
+    default_vhost = taiga_rabbitmq_vhost
+---
+# Source: taiga/charts/events-rabbitmq/templates/configuration.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-taiga-events-rabbitmq-config
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: events-rabbitmq
+    helm.sh/chart: events-rabbitmq-8.29.0
+    app.kubernetes.io/instance: my-taiga
+    app.kubernetes.io/managed-by: Helm
+data:
+  rabbitmq.conf: |-
+    ## Username and password
+    ##
+    default_user = taiga_rabbitmq_user
+    default_pass = CHANGEME
+    ## Clustering
+    ##
+    cluster_formation.peer_discovery_backend  = rabbit_peer_discovery_k8s
+    cluster_formation.k8s.host = kubernetes.default.svc.cluster.local
+    cluster_formation.node_cleanup.interval = 10
+    cluster_formation.node_cleanup.only_log_warning = true
+    cluster_partition_handling = autoheal
+    # queue master locator
+    queue_master_locator = min-masters
+    # enable guest user
+    loopback_users.guest = false
+    default_vhost = taiga_rabbitmq_vhost
+---
+# Source: taiga/charts/nginx-gateway/templates/server-block-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-taiga-nginx-gateway-server-block
+  labels:
+    app.kubernetes.io/name: nginx-gateway
+    helm.sh/chart: nginx-gateway-9.7.6
+    app.kubernetes.io/instance: my-taiga
+    app.kubernetes.io/managed-by: Helm
+data:
+  server-blocks-paths.conf: |-
+    include  "/opt/bitnami/nginx/conf/server_blocks/ldap/*.conf";
+    include  "/opt/bitnami/nginx/conf/server_blocks/common/*.conf";
+---
+# Source: taiga/templates/gateway/nginx-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-taiga-nginx-gateway-config
+data:
+  taiga-gateway.conf: |
+    server {
+        # The user running the Nginx process inside the container must have
+        # enough permissions to bind to the port number given by the value of
+        # .Values.taigaGateway.nginxServerContainerPort
+        listen 8080 default_server;
+
+        client_max_body_size 100M;
+        charset utf-8;
+
+        # Frontend
+        location / {
+            proxy_pass http://my-taiga-front/;
+            proxy_pass_header Server;
+            proxy_set_header Host $http_host;
+            proxy_redirect off;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Scheme $scheme;
+        }
+
+        # Api
+        location /api {
+            proxy_pass http://my-taiga-back:8000/api;
+            proxy_pass_header Server;
+            proxy_set_header Host $http_host;
+            proxy_redirect off;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Scheme $scheme;
+        }
+
+        # Admin
+        location /admin {
+            proxy_pass http://my-taiga-back:8000/admin;
+            proxy_pass_header Server;
+            proxy_set_header Host $http_host;
+            proxy_redirect off;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Scheme $scheme;
+        }
+
+        # Static
+        #
+        # This uses hardcoded paths
+        # location /static {
+        #     root /taiga;
+        # }
+        #
+        # Instead of that, this uses a generated value
+        location /static {
+            # Note: the alias path must end with a trailing slash, the to ensure
+            # this we remove all the trailing slashes that may exist and append
+            # only one at the end.
+            alias /taiga/static/;
+        }
+
+        # Media
+        location /_protected {
+            internal;
+            alias /taiga/media/;
+            add_header Content-disposition "attachment";
+        }
+
+        # Unprotected section
+        #
+        # This uses hardcoded paths
+        # location /media/exports {
+        #     alias /taiga/media/exports/;
+        #     add_header Content-disposition "attachment";
+        # }
+        #
+        # Instead of that, this uses a generated value
+        location /media/exports {
+            # Note: the alias path must end with a trailing slash, the to ensure
+            # this we remove all the trailing slashes that may exist at specific
+            # points and append only one at the end.
+            # Other note: it seems that files under /media/exports/ are generated
+            # to automatically expire after certain time, e.g. after 24 hours of
+            # being created.
+            alias /taiga/media/exports/;
+            add_header Content-disposition "attachment";
+        }
+
+        location /media {
+            proxy_set_header Host $http_host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Scheme $scheme;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_pass http://my-taiga-protected:8003/;
+            proxy_redirect off;
+        }
+
+        # Events
+        location /events {
+            proxy_pass http://my-taiga-events:8888/events;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_connect_timeout 7d;
+            proxy_send_timeout 7d;
+            proxy_read_timeout 7d;
+        }
+    }
+---
+# Source: taiga/charts/async-rabbitmq/templates/role.yaml
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-taiga-async-rabbitmq-endpoint-reader
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: async-rabbitmq
+    helm.sh/chart: async-rabbitmq-8.29.0
+    app.kubernetes.io/instance: my-taiga
+    app.kubernetes.io/managed-by: Helm
+rules:
+  - apiGroups: [""]
+    resources: ["endpoints"]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create"]
+---
+# Source: taiga/charts/events-rabbitmq/templates/role.yaml
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-taiga-events-rabbitmq-endpoint-reader
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: events-rabbitmq
+    helm.sh/chart: events-rabbitmq-8.29.0
+    app.kubernetes.io/instance: my-taiga
+    app.kubernetes.io/managed-by: Helm
+rules:
+  - apiGroups: [""]
+    resources: ["endpoints"]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create"]
+---
+# Source: taiga/charts/async-rabbitmq/templates/rolebinding.yaml
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-taiga-async-rabbitmq-endpoint-reader
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: async-rabbitmq
+    helm.sh/chart: async-rabbitmq-8.29.0
+    app.kubernetes.io/instance: my-taiga
+    app.kubernetes.io/managed-by: Helm
+subjects:
+  - kind: ServiceAccount
+    name: my-taiga-async-rabbitmq
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: my-taiga-async-rabbitmq-endpoint-reader
+---
+# Source: taiga/charts/events-rabbitmq/templates/rolebinding.yaml
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-taiga-events-rabbitmq-endpoint-reader
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: events-rabbitmq
+    helm.sh/chart: events-rabbitmq-8.29.0
+    app.kubernetes.io/instance: my-taiga
+    app.kubernetes.io/managed-by: Helm
+subjects:
+  - kind: ServiceAccount
+    name: my-taiga-events-rabbitmq
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: my-taiga-events-rabbitmq-endpoint-reader
+---
+# Source: taiga/charts/async-rabbitmq/templates/svc-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-taiga-async-rabbitmq-headless
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: async-rabbitmq
+    helm.sh/chart: async-rabbitmq-8.29.0
+    app.kubernetes.io/instance: my-taiga
+    app.kubernetes.io/managed-by: Helm
+spec:
+  clusterIP: None
+  ports:
+    - name: epmd
+      port: 4369
+      targetPort: epmd
+    - name: amqp
+      port: 5672
+      targetPort: amqp
+    - name: dist
+      port: 25672
+      targetPort: dist
+    - name: http-stats
+      port: 15672
+      targetPort: stats
+  selector: 
+    app.kubernetes.io/name: async-rabbitmq
+    app.kubernetes.io/instance: my-taiga
+  publishNotReadyAddresses: true
+---
+# Source: taiga/charts/async-rabbitmq/templates/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-taiga-async-rabbitmq
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: async-rabbitmq
+    helm.sh/chart: async-rabbitmq-8.29.0
+    app.kubernetes.io/instance: my-taiga
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - name: amqp
+      port: 5672
+      targetPort: amqp
+      nodePort: null
+    - name: epmd
+      port: 4369
+      targetPort: epmd
+      nodePort: null
+    - name: dist
+      port: 25672
+      targetPort: dist
+      nodePort: null
+    - name: http-stats
+      port: 15672
+      targetPort: stats
+      nodePort: null
+  selector: 
+    app.kubernetes.io/name: async-rabbitmq
+    app.kubernetes.io/instance: my-taiga
+---
+# Source: taiga/charts/events-rabbitmq/templates/svc-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-taiga-events-rabbitmq-headless
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: events-rabbitmq
+    helm.sh/chart: events-rabbitmq-8.29.0
+    app.kubernetes.io/instance: my-taiga
+    app.kubernetes.io/managed-by: Helm
+spec:
+  clusterIP: None
+  ports:
+    - name: epmd
+      port: 4369
+      targetPort: epmd
+    - name: amqp
+      port: 5672
+      targetPort: amqp
+    - name: dist
+      port: 25672
+      targetPort: dist
+    - name: http-stats
+      port: 15672
+      targetPort: stats
+  selector: 
+    app.kubernetes.io/name: events-rabbitmq
+    app.kubernetes.io/instance: my-taiga
+  publishNotReadyAddresses: true
+---
+# Source: taiga/charts/events-rabbitmq/templates/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-taiga-events-rabbitmq
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: events-rabbitmq
+    helm.sh/chart: events-rabbitmq-8.29.0
+    app.kubernetes.io/instance: my-taiga
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - name: amqp
+      port: 5672
+      targetPort: amqp
+      nodePort: null
+    - name: epmd
+      port: 4369
+      targetPort: epmd
+      nodePort: null
+    - name: dist
+      port: 25672
+      targetPort: dist
+      nodePort: null
+    - name: http-stats
+      port: 15672
+      targetPort: stats
+      nodePort: null
+  selector: 
+    app.kubernetes.io/name: events-rabbitmq
+    app.kubernetes.io/instance: my-taiga
+---
+# Source: taiga/charts/nginx-gateway/templates/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-taiga-nginx-gateway
+  labels:
+    app.kubernetes.io/name: nginx-gateway
+    helm.sh/chart: nginx-gateway-9.7.6
+    app.kubernetes.io/instance: my-taiga
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+  selector:
+    app.kubernetes.io/name: nginx-gateway
+    app.kubernetes.io/instance: my-taiga
+---
+# Source: taiga/charts/postgresql/templates/svc-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-taiga-postgresql-headless
+  labels:
+    app.kubernetes.io/name: postgresql
+    helm.sh/chart: postgresql-10.16.2
+    app.kubernetes.io/instance: my-taiga
+    app.kubernetes.io/managed-by: Helm
+    # Use this annotation in addition to the actual publishNotReadyAddresses
+    # field below because the annotation will stop being respected soon but the
+    # field is broken in some versions of Kubernetes:
+    # https://github.com/kubernetes/kubernetes/issues/58662
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+  namespace: default
+spec:
+  type: ClusterIP
+  clusterIP: None
+  # We want all pods in the StatefulSet to have their addresses published for
+  # the sake of the other Postgresql pods even before they're ready, since they
+  # have to be able to talk to each other in order to become ready.
+  publishNotReadyAddresses: true
+  ports:
+    - name: tcp-postgresql
+      port: 5432
+      targetPort: tcp-postgresql
+  selector:
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/instance: my-taiga
+---
+# Source: taiga/charts/postgresql/templates/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-taiga-postgresql
+  labels:
+    app.kubernetes.io/name: postgresql
+    helm.sh/chart: postgresql-10.16.2
+    app.kubernetes.io/instance: my-taiga
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+  namespace: default
+spec:
+  type: ClusterIP
+  ports:
+    - name: tcp-postgresql
+      port: 5432
+      targetPort: tcp-postgresql
+  selector:
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/instance: my-taiga
+    role: primary
+---
+# Source: taiga/templates/back/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-taiga-back
+  labels:
+    helm.sh/chart: taiga-0.1.0
+    app.kubernetes.io/name: taiga
+    app.kubernetes.io/instance: my-taiga
+    app.kubernetes.io/version: "6"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: api
+spec:
+  ports:
+    - port: 8000
+  selector:
+    app.kubernetes.io/component: api
+---
+# Source: taiga/templates/events/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-taiga-events
+  labels:
+    helm.sh/chart: taiga-0.1.0
+    app.kubernetes.io/name: taiga
+    app.kubernetes.io/instance: my-taiga
+    app.kubernetes.io/version: "6"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: events
+spec:
+  ports:
+    - port: 8888
+  selector:
+    app.kubernetes.io/component: events
+---
+# Source: taiga/templates/front/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-taiga-front
+  labels:
+    helm.sh/chart: taiga-0.1.0
+    app.kubernetes.io/name: taiga
+    app.kubernetes.io/instance: my-taiga
+    app.kubernetes.io/version: "6"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: front
+spec:
+  ports:
+    - port: 80
+  selector:
+    app.kubernetes.io/component: front
+---
+# Source: taiga/templates/protected/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-taiga-protected
+  labels:
+    helm.sh/chart: taiga-0.1.0
+    app.kubernetes.io/name: taiga
+    app.kubernetes.io/instance: my-taiga
+    app.kubernetes.io/version: "6"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: protected
+spec:
+  ports:
+    - port: 8003
+  selector:
+    app.kubernetes.io/component: protected
+---
+# Source: taiga/charts/nginx-gateway/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-taiga-nginx-gateway
+  labels:
+    app.kubernetes.io/name: nginx-gateway
+    helm.sh/chart: nginx-gateway-9.7.6
+    app.kubernetes.io/instance: my-taiga
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: nginx-gateway
+      app.kubernetes.io/instance: my-taiga
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: nginx-gateway
+        helm.sh/chart: nginx-gateway-9.7.6
+        app.kubernetes.io/instance: my-taiga
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      
+      automountServiceAccountToken: false
+      shareProcessNamespace: false
+      serviceAccountName: default
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: nginx-gateway
+                    app.kubernetes.io/instance: my-taiga
+                namespaces:
+                  - "default"
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      containers:
+        - name: nginx
+          image: docker.io/bitnami/nginx:1.21.6-debian-10-r0
+          imagePullPolicy: "IfNotPresent"
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+          ports:
+            - name: http
+              containerPort: 8080
+          livenessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          readinessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            successThreshold: 1
+            failureThreshold: 3
+          resources:
+            limits: {}
+            requests: {}
+          volumeMounts:
+            - name: nginx-server-block-paths
+              mountPath: /opt/bitnami/nginx/conf/server_blocks
+            - name: nginx-server-block
+              mountPath: /opt/bitnami/nginx/conf/server_blocks/common
+            - mountPath: '/taiga/static'
+              name: taiga-static-data
+              subPath: ""
+            - mountPath: '/taiga/media'
+              name: taiga-media-data
+              subPath: ""
+      volumes:
+        - name: nginx-server-block-paths
+          configMap:
+            name: my-taiga-nginx-gateway-server-block
+            items:
+              - key: server-blocks-paths.conf
+                path: server-blocks-paths.conf
+        - name: nginx-server-block
+          configMap:
+            name: my-taiga-nginx-gateway-config
+        - name: taiga-static-data
+          persistentVolumeClaim:
+            claimName: 'my-taiga-static-data'
+        - name: taiga-media-data
+          persistentVolumeClaim:
+            claimName: 'my-taiga-media-data'
+---
+# Source: taiga/templates/async/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-taiga-async
+  labels:
+    helm.sh/chart: taiga-0.1.0
+    app.kubernetes.io/name: taiga
+    app.kubernetes.io/instance: my-taiga
+    app.kubernetes.io/version: "6"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: async
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: taiga
+      app.kubernetes.io/instance: my-taiga
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: taiga
+        app.kubernetes.io/instance: my-taiga
+        app.kubernetes.io/component: async
+    spec:
+      serviceAccountName: default
+      securityContext:
+        {}
+      containers:
+        - name: "taiga-async"
+          securityContext:
+            {}
+          image: docker.io/taigaio/taiga-back:6.4.2
+          imagePullPolicy: "IfNotPresent"
+          command:
+            - /taiga-back/docker/async_entrypoint.sh
+          env:
+            # Database
+            - name: POSTGRES_HOST
+              value: "my-taiga-postgresql"
+            - name: POSTGRES_PORT
+              value: "5432"
+            - name: POSTGRES_DB
+              value: "taiga_db"
+            - name: POSTGRES_USER
+              value: "taiga_pg_user"
+            - name: POSTGRES_PASSWORD
+              value: ""
+            # Taiga settings
+            - name: TAIGA_SECRET_KEY
+              value: "VerySecret"
+            - name: TAIGA_SITES_SCHEME
+              value: "http"
+            - name: TAIGA_SITES_DOMAIN
+              value: "taiga.example.com"
+            # RabbitMQ settings
+            - name: RABBITMQ_USER
+              value: "taiga_rabbitmq_user"
+            - name: RABBITMQ_PASS
+              value: "taiga_rabbitmq_password"
+            - name: EVENTS_PUSH_BACKEND_URL
+              value: "amqp://taiga_rabbitmq_user:taiga_rabbitmq_password@my-taiga-events-rabbitmq:5672/taiga_rabbitmq_vhost"
+            - name: CELERY_BROKER_URL
+              value: "amqp://taiga_rabbitmq_user:taiga_rabbitmq_password@my-taiga-async-rabbitmq:5672/taiga_rabbitmq_vhost"
+            # Telemetry settings
+            - name: ENABLE_TELEMETRY
+              value: "true"
+          volumeMounts:
+            # Taiga Async needs access to files under the /media directory. For example,
+            # when exporting a project.
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - echo "TODO apply a command related with Celery liveness"
+            initialDelaySeconds: 300
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - echo "TODO apply a command related with Celery readiness"
+            initialDelaySeconds: 300
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          resources:
+            {}
+      volumes:
+---
+# Source: taiga/templates/back/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-taiga-back
+  labels:
+    helm.sh/chart: taiga-0.1.0
+    app.kubernetes.io/name: taiga
+    app.kubernetes.io/instance: my-taiga
+    app.kubernetes.io/version: "6"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: taiga
+      app.kubernetes.io/instance: my-taiga
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: taiga
+        app.kubernetes.io/instance: my-taiga
+        app.kubernetes.io/component: api
+        attached-to-static-data-volume: "true"
+        attached-to-media-data-volume: "true"
+    spec:
+      serviceAccountName: default
+      securityContext:
+        {}
+      containers:
+        - name: "taiga-back"
+          securityContext:
+            {}
+          image: docker.io/taigaio/taiga-back:6.4.2
+          imagePullPolicy: "IfNotPresent"
+          env:
+            # Database
+            - name: POSTGRES_HOST
+              value: "my-taiga-postgresql"
+            - name: POSTGRES_PORT
+              value: "5432"
+            - name: POSTGRES_DB
+              value: "taiga_db"
+            - name: POSTGRES_USER
+              value: "taiga_pg_user"
+            - name: POSTGRES_PASSWORD
+              value: ""
+            # Taiga settings
+            - name: TAIGA_SECRET_KEY
+              value: "VerySecret"
+            - name: TAIGA_SITES_SCHEME
+              value: "http"
+            - name: TAIGA_SITES_DOMAIN
+              value: "taiga.example.com"
+            # RabbitMQ settings
+            - name: RABBITMQ_USER
+              value: "taiga_rabbitmq_user"
+            - name: RABBITMQ_PASS
+              value: "taiga_rabbitmq_password"
+            - name: EVENTS_PUSH_BACKEND_URL
+              value: "amqp://taiga_rabbitmq_user:taiga_rabbitmq_password@my-taiga-events-rabbitmq:5672/taiga_rabbitmq_vhost"
+            - name: CELERY_BROKER_URL
+              value: "amqp://taiga_rabbitmq_user:taiga_rabbitmq_password@my-taiga-async-rabbitmq:5672/taiga_rabbitmq_vhost"
+            # Telemetry settings
+            - name: ENABLE_TELEMETRY
+              value: "true"
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          volumeMounts:
+          livenessProbe:
+            httpGet:
+              path: /api/v1/
+              port: http
+            initialDelaySeconds: 300
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          readinessProbe:
+            httpGet:
+              path: /api/v1/
+              port: http
+            initialDelaySeconds: 300
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          resources:
+            {}
+      volumes:
+---
+# Source: taiga/templates/events/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-taiga-events
+  labels:
+    helm.sh/chart: taiga-0.1.0
+    app.kubernetes.io/name: taiga
+    app.kubernetes.io/instance: my-taiga
+    app.kubernetes.io/version: "6"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: events
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: taiga
+      app.kubernetes.io/instance: my-taiga
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: taiga
+        app.kubernetes.io/instance: my-taiga
+        app.kubernetes.io/component: events
+    spec:
+      serviceAccountName: default
+      securityContext:
+        {}
+      containers:
+        - name: "taiga-events"
+          securityContext:
+            {}
+          image: docker.io/taigaio/taiga-events:6.4.0
+          imagePullPolicy: "IfNotPresent"
+          # replace the hardcoded RabbitMQ host and RabbitMQ Default Vhost values
+          # with the dynamic ones we have for the service related with the
+          # "RabbitMQ events" Taiga component
+          command: ["/bin/sh"]
+          args: ["-c", "sed -i 's/taiga-events-rabbitmq/my-taiga-events-rabbitmq/' /taiga-events/docker/env.template; sed -i 's/\\/taiga/\\/taiga_rabbitmq_vhost/' /taiga-events/docker/env.template; /taiga-events/docker/entrypoint.sh"]
+          env:
+            # Taiga settings
+            - name: TAIGA_SECRET_KEY
+              value: "VerySecret"
+            # RabbitMQ settings
+            # - name: RABBITMQ_URL
+            #   value: "amqp://taiga_rabbitmq_user:taiga_rabbitmq_password@my-taiga-events-rabbitmq:5672/taiga_rabbitmq_vhost"
+            # I believed that RABBITMQ_USER and RABBITMQ_PASS are not needed if RABBITMQ_URL is
+            # directly set, but I was wrong, because the RabbitMQ host is hardcoded in the env
+            # template file, as showed in the file available at
+            # https://github.com/kaleidos-ventures/taiga-events/blob/main/docker/env.template
+            - name: RABBITMQ_USER
+              value: "taiga_rabbitmq_user"
+            - name: RABBITMQ_PASS
+              value: "taiga_rabbitmq_password"
+            #
+          resources:
+            {}
+---
+# Source: taiga/templates/front/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-taiga-front
+  labels:
+    helm.sh/chart: taiga-0.1.0
+    app.kubernetes.io/name: taiga
+    app.kubernetes.io/instance: my-taiga
+    app.kubernetes.io/version: "6"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: front
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: taiga
+      app.kubernetes.io/instance: my-taiga
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: taiga
+        app.kubernetes.io/instance: my-taiga
+        app.kubernetes.io/component: front
+    spec:
+      serviceAccountName: default
+      securityContext:
+        {}
+      containers:
+        - name: "taiga-front"
+          securityContext:
+            {}
+          image: docker.io/taigaio/taiga-front:6.4.2
+          imagePullPolicy: "IfNotPresent"
+          env:
+            - name: TAIGA_URL
+              value: "http://taiga.example.com"
+            - name: TAIGA_WEBSOCKETS_URL
+              value: "ws://taiga.example.com"
+          resources:
+            {}
+---
+# Source: taiga/templates/protected/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-taiga-protected
+  labels:
+    helm.sh/chart: taiga-0.1.0
+    app.kubernetes.io/name: taiga
+    app.kubernetes.io/instance: my-taiga
+    app.kubernetes.io/version: "6"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: protected
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: taiga
+      app.kubernetes.io/instance: my-taiga
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: taiga
+        app.kubernetes.io/instance: my-taiga
+        app.kubernetes.io/component: protected
+    spec:
+      serviceAccountName: default
+      securityContext:
+        {}
+      containers:
+        - name: "taiga-protected"
+          securityContext:
+            {}
+          image: docker.io/taigaio/taiga-protected:6.4.0
+          imagePullPolicy: "IfNotPresent"
+          env:
+            # Taiga settings
+            - name: SECRET_KEY
+              value: "VerySecret"
+            # Protected settings
+            - name: MAX_AGE
+              value: "360"
+          resources:
+            {}
+---
+# Source: taiga/charts/async-rabbitmq/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-taiga-async-rabbitmq
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: async-rabbitmq
+    helm.sh/chart: async-rabbitmq-8.29.0
+    app.kubernetes.io/instance: my-taiga
+    app.kubernetes.io/managed-by: Helm
+spec:
+  serviceName: my-taiga-async-rabbitmq-headless
+  podManagementPolicy: OrderedReady
+  replicas: 1
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: async-rabbitmq
+      app.kubernetes.io/instance: my-taiga
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: async-rabbitmq
+        helm.sh/chart: async-rabbitmq-8.29.0
+        app.kubernetes.io/instance: my-taiga
+        app.kubernetes.io/managed-by: Helm
+      annotations:
+        checksum/config: 1d8484083c3a3f6a8387bbb95a24625fd2d27adfd40923efe93c36e623e8987c
+        checksum/secret: 0fd8945a7c64e6e942ce04d37d81692bd9615f436bb313734d258d973fbecdf8
+    spec:
+      
+      serviceAccountName: my-taiga-async-rabbitmq
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: async-rabbitmq
+                    app.kubernetes.io/instance: my-taiga
+                namespaces:
+                  - "default"
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+        runAsUser: 1001
+      terminationGracePeriodSeconds: 120
+      containers:
+        - name: rabbitmq
+          image: docker.io/bitnami/rabbitmq:3.9.13-debian-10-r13
+          imagePullPolicy: "IfNotPresent"
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: MY_POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: MY_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: MY_POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: K8S_SERVICE_NAME
+              value: "my-taiga-async-rabbitmq-headless"
+            - name: K8S_ADDRESS_TYPE
+              value: hostname
+            - name: RABBITMQ_FORCE_BOOT
+              value: "no"
+            - name: RABBITMQ_NODE_NAME
+              value: "rabbit@$(MY_POD_NAME).$(K8S_SERVICE_NAME).$(MY_POD_NAMESPACE).svc.cluster.local"
+            - name: K8S_HOSTNAME_SUFFIX
+              value: ".$(K8S_SERVICE_NAME).$(MY_POD_NAMESPACE).svc.cluster.local"
+            - name: RABBITMQ_MNESIA_DIR
+              value: "/bitnami/rabbitmq/mnesia/$(RABBITMQ_NODE_NAME)"
+            - name: RABBITMQ_LDAP_ENABLE
+              value: "no"
+            - name: RABBITMQ_LOGS
+              value: "-"
+            - name: RABBITMQ_ULIMIT_NOFILES
+              value: "65536"
+            - name: RABBITMQ_USE_LONGNAME
+              value: "true"
+            - name: RABBITMQ_ERL_COOKIE
+              valueFrom:
+                secretKeyRef:
+                  name: my-taiga-async-rabbitmq
+                  key: rabbitmq-erlang-cookie
+            - name: RABBITMQ_LOAD_DEFINITIONS
+              value: "no"
+            - name: RABBITMQ_SECURE_PASSWORD
+              value: "yes"
+            - name: RABBITMQ_USERNAME
+              value: "taiga_rabbitmq_user"
+            - name: RABBITMQ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-taiga-async-rabbitmq
+                  key: rabbitmq-password
+            - name: RABBITMQ_PLUGINS
+              value: "rabbitmq_management, rabbitmq_peer_discovery_k8s, rabbitmq_auth_backend_ldap"
+          ports:
+            - name: amqp
+              containerPort: 5672
+            - name: dist
+              containerPort: 25672
+            - name: stats
+              containerPort: 15672
+            - name: epmd
+              containerPort: 4369
+          livenessProbe:
+            exec:
+              command:
+                - /bin/bash
+                - -ec
+                - rabbitmq-diagnostics -q ping
+            initialDelaySeconds: 120
+            periodSeconds: 30
+            timeoutSeconds: 20
+            successThreshold: 1
+            failureThreshold: 6
+          readinessProbe:
+            exec:
+              command:
+                - /bin/bash
+                - -ec
+                - rabbitmq-diagnostics -q check_running && rabbitmq-diagnostics -q check_local_alarms
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 20
+            successThreshold: 1
+            failureThreshold: 3
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - /bin/bash
+                  - -ec
+                  - |
+                    if [[ -f /opt/bitnami/scripts/rabbitmq/nodeshutdown.sh ]]; then
+                        /opt/bitnami/scripts/rabbitmq/nodeshutdown.sh -t "120" -d  "false"
+                    else
+                        rabbitmqctl stop_app
+                    fi
+          resources:
+            limits: {}
+            requests: {}
+          volumeMounts:
+            - name: configuration
+              mountPath: /bitnami/rabbitmq/conf
+            - name: data
+              mountPath: /bitnami/rabbitmq/mnesia
+      volumes:
+        - name: configuration
+          configMap:
+            name: my-taiga-async-rabbitmq-config
+            items:
+              - key: rabbitmq.conf
+                path: rabbitmq.conf
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          app.kubernetes.io/name: async-rabbitmq
+          app.kubernetes.io/instance: my-taiga
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "8Gi"
+---
+# Source: taiga/charts/events-rabbitmq/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-taiga-events-rabbitmq
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: events-rabbitmq
+    helm.sh/chart: events-rabbitmq-8.29.0
+    app.kubernetes.io/instance: my-taiga
+    app.kubernetes.io/managed-by: Helm
+spec:
+  serviceName: my-taiga-events-rabbitmq-headless
+  podManagementPolicy: OrderedReady
+  replicas: 1
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: events-rabbitmq
+      app.kubernetes.io/instance: my-taiga
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: events-rabbitmq
+        helm.sh/chart: events-rabbitmq-8.29.0
+        app.kubernetes.io/instance: my-taiga
+        app.kubernetes.io/managed-by: Helm
+      annotations:
+        checksum/config: 89b665b0f5c08cebdc7f7f560b5855ba7aa22b9a4f9a9c7e56012ab6f4d3adde
+        checksum/secret: 2796224c31a7e861f8901d64d7ded5d37089e7a80510b24416a4c2446cae0669
+    spec:
+      
+      serviceAccountName: my-taiga-events-rabbitmq
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: events-rabbitmq
+                    app.kubernetes.io/instance: my-taiga
+                namespaces:
+                  - "default"
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+        runAsUser: 1001
+      terminationGracePeriodSeconds: 120
+      containers:
+        - name: rabbitmq
+          image: docker.io/bitnami/rabbitmq:3.9.13-debian-10-r13
+          imagePullPolicy: "IfNotPresent"
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: MY_POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: MY_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: MY_POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: K8S_SERVICE_NAME
+              value: "my-taiga-events-rabbitmq-headless"
+            - name: K8S_ADDRESS_TYPE
+              value: hostname
+            - name: RABBITMQ_FORCE_BOOT
+              value: "no"
+            - name: RABBITMQ_NODE_NAME
+              value: "rabbit@$(MY_POD_NAME).$(K8S_SERVICE_NAME).$(MY_POD_NAMESPACE).svc.cluster.local"
+            - name: K8S_HOSTNAME_SUFFIX
+              value: ".$(K8S_SERVICE_NAME).$(MY_POD_NAMESPACE).svc.cluster.local"
+            - name: RABBITMQ_MNESIA_DIR
+              value: "/bitnami/rabbitmq/mnesia/$(RABBITMQ_NODE_NAME)"
+            - name: RABBITMQ_LDAP_ENABLE
+              value: "no"
+            - name: RABBITMQ_LOGS
+              value: "-"
+            - name: RABBITMQ_ULIMIT_NOFILES
+              value: "65536"
+            - name: RABBITMQ_USE_LONGNAME
+              value: "true"
+            - name: RABBITMQ_ERL_COOKIE
+              valueFrom:
+                secretKeyRef:
+                  name: my-taiga-events-rabbitmq
+                  key: rabbitmq-erlang-cookie
+            - name: RABBITMQ_LOAD_DEFINITIONS
+              value: "no"
+            - name: RABBITMQ_SECURE_PASSWORD
+              value: "yes"
+            - name: RABBITMQ_USERNAME
+              value: "taiga_rabbitmq_user"
+            - name: RABBITMQ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-taiga-events-rabbitmq
+                  key: rabbitmq-password
+            - name: RABBITMQ_PLUGINS
+              value: "rabbitmq_management, rabbitmq_peer_discovery_k8s, rabbitmq_auth_backend_ldap"
+          ports:
+            - name: amqp
+              containerPort: 5672
+            - name: dist
+              containerPort: 25672
+            - name: stats
+              containerPort: 15672
+            - name: epmd
+              containerPort: 4369
+          livenessProbe:
+            exec:
+              command:
+                - /bin/bash
+                - -ec
+                - rabbitmq-diagnostics -q ping
+            initialDelaySeconds: 120
+            periodSeconds: 30
+            timeoutSeconds: 20
+            successThreshold: 1
+            failureThreshold: 6
+          readinessProbe:
+            exec:
+              command:
+                - /bin/bash
+                - -ec
+                - rabbitmq-diagnostics -q check_running && rabbitmq-diagnostics -q check_local_alarms
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 20
+            successThreshold: 1
+            failureThreshold: 3
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - /bin/bash
+                  - -ec
+                  - |
+                    if [[ -f /opt/bitnami/scripts/rabbitmq/nodeshutdown.sh ]]; then
+                        /opt/bitnami/scripts/rabbitmq/nodeshutdown.sh -t "120" -d  "false"
+                    else
+                        rabbitmqctl stop_app
+                    fi
+          resources:
+            limits: {}
+            requests: {}
+          volumeMounts:
+            - name: configuration
+              mountPath: /bitnami/rabbitmq/conf
+            - name: data
+              mountPath: /bitnami/rabbitmq/mnesia
+      volumes:
+        - name: configuration
+          configMap:
+            name: my-taiga-events-rabbitmq-config
+            items:
+              - key: rabbitmq.conf
+                path: rabbitmq.conf
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          app.kubernetes.io/name: events-rabbitmq
+          app.kubernetes.io/instance: my-taiga
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "8Gi"
+---
+# Source: taiga/charts/postgresql/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-taiga-postgresql
+  labels:
+    app.kubernetes.io/name: postgresql
+    helm.sh/chart: postgresql-10.16.2
+    app.kubernetes.io/instance: my-taiga
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: primary
+  annotations:
+  namespace: default
+spec:
+  serviceName: my-taiga-postgresql-headless
+  replicas: 1
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgresql
+      app.kubernetes.io/instance: my-taiga
+      role: primary
+  template:
+    metadata:
+      name: my-taiga-postgresql
+      labels:
+        app.kubernetes.io/name: postgresql
+        helm.sh/chart: postgresql-10.16.2
+        app.kubernetes.io/instance: my-taiga
+        app.kubernetes.io/managed-by: Helm
+        role: primary
+        app.kubernetes.io/component: primary
+    spec:      
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: postgresql
+                    app.kubernetes.io/instance: my-taiga
+                    app.kubernetes.io/component: primary
+                namespaces:
+                  - "default"
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+      automountServiceAccountToken: false
+      containers:
+        - name: my-taiga-postgresql
+          image: docker.io/bitnami/postgresql:11.14.0-debian-10-r28
+          imagePullPolicy: "IfNotPresent"
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+          securityContext:
+            runAsUser: 1001
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: POSTGRESQL_PORT_NUMBER
+              value: "5432"
+            - name: POSTGRESQL_VOLUME_DIR
+              value: "/bitnami/postgresql"
+            - name: PGDATA
+              value: "/bitnami/postgresql/data"
+            - name: POSTGRES_POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-taiga-postgresql
+                  key: postgresql-postgres-password
+            - name: POSTGRES_USER
+              value: "taiga_pg_user"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-taiga-postgresql
+                  key: postgresql-password
+            - name: POSTGRES_DB
+              value: "taiga_db"
+            - name: POSTGRESQL_ENABLE_LDAP
+              value: "no"
+            - name: POSTGRESQL_ENABLE_TLS
+              value: "no"
+            - name: POSTGRESQL_LOG_HOSTNAME
+              value: "false"
+            - name: POSTGRESQL_LOG_CONNECTIONS
+              value: "false"
+            - name: POSTGRESQL_LOG_DISCONNECTIONS
+              value: "false"
+            - name: POSTGRESQL_PGAUDIT_LOG_CATALOG
+              value: "off"
+            - name: POSTGRESQL_CLIENT_MIN_MESSAGES
+              value: "error"
+            - name: POSTGRESQL_SHARED_PRELOAD_LIBRARIES
+              value: "pgaudit"
+          ports:
+            - name: tcp-postgresql
+              containerPort: 5432
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - exec pg_isready -U "taiga_pg_user" -d "dbname=taiga_db" -h 127.0.0.1 -p 5432
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - -e
+                - |
+                  exec pg_isready -U "taiga_pg_user" -d "dbname=taiga_db" -h 127.0.0.1 -p 5432
+                  [ -f /opt/bitnami/postgresql/tmp/.initialized ] || [ -f /bitnami/postgresql/.initialized ]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          volumeMounts:
+            - name: dshm
+              mountPath: /dev/shm
+            - name: data
+              mountPath: /bitnami/postgresql
+              subPath: 
+      volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "5Gi"
+---
+# Source: taiga/templates/back/collect-static-files-job.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: my-taiga-collect-static-files
+  labels:
+    helm.sh/chart: taiga-0.1.0
+    app.kubernetes.io/name: taiga
+    app.kubernetes.io/instance: my-taiga
+    app.kubernetes.io/version: "6"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  ttlSecondsAfterFinished: 300
+  template:
+    spec:
+      containers:
+        - name: taiga-back-collect-static-files
+          image: docker.io/taigaio/taiga-back:6.4.2
+          imagePullPolicy: "IfNotPresent"
+          env:
+            # Database
+            - name: POSTGRES_HOST
+              value: "my-taiga-postgresql"
+            - name: POSTGRES_PORT
+              value: "5432"
+            - name: POSTGRES_DB
+              value: "taiga_db"
+            - name: POSTGRES_USER
+              value: "taiga_pg_user"
+            - name: POSTGRES_PASSWORD
+              value: ""
+            # Taiga settings
+            - name: TAIGA_SECRET_KEY
+              value: "VerySecret"
+            - name: TAIGA_SITES_SCHEME
+              value: "http"
+            - name: TAIGA_SITES_DOMAIN
+              value: "taiga.example.com"
+            # RabbitMQ settings
+            - name: RABBITMQ_USER
+              value: "taiga_rabbitmq_user"
+            - name: RABBITMQ_PASS
+              value: "taiga_rabbitmq_password"
+            - name: EVENTS_PUSH_BACKEND_URL
+              value: "amqp://taiga_rabbitmq_user:taiga_rabbitmq_password@my-taiga-events-rabbitmq:5672/taiga_rabbitmq_vhost"
+            - name: CELERY_BROKER_URL
+              value: "amqp://taiga_rabbitmq_user:taiga_rabbitmq_password@my-taiga-async-rabbitmq:5672/taiga_rabbitmq_vhost"
+            # Telemetry settings
+            - name: ENABLE_TELEMETRY
+              value: "true"
+          command: [ "/bin/sh", "-c" ]
+          args:
+            ["python manage.py collectstatic --noinput --verbosity 3"]
+          volumeMounts:
+      restartPolicy: OnFailure
+      volumes:

@@ -1,0 +1,299 @@
+---
+# Source: cassandra-cluster/templates/persistent-volume.yaml
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: cassandra-node1-pvc
+  namespace: default
+  labels:
+    helm.sh/chart: cassandra-cluster-0.1.0
+    app.kubernetes.io/name: cassandra-cluster
+    app.kubernetes.io/instance: my-cassandra-cluster
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  storageClassName: "local-path"
+  accessModes: 
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+---
+# Source: cassandra-cluster/templates/persistent-volume.yaml
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: cassandra-node2-pvc
+  namespace: default
+  labels:
+    helm.sh/chart: cassandra-cluster-0.1.0
+    app.kubernetes.io/name: cassandra-cluster
+    app.kubernetes.io/instance: my-cassandra-cluster
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  storageClassName: "local-path"
+  accessModes: 
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+---
+# Source: cassandra-cluster/templates/persistent-volume.yaml
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: cassandra-node3-pvc
+  namespace: default
+  labels:
+    helm.sh/chart: cassandra-cluster-0.1.0
+    app.kubernetes.io/name: cassandra-cluster
+    app.kubernetes.io/instance: my-cassandra-cluster
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  storageClassName: "local-path"
+  accessModes: 
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+---
+# Source: cassandra-cluster/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: cassandra-nodes-svc
+  namespace: default
+  labels:
+    helm.sh/chart: cassandra-cluster-0.1.0
+    app.kubernetes.io/name: cassandra-cluster
+    app.kubernetes.io/instance: my-cassandra-cluster
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: NodePort
+  ports:
+    - port: 9042
+      targetPort: 9042
+      protocol: TCP
+      name: csndra
+  selector:
+    app.kubernetes.io/name: cassandra-cluster
+    app.kubernetes.io/instance: my-cassandra-cluster
+---
+# Source: cassandra-cluster/templates/cassandra-statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: cassandra-node1
+  namespace: default
+  labels:
+    helm.sh/chart: cassandra-cluster-0.1.0
+    app.kubernetes.io/name: cassandra-cluster
+    app.kubernetes.io/instance: my-cassandra-cluster
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  serviceName: cassandra-nodes-svc
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cassandra-cluster
+      app.kubernetes.io/instance: my-cassandra-cluster
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: cassandra-cluster
+        app.kubernetes.io/instance: my-cassandra-cluster
+    spec:
+      volumes:
+        - name: db-vol
+          persistentVolumeClaim:
+            claimName: cassandra-node1-pvc
+      containers:
+        - name: cassandra-cluster-cnt1
+          image: cassandra:3.11.10
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: csndra
+              containerPort: 9042
+              protocol: TCP
+            
+            - name: jmx
+              containerPort: 7199
+              protocol: TCP
+
+            - name: brdcst-addr
+              containerPort: 7000
+              protocol: TCP 
+          env:  
+            - name: CASSANDRA_USER
+              value: "testuser"
+            - name: CASSANDRA_PASSWORD
+              value: "Testing123$"
+            - name: CASSANDRA_CLUSTER_NAME
+              value: "testCluster"
+            - name: CASSANDRA_SEEDS
+              value: "cassandra-node1-0.cassandra-nodes-svc.default.svc.cluster.local"
+            - name: CASSANDRA_DC
+              value: "DC1"
+            - name: CASSANDRA_RACK
+              value: "RACK1"
+            - name: CASSANDRA_ENDPOINT_SNITCH
+              value: "GossipingPropertyFileSnitch"
+          
+          volumeMounts:
+            - name: db-vol
+              mountPath: /var/lib/cassandra
+---
+# Source: cassandra-cluster/templates/cassandra-statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: cassandra-node2
+  namespace: default
+  labels:
+    helm.sh/chart: cassandra-cluster-0.1.0
+    app.kubernetes.io/name: cassandra-cluster
+    app.kubernetes.io/instance: my-cassandra-cluster
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  serviceName: cassandra-nodes-svc
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cassandra-cluster
+      app.kubernetes.io/instance: my-cassandra-cluster
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: cassandra-cluster
+        app.kubernetes.io/instance: my-cassandra-cluster
+    spec:
+      volumes:
+        - name: db-vol
+          persistentVolumeClaim:
+            claimName: cassandra-node2-pvc
+      containers:
+        - name: cassandra-cluster-cnt2
+          image: cassandra:3.11.10
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: csndra
+              containerPort: 9042
+              protocol: TCP
+            
+            - name: jmx
+              containerPort: 7199
+              protocol: TCP
+
+            - name: brdcst-addr
+              containerPort: 7000
+              protocol: TCP 
+          env:  
+            - name: CASSANDRA_USER
+              value: "testuser"
+            - name: CASSANDRA_PASSWORD
+              value: "Testing123$"
+            - name: CASSANDRA_CLUSTER_NAME
+              value: "testCluster"
+            - name: CASSANDRA_SEEDS
+              value: "cassandra-node1-0.cassandra-nodes-svc.default.svc.cluster.local"
+            - name: CASSANDRA_DC
+              value: "DC1"
+            - name: CASSANDRA_RACK
+              value: "RACK1"
+            - name: CASSANDRA_ENDPOINT_SNITCH
+              value: "GossipingPropertyFileSnitch"
+          
+          volumeMounts:
+            - name: db-vol
+              mountPath: /var/lib/cassandra
+---
+# Source: cassandra-cluster/templates/cassandra-statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: cassandra-node3
+  namespace: default
+  labels:
+    helm.sh/chart: cassandra-cluster-0.1.0
+    app.kubernetes.io/name: cassandra-cluster
+    app.kubernetes.io/instance: my-cassandra-cluster
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  serviceName: cassandra-nodes-svc
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cassandra-cluster
+      app.kubernetes.io/instance: my-cassandra-cluster
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: cassandra-cluster
+        app.kubernetes.io/instance: my-cassandra-cluster
+    spec:
+      volumes:
+        - name: db-vol
+          persistentVolumeClaim:
+            claimName: cassandra-node3-pvc
+      containers:
+        - name: cassandra-cluster-cnt3
+          image: cassandra:3.11.10
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: csndra
+              containerPort: 9042
+              protocol: TCP
+            
+            - name: jmx
+              containerPort: 7199
+              protocol: TCP
+
+            - name: brdcst-addr
+              containerPort: 7000
+              protocol: TCP 
+          env:  
+            - name: CASSANDRA_USER
+              value: "testuser"
+            - name: CASSANDRA_PASSWORD
+              value: "Testing123$"
+            - name: CASSANDRA_CLUSTER_NAME
+              value: "testCluster"
+            - name: CASSANDRA_SEEDS
+              value: "cassandra-node1-0.cassandra-nodes-svc.default.svc.cluster.local"
+            - name: CASSANDRA_DC
+              value: "DC1"
+            - name: CASSANDRA_RACK
+              value: "RACK1"
+            - name: CASSANDRA_ENDPOINT_SNITCH
+              value: "GossipingPropertyFileSnitch"
+          
+          volumeMounts:
+            - name: db-vol
+              mountPath: /var/lib/cassandra
+---
+# Source: cassandra-cluster/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-cassandra-cluster-test-connection"
+  labels:
+    helm.sh/chart: cassandra-cluster-0.1.0
+    app.kubernetes.io/name: cassandra-cluster
+    app.kubernetes.io/instance: my-cassandra-cluster
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-cassandra-cluster:']
+  restartPolicy: Never

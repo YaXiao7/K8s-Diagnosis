@@ -1,0 +1,159 @@
+---
+# Source: tandoor/templates/common.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-tandoor-nginx-config
+  labels:
+    app.kubernetes.io/instance: my-tandoor
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: tandoor
+    app.kubernetes.io/version: 1.5.19
+    helm.sh/chart: tandoor-0.9.7
+data:
+  default.conf: |
+    server {
+      listen 80;
+      server_name _;
+      access_log off;
+      root /var/www/html/public;
+    }
+---
+# Source: tandoor/templates/common.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-tandoor
+  labels:
+    app.kubernetes.io/service: my-tandoor
+    app.kubernetes.io/instance: my-tandoor
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: tandoor
+    app.kubernetes.io/version: 1.5.19
+    helm.sh/chart: tandoor-0.9.7
+  annotations:
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: http
+      protocol: TCP
+      name: http
+    - port: 80
+      targetPort: static
+      protocol: TCP
+      name: static
+  selector:
+    app.kubernetes.io/instance: my-tandoor
+    app.kubernetes.io/name: tandoor
+---
+# Source: tandoor/templates/common.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-tandoor
+  labels:
+    app.kubernetes.io/instance: my-tandoor
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: tandoor
+    app.kubernetes.io/version: 1.5.19
+    helm.sh/chart: tandoor-0.9.7
+spec:
+  revisionHistoryLimit: 3
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: tandoor
+      app.kubernetes.io/instance: my-tandoor
+  template:
+    metadata:
+      annotations:
+        
+        checksum/config: f7c9ff22bba543ff77568f89727dbe50fe4347442b15b76f79e33734d10fb9d4
+      labels:
+        app.kubernetes.io/name: tandoor
+        app.kubernetes.io/instance: my-tandoor
+    spec:
+      
+      serviceAccountName: default
+      automountServiceAccountToken: true
+      securityContext:
+        fsGroup: 65534
+        runAsGroup: 65534
+        runAsUser: 65534
+      dnsPolicy: ClusterFirst
+      enableServiceLinks: true
+      containers:
+        - name: my-tandoor
+          image: ghcr.io/tandoorrecipes/recipes:1.5.19
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: DEBUG
+              value: "0"
+            - name: GUNICORN_MEDIA
+              value: "0"
+            - name: TANDOOR_PORT
+              value: "8080"
+            - name: TIMEZONE
+              value: UTC
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: static
+              containerPort: 80
+              protocol: TCP
+          volumeMounts:
+            - name: django-js-reverse
+              mountPath: /opt/recipes/cookbook/static/django_js_reverse
+            - name: static
+              mountPath: /opt/recipes/staticfiles
+          livenessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 0
+            periodSeconds: 10
+            tcpSocket:
+              port: 8080
+            timeoutSeconds: 1
+          readinessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 0
+            periodSeconds: 10
+            tcpSocket:
+              port: 8080
+            timeoutSeconds: 1
+          startupProbe:
+            failureThreshold: 30
+            initialDelaySeconds: 0
+            periodSeconds: 5
+            tcpSocket:
+              port: 8080
+            timeoutSeconds: 1
+        - image: nginx:stable-alpine
+          imagePullPolicy: Always
+          name: nginx
+          ports:
+          - containerPort: 80
+            name: static
+          securityContext:
+            runAsGroup: 0
+            runAsUser: 0
+          volumeMounts:
+          - mountPath: /etc/nginx/conf.d/default.conf
+            name: nginx-config
+            readOnly: true
+            subPath: default.conf
+          - mountPath: /var/www/html/public/static
+            name: static
+      volumes:
+        - name: django-js-reverse
+          emptyDir:
+            {}
+        - name: nginx-config
+          configMap:
+            name: my-tandoor-nginx-config
+        - name: static
+          emptyDir:
+            {}

@@ -1,0 +1,179 @@
+---
+# Source: pvc-operator/templates/rbac.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-pvc-operator
+  labels:
+    app: pvc-operator
+    chart: pvc-operator-0.0.11
+    release: my-pvc-operator
+    heritage: Helm
+---
+# Source: pvc-operator/templates/rbac.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: "my-pvc-operator-nfs"
+  labels:
+    chart: pvc-operator-0.0.11
+    release: my-pvc-operator
+    heritage: Helm
+---
+# Source: pvc-operator/templates/crd.yaml
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  name: objectstores.banzaicloud.com
+  labels:
+    app: pvc-operator
+    chart: pvc-operator-0.0.11
+    release: my-pvc-operator
+    heritage: Helm
+spec:
+  group: banzaicloud.com
+  names:
+    kind: ObjectStore
+    listKind: ObjectStoreList
+    plural: objectstores
+    singular: objectstore
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+---
+# Source: pvc-operator/templates/rbac.yaml
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-pvc-operator
+  labels:
+      app: pvc-operator
+      chart: pvc-operator-0.0.11
+      heritage: Helm
+      release: my-pvc-operator
+rules:
+- apiGroups: ["banzaicloud.com"]
+  resources: ["*"]
+  verbs: ["*"]
+- apiGroups: [""]
+  resources: ["persistentvolumeclaims", "services", "pods"]
+  verbs: ["get", "list", "watch", "update", "create"]
+- apiGroups: ["storage.k8s.io"]
+  resources: ["storageclasses"]
+  verbs: ["get", "list", "watch", "create"]
+- apiGroups: ["extensions"]
+  resources: ["deployments"]
+  verbs: ["get", "list", "watch", "create"]
+---
+# Source: pvc-operator/templates/rbac.yaml
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: "nfs-provisioner-cluster-role"
+  labels:
+      chart: pvc-operator-0.0.11
+      heritage: Helm
+      release: my-pvc-operator
+rules:
+- apiGroups: ["storage.k8s.io"]
+  resources: ["storageclasses"]
+  verbs: ["get", "list", "watch", "create"]
+- apiGroups: [""]
+  resources: ["persistentvolumeclaims"]
+  verbs: ["get", "list", "watch", "update", "create"]
+- apiGroups: [""]
+  resources: ["persistentvolumes"]
+  verbs: ["get", "list", "watch", "create", "delete"]
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["list", "create", "update", "patch"]
+- apiGroups: [""]
+  resources: ["services", "endpoints"]
+  verbs: ["get"]
+---
+# Source: pvc-operator/templates/rbac.yaml
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-pvc-operator
+  labels:
+    app: pvc-operator
+    chart: pvc-operator-0.0.11
+    heritage: Helm
+    release: my-pvc-operator
+subjects:
+- kind: ServiceAccount
+  name: my-pvc-operator
+  namespace: default
+roleRef:
+  kind: ClusterRole
+  name: my-pvc-operator
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: pvc-operator/templates/rbac.yaml
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: "nfs-provisioner-cluster-rolebinding"
+  labels:
+    chart: pvc-operator-0.0.11
+    heritage: Helm
+    release: my-pvc-operator
+subjects:
+- kind: ServiceAccount
+  name: "my-pvc-operator-nfs"
+  namespace: default
+roleRef:
+  kind: ClusterRole
+  name: "nfs-provisioner-cluster-role"
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: pvc-operator/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-pvc-operator
+  labels:
+    app: pvc-operator
+    chart: pvc-operator-0.0.11
+    release: my-pvc-operator
+    heritage: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pvc-operator
+      release: my-pvc-operator
+  template:
+    metadata:
+      labels:
+        app: pvc-operator
+        chart: pvc-operator-0.0.11
+        heritage: Helm
+        release: my-pvc-operator
+    spec:
+      serviceAccountName: my-pvc-operator
+      containers:
+        - name: pvc-operator
+          image: "banzaicloud/pvc-operator:0.0.6"
+          imagePullPolicy: IfNotPresent
+          command:
+            - pvc-operator
+          env:
+            - name: WATCH_NAMESPACE
+              value: 
+            - name: OPERATOR_NAMESPACE
+              value: default
+            - name: NFS_NAMESPACE
+              value: default
+            - name: OWNER_REFERENCE_NAME
+              value: my-pvc-operator
+            - name: RBAC_ENABLED
+              value: "true"
+            - name: NFS_SERVICE_ACCOUNT_NAME
+              value: "my-pvc-operator-nfs"
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false

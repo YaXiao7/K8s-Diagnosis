@@ -1,0 +1,99 @@
+---
+# Source: cloudflare-ddns-update/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-cloudflare-ddns-update
+  labels:
+    helm.sh/chart: cloudflare-ddns-update-0.1.2
+    app.kubernetes.io/name: cloudflare-ddns-update
+    app.kubernetes.io/instance: my-cloudflare-ddns-update
+    app.kubernetes.io/version: "v0.1.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: cloudflare-ddns-update/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-cloudflare-ddns-update
+  labels:
+    helm.sh/chart: cloudflare-ddns-update-0.1.2
+    app.kubernetes.io/name: cloudflare-ddns-update
+    app.kubernetes.io/instance: my-cloudflare-ddns-update
+    app.kubernetes.io/version: "v0.1.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: cloudflare-ddns-update
+    app.kubernetes.io/instance: my-cloudflare-ddns-update
+---
+# Source: cloudflare-ddns-update/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-cloudflare-ddns-update
+  labels:
+    helm.sh/chart: cloudflare-ddns-update-0.1.2
+    app.kubernetes.io/name: cloudflare-ddns-update
+    app.kubernetes.io/instance: my-cloudflare-ddns-update
+    app.kubernetes.io/version: "v0.1.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cloudflare-ddns-update
+      app.kubernetes.io/instance: my-cloudflare-ddns-update
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: cloudflare-ddns-update
+        app.kubernetes.io/instance: my-cloudflare-ddns-update
+    spec:
+      serviceAccountName: my-cloudflare-ddns-update
+      securityContext:
+        {}
+      containers:
+        - name: cloudflare-ddns-update
+          securityContext:
+            {}
+          image: "ghcr.io/dploeger/cloudflare-ddns-update:v0.1.0"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+          env:
+            - name: CLOUDFLARE_ZONE
+              value: ""
+            - name: CLOUDFLARE_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  key: token
+                  name: 
+            - name: AUTH_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  key: username
+                  name: 
+            - name: AUTH_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: password
+                  name: 
+          resources:
+            {}

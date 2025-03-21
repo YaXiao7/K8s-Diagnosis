@@ -1,0 +1,2352 @@
+---
+# Source: vela-workflow/templates/workflow-controller.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-vela-workflow
+  labels:
+    helm.sh/chart: vela-workflow-0.6.0
+    app.kubernetes.io/name: vela-workflow
+    app.kubernetes.io/instance: my-vela-workflow
+    app.kubernetes.io/version: "0.6.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: vela-workflow/templates/workflow-controller.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-vela-workflow:manager-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: "cluster-admin"
+subjects:
+  - kind: ServiceAccount
+    name: my-vela-workflow
+    namespace: default
+---
+# Source: vela-workflow/templates/workflow-controller.yaml
+# permissions to do leader election.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: my-vela-workflow:leader-election-role
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps/status
+    verbs:
+      - get
+      - update
+      - patch
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - create
+---
+# Source: vela-workflow/templates/workflow-controller.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: my-vela-workflow:leader-election-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: my-vela-workflow:leader-election-role
+subjects:
+  - kind: ServiceAccount
+    name: my-vela-workflow
+---
+# Source: vela-workflow/templates/admission-webhooks/webhookService.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: vela-workflow-webhook
+  namespace: default
+  labels:
+    helm.sh/chart: vela-workflow-0.6.0
+    app.kubernetes.io/name: vela-workflow
+    app.kubernetes.io/instance: my-vela-workflow
+    app.kubernetes.io/version: "0.6.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 443
+      targetPort: 9443
+      protocol: TCP
+      name: https
+  selector:
+    
+      app.kubernetes.io/name: vela-workflow
+      app.kubernetes.io/instance: my-vela-workflow
+---
+# Source: vela-workflow/templates/workflow-controller.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-vela-workflow
+  namespace: default
+  labels:
+    controller.oam.dev/name: vela-workflow
+    helm.sh/chart: vela-workflow-0.6.0
+    app.kubernetes.io/name: vela-workflow
+    app.kubernetes.io/instance: my-vela-workflow
+    app.kubernetes.io/version: "0.6.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vela-workflow
+      app.kubernetes.io/instance: my-vela-workflow
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: vela-workflow
+        app.kubernetes.io/instance: my-vela-workflow
+      annotations:
+          prometheus.io/path: /metrics
+          prometheus.io/port: "8080"
+          prometheus.io/scrape: "true"
+    spec:
+      serviceAccountName: my-vela-workflow
+      securityContext:
+        {}
+      containers:
+        - name: my-vela-workflow
+          securityContext:
+            {}
+          args:
+            - "-test.coverprofile=/workspace/data/e2e-profile.out"
+            - "__DEVEL__E2E"
+            - "-test.run=E2EMain"
+            - "-test.coverpkg=$(go list ./pkg/...| tr '
+' ','| sed 's/,$//g')"
+            
+            - "--use-webhook=true"
+            - "--webhook-port=9443"
+            - "--webhook-cert-dir=/etc/k8s-webhook-certs"
+            
+            
+            
+            - "--metrics-bind-address=:8080"
+            - "--leader-elect"
+            - "--health-probe-bind-address=:9440"
+            - "--concurrent-reconciles=4"
+            - "--ignore-workflow-without-controller-requirement=false"
+            - "--kube-api-qps=500"
+            - "--kube-api-burst=1000"
+            - "--user-agent=vela-workflow"
+            - "--max-workflow-wait-backoff-time=60"
+            - "--max-workflow-failed-backoff-time=300"
+            - "--max-workflow-step-error-retry-times=10"
+            - "--feature-gates=EnableWatchEventListener=false"
+            - "--feature-gates=EnablePatchStatusAtOnce=false"
+            - "--feature-gates=EnableSuspendOnFailure=false"
+            - "--feature-gates=EnableBackupWorkflowRecord=false"
+            - "--group-by-label=pipeline.oam.dev/name"
+            
+          image: oamdev/vela-workflow:v0.6.0-post.1
+          imagePullPolicy: "Always"
+          resources:
+            limits:
+              cpu: 500m
+              memory: 1Gi
+            requests:
+              cpu: 50m
+              memory: 20Mi
+          
+          ports:
+            - containerPort: 9443
+              name: webhook-server
+              protocol: TCP
+            - containerPort: 9440
+              name: healthz
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: healthz
+            initialDelaySeconds: 30
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: healthz
+            initialDelaySeconds: 90
+            periodSeconds: 5
+          volumeMounts:
+            - mountPath: /etc/k8s-webhook-certs
+              name: tls-cert-vol
+              readOnly: true
+          
+      
+      volumes:
+        - name: tls-cert-vol
+          secret:
+            defaultMode: 420
+            secretName: my-vela-workflow-admission
+---
+# Source: vela-workflow/templates/admission-webhooks/mutatingWebhookConfiguration.yaml
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: my-vela-workflow-admission
+  namespace: default
+webhooks:
+  - clientConfig:
+      caBundle: Cg==
+      service:
+        name: vela-workflow-webhook
+        namespace: default
+        path: /mutating-core-oam-dev-v1alpha1-workflowruns
+    failurePolicy: Ignore
+    name: mutating.core.oam.dev.v1alpha1.workflowruns
+    sideEffects: None
+    rules:
+      - apiGroups:
+          - core.oam.dev
+        apiVersions:
+          - v1alpha1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - workflowruns
+        scope: Namespaced
+    admissionReviewVersions:
+      - v1beta1
+      - v1
+    timeoutSeconds: 5
+---
+# Source: vela-workflow/templates/admission-webhooks/validatingWebhookConfiguration.yaml
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: my-vela-workflow-admission
+  namespace: default
+webhooks:
+  - clientConfig:
+      caBundle: Cg==
+      service:
+        name: vela-workflow-webhook
+        namespace: default
+        path: /validating-core-oam-dev-v1alpha1-workflowruns
+    failurePolicy: Ignore
+    name: validating.core.oam.dev.v1alpha2.applicationconfigurations
+    sideEffects: None
+    rules:
+      - apiGroups:
+          - core.oam.dev
+        apiVersions:
+          - v1alpha1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - workflowruns
+        scope: Namespaced
+    admissionReviewVersions:
+      - v1beta1
+      - v1
+    timeoutSeconds: 5
+---
+# Source: vela-workflow/templates/definitions/addon-operation.yaml
+# Code generated by KubeVela templates. DO NOT EDIT. Please edit the original cue file.
+# Definition source cue file: vela-templates/definitions/internal/addon-operation.cue
+apiVersion: core.oam.dev/v1beta1
+kind: WorkflowStepDefinition
+metadata:
+  annotations:
+    definition.oam.dev/description: Enable a KubeVela addon
+    definition.oam.dev/example-url: https://raw.githubusercontent.com/kubevela/catalog/master/examples/vela-workflow/observability.yaml
+  labels:
+    custom.definition.oam.dev/scope: WorkflowRun
+  name: addon-operation
+  namespace: default
+spec:
+  schematic:
+    cue:
+      template: |
+        import (
+        	"vela/op"
+        )
+
+        job: op.#Apply & {
+        	value: {
+        		apiVersion: "batch/v1"
+        		kind:       "Job"
+        		metadata: {
+        			name:      context.name + "-" + context.stepSessionID
+        			namespace: "vela-system"
+        			labels: "enable-addon.oam.dev":          context.name
+        			annotations: "workflow.oam.dev/step": context.stepName
+        		}
+        		spec: {
+        			backoffLimit: 3
+        			template: {
+        				metadata: {
+        					labels: {
+        						"workflow.oam.dev/name":    context.name
+        						"workflow.oam.dev/session": context.stepSessionID
+        					}
+        					annotations: "workflow.oam.dev/step": context.stepName
+        				}
+        				spec: {
+        					containers: [
+        						{
+        							name:  parameter.addonName + "-enable-job"
+        							image: parameter.image
+
+        							if parameter.args == _|_ {
+        								command: ["vela", "addon", parameter.operation, parameter.addonName]
+        							}
+
+        							if parameter.args != _|_ {
+        								command: ["vela", "addon", parameter.operation, parameter.addonName] + parameter.args
+        							}
+        						},
+        					]
+        					restartPolicy:  "Never"
+        					serviceAccount: parameter.serviceAccountName
+        				}
+        			}
+        		}
+        	}
+        }
+        log: op.#Log & {
+        	source: resources: [{labelSelector: {
+        		"workflow.oam.dev/name":    context.name
+        		"workflow.oam.dev/session": context.stepSessionID
+        	}}]
+        }
+        fail: op.#Steps & {
+        	if job.value.status.failed != _|_ {
+        		if job.value.status.failed > 2 {
+        			breakWorkflow: op.#Fail & {
+        				message: "enable addon failed"
+        			}
+        		}
+        	}
+        }
+        wait: op.#ConditionalWait & {
+        	continue: job.value.status.succeeded != _|_ && job.value.status.succeeded > 0
+        }
+        parameter: {
+        	// +usage=Specify the name of the addon.
+        	addonName: string
+        	// +usage=Specify addon enable args.
+        	args?: [...string]
+        	// +usage=Specify the image
+        	image: *"oamdev/vela-cli:v1.6.4" | string
+        	// +usage=operation for the addon
+        	operation: *"enable" | "upgrade" | "disable"
+        	// +usage=specify serviceAccountName want to use
+        	serviceAccountName: *"kubevela-vela-core" | string
+        }
+---
+# Source: vela-workflow/templates/definitions/apply-app.yaml
+# Code generated by KubeVela templates. DO NOT EDIT. Please edit the original cue file.
+# Definition source cue file: vela-templates/definitions/internal/apply-app.cue
+apiVersion: core.oam.dev/v1beta1
+kind: WorkflowStepDefinition
+metadata:
+  annotations:
+    definition.oam.dev/alias: ""
+    definition.oam.dev/description: Apply application from data or ref to the cluster
+    definition.oam.dev/example-url: https://raw.githubusercontent.com/kubevela/workflow/main/examples/workflow-run/apply-applications.yaml
+  labels:
+    custom.definition.oam.dev/scope: WorkflowRun
+  name: apply-app
+  namespace: default
+spec:
+  schematic:
+    cue:
+      template: |
+        import (
+        	"vela/op"
+        	"encoding/yaml"
+        )
+
+        app: op.#Steps & {
+        	if parameter.data != _|_ {
+        		apply: op.#Apply & {
+        			value: parameter.data
+        		}
+        	}
+        	if parameter.ref != _|_ {
+        		if parameter.ref.type == "configMap" {
+        			cm: op.#Read & {
+        				value: {
+        					apiVersion: "v1"
+        					kind:       "ConfigMap"
+        					metadata: {
+        						name:      parameter.ref.name
+        						namespace: parameter.ref.namespace
+        					}
+        				}
+        			}
+        			template: cm.value.data[parameter.ref.key]
+        			apply:    op.#Apply & {
+        				value: yaml.Unmarshal(template)
+        			}
+        		}
+        	}
+        }
+        wait: op.#ConditionalWait & {
+        	continue: app.apply.value.status.status == "running" && app.apply.value.status.observedGeneration == app.apply.value.metadata.generation
+        }
+        parameter: close({
+        	data?: {...}
+        }) | close({
+        	ref?: {
+        		name:      string
+        		namespace: *context.namespace | string
+        		type:      *"configMap" | string
+        		key:       *"application" | string
+        	}
+        })
+---
+# Source: vela-workflow/templates/definitions/apply-deployment.yaml
+# Code generated by KubeVela templates. DO NOT EDIT. Please edit the original cue file.
+# Definition source cue file: vela-templates/definitions/internal/apply-deployment.cue
+apiVersion: core.oam.dev/v1beta1
+kind: WorkflowStepDefinition
+metadata:
+  annotations:
+    definition.oam.dev/alias: ""
+    definition.oam.dev/description: Apply deployment with specified image and cmd.
+  name: apply-deployment
+  namespace: default
+spec:
+  schematic:
+    cue:
+      template: |
+        import (
+        	"strconv"
+        	"strings"
+        	"vela/op"
+        )
+
+        output: op.#Apply & {
+        	value: {
+        		apiVersion: "apps/v1"
+        		kind:       "Deployment"
+        		metadata: {
+        			name:      context.stepName
+        			namespace: context.namespace
+        		}
+        		spec: {
+        			selector: matchLabels: "workflow.oam.dev/step-name": "\(context.name)-\(context.stepName)"
+        			template: {
+        				metadata: labels: "workflow.oam.dev/step-name": "\(context.name)-\(context.stepName)"
+        				spec: containers: [{
+        					name:  context.stepName
+        					image: parameter.image
+        					if parameter["cmd"] != _|_ {
+        						command: parameter.cmd
+        					}
+        				}]
+        			}
+        		}
+        	}
+        }
+        wait: op.#ConditionalWait & {
+        	continue: output.value.status != _|_ && output.value.status.updatedReplicas == output.value.status.availableReplicas && output.value.status.observedGeneration == output.value.metadata.generation
+        }
+        parameter: {
+        	image: string
+        	cmd?: [...string]
+        }
+---
+# Source: vela-workflow/templates/definitions/apply-job.yaml
+# Code generated by KubeVela templates. DO NOT EDIT. Please edit the original cue file.
+# Definition source cue file: vela-templates/definitions/internal/apply-job.cue
+apiVersion: core.oam.dev/v1beta1
+kind: WorkflowStepDefinition
+metadata:
+  annotations:
+    custom.definition.oam.dev/category: Resource Management
+    definition.oam.dev/description: Apply job
+  name: apply-job
+  namespace: default
+spec:
+  schematic:
+    cue:
+      template: |
+        import (
+        	"vela/op"
+        )
+
+        // apply the job
+        apply: op.#Apply & {
+        	value:   parameter.value
+        	cluster: parameter.cluster
+        }
+
+        // fail the step if the job fails
+        if apply.status.failed > 0 {
+        	fail: op.#Fail & {
+        		message: "Job failed"
+        	}
+        }
+
+        // wait the job to be ready
+        wait: op.#ConditionalWait & {
+        	continue: apply.status.succeeded == apply.spec.completions
+        }
+
+        parameter: {
+        	// +usage=Specify Kubernetes job object to be applied
+        	value: {
+        		apiVersion: "batch/v1"
+        		kind:       "Job"
+        		...
+        	}
+        	// +usage=The cluster you want to apply the resource to, default is the current control plane cluster
+        	cluster: *"" | string
+        }
+---
+# Source: vela-workflow/templates/definitions/apply-object.yaml
+# Code generated by KubeVela templates. DO NOT EDIT. Please edit the original cue file.
+# Definition source cue file: vela-templates/definitions/internal/apply-object.cue
+apiVersion: core.oam.dev/v1beta1
+kind: WorkflowStepDefinition
+metadata:
+  annotations:
+    definition.oam.dev/description: Apply raw kubernetes objects for your workflow steps
+  labels:
+    custom.definition.oam.dev/ui-hidden: "true"
+  name: apply-object
+  namespace: default
+spec:
+  schematic:
+    cue:
+      template: |
+        import (
+        	"vela/op"
+        )
+
+        apply: op.#Apply & {
+        	value:   parameter.value
+        	cluster: parameter.cluster
+        }
+        parameter: {
+        	// +usage=Specify Kubernetes native resource object to be applied
+        	value: {...}
+        	// +usage=The cluster you want to apply the resource to, default is the current control plane cluster
+        	cluster: *"" | string
+        }
+---
+# Source: vela-workflow/templates/definitions/apply-terraform-config.yaml
+# Code generated by KubeVela templates. DO NOT EDIT. Please edit the original cue file.
+# Definition source cue file: vela-templates/definitions/internal/apply-terraform-config.cue
+apiVersion: core.oam.dev/v1beta1
+kind: WorkflowStepDefinition
+metadata:
+  annotations:
+    definition.oam.dev/alias: ""
+    definition.oam.dev/description: Apply terraform configuration in the step
+    definition.oam.dev/example-url: https://raw.githubusercontent.com/kubevela/workflow/main/examples/workflow-run/apply-terraform-resource.yaml
+  name: apply-terraform-config
+  namespace: default
+spec:
+  schematic:
+    cue:
+      template: |
+        import (
+        	"vela/op"
+        )
+
+        apply: op.#Apply & {
+        	value: {
+        		apiVersion: "terraform.core.oam.dev/v1beta2"
+        		kind:       "Configuration"
+        		metadata: {
+        			name:      "\(context.name)-\(context.stepName)"
+        			namespace: context.namespace
+        		}
+        		spec: {
+        			deleteResource: parameter.deleteResource
+        			variable:       parameter.variable
+        			forceDelete:    parameter.forceDelete
+        			if parameter.source.path != _|_ {
+        				path: parameter.source.path
+        			}
+        			if parameter.source.remote != _|_ {
+        				remote: parameter.source.remote
+        			}
+        			if parameter.source.hcl != _|_ {
+        				hcl: parameter.source.hcl
+        			}
+        			if parameter.providerRef != _|_ {
+        				providerRef: parameter.providerRef
+        			}
+        			if parameter.jobEnv != _|_ {
+        				jobEnv: parameter.jobEnv
+        			}
+        			if parameter.writeConnectionSecretToRef != _|_ {
+        				writeConnectionSecretToRef: parameter.writeConnectionSecretToRef
+        			}
+        			if parameter.region != _|_ {
+        				region: parameter.region
+        			}
+        		}
+        	}
+        }
+        check: op.#ConditionalWait & {
+        	continue: apply.value.status != _|_ && apply.value.status.apply != _|_ && apply.value.status.apply.state == "Available"
+        }
+        parameter: {
+        	// +usage=specify the source of the terraform configuration
+        	source: close({
+        		// +usage=directly specify the hcl of the terraform configuration
+        		hcl: string
+        	}) | close({
+        		// +usage=specify the remote url of the terraform configuration
+        		remote: *"https://github.com/kubevela-contrib/terraform-modules.git" | string
+        		// +usage=specify the path of the terraform configuration
+        		path?: string
+        	})
+        	// +usage=whether to delete resource
+        	deleteResource: *true | bool
+        	// +usage=the variable in the configuration
+        	variable: {...}
+        	// +usage=this specifies the namespace and name of a secret to which any connection details for this managed resource should be written.
+        	writeConnectionSecretToRef?: {
+        		name:      string
+        		namespace: *context.namespace | string
+        	}
+        	// +usage=providerRef specifies the reference to Provider
+        	providerRef?: {
+        		name:      string
+        		namespace: *context.namespace | string
+        	}
+        	// +usage=region is cloud provider's region. It will override the region in the region field of providerRef
+        	region?: string
+        	// +usage=the envs for job
+        	jobEnv?: {...}
+        	// +usae=forceDelete will force delete Configuration no matter which state it is or whether it has provisioned some resources
+        	forceDelete: *false | bool
+        }
+---
+# Source: vela-workflow/templates/definitions/apply-terraform-provider.yaml
+# Code generated by KubeVela templates. DO NOT EDIT. Please edit the original cue file.
+# Definition source cue file: vela-templates/definitions/internal/apply-terraform-provider.cue
+apiVersion: core.oam.dev/v1beta1
+kind: WorkflowStepDefinition
+metadata:
+  annotations:
+    definition.oam.dev/alias: ""
+    definition.oam.dev/description: Apply terraform provider config
+    definition.oam.dev/example-url: https://raw.githubusercontent.com/kubevela/workflow/main/examples/workflow-run/apply-terraform-resource.yaml
+  name: apply-terraform-provider
+  namespace: default
+spec:
+  schematic:
+    cue:
+      template: |
+        import (
+        	"vela/op"
+        	"strings"
+        )
+
+        config: op.#CreateConfig & {
+        	name:      "\(context.name)-\(context.stepName)"
+        	namespace: context.namespace
+        	template:  "terraform-\(parameter.type)"
+        	config: {
+        		name: parameter.name
+        		if parameter.type == "alibaba" {
+        			ALICLOUD_ACCESS_KEY: parameter.accessKey
+        			ALICLOUD_SECRET_KEY: parameter.secretKey
+        			ALICLOUD_REGION:     parameter.region
+        		}
+        		if parameter.type == "aws" {
+        			AWS_ACCESS_KEY_ID:     parameter.accessKey
+        			AWS_SECRET_ACCESS_KEY: parameter.secretKey
+        			AWS_DEFAULT_REGION:    parameter.region
+        			AWS_SESSION_TOKEN:     parameter.token
+        		}
+        		if parameter.type == "azure" {
+        			ARM_CLIENT_ID:       parameter.clientID
+        			ARM_CLIENT_SECRET:   parameter.clientSecret
+        			ARM_SUBSCRIPTION_ID: parameter.subscriptionID
+        			ARM_TENANT_ID:       parameter.tenantID
+        		}
+        		if parameter.type == "baidu" {
+        			BAIDUCLOUD_ACCESS_KEY: parameter.accessKey
+        			BAIDUCLOUD_SECRET_KEY: parameter.secretKey
+        			BAIDUCLOUD_REGION:     parameter.region
+        		}
+        		if parameter.type == "ec" {
+        			EC_API_KEY: parameter.apiKey
+        		}
+        		if parameter.type == "gcp" {
+        			GOOGLE_CREDENTIALS: parameter.credentials
+        			GOOGLE_REGION:      parameter.region
+        			GOOGLE_PROJECT:     parameter.project
+        		}
+        		if parameter.type == "tencent" {
+        			TENCENTCLOUD_SECRET_ID:  parameter.secretID
+        			TENCENTCLOUD_SECRET_KEY: parameter.secretKey
+        			TENCENTCLOUD_REGION:     parameter.region
+        		}
+        		if parameter.type == "ucloud" {
+        			UCLOUD_PRIVATE_KEY: parameter.privateKey
+        			UCLOUD_PUBLIC_KEY:  parameter.publicKey
+        			UCLOUD_PROJECT_ID:  parameter.projectID
+        			UCLOUD_REGION:      parameter.region
+        		}
+        	}
+        }
+        read: op.#Read & {
+        	value: {
+        		apiVersion: "terraform.core.oam.dev/v1beta1"
+        		kind:       "Provider"
+        		metadata: {
+        			name:      parameter.name
+        			namespace: context.namespace
+        		}
+        	}
+        }
+        check: op.#ConditionalWait & {
+        	if read.value.status != _|_ {
+        		continue: read.value.status.state == "ready"
+        	}
+        	if read.value.status == _|_ {
+        		continue: false
+        	}
+        }
+        providerBasic: {
+        	accessKey: string
+        	secretKey: string
+        	region:    string
+        }
+        #AlibabaProvider: {
+        	providerBasic
+        	type: "alibaba"
+        	name: *"alibaba-provider" | string
+        }
+        #AWSProvider: {
+        	providerBasic
+        	token: *"" | string
+        	type:  "aws"
+        	name:  *"aws-provider" | string
+        }
+        #AzureProvider: {
+        	subscriptionID: string
+        	tenantID:       string
+        	clientID:       string
+        	clientSecret:   string
+        	name:           *"azure-provider" | string
+        }
+        #BaiduProvider: {
+        	providerBasic
+        	type: "baidu"
+        	name: *"baidu-provider" | string
+        }
+        #ECProvider: {
+        	type:   "ec"
+        	apiKey: *"" | string
+        	name:   "ec-provider" | string
+        }
+        #GCPProvider: {
+        	credentials: string
+        	region:      string
+        	project:     string
+        	type:        "gcp"
+        	name:        *"gcp-provider" | string
+        }
+        #TencentProvider: {
+        	secretID:  string
+        	secretKey: string
+        	region:    string
+        	type:      "tencent"
+        	name:      *"tencent-provider" | string
+        }
+        #UCloudProvider: {
+        	publicKey:  string
+        	privateKey: string
+        	projectID:  string
+        	region:     string
+        	type:       "ucloud"
+        	name:       *"ucloud-provider" | string
+        }
+        parameter: *#AlibabaProvider | #AWSProvider | #AzureProvider | #BaiduProvider | #ECProvider | #GCPProvider | #TencentProvider | #UCloudProvider
+---
+# Source: vela-workflow/templates/definitions/build-push-image.yaml
+# Code generated by KubeVela templates. DO NOT EDIT. Please edit the original cue file.
+# Definition source cue file: vela-templates/definitions/internal/build-push-image.cue
+apiVersion: core.oam.dev/v1beta1
+kind: WorkflowStepDefinition
+metadata:
+  annotations:
+    definition.oam.dev/alias: ""
+    definition.oam.dev/description: Build and push image from git url
+    definition.oam.dev/example-url: https://raw.githubusercontent.com/kubevela/workflow/main/examples/workflow-run/built-push-image.yaml
+  name: build-push-image
+  namespace: default
+spec:
+  schematic:
+    cue:
+      template: |
+        import (
+        	"vela/op"
+        	"encoding/json"
+        	"strings"
+        )
+
+        url: {
+        	if parameter.context.git != _|_ {
+        		address: strings.TrimPrefix(parameter.context.git, "git://")
+        		value:   "git://\(address)#refs/heads/\(parameter.context.branch)"
+        	}
+        	if parameter.context.git == _|_ {
+        		value: parameter.context
+        	}
+        }
+        kaniko: op.#Apply & {
+        	value: {
+        		apiVersion: "v1"
+        		kind:       "Pod"
+        		metadata: {
+        			name:      "\(context.name)-\(context.stepSessionID)-kaniko"
+        			namespace: context.namespace
+        		}
+        		spec: {
+        			containers: [
+        				{
+        					args: [
+        						"--dockerfile=\(parameter.dockerfile)",
+        						"--context=\(url.value)",
+        						"--destination=\(parameter.image)",
+        						"--verbosity=\(parameter.verbosity)",
+        						if parameter.platform != _|_ {
+        							"--customPlatform=\(parameter.platform)"
+        						},
+        						if parameter.buildArgs != _|_ for arg in parameter.buildArgs {
+        							"--build-arg=\(arg)"
+        						},
+        					]
+        					image: parameter.kanikoExecutor
+        					name:  "kaniko"
+        					if parameter.credentials != _|_ && parameter.credentials.image != _|_ {
+        						volumeMounts: [
+        							{
+        								mountPath: "/kaniko/.docker/"
+        								name:      parameter.credentials.image.name
+        							},
+        						]
+        					}
+        					if parameter.credentials != _|_ && parameter.credentials.git != _|_ {
+        						env: [
+        							{
+        								name: "GIT_TOKEN"
+        								valueFrom: secretKeyRef: {
+        									key:  parameter.credentials.git.key
+        									name: parameter.credentials.git.name
+        								}
+        							},
+        						]
+        					}
+        				},
+        			]
+        			if parameter.credentials != _|_ && parameter.credentials.image != _|_ {
+        				volumes: [
+        					{
+        						name: parameter.credentials.image.name
+        						secret: {
+        							defaultMode: 420
+        							items: [
+        								{
+        									key:  parameter.credentials.image.key
+        									path: "config.json"
+        								},
+        							]
+        							secretName: parameter.credentials.image.name
+        						}
+        					},
+        				]
+        			}
+        			restartPolicy: "Never"
+        		}
+        	}
+        }
+        log: op.#Log & {
+        	source: resources: [{
+        		name:      "\(context.name)-\(context.stepSessionID)-kaniko"
+        		namespace: context.namespace
+        	}]
+        }
+        read: op.#Read & {
+        	value: {
+        		apiVersion: "v1"
+        		kind:       "Pod"
+        		metadata: {
+        			name:      "\(context.name)-\(context.stepSessionID)-kaniko"
+        			namespace: context.namespace
+        		}
+        	}
+        }
+        wait: op.#ConditionalWait & {
+        	continue: read.value.status != _|_ && read.value.status.phase == "Succeeded"
+        }
+        #secret: {
+        	name: string
+        	key:  string
+        }
+        #git: {
+        	git:    string
+        	branch: *"master" | string
+        }
+        parameter: {
+        	// +usage=Specify the kaniko executor image, default to oamdev/kaniko-executor:v1.9.1
+        	kanikoExecutor: *"oamdev/kaniko-executor:v1.9.1" | string
+        	// +usage=Specify the context to build image, you can use context with git and branch or directly specify the context, please refer to https://github.com/GoogleContainerTools/kaniko#kaniko-build-contexts
+        	context: #git | string
+        	// +usage=Specify the dockerfile
+        	dockerfile: *"./Dockerfile" | string
+        	// +usage=Specify the image
+        	image: string
+        	// +usage=Specify the platform to build
+        	platform?: string
+        	// +usage=Specify the build args
+        	buildArgs?: [...string]
+        	// +usage=Specify the credentials to access git and image registry
+        	credentials?: {
+        		// +usage=Specify the credentials to access git
+        		git?: {
+        			// +usage=Specify the secret name
+        			name: string
+        			// +usage=Specify the secret key
+        			key: string
+        		}
+        		// +usage=Specify the credentials to access image registry
+        		image?: {
+        			// +usage=Specify the secret name
+        			name: string
+        			// +usage=Specify the secret key
+        			key: *".dockerconfigjson" | string
+        		}
+        	}
+        	// +usage=Specify the verbosity level
+        	verbosity: *"info" | "panic" | "fatal" | "error" | "warn" | "debug" | "trace"
+        }
+---
+# Source: vela-workflow/templates/definitions/chat-gpt.yaml
+# Code generated by KubeVela templates. DO NOT EDIT. Please edit the original cue file.
+# Definition source cue file: vela-templates/definitions/internal/chat-gpt.cue
+apiVersion: core.oam.dev/v1beta1
+kind: WorkflowStepDefinition
+metadata:
+  annotations:
+    custom.definition.oam.dev/category: External Intergration
+    definition.oam.dev/alias: ""
+    definition.oam.dev/description: Send request to chat-gpt
+    definition.oam.dev/example-url: https://raw.githubusercontent.com/kubevela/workflow/main/examples/workflow-run/chat-gpt.yaml
+  name: chat-gpt
+  namespace: default
+spec:
+  schematic:
+    cue:
+      template: |
+        import (
+        	"vela/op"
+        	"encoding/json"
+        	"encoding/base64"
+        )
+
+        token: op.#Steps & {
+        	if parameter.token.value != _|_ {
+        		value: parameter.token.value
+        	}
+        	if parameter.token.secretRef != _|_ {
+        		read: op.#Read & {
+        			value: {
+        				apiVersion: "v1"
+        				kind:       "Secret"
+        				metadata: {
+        					name:      parameter.token.secretRef.name
+        					namespace: context.namespace
+        				}
+        			}
+        		}
+
+        		stringValue: op.#ConvertString & {bt: base64.Decode(null, read.value.data[parameter.token.secretRef.key])}
+        		value:       stringValue.str
+        	}
+        }
+        http: op.#HTTPDo & {
+        	method: "POST"
+        	url:    "https://api.openai.com/v1/chat/completions"
+        	request: {
+        		timeout: parameter.timeout
+        		body:    json.Marshal({
+        			model: parameter.model
+        			messages: [{
+        				if parameter.prompt.type == "custom" {
+        					content: parameter.prompt.content
+        				}
+        				if parameter.prompt.type == "diagnose" {
+        					content: """
+        You are a professional kubernetes administrator.
+        Carefully read the provided information, being certain to spell out the diagnosis & reasoning, and don't skip any steps.
+        Answer in  \(parameter.prompt.lang).
+        ---
+        \(json.Marshal(parameter.prompt.content))
+        ---
+        What is wrong with this object and how to fix it?
+        """
+        				}
+        				if parameter.prompt.type == "audit" {
+        					content: """
+        You are a professional kubernetes administrator.
+        You inspect the object and find out the security misconfigurations and give advice.
+        Write down the possible problems in bullet points, using the imperative tense.
+        Remember to write only the most important points and do not write more than a few bullet points.
+        Answer in  \(parameter.prompt.lang).
+        ---
+        \(json.Marshal(parameter.prompt.content))
+        ---
+        What is the secure problem with this object and how to fix it?
+        """
+        				}
+        				if parameter.prompt.type == "quality-gate" {
+        					content: """
+        You are a professional kubernetes administrator.
+        You inspect the object and find out the security misconfigurations and rate the object. The max score is 100.
+        Answer with score only.
+        ---
+        \(json.Marshal(parameter.prompt.content))
+        ---
+        What is the score of this object?
+        """
+        				}
+        				role: "user"
+        			}]
+        		})
+        		header: {
+        			"Content-Type": "application/json"
+        			Authorization:  "Bearer \(token.value)"
+        		}
+        	}
+        }
+        response: json.Unmarshal(http.response.body)
+        fail:     op.#Steps & {
+        	if http.response.statusCode >= 400 {
+        		requestFail: op.#Fail & {
+        			message: "\(http.response.statusCode): failed to request: \(response.error.message)"
+        		}
+        	}
+        }
+        result: response.choices[0].message.content
+        log:    op.#Log & {
+        	data: result
+        }
+        parameter: {
+        	token: close({
+        		// +usage=the token value
+        		value: string
+        	}) | close({
+        		secretRef: {
+        			// +usage=name is the name of the secret
+        			name: string
+        			// +usage=key is the token key in the secret
+        			key: string
+        		}
+        	})
+        	// +usage=the model name
+        	model: *"gpt-3.5-turbo" | string
+        	// +usage=the prompt to use
+        	prompt: {
+        		type:    *"custom" | "diagnose" | "audit" | "quality-gate"
+        		lang:    *"English" | "Chinese"
+        		content: string | {...}
+        	}
+        	timeout: *"30s" | string
+        }
+---
+# Source: vela-workflow/templates/definitions/clean-jobs.yaml
+# Code generated by KubeVela templates. DO NOT EDIT. Please edit the original cue file.
+# Definition source cue file: vela-templates/definitions/internal/clean-jobs.cue
+apiVersion: core.oam.dev/v1beta1
+kind: WorkflowStepDefinition
+metadata:
+  annotations:
+    definition.oam.dev/description: clean applied jobs in the cluster
+  name: clean-jobs
+  namespace: default
+spec:
+  schematic:
+    cue:
+      template: |
+        import (
+        	"vela/op"
+        )
+
+        parameter: {
+        	labelselector?: {...}
+        	namespace: *context.namespace | string
+        }
+        cleanJobs: op.#Delete & {
+        	value: {
+        		apiVersion: "batch/v1"
+        		kind:       "Job"
+        		metadata: {
+        			name:      context.name
+        			namespace: parameter.namespace
+        		}
+        	}
+        	filter: {
+        		namespace: parameter.namespace
+        		if parameter.labelselector != _|_ {
+        			matchingLabels: parameter.labelselector
+        		}
+        		if parameter.labelselector == _|_ {
+        			matchingLabels: "workflow.oam.dev/name": context.name
+        		}
+        	}
+        }
+        cleanPods: op.#Delete & {
+        	value: {
+        		apiVersion: "v1"
+        		kind:       "pod"
+        		metadata: {
+        			name:      context.name
+        			namespace: parameter.namespace
+        		}
+        	}
+        	filter: {
+        		namespace: parameter.namespace
+        		if parameter.labelselector != _|_ {
+        			matchingLabels: parameter.labelselector
+        		}
+        		if parameter.labelselector == _|_ {
+        			matchingLabels: "workflow.oam.dev/name": context.name
+        		}
+        	}
+        }
+---
+# Source: vela-workflow/templates/definitions/create-config.yaml
+# Code generated by KubeVela templates. DO NOT EDIT. Please edit the original cue file.
+# Definition source cue file: vela-templates/definitions/internal/create-config.cue
+apiVersion: core.oam.dev/v1beta1
+kind: WorkflowStepDefinition
+metadata:
+  annotations:
+    definition.oam.dev/description: Create or update a config
+  name: create-config
+  namespace: default
+spec:
+  schematic:
+    cue:
+      template: |
+        import (
+        	"vela/op"
+        )
+
+        deploy: op.#CreateConfig & {
+        	name: parameter.name
+        	if parameter.namespace != _|_ {
+        		namespace: parameter.namespace
+        	}
+        	if parameter.namespace == _|_ {
+        		namespace: context.namespace
+        	}
+        	if parameter.template != _|_ {
+        		template: parameter.template
+        	}
+        	config: parameter.config
+        }
+        parameter: {
+        	//+usage=Specify the name of the config.
+        	name: string
+
+        	//+usage=Specify the namespace of the config.
+        	namespace?: string
+
+        	//+usage=Specify the template of the config.
+        	template?: string
+
+        	//+usage=Specify the content of the config.
+        	config: {...}
+        }
+---
+# Source: vela-workflow/templates/definitions/delete-config.yaml
+# Code generated by KubeVela templates. DO NOT EDIT. Please edit the original cue file.
+# Definition source cue file: vela-templates/definitions/internal/delete-config.cue
+apiVersion: core.oam.dev/v1beta1
+kind: WorkflowStepDefinition
+metadata:
+  annotations:
+    definition.oam.dev/description: Delete a config
+  name: delete-config
+  namespace: default
+spec:
+  schematic:
+    cue:
+      template: |
+        import (
+        	"vela/op"
+        )
+
+        deploy: op.#DeleteConfig & {
+        	name: parameter.name
+        	if parameter.namespace != _|_ {
+        		namespace: parameter.namespace
+        	}
+        	if parameter.namespace == _|_ {
+        		namespace: context.namespace
+        	}
+        }
+        parameter: {
+        	//+usage=Specify the name of the config.
+        	name: string
+
+        	//+usage=Specify the namespace of the config.
+        	namespace?: string
+        }
+---
+# Source: vela-workflow/templates/definitions/export2config.yaml
+# Code generated by KubeVela templates. DO NOT EDIT. Please edit the original cue file.
+# Definition source cue file: vela-templates/definitions/internal/export2config.cue
+apiVersion: core.oam.dev/v1beta1
+kind: WorkflowStepDefinition
+metadata:
+  annotations:
+    definition.oam.dev/description: Export data to specified Kubernetes ConfigMap in your workflow.
+  labels:
+    custom.definition.oam.dev/ui-hidden: "true"
+  name: export2config
+  namespace: default
+spec:
+  schematic:
+    cue:
+      template: |
+        import (
+        	"vela/op"
+        )
+
+        apply: op.#Apply & {
+        	value: {
+        		apiVersion: "v1"
+        		kind:       "ConfigMap"
+        		metadata: {
+        			name: parameter.configName
+        			if parameter.namespace != _|_ {
+        				namespace: parameter.namespace
+        			}
+        			if parameter.namespace == _|_ {
+        				namespace: context.namespace
+        			}
+        		}
+        		data: parameter.data
+        	}
+        	cluster: parameter.cluster
+        }
+        parameter: {
+        	// +usage=Specify the name of the config map
+        	configName: string
+        	// +usage=Specify the namespace of the config map
+        	namespace?: string
+        	// +usage=Specify the data of config map
+        	data: {}
+        	// +usage=Specify the cluster of the config map
+        	cluster: *"" | string
+        }
+---
+# Source: vela-workflow/templates/definitions/export2secret.yaml
+# Code generated by KubeVela templates. DO NOT EDIT. Please edit the original cue file.
+# Definition source cue file: vela-templates/definitions/internal/export2secret.cue
+apiVersion: core.oam.dev/v1beta1
+kind: WorkflowStepDefinition
+metadata:
+  annotations:
+    definition.oam.dev/description: Export data to Kubernetes Secret in your workflow.
+  labels:
+    custom.definition.oam.dev/ui-hidden: "true"
+  name: export2secret
+  namespace: default
+spec:
+  schematic:
+    cue:
+      template: |
+        import (
+        	"vela/op"
+        	"encoding/base64"
+        	"encoding/json"
+        )
+
+        secret: op.#Steps & {
+        	data: *parameter.data | {}
+        	if parameter.kind == "docker-registry" && parameter.dockerRegistry != _|_ {
+        		registryData: auths: "\(parameter.dockerRegistry.server)": {
+        			username: parameter.dockerRegistry.username
+        			password: parameter.dockerRegistry.password
+        			auth:     base64.Encode(null, "\(parameter.dockerRegistry.username):\(parameter.dockerRegistry.password)")
+        		}
+        		data: ".dockerconfigjson": json.Marshal(registryData)
+        	}
+        	apply: op.#Apply & {
+        		value: {
+        			apiVersion: "v1"
+        			kind:       "Secret"
+        			if parameter.type == _|_ && parameter.kind == "docker-registry" {
+        				type: "kubernetes.io/dockerconfigjson"
+        			}
+        			if parameter.type != _|_ {
+        				type: parameter.type
+        			}
+        			metadata: {
+        				name: parameter.secretName
+        				if parameter.namespace != _|_ {
+        					namespace: parameter.namespace
+        				}
+        				if parameter.namespace == _|_ {
+        					namespace: context.namespace
+        				}
+        			}
+        			stringData: data
+        		}
+        		cluster: parameter.cluster
+        	}
+        }
+        parameter: {
+        	// +usage=Specify the name of the secret
+        	secretName: string
+        	// +usage=Specify the namespace of the secret
+        	namespace?: string
+        	// +usage=Specify the type of the secret
+        	type?: string
+        	// +usage=Specify the data of secret
+        	data: {}
+        	// +usage=Specify the cluster of the secret
+        	cluster: *"" | string
+        	// +usage=Specify the kind of the secret
+        	kind: *"generic" | "docker-registry"
+        	// +usage=Specify the docker data
+        	dockerRegistry?: {
+        		// +usage=Specify the username of the docker registry
+        		username: string
+        		// +usage=Specify the password of the docker registry
+        		password: string
+        		// +usage=Specify the server of the docker registry
+        		server: *"https://index.docker.io/v1/" | string
+        	}
+        }
+---
+# Source: vela-workflow/templates/definitions/list-config.yaml
+# Code generated by KubeVela templates. DO NOT EDIT. Please edit the original cue file.
+# Definition source cue file: vela-templates/definitions/internal/list-config.cue
+apiVersion: core.oam.dev/v1beta1
+kind: WorkflowStepDefinition
+metadata:
+  annotations:
+    definition.oam.dev/description: List the configs
+  name: list-config
+  namespace: default
+spec:
+  schematic:
+    cue:
+      template: |
+        import (
+        	"vela/op"
+        )
+
+        output: op.#ListConfig & {
+        	if parameter.namespace != _|_ {
+        		namespace: parameter.namespace
+        	}
+        	if parameter.namespace == _|_ {
+        		namespace: context.namespace
+        	}
+        	template: parameter.template
+        }
+        parameter: {
+        	//+usage=Specify the template of the config.
+        	template: string
+        	//+usage=Specify the namespace of the config.
+        	namespace?: string
+        }
+---
+# Source: vela-workflow/templates/definitions/notification.yaml
+# Code generated by KubeVela templates. DO NOT EDIT. Please edit the original cue file.
+# Definition source cue file: vela-templates/definitions/internal/notification.cue
+apiVersion: core.oam.dev/v1beta1
+kind: WorkflowStepDefinition
+metadata:
+  annotations:
+    definition.oam.dev/description: Send notifications to Email, DingTalk, Slack, Lark or webhook in your workflow.
+  name: notification
+  namespace: default
+spec:
+  schematic:
+    cue:
+      template: |
+        import (
+        	"vela/op"
+        	"encoding/base64"
+        )
+
+        parameter: {
+        	// +usage=Please fulfill its url and message if you want to send Lark messages
+        	lark?: {
+        		// +usage=Specify the the lark url, you can either sepcify it in value or use secretRef
+        		url: close({
+        			// +usage=the url address content in string
+        			value: string
+        		}) | close({
+        			secretRef: {
+        				// +usage=name is the name of the secret
+        				name: string
+        				// +usage=key is the key in the secret
+        				key: string
+        			}
+        		})
+        		// +usage=Specify the message that you want to sent, refer to [Lark messaging](https://open.feishu.cn/document/ukTMukTMukTM/ucTM5YjL3ETO24yNxkjN#8b0f2a1b).
+        		message: {
+        			// +usage=msg_type can be text, post, image, interactive, share_chat, share_user, audio, media, file, sticker
+        			msg_type: string
+        			// +usage=content should be json encode string
+        			content: string
+        		}
+        	}
+        	// +usage=Please fulfill its url and message if you want to send DingTalk messages
+        	dingding?: {
+        		// +usage=Specify the the dingding url, you can either sepcify it in value or use secretRef
+        		url: close({
+        			// +usage=the url address content in string
+        			value: string
+        		}) | close({
+        			secretRef: {
+        				// +usage=name is the name of the secret
+        				name: string
+        				// +usage=key is the key in the secret
+        				key: string
+        			}
+        		})
+        		// +usage=Specify the message that you want to sent, refer to [dingtalk messaging](https://developers.dingtalk.com/document/robots/custom-robot-access/title-72m-8ag-pqw)
+        		message: {
+        			// +usage=Specify the message content of dingtalk notification
+        			text?: *null | close({
+        				content: string
+        			})
+        			// +usage=msgType can be text, link, mardown, actionCard, feedCard
+        			msgtype: *"text" | "link" | "markdown" | "actionCard" | "feedCard"
+        			link?:   *null | close({
+        				text?:       string
+        				title?:      string
+        				messageUrl?: string
+        				picUrl?:     string
+        			})
+        			markdown?: *null | close({
+        				text:  string
+        				title: string
+        			})
+        			at?: *null | close({
+        				atMobiles?: *null | [...string]
+        				isAtAll?:   bool
+        			})
+        			actionCard?: *null | close({
+        				text:           string
+        				title:          string
+        				hideAvatar:     string
+        				btnOrientation: string
+        				singleTitle:    string
+        				singleURL:      string
+        				btns:           *null | close([...*null | close({
+        					title:     string
+        					actionURL: string
+        				})])
+        			})
+        			feedCard?: *null | close({
+        				links: *null | close([...*null | close({
+        					text?:       string
+        					title?:      string
+        					messageUrl?: string
+        					picUrl?:     string
+        				})])
+        			})
+        		}
+        	}
+        	// +usage=Please fulfill its url and message if you want to send Slack messages
+        	slack?: {
+        		// +usage=Specify the the slack url, you can either sepcify it in value or use secretRef
+        		url: close({
+        			// +usage=the url address content in string
+        			value: string
+        		}) | close({
+        			secretRef: {
+        				// +usage=name is the name of the secret
+        				name: string
+        				// +usage=key is the key in the secret
+        				key: string
+        			}
+        		})
+        		// +usage=Specify the message that you want to sent, refer to [slack messaging](https://api.slack.com/reference/messaging/payload)
+        		message: {
+        			// +usage=Specify the message text for slack notification
+        			text:         string
+        			blocks?:      *null | close([...block])
+        			attachments?: *null | close({
+        				blocks?: *null | close([...block])
+        				color?:  string
+        			})
+        			thread_ts?: string
+        			// +usage=Specify the message text format in markdown for slack notification
+        			mrkdwn?: *true | bool
+        		}
+        	}
+        	// +usage=Please fulfill its from, to and content if you want to send email
+        	email?: {
+        		// +usage=Specify the email info that you want to send from
+        		from: {
+        			// +usage=Specify the email address that you want to send from
+        			address: string
+        			// +usage=The alias is the email alias to show after sending the email
+        			alias?: string
+        			// +usage=Specify the password of the email, you can either sepcify it in value or use secretRef
+        			password: close({
+        				// +usage=the password content in string
+        				value: string
+        			}) | close({
+        				secretRef: {
+        					// +usage=name is the name of the secret
+        					name: string
+        					// +usage=key is the key in the secret
+        					key: string
+        				}
+        			})
+        			// +usage=Specify the host of your email
+        			host: string
+        			// +usage=Specify the port of the email host, default to 587
+        			port: *587 | int
+        		}
+        		// +usage=Specify the email address that you want to send to
+        		to: [...string]
+        		// +usage=Specify the content of the email
+        		content: {
+        			// +usage=Specify the subject of the email
+        			subject: string
+        			// +usage=Specify the context body of the email
+        			body: string
+        		}
+        	}
+        }
+        block: {
+        	type:      string
+        	block_id?: string
+        	elements?: [...{
+        		type:       string
+        		action_id?: string
+        		url?:       string
+        		value?:     string
+        		style?:     string
+        		text?:      textType
+        		confirm?: {
+        			title:   textType
+        			text:    textType
+        			confirm: textType
+        			deny:    textType
+        			style?:  string
+        		}
+        		options?: [...option]
+        		initial_options?: [...option]
+        		placeholder?:  textType
+        		initial_date?: string
+        		image_url?:    string
+        		alt_text?:     string
+        		option_groups?: [...option]
+        		max_selected_items?: int
+        		initial_value?:      string
+        		multiline?:          bool
+        		min_length?:         int
+        		max_length?:         int
+        		dispatch_action_config?: trigger_actions_on?: [...string]
+        		initial_time?: string
+        	}]
+        }
+        textType: {
+        	type:      string
+        	text:      string
+        	emoji?:    bool
+        	verbatim?: bool
+        }
+        option: {
+        	text:         textType
+        	value:        string
+        	description?: textType
+        	url?:         string
+        }
+        // send webhook notification
+        ding: op.#Steps & {
+        	if parameter.dingding != _|_ {
+        		if parameter.dingding.url.value != _|_ {
+        			ding1: op.#DingTalk & {
+        				message: parameter.dingding.message
+        				dingUrl: parameter.dingding.url.value
+        			}
+        		}
+        		if parameter.dingding.url.secretRef != _|_ && parameter.dingding.url.value == _|_ {
+        			read: op.#Read & {
+        				value: {
+        					apiVersion: "v1"
+        					kind:       "Secret"
+        					metadata: {
+        						name:      parameter.dingding.url.secretRef.name
+        						namespace: context.namespace
+        					}
+        				}
+        			}
+
+        			stringValue: op.#ConvertString & {bt: base64.Decode(null, read.value.data[parameter.dingding.url.secretRef.key])}
+        			ding2:       op.#DingTalk & {
+        				message: parameter.dingding.message
+        				dingUrl: stringValue.str
+        			}
+        		}
+        	}
+        }
+        lark: op.#Steps & {
+        	if parameter.lark != _|_ {
+        		if parameter.lark.url.value != _|_ {
+        			lark1: op.#Lark & {
+        				message: parameter.lark.message
+        				larkUrl: parameter.lark.url.value
+        			}
+        		}
+        		if parameter.lark.url.secretRef != _|_ && parameter.lark.url.value == _|_ {
+        			read: op.#Read & {
+        				value: {
+        					apiVersion: "v1"
+        					kind:       "Secret"
+        					metadata: {
+        						name:      parameter.lark.url.secretRef.name
+        						namespace: context.namespace
+        					}
+        				}
+        			}
+
+        			stringValue: op.#ConvertString & {bt: base64.Decode(null, read.value.data[parameter.lark.url.secretRef.key])}
+        			lark2:       op.#Lark & {
+        				message: parameter.lark.message
+        				larkUrl: stringValue.str
+        			}
+        		}
+        	}
+        }
+        slack: op.#Steps & {
+        	if parameter.slack != _|_ {
+        		if parameter.slack.url.value != _|_ {
+        			slack1: op.#Slack & {
+        				message:  parameter.slack.message
+        				slackUrl: parameter.slack.url.value
+        			}
+        		}
+        		if parameter.slack.url.secretRef != _|_ && parameter.slack.url.value == _|_ {
+        			read: op.#Read & {
+        				value: {
+        					kind:       "Secret"
+        					apiVersion: "v1"
+        					metadata: {
+        						name:      parameter.slack.url.secretRef.name
+        						namespace: context.namespace
+        					}
+        				}
+        			}
+
+        			stringValue: op.#ConvertString & {bt: base64.Decode(null, read.value.data[parameter.slack.url.secretRef.key])}
+        			slack2:      op.#Slack & {
+        				message:  parameter.slack.message
+        				slackUrl: stringValue.str
+        			}
+        		}
+        	}
+        }
+        email: op.#Steps & {
+        	if parameter.email != _|_ {
+        		if parameter.email.from.password.value != _|_ {
+        			email1: op.#SendEmail & {
+        				from: {
+        					address: parameter.email.from.address
+        					if parameter.email.from.alias != _|_ {
+        						alias: parameter.email.from.alias
+        					}
+        					password: parameter.email.from.password.value
+        					host:     parameter.email.from.host
+        					port:     parameter.email.from.port
+        				}
+        				to:      parameter.email.to
+        				content: parameter.email.content
+        			}
+        		}
+
+        		if parameter.email.from.password.secretRef != _|_ && parameter.email.from.password.value == _|_ {
+        			read: op.#Read & {
+        				value: {
+        					kind:       "Secret"
+        					apiVersion: "v1"
+        					metadata: {
+        						name:      parameter.email.from.password.secretRef.name
+        						namespace: context.namespace
+        					}
+        				}
+        			}
+
+        			stringValue: op.#ConvertString & {bt: base64.Decode(null, read.value.data[parameter.email.from.password.secretRef.key])}
+        			email2:      op.#SendEmail & {
+        				from: {
+        					address: parameter.email.from.address
+        					if parameter.email.from.alias != _|_ {
+        						alias: parameter.email.from.alias
+        					}
+        					password: stringValue.str
+        					host:     parameter.email.from.host
+        					port:     parameter.email.from.port
+        				}
+        				to:      parameter.email.to
+        				content: parameter.email.content
+        			}
+        		}
+        	}
+        }
+---
+# Source: vela-workflow/templates/definitions/print-message-in-status.yaml
+# Code generated by KubeVela templates. DO NOT EDIT. Please edit the original cue file.
+# Definition source cue file: vela-templates/definitions/internal/print-message-in-status.cue
+apiVersion: core.oam.dev/v1beta1
+kind: WorkflowStepDefinition
+metadata:
+  annotations:
+    definition.oam.dev/description: print message in workflow step status
+  labels:
+    custom.definition.oam.dev/ui-hidden: "true"
+  name: print-message-in-status
+  namespace: default
+spec:
+  schematic:
+    cue:
+      template: |
+        import (
+        	"vela/op"
+        )
+
+        parameter: message: string
+        msg: op.#Message & {
+        	message: parameter.message
+        }
+---
+# Source: vela-workflow/templates/definitions/read-app.yaml
+# Code generated by KubeVela templates. DO NOT EDIT. Please edit the original cue file.
+# Definition source cue file: vela-templates/definitions/internal/read-app.cue
+apiVersion: core.oam.dev/v1beta1
+kind: WorkflowStepDefinition
+metadata:
+  annotations:
+    definition.oam.dev/alias: ""
+    definition.oam.dev/description: Read application from the cluster
+    definition.oam.dev/example-url: https://raw.githubusercontent.com/kubevela/workflow/main/examples/workflow-run/apply-applications.yaml
+  labels:
+    custom.definition.oam.dev/scope: WorkflowRun
+  name: read-app
+  namespace: default
+spec:
+  schematic:
+    cue:
+      template: |
+        import (
+        	"vela/op"
+        	"encoding/yaml"
+        	"strings"
+        )
+
+        read: op.#Read & {
+        	value: {
+        		apiVersion: "core.oam.dev/v1beta1"
+        		kind:       "Application"
+        		metadata: {
+        			name:      parameter.name
+        			namespace: parameter.namespace
+        		}
+        	}
+        }
+        message: op.#Steps & {
+        	if read.err != _|_ {
+        		if strings.Contains(read.err, "not found") {
+        			msg: op.#Message & {
+        				message: "Application not found"
+        			}
+        		}
+        	}
+        }
+        parameter: {
+        	name:      string
+        	namespace: *context.namespace | string
+        }
+---
+# Source: vela-workflow/templates/definitions/read-config.yaml
+# Code generated by KubeVela templates. DO NOT EDIT. Please edit the original cue file.
+# Definition source cue file: vela-templates/definitions/internal/read-config.cue
+apiVersion: core.oam.dev/v1beta1
+kind: WorkflowStepDefinition
+metadata:
+  annotations:
+    definition.oam.dev/description: Read a config
+  name: read-config
+  namespace: default
+spec:
+  schematic:
+    cue:
+      template: |
+        import (
+        	"vela/op"
+        )
+
+        output: op.#ReadConfig & {
+        	name: parameter.name
+        	if parameter.namespace != _|_ {
+        		namespace: parameter.namespace
+        	}
+        	if parameter.namespace == _|_ {
+        		namespace: context.namespace
+        	}
+        }
+        parameter: {
+        	//+usage=Specify the name of the config.
+        	name: string
+
+        	//+usage=Specify the namespace of the config.
+        	namespace?: string
+        }
+---
+# Source: vela-workflow/templates/definitions/read-object.yaml
+# Code generated by KubeVela templates. DO NOT EDIT. Please edit the original cue file.
+# Definition source cue file: vela-templates/definitions/internal/read-object.cue
+apiVersion: core.oam.dev/v1beta1
+kind: WorkflowStepDefinition
+metadata:
+  annotations:
+    definition.oam.dev/description: Read Kubernetes objects from cluster for your workflow steps
+  labels:
+    custom.definition.oam.dev/ui-hidden: "true"
+  name: read-object
+  namespace: default
+spec:
+  schematic:
+    cue:
+      template: |
+        import (
+        	"vela/op"
+        )
+
+        output: {
+        	if parameter.apiVersion == _|_ && parameter.kind == _|_ {
+        		op.#Read & {
+        			value: {
+        				apiVersion: "core.oam.dev/v1beta1"
+        				kind:       "Application"
+        				metadata: {
+        					name: parameter.name
+        					if parameter.namespace != _|_ {
+        						namespace: parameter.namespace
+        					}
+        				}
+        			}
+        			cluster: parameter.cluster
+        		}
+        	}
+        	if parameter.apiVersion != _|_ || parameter.kind != _|_ {
+        		op.#Read & {
+        			value: {
+        				apiVersion: parameter.apiVersion
+        				kind:       parameter.kind
+        				metadata: {
+        					name: parameter.name
+        					if parameter.namespace != _|_ {
+        						namespace: parameter.namespace
+        					}
+        				}
+        			}
+        			cluster: parameter.cluster
+        		}
+        	}
+        }
+        parameter: {
+        	// +usage=Specify the apiVersion of the object, defaults to 'core.oam.dev/v1beta1'
+        	apiVersion?: string
+        	// +usage=Specify the kind of the object, defaults to Application
+        	kind?: string
+        	// +usage=Specify the name of the object
+        	name: string
+        	// +usage=The namespace of the resource you want to read
+        	namespace?: *"default" | string
+        	// +usage=The cluster you want to apply the resource to, default is the current control plane cluster
+        	cluster: *"" | string
+        }
+---
+# Source: vela-workflow/templates/definitions/request.yaml
+# Code generated by KubeVela templates. DO NOT EDIT. Please edit the original cue file.
+# Definition source cue file: vela-templates/definitions/internal/request.cue
+apiVersion: core.oam.dev/v1beta1
+kind: WorkflowStepDefinition
+metadata:
+  annotations:
+    definition.oam.dev/alias: ""
+    definition.oam.dev/description: Send request to the url
+    definition.oam.dev/example-url: https://raw.githubusercontent.com/kubevela/workflow/main/examples/workflow-run/request.yaml
+  name: request
+  namespace: default
+spec:
+  schematic:
+    cue:
+      template: |
+        import (
+        	"vela/op"
+        	"encoding/json"
+        )
+
+        http: op.#HTTPDo & {
+        	method: parameter.method
+        	url:    parameter.url
+        	request: {
+        		if parameter.body != _|_ {
+        			body: json.Marshal(parameter.body)
+        		}
+        		if parameter.header != _|_ {
+        			header: parameter.header
+        		}
+        	}
+        }
+        fail: op.#Steps & {
+        	if http.response.statusCode > 400 {
+        		requestFail: op.#Fail & {
+        			message: "request of \(parameter.url) is fail: \(http.response.statusCode)"
+        		}
+        	}
+        }
+        response: json.Unmarshal(http.response.body)
+        parameter: {
+        	url:    string
+        	method: *"GET" | "POST" | "PUT" | "DELETE"
+        	body?: {...}
+        	header?: [string]: string
+        }
+---
+# Source: vela-workflow/templates/definitions/step-group.yaml
+# Code generated by KubeVela templates. DO NOT EDIT. Please edit the original cue file.
+# Definition source cue file: vela-templates/definitions/internal/step-group.cue
+apiVersion: core.oam.dev/v1beta1
+kind: WorkflowStepDefinition
+metadata:
+  annotations:
+    definition.oam.dev/description: A special step that you can declare 'subSteps' in it, 'subSteps' is an array containing any step type whose valid parameters do not include the `step-group` step type itself. The sub steps were executed in parallel.
+  labels:
+    custom.definition.oam.dev/ui-hidden: "true"
+  name: step-group
+  namespace: default
+spec:
+  schematic:
+    cue:
+      template: |
+        // no parameters, the nop only to make the template not empty or it's invalid
+        nop: {}
+---
+# Source: vela-workflow/templates/definitions/suspend.yaml
+# Code generated by KubeVela templates. DO NOT EDIT. Please edit the original cue file.
+# Definition source cue file: vela-templates/definitions/internal/suspend.cue
+apiVersion: core.oam.dev/v1beta1
+kind: WorkflowStepDefinition
+metadata:
+  annotations:
+    definition.oam.dev/description: Suspend the current workflow, it can be resumed by 'vela workflow resume' command.
+  name: suspend
+  namespace: default
+spec:
+  schematic:
+    cue:
+      template: |
+        parameter: {
+        	// +usage=Specify the wait duration time to resume workflow such as "30s", "1min" or "2m15s"
+        	duration?: string
+        }
+---
+# Source: vela-workflow/templates/definitions/vela-cli.yaml
+# Code generated by KubeVela templates. DO NOT EDIT. Please edit the original cue file.
+# Definition source cue file: vela-templates/definitions/internal/vela-cli.cue
+apiVersion: core.oam.dev/v1beta1
+kind: WorkflowStepDefinition
+metadata:
+  annotations:
+    definition.oam.dev/description: Run a vela command
+    definition.oam.dev/example-url: https://raw.githubusercontent.com/kubevela/workflow/main/examples/workflow-run/apply-terraform-resource.yaml
+  name: vela-cli
+  namespace: default
+spec:
+  schematic:
+    cue:
+      template: |
+        import (
+        	"vela/op"
+        )
+
+        mountsArray: [
+        	if parameter.storage != _|_ && parameter.storage.secret != _|_ for v in parameter.storage.secret {
+        		{
+        			name:      "secret-" + v.name
+        			mountPath: v.mountPath
+        			if v.subPath != _|_ {
+        				subPath: v.subPath
+        			}
+        		}
+        	},
+        	if parameter.storage != _|_ && parameter.storage.hostPath != _|_ for v in parameter.storage.hostPath {
+        		{
+        			name:      "hostpath-" + v.name
+        			mountPath: v.mountPath
+        		}
+        	},
+        ]
+        volumesList: [
+        	if parameter.storage != _|_ && parameter.storage.secret != _|_ for v in parameter.storage.secret {
+        		{
+        			name: "secret-" + v.name
+        			secret: {
+        				defaultMode: v.defaultMode
+        				secretName:  v.secretName
+        				if v.items != _|_ {
+        					items: v.items
+        				}
+        			}
+        		}
+        		if parameter.storage != _|_ && parameter.storage.hostPath != _|_ for v in parameter.storage.hostPath {
+        			{
+        				name: "hostpath-" + v.name
+        				path: v.path
+        			}
+        		}
+        	},
+        ]
+        deDupVolumesArray: [
+        	for val in [
+        		for i, vi in volumesList {
+        			for j, vj in volumesList if j < i && vi.name == vj.name {
+        				_ignore: true
+        			}
+        			vi
+        		},
+        	] if val._ignore == _|_ {
+        		val
+        	},
+        ]
+        job: op.#Apply & {
+        	value: {
+        		apiVersion: "batch/v1"
+        		kind:       "Job"
+        		metadata: {
+        			name: "\(context.name)-\(context.stepName)-\(context.stepSessionID)"
+        			if parameter.serviceAccountName == "kubevela-vela-core" {
+        				namespace: "vela-system"
+        			}
+        			if parameter.serviceAccountName != "kubevela-vela-core" {
+        				namespace: context.namespace
+        			}
+        		}
+        		spec: {
+        			backoffLimit: 3
+        			template: {
+        				metadata: labels: "workflow.oam.dev/step-name": "\(context.name)-\(context.stepName)"
+        				spec: {
+        					containers: [
+        						{
+        							name:         "\(context.name)-\(context.stepName)-\(context.stepSessionID)-job"
+        							image:        parameter.image
+        							command:      parameter.command
+        							volumeMounts: mountsArray
+        						},
+        					]
+        					restartPolicy:  "Never"
+        					serviceAccount: parameter.serviceAccountName
+        					volumes:        deDupVolumesArray
+        				}
+        			}
+        		}
+        	}
+        }
+        log: op.#Log & {
+        	source: resources: [{labelSelector: "workflow.oam.dev/step-name": "\(context.name)-\(context.stepName)"}]
+        }
+        fail: op.#Steps & {
+        	if job.value.status.failed != _|_ {
+        		if job.value.status.failed > 2 {
+        			breakWorkflow: op.#Fail & {
+        				message: "failed to execute vela command"
+        			}
+        		}
+        	}
+        }
+        wait: op.#ConditionalWait & {
+        	continue: job.value.status.succeeded != _|_ && job.value.status.succeeded > 0
+        }
+        parameter: {
+        	// +usage=Specify the name of the addon.
+        	addonName: string
+        	// +usage=Specify the vela command
+        	command: [...string]
+        	// +usage=Specify the image
+        	image: *"oamdev/vela-cli:v1.6.4" | string
+        	// +usage=specify serviceAccountName want to use
+        	serviceAccountName: *"kubevela-vela-core" | string
+        	storage?: {
+        		// +usage=Mount Secret type storage
+        		secret?: [...{
+        			name:        string
+        			mountPath:   string
+        			subPath?:    string
+        			defaultMode: *420 | int
+        			secretName:  string
+        			items?: [...{
+        				key:  string
+        				path: string
+        				mode: *511 | int
+        			}]
+        		}]
+        		// +usage=Declare host path type storage
+        		hostPath?: [...{
+        			name:      string
+        			path:      string
+        			mountPath: string
+        			type:      *"Directory" | "DirectoryOrCreate" | "FileOrCreate" | "File" | "Socket" | "CharDevice" | "BlockDevice"
+        		}]
+        	}
+        }
+---
+# Source: vela-workflow/templates/admission-webhooks/job-patch/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name:  my-vela-workflow-admission
+  namespace: default
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade,post-install,post-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+  labels:
+    app: vela-workflow-admission
+    helm.sh/chart: vela-workflow-0.6.0
+    app.kubernetes.io/name: vela-workflow
+    app.kubernetes.io/instance: my-vela-workflow
+    app.kubernetes.io/version: "0.6.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: vela-workflow/templates/admission-webhooks/job-patch/clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name:  my-vela-workflow-admission
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade,post-install,post-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+  labels:
+    app: vela-workflow-admission
+    helm.sh/chart: vela-workflow-0.6.0
+    app.kubernetes.io/name: vela-workflow
+    app.kubernetes.io/instance: my-vela-workflow
+    app.kubernetes.io/version: "0.6.0"
+    app.kubernetes.io/managed-by: Helm
+rules:
+  - apiGroups:
+      - admissionregistration.k8s.io
+    resources:
+      - validatingwebhookconfigurations
+      - mutatingwebhookconfigurations
+    verbs:
+      - get
+      - update
+  - apiGroups:
+      - apiextensions.k8s.io
+    resources:
+      - customresourcedefinitions
+    verbs:
+      - get
+      - update
+---
+# Source: vela-workflow/templates/admission-webhooks/job-patch/clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name:  my-vela-workflow-admission
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade,post-install,post-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+  labels:
+    app: vela-workflow-admission
+    helm.sh/chart: vela-workflow-0.6.0
+    app.kubernetes.io/name: vela-workflow
+    app.kubernetes.io/instance: my-vela-workflow
+    app.kubernetes.io/version: "0.6.0"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-vela-workflow-admission
+subjects:
+  - kind: ServiceAccount
+    name: my-vela-workflow-admission
+    namespace: default
+---
+# Source: vela-workflow/templates/admission-webhooks/job-patch/role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name:  my-vela-workflow-admission
+  namespace: default
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade,post-install,post-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+  labels:
+    app: vela-workflow-admission
+    helm.sh/chart: vela-workflow-0.6.0
+    app.kubernetes.io/name: vela-workflow
+    app.kubernetes.io/instance: my-vela-workflow
+    app.kubernetes.io/version: "0.6.0"
+    app.kubernetes.io/managed-by: Helm
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+    verbs:
+      - get
+      - create
+---
+# Source: vela-workflow/templates/admission-webhooks/job-patch/rolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name:  my-vela-workflow-admission
+  namespace: default
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade,post-install,post-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+  labels:
+    app: vela-workflow-admission
+    helm.sh/chart: vela-workflow-0.6.0
+    app.kubernetes.io/name: vela-workflow
+    app.kubernetes.io/instance: my-vela-workflow
+    app.kubernetes.io/version: "0.6.0"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: my-vela-workflow-admission
+subjects:
+  - kind: ServiceAccount
+    name: my-vela-workflow-admission
+    namespace: default
+---
+# Source: vela-workflow/templates/admission-webhooks/job-patch/job-createSecret.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name:  my-vela-workflow-admission-create
+  namespace: default
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+  labels:
+    app: vela-workflow-admission-create
+    helm.sh/chart: vela-workflow-0.6.0
+    app.kubernetes.io/name: vela-workflow
+    app.kubernetes.io/instance: my-vela-workflow
+    app.kubernetes.io/version: "0.6.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  template:
+    metadata:
+      name:  my-vela-workflow-admission-create
+      labels:
+        app: vela-workflow-admission-create
+        helm.sh/chart: vela-workflow-0.6.0
+        app.kubernetes.io/name: vela-workflow
+        app.kubernetes.io/instance: my-vela-workflow
+        app.kubernetes.io/version: "0.6.0"
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      containers:
+        - name: create
+          image: oamdev/kube-webhook-certgen:v2.4.1
+          imagePullPolicy: IfNotPresent
+          args:
+            - create
+            - --host=vela-workflow-webhook,vela-workflow-webhook.default.svc
+            - --namespace=default
+            - --secret-name=my-vela-workflow-admission
+            - --key-name=tls.key
+            - --cert-name=tls.crt
+      restartPolicy: OnFailure
+      serviceAccountName: my-vela-workflow-admission
+      securityContext:
+        runAsGroup: 2000
+        runAsNonRoot: true
+        runAsUser: 2000
+---
+# Source: vela-workflow/templates/admission-webhooks/job-patch/job-patchWebhook.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name:  my-vela-workflow-admission-patch
+  namespace: default
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+  labels:
+    app: vela-workflow-admission-patch
+    helm.sh/chart: vela-workflow-0.6.0
+    app.kubernetes.io/name: vela-workflow
+    app.kubernetes.io/instance: my-vela-workflow
+    app.kubernetes.io/version: "0.6.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  template:
+    metadata:
+      name:  my-vela-workflow-admission-patch
+      labels:
+        app: vela-workflow-admission-patch
+        helm.sh/chart: vela-workflow-0.6.0
+        app.kubernetes.io/name: vela-workflow
+        app.kubernetes.io/instance: my-vela-workflow
+        app.kubernetes.io/version: "0.6.0"
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      containers:
+        - name: patch
+          image: oamdev/kube-webhook-certgen:v2.4.1
+          imagePullPolicy: IfNotPresent
+          args:
+            - patch
+            - --webhook-name=my-vela-workflow-admission
+            - --namespace=default
+            - --secret-name=my-vela-workflow-admission
+            - --patch-failure-policy=Fail
+      restartPolicy: OnFailure
+      serviceAccountName: my-vela-workflow-admission
+      securityContext:
+        runAsGroup: 2000
+        runAsNonRoot: true
+        runAsUser: 2000

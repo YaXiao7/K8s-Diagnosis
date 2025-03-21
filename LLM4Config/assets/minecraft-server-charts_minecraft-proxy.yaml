@@ -1,0 +1,138 @@
+---
+# Source: minecraft-proxy/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: "my-minecraft-proxy-minecraft-proxy-rcon"
+  namespace: default
+  labels:
+    app: my-minecraft-proxy-minecraft-proxy
+    chart: "minecraft-proxy-3.8.2"
+    release: "my-minecraft-proxy"
+    heritage: "Helm"
+type: Opaque
+data:
+  rcon-password:
+    "Q0hBTkdFTUUh"
+---
+# Source: minecraft-proxy/templates/proxy-svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-minecraft-proxy-minecraft-proxy
+  namespace: default
+  labels:
+    app: my-minecraft-proxy-minecraft-proxy
+    chart: "minecraft-proxy-3.8.2"
+    release: "my-minecraft-proxy"
+    heritage: "Helm"
+  annotations:
+    {}
+spec:
+  type: ClusterIP
+  ports:
+  - name: proxy
+    port: 25565
+    targetPort: proxy
+    protocol: TCP
+  selector:
+    app: my-minecraft-proxy-minecraft-proxy
+---
+# Source: minecraft-proxy/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-minecraft-proxy-minecraft-proxy
+  namespace: default
+  annotations: 
+    {}
+  labels:
+    app: my-minecraft-proxy-minecraft-proxy
+    chart: "minecraft-proxy-3.8.2"
+    release: "my-minecraft-proxy"
+    heritage: "Helm"
+spec:
+  replicas: 1
+  strategy:
+    type: 
+  selector:
+    matchLabels:
+      app: my-minecraft-proxy-minecraft-proxy
+  template:
+    metadata:
+      labels:
+        app: my-minecraft-proxy-minecraft-proxy
+      annotations: 
+        {}
+    spec:
+      securityContext:
+        fsGroup: 2000
+        runAsGroup: 3000
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        []
+      containers:
+      - name: my-minecraft-proxy-minecraft-proxy
+        image: "itzg/bungeecord:latest"
+        imagePullPolicy: Always
+        tty: true
+        stdin: true
+        resources: 
+          requests:
+            cpu: 500m
+            memory: 512Mi
+        readinessProbe:
+          tcpSocket:
+            port: 25577
+          initialDelaySeconds: 30
+          periodSeconds: 5
+          failureThreshold: 10
+          successThreshold: 1
+          timeoutSeconds: 1
+        livenessProbe:
+          tcpSocket:
+            port: 25577
+          initialDelaySeconds: 30
+          periodSeconds: 5
+          failureThreshold: 10
+          successThreshold: 1
+          timeoutSeconds: 1
+        env:
+        - name: UID
+          value: "1000"
+        - name: GID
+          value: "1000"
+        - name: TYPE
+          value: "BUNGEECORD"
+        - name: BUNGEE_JOB_ID
+          value: lastStableBuild
+        - name: MEMORY
+          value: "512M"
+        - name: JVM_OPTS
+          value: ""
+        - name: ENABLE_RCON
+          value: "false"
+
+        ports:
+        - name: proxy
+          containerPort: 25577
+          protocol: TCP
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: datadir
+          mountPath: /server
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: datadir
+        emptyDir: {}

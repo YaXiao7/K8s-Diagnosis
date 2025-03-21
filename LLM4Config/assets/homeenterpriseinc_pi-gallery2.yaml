@@ -1,0 +1,336 @@
+---
+# Source: pi-gallery2/templates/persistentVolume.yaml
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pi-gallery2-config-pv
+  finalizers: []
+  labels:
+    helm.sh/chart: pi-gallery2-0.3
+    app-name: pi-gallery2
+    component: "photo-server"
+    managed-by: chynten
+    created-by: chynten
+    version: "1.9.0-debian-buster"
+spec:
+  volumeMode: Filesystem
+  capacity:
+    storage: 5Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-storage-class
+  claimRef:
+    name: pi-gallery2-config-pvc
+    namespace: default
+  local:
+    path: /opt/data/pi-gallery2/config
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - example
+---
+# Source: pi-gallery2/templates/persistentVolume.yaml
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pi-gallery2-data-pv
+  finalizers: []
+  labels:
+    helm.sh/chart: pi-gallery2-0.3
+    app-name: pi-gallery2
+    component: "photo-server"
+    managed-by: chynten
+    created-by: chynten
+    version: "1.9.0-debian-buster"
+spec:
+  capacity:
+    storage: 2Ti
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-storage-class
+  claimRef:
+    name: pi-gallery2-data-pvc
+    namespace: default
+  local:
+    path: /opt/data/pi-gallery2/data
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+            - example
+---
+# Source: pi-gallery2/templates/persistentVolume.yaml
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pi-gallery2-image-pv
+  finalizers: []
+  labels:
+    helm.sh/chart: pi-gallery2-0.3
+    app-name: pi-gallery2
+    component: "photo-server"
+    managed-by: chynten
+    created-by: chynten
+    version: "1.9.0-debian-buster"
+spec:
+  capacity:
+    storage: 2Ti
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-storage-class
+  claimRef:
+    name: pi-gallery2-image-pvc
+    namespace: default
+  local:
+    path: /mnt/
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - example
+---
+# Source: pi-gallery2/templates/presistentVolumeClaim.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pi-gallery2-config-pvc
+  labels:
+    helm.sh/chart: pi-gallery2-0.3
+    app-name: pi-gallery2
+    component: "photo-server"
+    managed-by: chynten
+    created-by: chynten
+    version: "1.9.0-debian-buster"
+spec:
+  accessModes:
+  - "ReadWriteOnce"
+  resources:
+    requests:
+      storage: "5Gi"
+---
+# Source: pi-gallery2/templates/presistentVolumeClaim.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pi-gallery2-data-pvc
+  labels:
+    helm.sh/chart: pi-gallery2-0.3
+    app-name: pi-gallery2
+    component: "photo-server"
+    managed-by: chynten
+    created-by: chynten
+    version: "1.9.0-debian-buster"
+spec:
+  accessModes:
+  - "ReadWriteOnce"
+  resources:
+    requests:
+      storage: "2Ti"
+---
+# Source: pi-gallery2/templates/presistentVolumeClaim.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pi-gallery2-image-pvc
+  labels:
+    helm.sh/chart: pi-gallery2-0.3
+    app-name: pi-gallery2
+    component: "photo-server"
+    managed-by: chynten
+    created-by: chynten
+    version: "1.9.0-debian-buster"
+spec:
+  accessModes:
+    - "ReadWriteOnce"
+  resources:
+    requests:
+      storage: "2Ti"
+---
+# Source: pi-gallery2/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: pi-gallery2-svc
+  labels:
+    helm.sh/chart: pi-gallery2-0.3
+    app-name: pi-gallery2
+    component: "photo-server"
+    managed-by: chynten
+    created-by: chynten
+    version: "1.9.0-debian-buster"
+spec:
+  type: ClusterIP
+  ports:
+    - name: pms
+      protocol: TCP
+      port: 80
+      targetPort: 80
+  selector:
+    app-name: pi-gallery2
+---
+# Source: pi-gallery2/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pi-gallery2-deployment
+  labels:
+    helm.sh/chart: pi-gallery2-0.3
+    app-name: pi-gallery2
+    component: "photo-server"
+    managed-by: chynten
+    created-by: chynten
+    version: "1.9.0-debian-buster"
+spec:
+  replicas: 1
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app-name: pi-gallery2
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app-name: pi-gallery2
+    spec:
+      hostNetwork: false
+      restartPolicy: Always
+      containers:
+        - name: pi-gallery2
+          image: "bpatrik/pigallery2:1.9.0-debian-buster"
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            privileged: false
+          resources:
+            {}
+          env:
+          - name: NODE_ENV
+            value: "production"
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            failureThreshold: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            failureThreshold: 5
+            periodSeconds: 10
+          startupProbe:
+            httpGet:
+              path: /
+              port: 80
+            failureThreshold: 30            
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+          - name: data
+            mountPath: /app/data/db
+          - name: config
+            mountPath: /app/data/config
+          - name: image
+            mountPath: /app/data/images
+          - name: tmp-volume
+            mountPath: /app/data/tmp
+      securityContext:
+        {}
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: 'pi-gallery2-data-pvc'
+      - name: config
+        persistentVolumeClaim:
+          claimName: 'pi-gallery2-config-pvc'
+      - name: image
+        persistentVolumeClaim:
+          claimName: 'pi-gallery2-image-pvc'
+      - name: tmp-volume
+        emptyDir: {}
+---
+# Source: pi-gallery2/templates/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: pi-gallery2-ingress
+  labels:
+    helm.sh/chart: pi-gallery2-0.3
+    app-name: pi-gallery2
+    component: "photo-server"
+    managed-by: chynten
+    created-by: chynten
+    version: "1.9.0-debian-buster"
+spec:
+  tls:
+    - hosts:
+        - "photos.example.com"
+      secretName: pi-gallery2-letsencrypt-certificate
+  rules:
+    - host: "photos.example.com"
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: pi-gallery2-svc
+                port:
+                  number: 80
+---
+# Source: pi-gallery2/templates/certificate.yaml
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: pi-gallery2-certificate
+  labels:
+    helm.sh/chart: pi-gallery2-0.3
+    app-name: pi-gallery2
+    component: "photo-server"
+    managed-by: chynten
+    created-by: chynten
+    version: "1.9.0-debian-buster"
+spec:
+  dnsNames:
+    - "photos.example.com"
+  secretName: pi-gallery2-letsencrypt-certificate
+  issuerRef:
+    kind: ClusterIssuer
+    name: letsencrypt
+---
+# Source: pi-gallery2/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-pi-gallery2-test-connection"
+  labels:
+    helm.sh/chart: pi-gallery2-0.3
+    app-name: pi-gallery2
+    component: "photo-server"
+    managed-by: chynten
+    created-by: chynten
+    version: "1.9.0-debian-buster"
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-pi-gallery2:80']
+  restartPolicy: Never

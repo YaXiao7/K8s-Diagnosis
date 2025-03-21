@@ -1,0 +1,54 @@
+---
+# Source: dcgm-exporter/templates/dcgm-exporter.yaml
+apiVersion: plugins.kubegems.io/v1beta1
+kind: Plugin
+metadata:
+  name: dcgm-exporter
+  namespace: "default"
+spec:
+  kind: helm
+  url: https://nvidia.github.io/dcgm-exporter/helm-charts
+  version: 2.6.9
+  values:
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+          - matchExpressions:
+            - key: nvidia.com/gpu
+              operator: Exists
+          - matchExpressions:
+            - key: tencent.com/vcuda
+              operator: Exists
+    serviceMonitor:
+      interval: 15s
+      honorLabels: true
+---
+# Source: dcgm-exporter/templates/recording-rule.yaml
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  labels:
+    prometheusrule.kubegems.io/name: dcgm-exporter
+  name: dcgm-exporter
+  namespace: default
+spec:
+  groups:
+    - name: gpu
+      rules:
+        - record: gems_container_gpu_usage_percent
+          expr: |
+            sum(DCGM_FI_DEV_GPU_UTIL * on(namespace,pod) group_left(node,host_ip,pod_ip) gems_pod_status) 
+            by (container, pod, namespace, device, node, host_ip, pod_ip, modelName)
+        - record: gems_container_gpu_memory_usage_mb
+          expr: |
+            sum(DCGM_FI_DEV_FB_USED * on(namespace,pod) group_left(node,host_ip,pod_ip) gems_pod_status) 
+            by (container, pod, namespace, device, node, host_ip, pod_ip, modelName)
+        - record: gems_container_gpu_temp
+          expr: |
+            sum(DCGM_FI_DEV_GPU_TEMP * on(namespace,pod) group_left(node,host_ip,pod_ip) gems_pod_status) 
+            by (container, pod, namespace, device, node, host_ip, pod_ip, modelName)
+        - record: gems_container_gpu_power_usage_watt
+          expr: |
+            sum(DCGM_FI_DEV_POWER_USAGE * on(namespace,pod) group_left(node,host_ip,pod_ip) gems_pod_status) 
+            by (container, pod, namespace, device, node, host_ip, pod_ip, modelName)

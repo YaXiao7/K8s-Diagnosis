@@ -1,0 +1,84 @@
+---
+# Source: nginx-websockets-proxy/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-nginx-websockets-proxy
+  labels:
+    helm.sh/chart: nginx-websockets-proxy-0.1.0
+    app.kubernetes.io/name: nginx-websockets-proxy
+    app.kubernetes.io/instance: my-nginx-websockets-proxy
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: nginx-websockets-proxy/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-nginx-websockets-proxy
+  labels:
+    helm.sh/chart: nginx-websockets-proxy-0.1.0
+    app.kubernetes.io/name: nginx-websockets-proxy
+    app.kubernetes.io/instance: my-nginx-websockets-proxy
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: nginx-websockets-proxy
+    app.kubernetes.io/instance: my-nginx-websockets-proxy
+---
+# Source: nginx-websockets-proxy/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-nginx-websockets-proxy
+  labels:
+    helm.sh/chart: nginx-websockets-proxy-0.1.0
+    app.kubernetes.io/name: nginx-websockets-proxy
+    app.kubernetes.io/instance: my-nginx-websockets-proxy
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: nginx-websockets-proxy
+      app.kubernetes.io/instance: my-nginx-websockets-proxy
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: nginx-websockets-proxy
+        app.kubernetes.io/instance: my-nginx-websockets-proxy
+    spec:
+      serviceAccountName: my-nginx-websockets-proxy
+      securityContext:
+        {}
+      containers:
+        - name: nginx-websockets-proxy
+          securityContext:
+            {}
+          image: docker.io/nlxio/nginx-websockets-proxy:096fefa6
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: OUTWAY_SERVICE_BASE_URL
+              value: 
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+          resources:
+            {}

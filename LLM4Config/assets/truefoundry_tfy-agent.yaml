@@ -1,0 +1,272 @@
+---
+# Source: tfy-agent/templates/resource-quota.yaml
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: my-tfy-agent-critical-pods
+spec:
+  scopeSelector:
+    matchExpressions:
+    - operator: In
+      scopeName: PriorityClass
+      values:
+        - system-cluster-critical
+---
+# Source: tfy-agent/templates/tfy-agent-proxy-serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-tfy-agent-proxy
+  labels:
+    helm.sh/chart: tfy-agent-0.2.31
+    app.kubernetes.io/name: my-tfy-agent-proxy
+    app.kubernetes.io/version: "69d69111acf1363505441a7cb02abaea28353044"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: tfy-agent/templates/tfy-agent-serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-tfy-agent
+  labels:
+    helm.sh/chart: tfy-agent-0.2.31
+    app.kubernetes.io/name: tfy-agent
+    app.kubernetes.io/instance: my-tfy-agent
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: tfy-agent/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-tfy-agent-token
+  labels:
+    helm.sh/chart: tfy-agent-0.2.31
+    app.kubernetes.io/name: tfy-agent
+    app.kubernetes.io/instance: my-tfy-agent
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+stringData:
+  CLUSTER_TOKEN:
+---
+# Source: tfy-agent/templates/tfy-agent-clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-tfy-agent
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces", "pods", "resourcequotas", "nodes", "events"]
+    verbs: ["list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["replicasets", "deployments"]
+    verbs: ["list", "watch"]
+  - apiGroups: ["networking.istio.io"]
+    resources: ["gateways", "virtualservices"]
+    verbs: ["list", "watch"]
+  - apiGroups: ["argoproj.io"]
+    resources: ["applications", "rollouts", "workflowtemplates", "workflows"]
+    verbs: ["list", "watch"]
+---
+# Source: tfy-agent/templates/tfy-agent-proxy-clusterrole-cs.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-tfy-agent-proxy-cs
+rules:
+  - apiGroups: ["*"]
+    resources: ["*"]
+    verbs: ["*"]
+---
+# Source: tfy-agent/templates/tfy-agent-clusterrolebinding.yaml
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-tfy-agent
+subjects:
+  - kind: ServiceAccount
+    name: my-tfy-agent
+    namespace: default
+roleRef:
+  kind: ClusterRole
+  name: my-tfy-agent
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: tfy-agent/templates/tfy-agent-proxy-clusterrolebinding-cs.yaml
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-tfy-agent-proxy-cs
+subjects:
+  - kind: ServiceAccount
+    name: my-tfy-agent-proxy
+    namespace: default
+roleRef:
+  kind: ClusterRole
+  name: my-tfy-agent-proxy-cs
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: tfy-agent/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-tfy-agent
+  labels:
+    helm.sh/chart: tfy-agent-0.2.31
+    app.kubernetes.io/name: tfy-agent
+    app.kubernetes.io/instance: my-tfy-agent
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3000
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: tfy-agent
+    app.kubernetes.io/instance: my-tfy-agent
+---
+# Source: tfy-agent/templates/tfy-agent-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-tfy-agent
+  labels:
+    helm.sh/chart: tfy-agent-0.2.31
+    app.kubernetes.io/name: tfy-agent
+    app.kubernetes.io/instance: my-tfy-agent
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: tfy-agent
+      app.kubernetes.io/instance: my-tfy-agent
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: tfy-agent
+        app.kubernetes.io/instance: my-tfy-agent
+    spec:
+      serviceAccountName: my-tfy-agent
+      containers:
+        - name: tfy-agent
+          securityContext:
+            {}
+          env:
+            - name: CONTROL_PLANE_URL
+              value: "http://truefoundry-truefoundry-frontend-app.truefoundry.svc.cluster.local:5000"
+            - name: CONTROL_PLANE_NATS_URL
+              value: "ws://truefoundry-nats.truefoundry.svc.cluster.local:443"
+            - name: TENANT_NAME
+              value:  ""
+            - name: OPENCOST_ENDPOINT
+              value: "http://opencost.opencost.svc.cluster.local:9003"
+            - name: OPENCOST_POLL_INTERVAL
+              value: "180000"
+            - name: PROMETHEUS_POLL_INTERVAL
+              value: "60000"
+            - name: PROMETHEUS_ENDPOINT
+              value: "http://prometheus-operated.prometheus.svc.cluster.local:9090"
+            - name: ALERT_URL
+              value: "https://auth.truefoundry.com"
+            - name: NODE_ENV
+              value: "production"
+            - name: WORKLOAD_NAMESPACE
+              value: "default"
+            - name: CLUSTER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  key: CLUSTER_TOKEN
+                  name: my-tfy-agent-token
+          image: "public.ecr.aws/truefoundrycloud/tfy-agent:7ec9794ae905b53fafeab243cb8eb98ba5291b58"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          livenessProbe:
+            failureThreshold: 5
+            httpGet:
+              path: /
+              port: 3000
+              scheme: HTTP
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+          readinessProbe:
+            failureThreshold: 5
+            httpGet:
+              path: /
+              port: 3000
+              scheme: HTTP
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+          resources:
+            limits:
+              cpu: 500m
+              ephemeral-storage: 256Mi
+              memory: 512Mi
+            requests:
+              cpu: 300m
+              ephemeral-storage: 128Mi
+              memory: 256Mi
+          volumeMounts:
+            []
+      volumes:
+        []
+      priorityClassName: "system-cluster-critical"
+---
+# Source: tfy-agent/templates/tfy-agent-proxy-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-tfy-agent-proxy
+  labels:
+    helm.sh/chart: tfy-agent-0.2.31
+    app.kubernetes.io/name: my-tfy-agent-proxy
+    app.kubernetes.io/version: "69d69111acf1363505441a7cb02abaea28353044"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: my-tfy-agent-proxy
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: my-tfy-agent-proxy
+    spec:
+      serviceAccountName: my-tfy-agent-proxy
+      containers:
+        - name: tfy-agent-proxy
+          securityContext:
+            {}
+          env:
+            - name: CONTROL_PLANE_URL
+              value: "http://truefoundry-tfy-controller.truefoundry.svc.cluster.local:8123"
+            - name: CONTROL_PLANE_PATH
+              value: "/proxy/cluster/connect"
+            - name: CLUSTER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  key: CLUSTER_TOKEN
+                  name: my-tfy-agent-token
+          image: "public.ecr.aws/truefoundrycloud/tfy-agent-proxy:69d69111acf1363505441a7cb02abaea28353044"
+          imagePullPolicy: IfNotPresent
+          resources:
+            limits:
+              cpu: 500m
+              ephemeral-storage: 500M
+              memory: 512Mi
+            requests:
+              cpu: 50m
+              ephemeral-storage: 200M
+              memory: 128Mi
+      priorityClassName: "system-cluster-critical"

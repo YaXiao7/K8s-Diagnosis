@@ -1,0 +1,3499 @@
+---
+# Source: truefoundry/charts/nats/templates/pdb.yaml
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: my-truefoundry-nats
+  namespace: default
+  labels:
+    helm.sh/chart: nats-0.19.1
+    app.kubernetes.io/name: nats
+    app.kubernetes.io/instance: my-truefoundry
+    app.kubernetes.io/version: "2.9.8"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: nats
+      app.kubernetes.io/instance: my-truefoundry
+---
+# Source: truefoundry/charts/nats/templates/rbac.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-truefoundry-nats
+  namespace: default
+  labels:
+    helm.sh/chart: nats-0.19.1
+    app.kubernetes.io/name: nats
+    app.kubernetes.io/instance: my-truefoundry
+    app.kubernetes.io/version: "2.9.8"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: truefoundry/templates/mlfoundry-server/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: mlfoundry-server
+  labels:
+    helm.sh/chart: truefoundry-0.4.21
+    app.kubernetes.io/name: mlfoundry-server
+    app.kubernetes.io/instance: my-truefoundry
+    app.kubernetes.io/version: "v0.2.120"
+    app.kubernetes.io/managed-by: Helm
+imagePullSecrets:
+  - name: truefoundry-image-pull-secret
+---
+# Source: truefoundry/templates/servicefoundry-server/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: servicefoundry-server
+  labels:
+    helm.sh/chart: truefoundry-0.4.21
+    app.kubernetes.io/name: servicefoundry-server
+    app.kubernetes.io/instance: my-truefoundry
+    app.kubernetes.io/version: "v0.4.4"
+    app.kubernetes.io/managed-by: Helm
+imagePullSecrets:
+  - name: truefoundry-image-pull-secret
+---
+# Source: truefoundry/templates/sfy-manifest-service/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sfy-manifest-service
+  labels:
+    helm.sh/chart: truefoundry-0.4.21
+    app.kubernetes.io/name: sfy-manifest-service
+    app.kubernetes.io/instance: my-truefoundry
+    app.kubernetes.io/version: "0.1.134"
+    app.kubernetes.io/managed-by: Helm
+imagePullSecrets:
+  - name: truefoundry-image-pull-secret
+---
+# Source: truefoundry/templates/tfy-build/build-workflow-service-account.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: tfy-build
+imagePullSecrets:
+  - name: truefoundry-image-pull-secret
+---
+# Source: truefoundry/templates/tfy-controller/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: tfy-controller
+  labels:
+    helm.sh/chart: truefoundry-0.4.21
+    app.kubernetes.io/name: tfy-controller
+    app.kubernetes.io/instance: my-truefoundry
+    app.kubernetes.io/version: "v0.0.28"
+    app.kubernetes.io/managed-by: Helm
+imagePullSecrets:
+  - name: truefoundry-image-pull-secret
+---
+# Source: truefoundry/templates/tfy-k8s-controller/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: tfy-k8s-controller
+  labels:
+    helm.sh/chart: truefoundry-0.4.21
+    app.kubernetes.io/name: tfy-k8s-controller
+    app.kubernetes.io/instance: my-truefoundry
+    app.kubernetes.io/version: "v0.1.6"
+    app.kubernetes.io/managed-by: Helm
+imagePullSecrets:
+  - name: truefoundry-image-pull-secret
+---
+# Source: truefoundry/templates/truefoundry-frontend-app/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: truefoundry-frontend-app
+  labels:
+    helm.sh/chart: truefoundry-0.4.21
+    app.kubernetes.io/name: truefoundry-frontend-app
+    app.kubernetes.io/instance: my-truefoundry
+    app.kubernetes.io/version: "v0.3.154"
+    app.kubernetes.io/managed-by: Helm
+imagePullSecrets:
+  - name: truefoundry-image-pull-secret
+---
+# Source: truefoundry/templates/image-pull-secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: "truefoundry-image-pull-secret"
+  namespace: default
+type: kubernetes.io/dockerconfigjson
+data:
+  .dockerconfigjson:
+---
+# Source: truefoundry/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: truefoundry-creds
+  namespace: default
+type: Opaque
+stringData:
+  DB_HOST: 
+  DB_USERNAME: 
+  DB_PASSWORD: 
+  DB_NAME: 
+  TFY_API_KEY:
+---
+# Source: truefoundry/charts/nats/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-truefoundry-nats-config
+  namespace: default
+  labels:
+    helm.sh/chart: nats-0.19.1
+    app.kubernetes.io/name: nats
+    app.kubernetes.io/instance: my-truefoundry
+    app.kubernetes.io/version: "2.9.8"
+    app.kubernetes.io/managed-by: Helm
+data:
+  nats.conf: |
+    # NATS Clients Port
+    port: 4222
+
+    # PID file shared with configuration reloader.
+    pid_file: "/var/run/nats/nats.pid"
+
+    ###############
+    #             #
+    # Monitoring  #
+    #             #
+    ###############
+    http: 8222
+    server_name:$POD_NAME
+    ###################################
+    #                                 #
+    # NATS JetStream                  #
+    #                                 #
+    ###################################
+    jetstream {
+      max_mem: 1Gi
+      store_dir: /data
+
+      max_file:10Gi
+    }
+    ###################################
+    #                                 #
+    # NATS Full Mesh Clustering Setup #
+    #                                 #
+    ###################################
+    cluster {
+      port: 6222
+      name: nats
+
+      routes = [
+        nats://my-truefoundry-nats-0.my-truefoundry-nats.default.svc.cluster.local:6222,nats://my-truefoundry-nats-1.my-truefoundry-nats.default.svc.cluster.local:6222,nats://my-truefoundry-nats-2.my-truefoundry-nats.default.svc.cluster.local:6222,
+        
+      ]
+      cluster_advertise: $CLUSTER_ADVERTISE
+      no_advertise: true
+
+      connect_retries: 120
+    }
+    debug: true
+    lame_duck_grace_period: 10s
+    lame_duck_duration: 30s
+    ##################
+    #                #
+    # Websocket      #
+    #                #
+    ##################
+    websocket {
+      port: 443
+      no_tls: true
+      same_origin: false
+    }
+    ##################
+    #                #
+    # Authorization  #
+    #                #
+    ##################
+        resolver: MEMORY
+        include "accounts/resolver.conf"
+---
+# Source: truefoundry/charts/tfy-configs/templates/cicd-templates-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-truefoundry-cicd-templates-cm
+  namespace: default
+data:
+  bitbucket-pipelines-git-source-patch-application.yaml: |
+    name: Patch Commit SHA to Build and Deploy via Git Integration on TrueFoundry
+    cicd_provider_id: bitbucket
+    enabled: true
+    description: "TrueFoundry Control Plane will git clone the source code and build the image to deploy the application."
+    deployment_mode: patch-application
+    build_source: git
+    image_builder: truefoundry-control-plane
+    steps:
+      - label: Generate API Key
+        icon: null
+        usage: Generate an API Key to authenticate and deploy applications
+        type: generate-api-key
+      - label: Add API Key to Secrets
+        icon: null
+        usage: null
+        type: markdown-content
+        args:
+          content: |
+            In your Bitbucket Repository, navigate to **Pipelines > Workspace variables**.
+            Add a new secret called `TFY_API_KEY` and set the generated api key as value
+      - label: Create Bitbucket Pipeline
+        icon: null
+        usage: |
+          Add the below workflow as `bitbucket-pipelines.yml` in your root directory.
+          Following Pipelines will be triggered on each push to `main` branch
+        type: markdown-content
+        args:
+          content: |
+            ```yaml
+            image: python:3.11.9-bullseye
+            options:
+              max-time: 30
+  
+            pipelines:
+              branches:
+                main:
+                  - stage:
+                      name: deploy
+                      steps:
+                        - step:
+                            name: Deploying the application
+                            script:
+                              - export TFY_HOST={{ TRUEFOUNDRY_TFY_HOST }}
+                              - export APPLICATION_FQN={{ TRUEFOUNDRY_APPLICATION_FQN }}
+                              - apt update && apt install -y jq
+                              - pip3 install "truefoundry<1.0.0"
+                              - tfy patch-application --application-fqn "$APPLICATION_FQN" --patch="{\"image\": {\"build_source\": {\"ref\": \"$BITBUCKET_COMMIT\"}}}"
+            ```
+  bitbucket-pipelines-git-source.yaml: "name: Build and Deploy via Git Integration on
+    TrueFoundry\ncicd_provider_id: bitbucket\nenabled: true\ndescription: \"TrueFoundry
+    Control Plane will git clone the source code and build the image to deploy the application.\"\ndeployment_mode:
+    deploy\nbuild_source: git\nimage_builder: truefoundry-control-plane\nsteps:\n  -
+    label: Generate API Key\n    icon: null\n    usage: Generate an API Key to authenticate
+    and deploy applications\n    type: generate-api-key\n  - label: Add API Key to Secrets\n
+    \   icon: null\n    usage: null\n    type: markdown-content\n    args:\n      content:
+    |\n        In your Bitbucket Repository, navigate to **Pipelines > Workspace variables**.\n
+    \       Add a new secret called `TFY_API_KEY` and set the generated api key as value\n
+    \ - label: Download Application Spec\n    icon: null\n    usage: Click the button
+    below to download the `truefoundry.yaml` application spec file. Copy it to the root
+    of your project directory.\n    type: download-truefoundry-spec\n  - label: Create
+    Bitbucket Pipeline\n    icon: null\n    usage: |\n      Add the below workflow as
+    `bitbucket-pipelines.yml` in your root directory.\n      Following Pipelines will
+    be triggered on each push to `main` branch\n    type: markdown-content\n    args:\n
+    \     content: |\n        ```yaml\n        image: python:3.11.9-bullseye\n        options:\n
+    \         max-time: 30\n\n        pipelines:\n          branches:\n            main:\n
+    \             - stage:\n                  name: deploy\n                  steps:\n
+    \                   - step:\n                        name: Deploying the application\n
+    \                       script:\n                          - export TFY_HOST={{
+    TRUEFOUNDRY_TFY_HOST }}\n                          - export WORKSPACE_FQN={{ TRUEFOUNDRY_WORKSPACE_FQN
+    }}\n                          - apt update && apt install -y jq\n                          -
+    pip3 install \"truefoundry<1.0.0\"\n                          - tfy patch -f truefoundry.yaml
+    --filter \".image.build_source.ref = \\\"$BITBUCKET_COMMIT\\\" | .image.build_source.branch_name
+    = \\\"$BITBUCKET_BRANCH\\\"\" -o truefoundry-patched.yaml\n                          -
+    tfy deploy -f truefoundry-patched.yaml -w \"$WORKSPACE_FQN\" --no-wait\n        \n
+    \       ```\n"
+  bitbucket-pipelines-local-source.yaml: |
+    name: Upload Code, Build and Deploy using TrueFoundry
+    cicd_provider_id: bitbucket
+    enabled: true
+    description: "TrueFoundry Control Plane will pull an archive of the source code from your Storage Integrations and build the image to deploy the application."
+    deployment_mode: deploy
+    build_source: local
+    image_builder: truefoundry-control-plane
+    steps:
+      - label: Generate API Key
+        icon: null
+        usage: Generate an API Key to authenticate and deploy applications
+        type: generate-api-key
+      - label: Add API Key to Secrets
+        icon: null
+        usage: null
+        type: markdown-content
+        args:
+          content: |
+            In your Bitbucket Repository, navigate to **Pipelines > Workspace variables**.
+            Add a new secret called `TFY_API_KEY` and set the generated api key as value
+      - label: Download Application Spec
+        icon: null
+        usage: Click the button below to download the `truefoundry.yaml` application spec file. Copy it to the root of your project directory.
+        type: download-truefoundry-spec
+      - label: Create Bitbucket Pipeline
+        icon: null
+        usage: |
+          Add the below workflow as `bitbucket-pipelines.yml` in your root directory.
+          Following Pipelines will be triggered on each push to `main` branch
+        type: markdown-content
+        args:
+          content: |
+            ```yaml
+            image: python:3.11.9-bullseye
+            options:
+              max-time: 30
+  
+            pipelines:
+              branches:
+                main:
+                  - stage:
+                      name: deploy
+                      steps:
+                        - step:
+                            name: Deploying the application
+                            script:
+                              - export TFY_HOST={{ TRUEFOUNDRY_TFY_HOST }}
+                              - export WORKSPACE_FQN={{ TRUEFOUNDRY_WORKSPACE_FQN }}
+                              - apt update && apt install -y jq
+                              - pip3 install "truefoundry<1.0.0"
+                              - tfy deploy -f truefoundry.yaml -w "$WORKSPACE_FQN" --no-wait
+            ```
+  bitbucket-pipelines-self-build-image-patch-application.yaml: "name: Build Image Yourself
+    and Patch Image URI to Deploy Image on TrueFoundry\ncicd_provider_id: bitbucket\nenabled:
+    true\ndescription: \"Build Docker Image using your own steps and deploy the image
+    on TrueFoundry.\"\ndeployment_mode: patch-application\nbuild_source: local\nimage_builder:
+    self\nsteps:\n  - label: Generate API Key\n    icon: null\n    usage: Generate an
+    API Key to authenticate and deploy applications\n    type: generate-api-key\n  -
+    label: Add API Key to Secrets\n    icon: null\n    usage: null\n    type: markdown-content\n
+    \   args:\n      content: |\n        In your Bitbucket Repository, navigate to **Pipelines
+    > Workspace variables**.\n        Add a new secret called `TFY_API_KEY` and set
+    the generated api key as value\n  - label: Create Bitbucket Pipeline\n    icon:
+    null\n    usage: |\n      Add the below workflow as `bitbucket-pipelines.yml` in
+    your root directory.\n      Following Pipelines will be triggered on each push to
+    `main` branch\n    type: markdown-content\n    args:\n      content: |\n        >
+    **Note:** Please read through the `variables` section and `build-image` Steps and
+    update them for your registry and repo.\n        \n\n        ```yaml\n        image:
+    python:3.11.9-bullseye\n        options:\n          max-time: 30\n\n        pipelines:\n
+    \         branches:\n            main:\n              - stage:\n                  name:
+    deploy\n                  steps:\n                    - step:\n                        name:
+    Deploying the application\n                        services:\n                          -
+    docker\n                        script:\n                          - export TFY_HOST={{
+    TRUEFOUNDRY_TFY_HOST }}\n                          - export APPLICATION_FQN={{ TRUEFOUNDRY_APPLICATION_FQN
+    }}\n\n                          ### Image Build Section ###\n                          #
+    Here is a sample for docker, you can replace this with any other registry.\n                          #
+    The registry here should be also be linked in Integrations on TrueFoundry\n                          -
+    export DOCKER_BUILDKIT=1\n\n                          # Update these with your Docker
+    Registry and Repository\n                          - export DOCKER_REGISTRY=docker.io\n
+    \                         - export DOCKER_REPO_NAME=$BITBUCKET_REPO_SLUG\n                          -
+    export DOCKER_IMAGE_REPO=$DOCKER_REGISTRY/$DOCKER_REPO_NAME\n                          -
+    export DOCKER_IMAGE_TAG=$BITBUCKET_COMMIT\n                          - export DOCKER_IMAGE_URI=$DOCKER_IMAGE_REPO:$DOCKER_IMAGE_TAG\n
+    \                         - echo \"$DOCKER_REGISTRY_PASSWORD\" | docker login $DOCKER_REGISTRY
+    --username $DOCKER_REGISTRY_USER --password-stdin\n                          - docker
+    build --cache-from $DOCKER_IMAGE_REPO:buildcache --tag $DOCKER_IMAGE_URI --tag $DOCKER_IMAGE_REPO:buildcache
+    .\n                          - docker push $DOCKER_IMAGE_URI\n                          -
+    docker push $DOCKER_IMAGE_REPO:buildcache\n\n                          ###########################\n
+    \                         - apt update && apt install -y jq\n                          -
+    pip3 install \"truefoundry<1.0.0\"\n                          - tfy patch-application
+    --application-fqn \"$APPLICATION_FQN\" --patch=\"{\\\"image\\\": {\\\"image_uri\\\":
+    \\\"$DOCKER_IMAGE_URI\\\"}}\"\n        ```\n"
+  bitbucket-pipelines-self-build-image.yaml: "name: Build Image Yourself and Deploy
+    Image on TrueFoundry\ncicd_provider_id: bitbucket\nenabled: true\ndescription: \"Build
+    Docker Image using your own steps and deploy the image on TrueFoundry.\"\ndeployment_mode:
+    deploy\nbuild_source: local\nimage_builder: self\nsteps:\n  - label: Generate API
+    Key\n    icon: null\n    usage: Generate an API Key to authenticate and deploy applications\n
+    \   type: generate-api-key\n  - label: Add API Key to Secrets\n    icon: null\n
+    \   usage: null\n    type: markdown-content\n    args:\n      content: |\n        In
+    your Bitbucket Repository, navigate to **Pipelines > Workspace variables**.\n        Add
+    a new secret called `TFY_API_KEY` and set the generated api key as value\n  - label:
+    Download Application Spec\n    icon: null\n    usage: Click the button below to
+    download the `truefoundry.yaml` application spec file. Copy it to the root of your
+    project directory.\n    type: download-truefoundry-spec\n  - label: Create Bitbucket
+    Pipeline\n    icon: null\n    usage: |\n      Add the below workflow as `bitbucket-pipelines.yml`
+    in your root directory.\n      Following Pipelines will be triggered on each push
+    to `main` branch\n    type: markdown-content\n    args:\n      content: |\n        >
+    **Note:** Please read through the `variables` section and `build-image` Steps and
+    update them for your registry and repo.\n        \n\n        ```yaml\n        image:
+    python:3.11.9-bullseye\n        options:\n          max-time: 30\n\n        pipelines:\n
+    \         branches:\n            main:\n              - stage:\n                  name:
+    deploy\n                  steps:\n                    - step:\n                        name:
+    Deploying the application\n                        services:\n                          -
+    docker\n                        script:\n                          - export TFY_HOST={{
+    TRUEFOUNDRY_TFY_HOST }}\n                          - export WORKSPACE_FQN={{ TRUEFOUNDRY_WORKSPACE_FQN
+    }}\n\n                          ### Image Build Section ###\n                          #
+    Here is a sample for docker, you can replace this with any other registry.\n                          #
+    The registry here should be also be linked in Integrations on TrueFoundry\n                          -
+    export DOCKER_BUILDKIT=1\n\n                          # Update these with your Docker
+    Registry and Repository\n                          - export DOCKER_REGISTRY=docker.io\n
+    \                         - export DOCKER_REPO_NAME=$BITBUCKET_REPO_SLUG\n                          -
+    export DOCKER_IMAGE_REPO=$DOCKER_REGISTRY/$DOCKER_REPO_NAME\n                          -
+    export DOCKER_IMAGE_TAG=$BITBUCKET_COMMIT\n                          - export DOCKER_IMAGE_URI=$DOCKER_IMAGE_REPO:$DOCKER_IMAGE_TAG\n
+    \                         - echo \"$DOCKER_REGISTRY_PASSWORD\" | docker login $DOCKER_REGISTRY
+    --username $DOCKER_REGISTRY_USER --password-stdin\n                          - docker
+    build --cache-from $DOCKER_IMAGE_REPO:buildcache --tag $DOCKER_IMAGE_URI --tag $DOCKER_IMAGE_REPO:buildcache
+    .\n                          - docker push $DOCKER_IMAGE_URI\n                          -
+    docker push $DOCKER_IMAGE_REPO:buildcache\n\n                          ###########################\n
+    \                         - apt update && apt install -y jq\n                          -
+    pip3 install \"truefoundry<1.0.0\"\n                          - tfy patch -f truefoundry.yaml
+    --filter \".image.image_uri = \\\"$DOCKER_IMAGE_URI\\\"\" -o truefoundry-patched.yaml\n
+    \                         - tfy deploy -f truefoundry-patched.yaml -w \"$WORKSPACE_FQN\"
+    --no-wait\n\n        ```\n"
+  cicd-providers.yaml: |
+    - id: github
+      name: GitHub
+      icon: github
+      enabled: true
+    - id: gitlab
+      name: GitLab
+      icon: gitlab
+      enabled: true
+    - id: bitbucket
+      name: Bitbucket
+      icon: bitbucket
+      enabled: true
+  github-actions-git-source-patch-application.yaml: |
+    name: Patch Commit SHA to Build and Deploy via Git Integration on TrueFoundry
+    cicd_provider_id: github
+    enabled: true
+    description: "TrueFoundry Control Plane will git clone the source code and build the image to deploy the application."
+    deployment_mode: patch-application
+    build_source: git
+    image_builder: truefoundry-control-plane
+    steps:
+      - label: Generate API Key
+        icon: null
+        usage: Generate an API Key to authenticate and deploy applications
+        type: generate-api-key
+      - label: Add API Key to Github Secrets
+        icon: null
+        usage: null
+        type: markdown-content
+        args:
+          content: |
+            In your GitHub Repository, navigate to **Settings > Secrets and Variables > Actions**.
+            Add a new secret called `TFY_API_KEY` and set the generated api key as value
+      - label: Create GitHub Action
+        icon: null
+        usage: |
+          Add the below workflow as `tfy-deploy.yaml` in your github workflow directory (`.github/workflows/`).
+          Following GitHub Action will be triggered on each push to `main` branch
+        type: markdown-content
+        args:
+          content: |
+            ```yaml
+            name: Deploy to TrueFoundry
+  
+            on:
+              push:
+                branches:
+                  - 'main'
+  
+            env:
+              TFY_HOST: {{ TRUEFOUNDRY_TFY_HOST }}
+              TFY_API_KEY: $\{{ secrets.TFY_API_KEY }}
+              APPLICATION_FQN: {{ TRUEFOUNDRY_APPLICATION_FQN }}
+  
+            jobs:
+              deploy:
+                runs-on: ubuntu-latest
+                timeout-minutes: 30
+                steps:
+                  - name: Checkout code
+                    uses: actions/checkout@v3
+  
+                  - name: Set up Python
+                    uses: actions/setup-python@v4
+                    with:
+                      python-version: 3.11
+  
+                  - name: Install dependencies
+                    run: |
+                      pip install "truefoundry<1.0.0"
+  
+                  - name: Patch the commit sha
+                    run: |
+                      tfy patch-application --application-fqn $\{{ env.APPLICATION_FQN }} --patch='{"image": {"build_source": {"ref": "$\{{ github.sha }}"}}}'
+            ```
+  github-actions-git-source.yaml: |
+    name: Build and Deploy via Git Integration on TrueFoundry
+    cicd_provider_id: github
+    enabled: true
+    description: "TrueFoundry Control Plane will git clone the source code and build the image to deploy the application."
+    deployment_mode: deploy
+    build_source: git
+    image_builder: truefoundry-control-plane
+    steps:
+      - label: Generate API Key
+        icon: null
+        usage: Generate an API Key to authenticate and deploy applications
+        type: generate-api-key
+      - label: Add API Key to Github Secrets
+        icon: null
+        usage: null
+        type: markdown-content
+        args:
+          content: |
+            In your GitHub Repository, navigate to **Settings > Secrets and Variables > Actions**.
+            Add a new secret called `TFY_API_KEY` and set the generated api key as value
+      - label: Download Application Spec
+        icon: null
+        usage: Click the button below to download the `truefoundry.yaml` application spec file. Copy it to the root of your project directory.
+        type: download-truefoundry-spec
+      - label: Create GitHub Action
+        icon: null
+        usage: |
+          Add the below workflow as `tfy-deploy.yaml` in your github workflow directory (`.github/workflows/`).
+          Following GitHub Action will be triggered on each push to `main` branch
+        type: markdown-content
+        args:
+          content: |
+            ```yaml
+            name: Deploy to TrueFoundry
+  
+            on:
+              push:
+                branches:
+                  - 'main'
+  
+            env:
+              TFY_HOST: {{ TRUEFOUNDRY_TFY_HOST }}
+              TFY_API_KEY: $\{{ secrets.TFY_API_KEY }}
+              WORKSPACE_FQN: {{ TRUEFOUNDRY_WORKSPACE_FQN }}
+  
+            jobs:
+              deploy:
+                runs-on: ubuntu-latest
+                timeout-minutes: 30
+                steps:
+                  - name: Checkout code
+                    uses: actions/checkout@v3
+  
+                  - name: Set up Python
+                    uses: actions/setup-python@v4
+                    with:
+                      python-version: 3.11
+  
+                  - name: Install dependencies
+                    run: |
+                      pip install "truefoundry<1.0.0"
+  
+                  - name: Deploy to workspace
+                    run: |
+                      tfy patch -f truefoundry.yaml --filter '.image.build_source.ref = "$\{{ github.sha }}" | .image.build_source.branch_name = "$\{{ github.ref_name }}"' -o truefoundry-patched.yaml
+                      tfy deploy -f truefoundry-patched.yaml -w "$\{{ env.WORKSPACE_FQN }}" --no-wait
+            ```
+  github-actions-local-source.yaml: |
+    name: Upload Code, Build and Deploy using TrueFoundry
+    cicd_provider_id: github
+    enabled: true
+    description: "TrueFoundry Control Plane will pull an archive of the source code from your Storage Integrations and build the image to deploy the application."
+    deployment_mode: deploy
+    build_source: local
+    image_builder: truefoundry-control-plane
+    steps:
+      - label: Generate API Key
+        icon: null
+        usage: Generate an API Key to authenticate and deploy applications
+        type: generate-api-key
+      - label: Add API Key to Github Secrets
+        icon: null
+        usage: null
+        type: markdown-content
+        args:
+          content: |
+            In your GitHub Repository, navigate to **Settings > Secrets and Variables > Actions**.
+            Add a new secret called `TFY_API_KEY` and set the generated api key as value
+      - label: Download Application Spec
+        icon: null
+        usage: Click the button below to download the `truefoundry.yaml` application spec file. Copy it to the root of your project directory.
+        type: download-truefoundry-spec
+      - label: Create GitHub Action
+        icon: null
+        usage: |
+          Add the below workflow as `tfy-deploy.yaml` in your github workflow directory (`.github/workflows/`).
+          Following GitHub Action will be triggered on each push to `main` branch
+        type: markdown-content
+        args:
+          content: |
+            ```yaml
+            name: Deploy to TrueFoundry
+  
+            on:
+              push:
+                branches:
+                  - 'main'
+  
+            env:
+              TFY_HOST: {{ TRUEFOUNDRY_TFY_HOST }}
+              TFY_API_KEY: $\{{ secrets.TFY_API_KEY }}
+              WORKSPACE_FQN: {{ TRUEFOUNDRY_WORKSPACE_FQN }}
+  
+            jobs:
+              build_deploy:
+                name: Build Image
+                runs-on: ubuntu-latest
+                timeout-minutes: 30
+                steps:
+                  - name: Checkout code
+                    uses: actions/checkout@v3
+  
+                  - name: Set up Docker Buildx
+                    uses: docker/setup-buildx-action@v3
+  
+                  - name: Set up Python
+                    uses: actions/setup-python@v4
+                    with:
+                      python-version: 3.11
+  
+                  - name: Install dependencies
+                    run: |
+                      pip install "truefoundry<1.0.0"
+  
+                  - name: Deploy to workspace
+                    run: |
+                      tfy deploy -f truefoundry.yaml -w "$\{{ env.WORKSPACE_FQN }}" --no-wait
+            ```
+  github-actions-self-build-image-patch-application.yaml: "name: Build Image Yourself
+    and Patch Image URI to deploy on TrueFoundry\ncicd_provider_id: github\nenabled:
+    true\ndescription: \"Build Docker Image using your own steps and deploy the image
+    on TrueFoundry.\"\ndeployment_mode: patch-application\nbuild_source: local\nimage_builder:
+    self\nsteps:\n  - label: Generate API Key\n    icon: null\n    usage: Generate an
+    API Key to authenticate and deploy applications\n    type: generate-api-key\n  -
+    label: Add API Key to Github Secrets\n    icon: null\n    usage: null\n    type:
+    markdown-content\n    args:\n      content: |\n        In your GitHub Repository,
+    navigate to **Settings > Secrets and Variables > Actions**.\n        Add a new secret
+    called `TFY_API_KEY` and set the generated api key as value\n  - label: Create GitHub
+    Action\n    icon: null\n    usage: |\n      Add the below workflow as `tfy-deploy.yaml`
+    in your github workflow directory (`.github/workflows/`).\n      Following GitHub
+    Action will be triggered on each push to `main` branch\n    type: markdown-content\n
+    \   args:\n      content: |\n        > **Note:** Please read through the `env` section
+    and Image Build Section and update them for your registry and repo.\n       \n       \n
+    \       ```yaml\n        name: Deploy to TrueFoundry\n\n        on:\n          push:\n
+    \           branches:\n              - 'main'\n\n        permissions:\n          id-token:
+    write\n          contents: read\n\n        env:\n          TFY_HOST: {{ TRUEFOUNDRY_TFY_HOST
+    }}\n          TFY_API_KEY: $\\{{ secrets.TFY_API_KEY }}\n          APPLICATION_FQN:
+    {{ TRUEFOUNDRY_APPLICATION_FQN }}\n          \n          # Update these with your
+    Docker Registry and Repository\n          DOCKER_REGISTRY: docker.io\n          DOCKER_REPO_NAME:
+    $\\{{ github.event.repository.name }}\n          \n          DOCKER_IMAGE_REPO:
+    $\\{{ env.DOCKER_REGISTRY }}/$\\{{ env.DOCKER_REPO_NAME }}\n          DOCKER_IMAGE_TAG:
+    $\\{{ github.sha }}\n          DOCKER_IMAGE_URI: \"$\\{{ env.DOCKER_IMAGE_REPO }}:$\\{{
+    env.DOCKER_IMAGE_TAG }}\"\n\n        jobs:\n          build_deploy:\n            name:
+    Build Image\n            runs-on: ubuntu-latest\n            timeout-minutes: 30\n
+    \           steps:\n              - name: Checkout code\n                uses: actions/checkout@v3\n\n
+    \             - name: Set up Docker Buildx\n                uses: docker/setup-buildx-action@v3\n\n
+    \             ### Image Build Section ###\n\n              # Build your image, push
+    it\n              # Here is a sample, you can replace this with your registry specific
+    steps.\n              # The registry here should be also be linked in Integrations
+    on TrueFoundry\n\n              # Please see https://github.com/docker/login-action?tab=readme-ov-file#usage
+    for examples\n              name: Login to Docker Hub\n              uses: docker/login-action@v3\n
+    \             with:\n                registry: $\\{{ env.DOCKER_REGISTRY }}\n                username:
+    $\\{{ secrets.DOCKER_REGISTRY_USERNAME }}\n                password: $\\{{ secrets.DOCKER_REGISTRY_PASSWORD
+    }}\n                \n              - name: Build and push image\n                uses:
+    docker/build-push-action@v5\n                with:\n                  platforms:
+    linux/amd64\n                  context: .\n                  push: true\n                  tags:
+    $\\{{ env.DOCKER_IMAGE_URI }}\n                  cache-from: type=registry,ref=$\\{{
+    env.DOCKER_IMAGE_REPO }}:buildcache\n                  cache-to: mode=max,image-manifest=true,type=registry,ref=$\\{{
+    env.DOCKER_IMAGE_REPO }}:buildcache\n\n              ############################\n\n
+    \             - name: Set up Python\n                uses: actions/setup-python@v4\n
+    \               with:\n                  python-version: 3.11\n\n              -
+    name: Install dependencies\n                run: |\n                  pip install
+    \"truefoundry<1.0.0\"\n\n              - name: Deploy to workspace\n                run:
+    |\n                  tfy patch-application --application-fqn $\\{{ env.APPLICATION_FQN
+    }} --patch='{\"image\": {\"image_uri\": \"$\\{{ env.DOCKER_IMAGE_URI }}\"}}'\n        ```\n"
+  github-actions-self-build-image.yaml: "name: Build Image Yourself and Deploy Image
+    on TrueFoundry\ncicd_provider_id: github\nenabled: true\ndescription: \"Build Docker
+    Image using your own steps and deploy the image on TrueFoundry.\"\ndeployment_mode:
+    deploy\nbuild_source: local\nimage_builder: self\nsteps:\n  - label: Generate API
+    Key\n    icon: null\n    usage: Generate an API Key to authenticate and deploy applications\n
+    \   type: generate-api-key\n  - label: Add API Key to Github Secrets\n    icon:
+    null\n    usage: null\n    type: markdown-content\n    args:\n      content: |\n
+    \       In your GitHub Repository, navigate to **Settings > Secrets and Variables
+    > Actions**.\n        Add a new secret called `TFY_API_KEY` and set the generated
+    api key as value\n  - label: Download Application Spec\n    icon: null\n    usage:
+    Click the button below to download the `truefoundry.yaml` application spec file.
+    Copy it to the root of your project directory.\n    type: download-truefoundry-spec\n
+    \ - label: Create GitHub Action\n    icon: null\n    usage: |\n      Add the below
+    workflow as `tfy-deploy.yaml` in your github workflow directory (`.github/workflows/`).\n
+    \     Following GitHub Action will be triggered on each push to `main` branch\n
+    \   type: markdown-content\n    args:\n      content: |\n        > **Note:** Please
+    read through the `env` section and Image Build Section and update them for your
+    registry and repo.\n       \n       \n        ```yaml\n        name: Deploy to TrueFoundry\n\n
+    \       on:\n          push:\n            branches:\n              - 'main'\n\n
+    \       permissions:\n          id-token: write\n          contents: read\n\n        env:\n
+    \         TFY_HOST: {{ TRUEFOUNDRY_TFY_HOST }}\n          TFY_API_KEY: $\\{{ secrets.TFY_API_KEY
+    }}\n          WORKSPACE_FQN: {{ TRUEFOUNDRY_WORKSPACE_FQN }}\n          \n          #
+    Update these with your Docker Registry and Repository\n          DOCKER_REGISTRY:
+    docker.io\n          DOCKER_REPO_NAME: $\\{{ github.event.repository.name }}\n          \n
+    \         DOCKER_IMAGE_REPO: $\\{{ env.DOCKER_REGISTRY }}/$\\{{ env.DOCKER_REPO_NAME
+    }}\n          DOCKER_IMAGE_TAG: $\\{{ github.sha }}\n          DOCKER_IMAGE_URI:
+    \"$\\{{ env.DOCKER_IMAGE_REPO }}:$\\{{ env.DOCKER_IMAGE_TAG }}\"\n\n        jobs:\n
+    \         build_deploy:\n            name: Build Image\n            runs-on: ubuntu-latest\n
+    \           timeout-minutes: 30\n            steps:\n              - name: Checkout
+    code\n                uses: actions/checkout@v3\n\n              - name: Set up
+    Docker Buildx\n                uses: docker/setup-buildx-action@v3\n\n              ###
+    Image Build Section ###\n\n              # Build your image, push it\n              #
+    Here is a sample, you can replace this with your registry specific steps.\n              #
+    The registry here should be also be linked in Integrations on TrueFoundry\n\n              #
+    Please see https://github.com/docker/login-action?tab=readme-ov-file#usage for examples\n
+    \             name: Login to Docker Hub\n              uses: docker/login-action@v3\n
+    \             with:\n                registry: $\\{{ env.DOCKER_REGISTRY }}\n                username:
+    $\\{{ secrets.DOCKER_REGISTRY_USERNAME }}\n                password: $\\{{ secrets.DOCKER_REGISTRY_PASSWORD
+    }}\n                \n              - name: Build and push image\n                uses:
+    docker/build-push-action@v5\n                with:\n                  platforms:
+    linux/amd64\n                  context: .\n                  push: true\n                  tags:
+    $\\{{ env.DOCKER_IMAGE_URI }}\n                  cache-from: type=registry,ref=$\\{{
+    env.DOCKER_IMAGE_REPO }}:buildcache\n                  cache-to: mode=max,image-manifest=true,type=registry,ref=$\\{{
+    env.DOCKER_IMAGE_REPO }}:buildcache\n\n              ############################\n\n
+    \             - name: Set up Python\n                uses: actions/setup-python@v4\n
+    \               with:\n                  python-version: 3.11\n\n              -
+    name: Install dependencies\n                run: |\n                  pip install
+    \"truefoundry<1.0.0\"\n\n              - name: Deploy to workspace\n                run:
+    |\n                  tfy patch -f truefoundry.yaml --filter '.image.image_uri =
+    \"$\\{{ env.DOCKER_IMAGE_URI }}\"' -o truefoundry-patched.yaml\n                  tfy
+    deploy -f truefoundry-patched.yaml -w \"$\\{{ env.WORKSPACE_FQN }}\" --no-wait\n
+    \       ```\n"
+  gitlab-pipeline-git-source-patch-application.yaml: "name: Patch Commit SHA to Build
+    and Deploy via Git Integration on TrueFoundry\ncicd_provider_id: gitlab\nenabled:
+    true\ndescription: \"TrueFoundry Control Plane will git clone the source code and
+    build the image to deploy the application.\"\ndeployment_mode: patch-application\nbuild_source:
+    git\nimage_builder: truefoundry-control-plane\nsteps:\n  - label: Generate API Key\n
+    \   icon: null\n    usage: Generate an API Key to authenticate and deploy applications\n
+    \   type: generate-api-key\n  - label: Add API Key to Secrets\n    icon: null\n
+    \   usage: null\n    type: markdown-content\n    args:\n      content: |\n        In
+    your GitLab Repository, navigate to **Settings > CI/CD** then expand **Variables**.\n
+    \       Add a new secret called `TFY_API_KEY` and set the generated api key as value
+    and select the **Mask Variable** checkbox.\n  - label: Create GitLab Pipeline\n
+    \   icon: null\n    usage: |\n      Add the below workflow as `.gitlab-ci.yml` in
+    your root directory.\n      Following Pipelines will be triggered on each push to
+    `main` branch\n    type: markdown-content\n    args:\n      content: |\n        ```yaml\n
+    \       default:\n          image: python:3.11.9-bullseye\n        \n        workflow:\n
+    \         rules:\n            - if: $CI_COMMIT_BRANCH == \"main\"\n\n        variables:\n
+    \         TFY_HOST: {{ TRUEFOUNDRY_TFY_HOST }}\n          APPLICATION_FQN: {{ TRUEFOUNDRY_APPLICATION_FQN
+    }}\n          \n        deploy-job:\n          stage: deploy\n          timeout:
+    30 minutes\n          script: \n            - apt update && apt install -y jq\n
+    \           - pip3 install \"truefoundry<1.0.0\"\n            - tfy patch-application
+    --application-fqn \"$APPLICATION_FQN\" --patch=\"{\\\"image\\\": {\\\"build_source\\\":
+    {\\\"ref\\\": \\\"$CI_COMMIT_SHA\\\"}}}\"\n        ```\n"
+  gitlab-pipeline-git-source.yaml: "name: Build and Deploy via Git Integration on TrueFoundry\ncicd_provider_id:
+    gitlab\nenabled: true\ndescription: \"TrueFoundry Control Plane will git clone the
+    source code and build the image to deploy the application.\"\ndeployment_mode: deploy\nbuild_source:
+    git\nimage_builder: truefoundry-control-plane\nsteps:\n  - label: Generate API Key\n
+    \   icon: null\n    usage: Generate an API Key to authenticate and deploy applications\n
+    \   type: generate-api-key\n  - label: Add API Key to Secrets\n    icon: null\n
+    \   usage: null\n    type: markdown-content\n    args:\n      content: |\n        In
+    your GitLab Repository, navigate to **Settings > CI/CD** then expand **Variables**.\n
+    \       Add a new secret called `TFY_API_KEY` and set the generated api key as value
+    and select the **Mask Variable** checkbox.\n  - label: Download Application Spec\n
+    \   icon: null\n    usage: Click the button below to download the `truefoundry.yaml`
+    application spec file. Copy it to the root of your project directory.\n    type:
+    download-truefoundry-spec\n  - label: Create GitLab Pipeline\n    icon: null\n    usage:
+    |\n      Add the below workflow as `.gitlab-ci.yml` in your root directory.\n      Following
+    Pipelines will be triggered on each push to `main` branch\n    type: markdown-content\n
+    \   args:\n      content: |\n        ```yaml\n        default:\n          image:
+    python:3.11.9-bullseye\n        \n        workflow:\n          rules:\n            -
+    if: $CI_COMMIT_BRANCH == \"main\"\n\n        variables:\n          TFY_HOST: {{
+    TRUEFOUNDRY_TFY_HOST }}\n          WORKSPACE_FQN: {{ TRUEFOUNDRY_WORKSPACE_FQN }}\n
+    \         \n        deploy-job:\n          stage: deploy\n          timeout: 30
+    minutes\n          script: \n            - apt update && apt install -y jq\n            -
+    pip3 install \"truefoundry<1.0.0\"\n            - tfy patch -f truefoundry.yaml
+    --filter \".image.build_source.ref = \\\"$CI_COMMIT_SHA\\\" | .image.build_source.branch_name
+    = \\\"$CI_COMMIT_REF_NAME\\\"\" -o truefoundry-patched.yaml\n            - tfy deploy
+    -f truefoundry-patched.yaml -w \"$WORKSPACE_FQN\" --no-wait\n        ```\n"
+  gitlab-pipelines-local-source.yaml: "name: Upload Code, Build and Deploy using TrueFoundry\ncicd_provider_id:
+    gitlab\nenabled: true\ndescription: \"TrueFoundry Control Plane will pull an archive
+    of the source code from your Storage Integrations and build the image to deploy
+    the application.\"\ndeployment_mode: deploy\nbuild_source: local\nimage_builder:
+    truefoundry-control-plane\nsteps:\n  - label: Generate API Key\n    icon: null\n
+    \   usage: Generate an API Key to authenticate and deploy applications\n    type:
+    generate-api-key\n  - label: Add API Key to Secrets\n    icon: null\n    usage:
+    null\n    type: markdown-content\n    args:\n      content: |\n        In your GitLab
+    Repository, navigate to **Settings > CI/CD** then expand **Variables**.\n        Add
+    a new secret called `TFY_API_KEY` and set the generated api key as value and select
+    the **Mask Variable** checkbox.\n  - label: Download Application Spec\n    icon:
+    null\n    usage: Click the button below to download the `truefoundry.yaml` application
+    spec file. Copy it to the root of your project directory.\n    type: download-truefoundry-spec\n
+    \ - label: Create GitLab Pipeline\n    icon: null\n    usage: |\n      Add the below
+    workflow as `.gitlab-ci.yml` in your root directory.\n      Following Pipelines
+    will be triggered on each push to `main` branch\n    type: markdown-content\n    args:\n
+    \     content: |\n        ```yaml\n        default:\n          image: python:3.11.9-bullseye\n
+    \       \n        workflow:\n          rules:\n            - if: $CI_COMMIT_BRANCH
+    == \"main\"\n        \n        variables:\n          TFY_HOST: {{ TRUEFOUNDRY_TFY_HOST
+    }}\n          WORKSPACE_FQN: {{ TRUEFOUNDRY_WORKSPACE_FQN }}\n          \n        deploy-job:\n
+    \         stage: deploy\n          timeout: 30 minutes\n          script: \n            -
+    apt update && apt install -y jq\n            - pip3 install \"truefoundry<1.0.0\"\n
+    \           - tfy deploy -f truefoundry.yaml -w \"$WORKSPACE_FQN\" --no-wait\n        ```\n"
+  gitlab-pipelines-self-build-image-patch-application.yaml: "name: Build Image Yourself
+    and Patch Image URI to deploy on TrueFoundry\ncicd_provider_id: gitlab\nenabled:
+    true\ndescription: \"Build Docker Image using your own steps and deploy the image
+    on TrueFoundry.\"\ndeployment_mode: patch-application\nbuild_source: local\nimage_builder:
+    self\nsteps:\n  - label: Generate API Key\n    icon: null\n    usage: Generate an
+    API Key to authenticate and deploy applications\n    type: generate-api-key\n  -
+    label: Add API Key to Secrets\n    icon: null\n    usage: null\n    type: markdown-content\n
+    \   args:\n      content: |\n        In your GitLab Repository, navigate to **Settings
+    > CI/CD** then expand **Variables**.\n        Add a new secret called `TFY_API_KEY`
+    and set the generated api key as value and select the **Mask Variable** checkbox.\n
+    \ - label: Create GitLab Pipeline\n    icon: null\n    usage: |\n      Add the below
+    workflow as `.gitlab-ci.yml` in your root directory.\n      Following Pipelines
+    will be triggered on each push to `main` branch\n    type: markdown-content\n    args:\n
+    \     content: |\n        > **Note:** Please read through the `variables` section
+    and `build-image` Steps and update them for your registry and repo.\n        \n
+    \       \n        ```yaml\n        stages:\n          - build\n          - deploy\n
+    \       \n        workflow:\n          rules:\n            - if: $CI_COMMIT_BRANCH
+    == \"main\"\n\n        variables:\n          TFY_HOST: {{ TRUEFOUNDRY_TFY_HOST }}\n
+    \         APPLICATION_FQN: {{ TRUEFOUNDRY_APPLICATION_FQN }}\n\n          # Update
+    these with your Docker Registry and Repository\n          DOCKER_REGISTRY: docker.io\n
+    \         DOCKER_REPO_NAME: $CI_PROJECT_NAME\n          \n          DOCKER_IMAGE_REPO:
+    $DOCKER_REGISTRY/$DOCKER_REPO_NAME\n          DOCKER_IMAGE_TAG: $CI_COMMIT_SHA\n
+    \         DOCKER_IMAGE_URI: \"$DOCKER_IMAGE_REPO:$DOCKER_IMAGE_TAG\"\n\n        ###
+    Image Build Section ###\n        # Build your image, push it\n        # Here is
+    a sample, you can replace this with your registry specific steps.\n        # The
+    registry here should be also be linked in Integrations on TrueFoundry\n\n        build-image:\n
+    \         stage: build\n          image: docker:24.0.5\n          environment: production\n
+    \         timeout: 30 minutes\n          services:\n            - docker:24.0.5-dind\n
+    \         variables:\n            DOCKER_HOST: tcp://docker:2376\n            DOCKER_TLS_CERTDIR:
+    \"/certs\"\n          before_script:\n            - docker info\n            - export
+    BUILDX_VERSION=v0.6.3\n            - apk add --no-cache curl\n            - mkdir
+    -p ~/.docker/cli-plugins\n            - curl -sSLo ~/.docker/cli-plugins/docker-buildx
+    \"https://github.com/docker/buildx/releases/download/${BUILDX_VERSION}/buildx-${BUILDX_VERSION}.linux-amd64\"\n
+    \           - chmod a+x ~/.docker/cli-plugins/docker-buildx\n            - docker
+    buildx create --use --platform=linux/amd64,linux/arm64\n          script:\n            -
+    echo \"$DOCKER_REGISTRY_PASSWORD\" | docker login $DOCKER_REGISTRY --username $DOCKER_REGISTRY_USER
+    --password-stdin\n            # Assuming Dockerfile is present at the root of the
+    project. If not, please pass it via --file\n            - docker buildx build --cache-from
+    type=registry,ref=$DOCKER_IMAGE_REPO:buildcache --cache-to mode=max,image-manifest=true,type=registry,ref=$DOCKER_IMAGE_REPO:buildcache
+    --tag $DOCKER_IMAGE_URI --push .\n\n        ############################\n\n        deploy-job:\n
+    \         needs: [\"build-image\"]\n          stage: deploy\n          image: python:3.11.9-bullseye\n
+    \         environment: production\n          timeout: 30 minutes\n          variables:\n
+    \           PIP_CACHE_DIR: \"$CI_PROJECT_DIR/.cache/pip\"\n          script:\n            -
+    apt update && apt install -y jq\n            - pip3 install \"truefoundry<1.0.0\"\n
+    \           - tfy patch-application --application-fqn \"$APPLICATION_FQN\" --patch=\"{\\\"image\\\":
+    {\\\"image_uri\\\": \\\"$DOCKER_IMAGE_URI\\\"}}\"\n        ```\n"
+  gitlab-pipelines-self-build-image.yaml: "name: Build Image Yourself and Deploy Image
+    on TrueFoundry\ncicd_provider_id: gitlab\nenabled: true\ndescription: \"Build Docker
+    Image using your own steps and deploy the image on TrueFoundry.\"\ndeployment_mode:
+    deploy\nbuild_source: local\nimage_builder: self\nsteps:\n  - label: Generate API
+    Key\n    icon: null\n    usage: Generate an API Key to authenticate and deploy applications\n
+    \   type: generate-api-key\n  - label: Add API Key to Secrets\n    icon: null\n
+    \   usage: null\n    type: markdown-content\n    args:\n      content: |\n        In
+    your GitLab Repository, navigate to **Settings > CI/CD** then expand **Variables**.\n
+    \       Add a new secret called `TFY_API_KEY` and set the generated api key as value
+    and select the **Mask Variable** checkbox.\n  - label: Download Application Spec\n
+    \   icon: null\n    usage: Click the button below to download the `truefoundry.yaml`
+    application spec file. Copy it to the root of your project directory.\n    type:
+    download-truefoundry-spec\n  - label: Create GitLab Pipeline\n    icon: null\n    usage:
+    |\n      Add the below workflow as `.gitlab-ci.yml` in your root directory.\n      Following
+    Pipelines will be triggered on each push to `main` branch\n    type: markdown-content\n
+    \   args:\n      content: |\n        > **Note:** Please read through the `variables`
+    section and `build-image` Steps and update them for your registry and repo.\n        \n
+    \       \n        ```yaml\n        stages:\n          - build\n          - deploy\n
+    \       \n        workflow:\n          rules:\n            - if: $CI_COMMIT_BRANCH
+    == \"main\"\n\n        variables:\n          TFY_HOST: {{ TRUEFOUNDRY_TFY_HOST }}\n
+    \         WORKSPACE_FQN: {{ TRUEFOUNDRY_WORKSPACE_FQN }}\n\n          # Update these
+    with your Docker Registry and Repository\n          DOCKER_REGISTRY: docker.io\n
+    \         DOCKER_REPO_NAME: $CI_PROJECT_NAME\n          \n          DOCKER_IMAGE_REPO:
+    $DOCKER_REGISTRY/$DOCKER_REPO_NAME\n          DOCKER_IMAGE_TAG: $CI_COMMIT_SHA\n
+    \         DOCKER_IMAGE_URI: \"$DOCKER_IMAGE_REPO:$DOCKER_IMAGE_TAG\"\n\n        ###
+    Image Build Section ###\n        # Build your image, push it\n        # Here is
+    a sample, you can replace this with your registry specific steps.\n        # The
+    registry here should be also be linked in Integrations on TrueFoundry\n\n        build-image:\n
+    \         stage: build\n          image: docker:24.0.5\n          environment: production\n
+    \         timeout: 30 minutes\n          services:\n            - docker:24.0.5-dind\n
+    \         variables:\n            DOCKER_HOST: tcp://docker:2376\n            DOCKER_TLS_CERTDIR:
+    \"/certs\"\n          before_script:\n            - docker info\n            - export
+    BUILDX_VERSION=v0.6.3\n            - apk add --no-cache curl\n            - mkdir
+    -p ~/.docker/cli-plugins\n            - curl -sSLo ~/.docker/cli-plugins/docker-buildx
+    \"https://github.com/docker/buildx/releases/download/${BUILDX_VERSION}/buildx-${BUILDX_VERSION}.linux-amd64\"\n
+    \           - chmod a+x ~/.docker/cli-plugins/docker-buildx\n            - docker
+    buildx create --use --platform=linux/amd64,linux/arm64\n          script:\n            -
+    echo \"$DOCKER_REGISTRY_PASSWORD\" | docker login $DOCKER_REGISTRY --username $DOCKER_REGISTRY_USER
+    --password-stdin\n            # Assuming Dockerfile is present at the root of the
+    project. If not, please pass it via --file\n            - docker buildx build --cache-from
+    type=registry,ref=$DOCKER_IMAGE_REPO:buildcache --cache-to mode=max,image-manifest=true,type=registry,ref=$DOCKER_IMAGE_REPO:buildcache
+    --tag $DOCKER_IMAGE_URI --push .\n\n        ############################\n\n        deploy-job:\n
+    \         needs: [\"build-image\"]\n          stage: deploy\n          image: python:3.11.9-bullseye\n
+    \         environment: production\n          timeout: 30 minutes\n          variables:\n
+    \           PIP_CACHE_DIR: \"$CI_PROJECT_DIR/.cache/pip\"\n          script:\n            -
+    apt update && apt install -y jq\n            - pip3 install \"truefoundry<1.0.0\"\n
+    \           - tfy patch -f truefoundry.yaml --filter \".image.image_uri = \\\"$DOCKER_IMAGE_URI\\\"\"
+    -o truefoundry-patched.yaml\n            - tfy deploy -f truefoundry-patched.yaml
+    -w \"$WORKSPACE_FQN\" --no-wait\n        ```\n"
+---
+# Source: truefoundry/charts/tfy-configs/templates/workbench-images-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-truefoundry-workbench-images-cm
+  namespace: default
+data:
+  workbench-images.yaml: |-
+    
+    # cluster_region is based on topology.kubernetes.io/region
+    # image section can also contain `build_script` and `docker_registry`
+    images:
+      - name: Jupyter Lab Minimal Image
+        type: notebook
+        enabled: true
+        description: Minimal image with Python 3.11 environment. Starts quickly
+        image:
+          - match:
+              - key: cluster_type
+                operator: In
+                values:
+                  - 'gcp-gke-standard'
+              - key: cluster_region
+                operator: StartsWith
+                values:
+                  - 'us-'
+            spec:
+              image_uri: 'us-docker.pkg.dev/production-01-407505/tfy-docker-us/jupyter:0.3.0-sudo'
+          - match:
+              - key: cluster_type
+                operator: In
+                values:
+                  - 'gcp-gke-standard'
+              - key: cluster_region
+                operator: StartsWith
+                values:
+                  - 'europe-'
+            spec:
+              image_uri: 'europe-docker.pkg.dev/production-01-407505/tfy-docker-eu/jupyter:0.3.0-sudo'
+          - match:
+              - key: cluster_type
+                operator: In
+                values:
+                  - 'gcp-gke-standard'
+              - key: cluster_region
+                operator: StartsWith
+                values:
+                  - 'asia-'
+            spec:
+              image_uri: 'asia-docker.pkg.dev/production-01-407505/tfy-docker-as/jupyter:0.3.0-sudo'
+          - match: []
+            spec:
+              image_uri: 'public.ecr.aws/truefoundrycloud/jupyter:0.3.0-sudo'
+    
+      - name: Jupyter Lab Cuda 12.1 Image
+        type: notebook
+        enabled: true
+        description: Python 3.11 environment with cuda toolkit 12.1
+        image:
+          - match:
+              - key: cluster_type
+                operator: In
+                values:
+                  - 'gcp-gke-standard'
+              - key: cluster_region
+                operator: StartsWith
+                values:
+                  - 'us-'
+            spec:
+              image_uri: 'us-docker.pkg.dev/production-01-407505/tfy-docker-us/jupyter:0.3.0-cu121-sudo'
+          - match:
+              - key: cluster_type
+                operator: In
+                values:
+                  - 'gcp-gke-standard'
+              - key: cluster_region
+                operator: StartsWith
+                values:
+                  - 'europe-'
+            spec:
+              image_uri: 'europe-docker.pkg.dev/production-01-407505/tfy-docker-eu/jupyter:0.3.0-cu121-sudo'
+          - match:
+              - key: cluster_type
+                operator: In
+                values:
+                  - 'gcp-gke-standard'
+              - key: cluster_region
+                operator: StartsWith
+                values:
+                  - 'asia-'
+            spec:
+              image_uri: 'asia-docker.pkg.dev/production-01-407505/tfy-docker-as/jupyter:0.3.0-cu121-sudo'
+          - match: []
+            spec:
+              image_uri: 'public.ecr.aws/truefoundrycloud/jupyter:0.3.0-cu121-sudo'
+    
+      - name: Jupyter Lab Full Image
+        type: notebook
+        enabled: true
+        description: Python 3.11 environment with common ML Libraries and cuda toolkit 12.1
+        image:
+          - match:
+              - key: cluster_type
+                operator: In
+                values:
+                  - 'gcp-gke-standard'
+              - key: cluster_region
+                operator: StartsWith
+                values:
+                  - 'us-'
+            spec:
+              image_uri: 'us-docker.pkg.dev/production-01-407505/tfy-docker-us/jupyter-full:0.3.0-sudo'
+          - match:
+              - key: cluster_type
+                operator: In
+                values:
+                  - 'gcp-gke-standard'
+              - key: cluster_region
+                operator: StartsWith
+                values:
+                  - 'europe-'
+            spec:
+              image_uri: 'europe-docker.pkg.dev/production-01-407505/tfy-docker-eu/jupyter-full:0.3.0-sudo'
+          - match:
+              - key: cluster_type
+                operator: In
+                values:
+                  - 'gcp-gke-standard'
+              - key: cluster_region
+                operator: StartsWith
+                values:
+                  - 'asia-'
+            spec:
+              image_uri: 'asia-docker.pkg.dev/production-01-407505/tfy-docker-as/jupyter-full:0.3.0-sudo'
+          - match: []
+            spec:
+              image_uri: 'public.ecr.aws/truefoundrycloud/jupyter-full:0.3.0-sudo'
+    
+      - name: SSH Server Minimal Image
+        type: ssh-server
+        enabled: true
+        description: SSH Server image with Python 3.11 environment
+        image:
+          - match:
+              - key: cluster_type
+                operator: In
+                values:
+                  - 'gcp-gke-standard'
+              - key: cluster_region
+                operator: StartsWith
+                values:
+                  - 'us-'
+            spec:
+              image_uri: 'us-docker.pkg.dev/production-01-407505/tfy-docker-us/ssh-server:0.3.0'
+          - match:
+              - key: cluster_type
+                operator: In
+                values:
+                  - 'gcp-gke-standard'
+              - key: cluster_region
+                operator: StartsWith
+                values:
+                  - 'europe-'
+            spec:
+              image_uri: 'europe-docker.pkg.dev/production-01-407505/tfy-docker-eu/ssh-server:0.3.0'
+          - match:
+              - key: cluster_type
+                operator: In
+                values:
+                  - 'gcp-gke-standard'
+              - key: cluster_region
+                operator: StartsWith
+                values:
+                  - 'asia-'
+            spec:
+              image_uri: 'asia-docker.pkg.dev/production-01-407505/tfy-docker-as/ssh-server:0.3.0'
+          - match: []
+            spec:
+              image_uri: 'public.ecr.aws/truefoundrycloud/ssh-server:0.3.0'
+    
+      - name: SSH Server Cuda 12.1 Image
+        type: ssh-server
+        enabled: true
+        description: Python 3.11 environment with cuda toolkit 12.1
+        image:
+          - match:
+              - key: cluster_type
+                operator: In
+                values:
+                  - 'gcp-gke-standard'
+              - key: cluster_region
+                operator: StartsWith
+                values:
+                  - 'us-'
+            spec:
+              image_uri: 'us-docker.pkg.dev/production-01-407505/tfy-docker-us/ssh-server:0.3.0-cu121'
+          - match:
+              - key: cluster_type
+                operator: In
+                values:
+                  - 'gcp-gke-standard'
+              - key: cluster_region
+                operator: StartsWith
+                values:
+                  - 'europe-'
+            spec:
+              image_uri: 'europe-docker.pkg.dev/production-01-407505/tfy-docker-eu/ssh-server:0.3.0-cu121'
+          - match:
+              - key: cluster_type
+                operator: In
+                values:
+                  - 'gcp-gke-standard'
+              - key: cluster_region
+                operator: StartsWith
+                values:
+                  - 'asia-'
+            spec:
+              image_uri: 'asia-docker.pkg.dev/production-01-407505/tfy-docker-as/ssh-server:0.3.0-cu121'
+          - match: []
+            spec:
+              image_uri: 'public.ecr.aws/truefoundrycloud/ssh-server:0.3.0-cu121'
+    
+      - name: CodeServer (VS Code) Minimal Image
+        type: codeserver
+        enabled: true
+        description: CodeServer (VS Code) image with Python 3.11 environment
+        image:
+          - match:
+              - key: cluster_type
+                operator: In
+                values:
+                  - 'gcp-gke-standard'
+              - key: cluster_region
+                operator: StartsWith
+                values:
+                  - 'us-'
+            spec:
+              image_uri: 'us-docker.pkg.dev/production-01-407505/tfy-docker-us/codeserver-python:0.3.0-sudo'
+          - match:
+              - key: cluster_type
+                operator: In
+                values:
+                  - 'gcp-gke-standard'
+              - key: cluster_region
+                operator: StartsWith
+                values:
+                  - 'europe-'
+            spec:
+              image_uri: 'europe-docker.pkg.dev/production-01-407505/tfy-docker-eu/codeserver-python:0.3.0-sudo'
+          - match:
+              - key: cluster_type
+                operator: In
+                values:
+                  - 'gcp-gke-standard'
+              - key: cluster_region
+                operator: StartsWith
+                values:
+                  - 'asia-'
+            spec:
+              image_uri: 'asia-docker.pkg.dev/production-01-407505/tfy-docker-as/codeserver-python:0.3.0-sudo'
+          - match: []
+            spec:
+              image_uri: 'public.ecr.aws/truefoundrycloud/codeserver-python:0.3.0-sudo'
+    
+      - name: CodeServer (VS Code) Cuda 12.1 Image
+        type: codeserver
+        enabled: true
+        description: CodeServer (VS Code) image with Python 3.11 environment and cuda toolkit 12.1
+        image:
+          - match:
+              - key: cluster_type
+                operator: In
+                values:
+                  - 'gcp-gke-standard'
+              - key: cluster_region
+                operator: StartsWith
+                values:
+                  - 'us-'
+            spec:
+              image_uri: 'us-docker.pkg.dev/production-01-407505/tfy-docker-us/codeserver-python:0.3.0-cu121-sudo'
+          - match:
+              - key: cluster_type
+                operator: In
+                values:
+                  - 'gcp-gke-standard'
+              - key: cluster_region
+                operator: StartsWith
+                values:
+                  - 'europe-'
+            spec:
+              image_uri: 'europe-docker.pkg.dev/production-01-407505/tfy-docker-eu/codeserver-python:0.3.0-cu121-sudo'
+          - match:
+              - key: cluster_type
+                operator: In
+                values:
+                  - 'gcp-gke-standard'
+              - key: cluster_region
+                operator: StartsWith
+                values:
+                  - 'asia-'
+            spec:
+              image_uri: 'asia-docker.pkg.dev/production-01-407505/tfy-docker-as/codeserver-python:0.3.0-cu121-sudo'
+          - match: []
+            spec:
+              image_uri: 'public.ecr.aws/truefoundrycloud/codeserver-python:0.3.0-cu121-sudo'
+---
+# Source: truefoundry/templates/servicefoundry-server/role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: servicefoundry-server-role
+rules:
+  - apiGroups:
+      - argoproj.io
+    resources:
+      - workflows
+    verbs:
+      - create
+---
+# Source: truefoundry/templates/tfy-build/build-workflow-role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: tfy-build-role
+rules:
+  - apiGroups:
+      - argoproj.io
+    resources:
+      - workflowtaskresults
+    verbs:
+      - create
+      - patch
+---
+# Source: truefoundry/templates/servicefoundry-server/rolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: servicefoundry-server-role-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: servicefoundry-server-role
+subjects:
+  - kind: ServiceAccount
+    namespace: default
+    name: servicefoundry-server
+---
+# Source: truefoundry/templates/tfy-build/build-workflow-role-binding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: tfy-build-role-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: tfy-build-role
+subjects:
+  - kind: ServiceAccount
+    namespace: default
+    name: tfy-build
+---
+# Source: truefoundry/charts/nats/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-truefoundry-nats
+  namespace: default
+  labels:
+    helm.sh/chart: nats-0.19.1
+    app.kubernetes.io/name: nats
+    app.kubernetes.io/instance: my-truefoundry
+    app.kubernetes.io/version: "2.9.8"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+    app.kubernetes.io/name: nats
+    app.kubernetes.io/instance: my-truefoundry
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+  - name: websocket
+    port: 443
+    appProtocol: tcp
+  - name: client
+    port: 4222
+    appProtocol: tcp
+  - name: cluster
+    port: 6222
+    appProtocol: tcp
+  - name: monitor
+    port: 8222
+    appProtocol: http
+  - name: metrics
+    port: 7777
+    appProtocol: http
+  - name: leafnodes
+    port: 7422
+    appProtocol: tcp
+  - name: gateways
+    port: 7522
+    appProtocol: tcp
+---
+# Source: truefoundry/templates/mlfoundry-server/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-truefoundry-mlfoundry-server
+  labels:
+    helm.sh/chart: truefoundry-0.4.21
+    app.kubernetes.io/name: mlfoundry-server
+    app.kubernetes.io/instance: my-truefoundry
+    app.kubernetes.io/version: "v0.2.120"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5000
+      targetPort: 5000
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: mlfoundry-server
+    app.kubernetes.io/instance: my-truefoundry
+---
+# Source: truefoundry/templates/servicefoundry-server/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-truefoundry-servicefoundry-server
+  labels:
+    helm.sh/chart: truefoundry-0.4.21
+    app.kubernetes.io/name: servicefoundry-server
+    app.kubernetes.io/instance: my-truefoundry
+    app.kubernetes.io/version: "v0.4.4"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3000
+      targetPort: 3000
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: servicefoundry-server
+    app.kubernetes.io/instance: my-truefoundry
+---
+# Source: truefoundry/templates/sfy-manifest-service/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-truefoundry-sfy-manifest-service
+  labels:
+    helm.sh/chart: truefoundry-0.4.21
+    app.kubernetes.io/name: sfy-manifest-service
+    app.kubernetes.io/instance: my-truefoundry
+    app.kubernetes.io/version: "0.1.134"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: sfy-manifest-service
+    app.kubernetes.io/instance: my-truefoundry
+---
+# Source: truefoundry/templates/tfy-controller/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-truefoundry-tfy-controller
+  labels:
+    helm.sh/chart: truefoundry-0.4.21
+    app.kubernetes.io/name: tfy-controller
+    app.kubernetes.io/instance: my-truefoundry
+    app.kubernetes.io/version: "v0.0.28"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8123
+      targetPort: 8123
+      protocol: TCP
+      name: port-8123
+  selector:
+    app.kubernetes.io/name: tfy-controller
+    app.kubernetes.io/instance: my-truefoundry
+---
+# Source: truefoundry/templates/tfy-k8s-controller/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-truefoundry-tfy-k8s-controller
+  labels:
+    helm.sh/chart: truefoundry-0.4.21
+    app.kubernetes.io/name: tfy-k8s-controller
+    app.kubernetes.io/instance: my-truefoundry
+    app.kubernetes.io/version: "v0.1.6"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3002
+      targetPort: 3002
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: tfy-k8s-controller
+    app.kubernetes.io/instance: my-truefoundry
+---
+# Source: truefoundry/templates/truefoundry-frontend-app/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-truefoundry-truefoundry-frontend-app
+  labels:
+    helm.sh/chart: truefoundry-0.4.21
+    app.kubernetes.io/name: truefoundry-frontend-app
+    app.kubernetes.io/instance: my-truefoundry
+    app.kubernetes.io/version: "v0.3.154"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5000
+      targetPort: 5000
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: truefoundry-frontend-app
+    app.kubernetes.io/instance: my-truefoundry
+---
+# Source: truefoundry/templates/mlfoundry-server/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-truefoundry-mlfoundry-server
+  labels:
+    helm.sh/chart: truefoundry-0.4.21
+    app.kubernetes.io/name: mlfoundry-server
+    app.kubernetes.io/instance: my-truefoundry
+    app.kubernetes.io/version: "v0.2.120"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mlfoundry-server
+      app.kubernetes.io/instance: my-truefoundry
+  template:
+    metadata:
+      labels:
+        helm.sh/chart: truefoundry-0.4.21
+        app.kubernetes.io/name: mlfoundry-server
+        app.kubernetes.io/instance: my-truefoundry
+        app.kubernetes.io/version: "v0.2.120"
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      serviceAccountName: mlfoundry-server
+      containers:
+        - name: "mlfoundry-server"
+          env:
+            - name: ARTIFACT_ROOT
+              value: "s3://"
+            - name: AUTH_SERVER_URL
+              value: "https://auth.truefoundry.com"
+            - name: DB_DIALECT
+              value: "postgresql+psycopg2"
+            - name: DB_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: truefoundry-creds
+                  key: DB_HOST
+            - name: DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: truefoundry-creds
+                  key: DB_NAME
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: truefoundry-creds
+                  key: DB_PASSWORD
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_POSTGRES_SCHEMA
+              value: "mlfoundry"
+            - name: DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: truefoundry-creds
+                  key: DB_USERNAME
+            - name: ENVIRONMENT
+              value: "production"
+            - name: MLFLOW_S3_ENDPOINT_URL
+              value: ""
+            - name: MULTITENANT
+              value: "false"
+            - name: S3_ENDPOINT_URL
+              value: ""
+            - name: SERVICEFOUNDRY_SERVER_URL
+              value: "http://my-truefoundry-servicefoundry-server.default.svc.cluster.local:3000"
+            - name: SVC_FOUNDRY_SERVICE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: truefoundry-creds
+                  key: TFY_API_KEY
+            - name: TENANT_NAME
+              value: ""
+            - name: prometheus_multiproc_dir
+              value: ".prom_metrics"
+          image: "truefoundrycloud/mlfoundry-server:v0.2.120"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 5000
+              protocol: TCP
+          resources:
+            limits:
+              cpu: 400m
+              ephemeral-storage: 256Mi
+              memory: 1024Mi
+            requests:
+              cpu: 100m
+              ephemeral-storage: 128Mi
+              memory: 640Mi
+          livenessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+            httpGet:
+              path: /
+              port: 5000
+              scheme: HTTP
+          readinessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+            httpGet:
+              path: /
+              port: 5000
+              scheme: HTTP
+          volumeMounts:
+            []
+      volumes:
+        []
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      tolerations:
+        - effect: NoSchedule
+          key: class.truefoundry.io/control-plane
+          operator: Exists
+        - effect: NoSchedule
+          key: cloud.google.com/gke-spot
+          operator: Equal
+          value: "true"
+        - effect: NoSchedule
+          key: kubernetes.azure.com/scalesetpriority
+          operator: Equal
+          value: spot
+---
+# Source: truefoundry/templates/servicefoundry-server/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-truefoundry-servicefoundry-server
+  labels:
+    helm.sh/chart: truefoundry-0.4.21
+    app.kubernetes.io/name: servicefoundry-server
+    app.kubernetes.io/instance: my-truefoundry
+    app.kubernetes.io/version: "v0.4.4"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: servicefoundry-server
+      app.kubernetes.io/instance: my-truefoundry
+  template:
+    metadata:
+      labels:
+        helm.sh/chart: truefoundry-0.4.21
+        app.kubernetes.io/name: servicefoundry-server
+        app.kubernetes.io/instance: my-truefoundry
+        app.kubernetes.io/version: "v0.4.4"
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      serviceAccountName: servicefoundry-server
+      containers:
+        - name: "servicefoundry-server"
+          env:
+            - name: ACCESS_TFY_GATEWAY_MODELS_TENANT_DENY_LIST
+              value: ""
+            - name: AUTH_SERVER_URL
+              value: "https://auth.truefoundry.com"
+            - name: AWS_ASSUME_ROLE_ARN
+              value: ""
+            - name: AWS_REGION
+              value: ""
+            - name: AZURE_BLOB_CONNECTION_STRING
+              value: ""
+            - name: AZURE_BLOB_URI
+              value: ""
+            - name: AZURE_CLIENT_ID
+              value: ""
+            - name: AZURE_CLIENT_SECRET
+              value: ""
+            - name: BITBUCKET_APP_PASSWORD
+              value: ""
+            - name: BITBUCKET_CLIENT_ID
+              value: ""
+            - name: BITBUCKET_CLIENT_SECRET
+              value: ""
+            - name: BUILDKIT_SERVICE_URL
+              value: ""
+            - name: BUILD_CALLBACK_URL
+              value: "http://my-truefoundry-servicefoundry-server.default.svc.cluster.local:3000"
+            - name: CLICKHOUSE_HOST
+              value: ""
+            - name: CLICKHOUSE_PASSWORD
+              value: ""
+            - name: CLICKHOUSE_USER
+              value: ""
+            - name: CLICKHOUSE_WAIT_TIMEOUT
+              value: "5m"
+            - name: CLUSTER_PROXY_URL
+              value: "http://my-truefoundry-tfy-controller.default.svc.cluster.local:8123"
+            - name: CONTROL_PLANE_URL
+              value: "http://truefoundry-truefoundry-frontend-app.truefoundry.svc.cluster.local:5000"
+            - name: DB_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: truefoundry-creds
+                  key: DB_HOST
+            - name: DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: truefoundry-creds
+                  key: DB_NAME
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: truefoundry-creds
+                  key: DB_PASSWORD
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_SSL_CA_PATH
+              value: ""
+            - name: DB_SSL_CERT_PATH
+              value: ""
+            - name: DB_SSL_KEY_PATH
+              value: ""
+            - name: DB_SSL_MODE
+              value: ""
+            - name: DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: truefoundry-creds
+                  key: DB_USERNAME
+            - name: DEFAULT_CLOUD_PROVIDER
+              value: "aws"
+            - name: DEPOT_PROJECT_ID
+              value: ""
+            - name: DEPOT_TOKEN
+              value: ""
+            - name: EXTERNAL_OAUTH_CLIENT_ID
+              value: ""
+            - name: EXTERNAL_OAUTH_CLIENT_SECRET
+              value: ""
+            - name: EXTERNAL_OAUTH_ISSUER
+              value: ""
+            - name: FLYTE_ADMIN_URL
+              value: ""
+            - name: GITHUB_APP_ID
+              value: ""
+            - name: GITHUB_INSTALLATION_URL
+              value: ""
+            - name: GITHUB_PAT
+              value: ""
+            - name: GITHUB_PRIVATE_KEY
+              value: ""
+            - name: GITLAB_APP_ID
+              value: ""
+            - name: GITLAB_APP_SECRET
+              value: ""
+            - name: GITLAB_SCOPE
+              value: ""
+            - name: GS_BUCKET_NAME
+              value: ""
+            - name: KUBE_CONTEXT
+              value: ""
+            - name: LLM_GATEWAY_URL
+              value: ""
+            - name: MANIFEST_SERVICE_URL
+              value: "http://my-truefoundry-sfy-manifest-service.default.svc.cluster.local:8080"
+            - name: MLFOUNDRY_SERVER_URL
+              value: "http://my-truefoundry-mlfoundry-server.default.svc.cluster.local:5000"
+            - name: NATS_CONTROLPLANE_ACCOUNT_SEED
+              valueFrom:
+                secretKeyRef:
+                  name: truefoundry-nats-secret
+                  key: NATS_CONTROLPLANE_ACCOUNT_SEED
+            - name: NATS_QGROUP_NAME
+              value: ""
+            - name: NATS_URL
+              value: "http://my-truefoundry-nats.default.svc.cluster.local:4222"
+            - name: S3_BUCKET_NAME
+              value: ""
+            - name: SLACK_ALERT_URL
+              value: ""
+            - name: SLACK_BILLING_ALERT_URL
+              value: ""
+            - name: STORAGE_CLASS_ACCESS_MODES
+              value: ""
+            - name: STRIPE_KEY
+              value: ""
+            - name: STRIPE_WEBHOOK_SECRET
+              value: ""
+            - name: TENANT_NAME
+              value: ""
+            - name: TFY_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: truefoundry-creds
+                  key: TFY_API_KEY
+            - name: TFY_BUILD_LOGS_URL
+              value: "http://truefoundry-truefoundry-frontend-app.truefoundry.svc.cluster.local:5000/api/svc"
+            - name: TFY_BUILD_WS_URL
+              value: "http://truefoundry-truefoundry-frontend-app.truefoundry.svc.cluster.local:5000"
+            - name: TRUEFOUNDRY_PUBLIC_ENABLED
+              value: ""
+            - name: VCS_INTEGRATION_STATE_OBJECT_HASH_SECRET
+              value: ""
+            - name: CICD_TEMPLATES_DIRECTORY
+              value: /opt/truefoundry/configs/cicd-templates
+            - name: WORKBENCH_IMAGES_CONFIG_PATH
+              value: /opt/truefoundry/configs/workbench-images/workbench-images.yaml
+          image: "truefoundrycloud/servicefoundry-server:v0.4.4"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          resources:
+            limits:
+              cpu: 600m
+              ephemeral-storage: 256Mi
+              memory: 1024Mi
+            requests:
+              cpu: 400m
+              ephemeral-storage: 128Mi
+              memory: 512Mi
+          livenessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+            httpGet:
+              path: /
+              port: 3000
+              scheme: HTTP
+          readinessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+            httpGet:
+              path: /
+              port: 3000
+              scheme: HTTP
+          volumeMounts:
+            - mountPath: /opt/truefoundry/configs/cicd-templates
+              name: configs-cicd-templates
+            - mountPath: /opt/truefoundry/configs/workbench-images
+              name: configs-workbench-images
+      volumes:
+        - configMap:
+            name: my-truefoundry-cicd-templates-cm
+          name: configs-cicd-templates
+        - configMap:
+            name: my-truefoundry-workbench-images-cm
+          name: configs-workbench-images
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      tolerations:
+        - effect: NoSchedule
+          key: class.truefoundry.io/control-plane
+          operator: Exists
+        - effect: NoSchedule
+          key: cloud.google.com/gke-spot
+          operator: Equal
+          value: "true"
+        - effect: NoSchedule
+          key: kubernetes.azure.com/scalesetpriority
+          operator: Equal
+          value: spot
+---
+# Source: truefoundry/templates/sfy-manifest-service/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-truefoundry-sfy-manifest-service
+  labels:
+    helm.sh/chart: truefoundry-0.4.21
+    app.kubernetes.io/name: sfy-manifest-service
+    app.kubernetes.io/instance: my-truefoundry
+    app.kubernetes.io/version: "0.1.134"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sfy-manifest-service
+      app.kubernetes.io/instance: my-truefoundry
+  template:
+    metadata:
+      labels:
+        helm.sh/chart: truefoundry-0.4.21
+        app.kubernetes.io/name: sfy-manifest-service
+        app.kubernetes.io/instance: my-truefoundry
+        app.kubernetes.io/version: "0.1.134"
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      serviceAccountName: sfy-manifest-service
+      containers:
+        - name: "sfy-manifest-service"
+          env:
+            - name: ADDITIONAL_KUSTOMIZE_PATCHES
+              value: ""
+            - name: APP_CATALOGUE_ENDPOINT
+              value: "https://catalogue.truefoundry.com/templates/"
+            - name: ASYNC_PROCESSOR_SIDECAR_IMAGE
+              value: "public.ecr.aws/w0y0d8g6/truefoundrycloud/async_processor:35b639ea3db5490f816379de0c92a9a933338cdf"
+            - name: AUTH_SERVER_URL
+              value: "https://auth.truefoundry.com"
+            - name: AUTOPILOT_PROCESSOR_ENABLED
+              value: "false"
+            - name: AUTOPILOT_PROCESSOR_NATS_ACK_WAIT
+              value: "120"
+            - name: AUTOPILOT_PROCESSOR_NATS_PULL_MAX_BYTES
+              value: "10485760"
+            - name: AUTOPILOT_PROCESSOR_NATS_URL
+              value: "nats://my-truefoundry-nats.default.svc.cluster.local:4222"
+            - name: AUTOPILOT_PROCESSOR_NUMBER_OF_WORKERS
+              value: "2"
+            - name: AUTOPILOT_PROCESSOR_PUBLISH_ASYNC_MAX_PENDING
+              value: "100"
+            - name: GIN_MODE
+              value: "release"
+            - name: HELM_SIZE_LIMIT_BYTES
+              value: "307200"
+            - name: MLF_SERVER_URL
+              value: "http://my-truefoundry-mlfoundry-server.default.svc.cluster.local:5000"
+            - name: PORT
+              value: "8080"
+            - name: PROCESS_TICKER_PERIOD_SECONDS
+              value: "5"
+            - name: SFY_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: truefoundry-creds
+                  key: TFY_API_KEY
+            - name: SFY_SERVER_URL
+              value: "http://my-truefoundry-servicefoundry-server.default.svc.cluster.local:3000"
+            - name: TENANT_NAME
+              value: ""
+            - name: TFY_MANIFESTS_TEMPLATE_CHART_CONFIG
+              value: "{\"repoType\": \"helm\", \"repoURL\": \"https://truefoundry.github.io/infra-charts/\", \"chart\": \"tfy-manifests-template\", \"targetRevision\": \"0.2.0\" }"
+            - name: TFY_MODEL_DOWNLOADER_IMAGE
+              value: "public.ecr.aws/truefoundrycloud/tfy-model-downloader:0.1.7"
+          image: "truefoundrycloud/sfy-manifest-service:0.1.134"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          resources:
+            limits:
+              cpu: 200m
+              ephemeral-storage: 256Mi
+              memory: 512Mi
+            requests:
+              cpu: 100m
+              ephemeral-storage: 128Mi
+              memory: 256Mi
+          livenessProbe:
+            httpGet:
+              path: /healthy
+              port: 8080
+          readinessProbe:
+            httpGet:
+              path: /healthy
+              port: 8080
+          volumeMounts:
+            []
+      volumes:
+        []
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      tolerations:
+        - effect: NoSchedule
+          key: class.truefoundry.io/control-plane
+          operator: Exists
+        - effect: NoSchedule
+          key: cloud.google.com/gke-spot
+          operator: Equal
+          value: "true"
+        - effect: NoSchedule
+          key: kubernetes.azure.com/scalesetpriority
+          operator: Equal
+          value: spot
+---
+# Source: truefoundry/templates/tfy-controller/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-truefoundry-tfy-controller
+  labels:
+    helm.sh/chart: truefoundry-0.4.21
+    app.kubernetes.io/name: tfy-controller
+    app.kubernetes.io/instance: my-truefoundry
+    app.kubernetes.io/version: "v0.0.28"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: tfy-controller
+      app.kubernetes.io/instance: my-truefoundry
+  template:
+    metadata:
+      labels:
+        helm.sh/chart: truefoundry-0.4.21
+        app.kubernetes.io/name: tfy-controller
+        app.kubernetes.io/instance: my-truefoundry
+        app.kubernetes.io/version: "v0.0.28"
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      serviceAccountName: tfy-controller
+      containers:
+        - name: "tfy-controller"
+          env:
+            - name: AUTH_SERVER_URL
+              value: "https://auth.truefoundry.com"
+            - name: DEPLOYMENT_CONTROLLER_ENABLED
+              value: "true"
+            - name: GIN_MODE
+              value: "release"
+            - name: MIGRATION_CONTROLLER_APPLICATION_HEALTH_CHECK_INTERVAL_SECONDS
+              value: "20"
+            - name: MIGRATION_CONTROLLER_APPLICATION_HEALTH_CHECK_TIMEOUT_MINUTES
+              value: "5"
+            - name: MIGRATION_CONTROLLER_ENABLED
+              value: "false"
+            - name: MIGRATION_CONTROLLER_INTERVAL_MINUTES
+              value: "60"
+            - name: PROXY_SERVER_ENABLED
+              value: "true"
+            - name: PROXY_SERVER_PORT
+              value: "8123"
+            - name: SFY_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: truefoundry-creds
+                  key: TFY_API_KEY
+            - name: SFY_MANIFEST_SERVER_URL
+              value: "http://my-truefoundry-sfy-manifest-service.default.svc.cluster.local:8080"
+            - name: SFY_SERVER_URL
+              value: "http://my-truefoundry-servicefoundry-server.default.svc.cluster.local:3000"
+            - name: TENANT_NAME
+              value: ""
+            - name: TFY_AGENT_STATE_BUFFER_PROCESSOR_ENABLED
+              value: "true"
+            - name: TFY_AGENT_STATE_BUFFER_PROCESSOR_NATS_URL
+              value: "nats://my-truefoundry-nats.default.svc.cluster.local:4222"
+          image: "truefoundrycloud/tfy-controller:v0.0.28"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: port-8123
+              containerPort: 8123
+              protocol: TCP
+          resources:
+            limits:
+              cpu: 100m
+              ephemeral-storage: 256Mi
+              memory: 256Mi
+            requests:
+              cpu: 50m
+              ephemeral-storage: 128Mi
+              memory: 256Mi
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /healthy
+              port: 8123
+              scheme: HTTP
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      tolerations:
+        - effect: NoSchedule
+          key: class.truefoundry.io/control-plane
+          operator: Exists
+        - effect: NoSchedule
+          key: cloud.google.com/gke-spot
+          operator: Equal
+          value: "true"
+        - effect: NoSchedule
+          key: kubernetes.azure.com/scalesetpriority
+          operator: Equal
+          value: spot
+---
+# Source: truefoundry/templates/tfy-k8s-controller/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-truefoundry-tfy-k8s-controller
+  labels:
+    helm.sh/chart: truefoundry-0.4.21
+    app.kubernetes.io/name: tfy-k8s-controller
+    app.kubernetes.io/instance: my-truefoundry
+    app.kubernetes.io/version: "v0.1.6"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: tfy-k8s-controller
+      app.kubernetes.io/instance: my-truefoundry
+  template:
+    metadata:
+      labels:
+        helm.sh/chart: truefoundry-0.4.21
+        app.kubernetes.io/name: tfy-k8s-controller
+        app.kubernetes.io/instance: my-truefoundry
+        app.kubernetes.io/version: "v0.1.6"
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      serviceAccountName: tfy-k8s-controller
+      containers:
+        - name: "tfy-k8s-controller"
+          env:
+            - name: CONTROL_PLANE_NATS_URL
+              value: "http://my-truefoundry-nats.default.svc.cluster.local:4222"
+            - name: SFY_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: truefoundry-creds
+                  key: TFY_API_KEY
+            - name: SFY_SERVER_URL
+              value: "http://my-truefoundry-servicefoundry-server.default.svc.cluster.local:3000"
+          image: "truefoundrycloud/tfy-k8s-controller:v0.1.6"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3002
+              protocol: TCP
+          resources:
+            limits:
+              cpu: 400m
+              ephemeral-storage: 256Mi
+              memory: 512Mi
+            requests:
+              cpu: 200m
+              ephemeral-storage: 128Mi
+              memory: 256Mi
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 3002
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 3002
+          volumeMounts:
+            []
+      volumes:
+        []
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      tolerations:
+        - effect: NoSchedule
+          key: class.truefoundry.io/control-plane
+          operator: Exists
+        - effect: NoSchedule
+          key: cloud.google.com/gke-spot
+          operator: Equal
+          value: "true"
+        - effect: NoSchedule
+          key: kubernetes.azure.com/scalesetpriority
+          operator: Equal
+          value: spot
+---
+# Source: truefoundry/templates/truefoundry-frontend-app/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-truefoundry-truefoundry-frontend-app
+  labels:
+    helm.sh/chart: truefoundry-0.4.21
+    app.kubernetes.io/name: truefoundry-frontend-app
+    app.kubernetes.io/instance: my-truefoundry
+    app.kubernetes.io/version: "v0.3.154"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: truefoundry-frontend-app
+      app.kubernetes.io/instance: my-truefoundry
+  template:
+    metadata:
+      labels:
+        helm.sh/chart: truefoundry-0.4.21
+        app.kubernetes.io/name: truefoundry-frontend-app
+        app.kubernetes.io/instance: my-truefoundry
+        app.kubernetes.io/version: "v0.3.154"
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      serviceAccountName: truefoundry-frontend-app
+      containers:
+        - name: "truefoundry-frontend-app"
+          env:
+            - name: AUTH_SERVER_URL
+              value: "https://auth.truefoundry.com"
+            - name: MLFOUNDRY_SERVER_URL
+              value: "http://my-truefoundry-mlfoundry-server.default.svc.cluster.local:5000"
+            - name: NATS_URL
+              value: "ws://my-truefoundry-nats.default.svc.cluster.local:443"
+            - name: SERVICEFOUNDRY_SERVER_URL
+              value: "http://my-truefoundry-servicefoundry-server.default.svc.cluster.local:3000"
+            - name: TFY_CONTROLLER_URL
+              value: "http://my-truefoundry-tfy-controller.default.svc.cluster.local:8123"
+            - name: VITE_APEX_DOMAIN
+              value: "http://truefoundry.com/"
+            - name: VITE_APP_ENVIRONMENT
+              value: ""
+            - name: VITE_AUTHSERVER_URL
+              value: "/api/auth"
+            - name: VITE_CIVO_RESOURCES_STRING
+              value: ""
+            - name: VITE_CLUSTER_ONBOARDING_FLOW_ENABLED
+              value: "false"
+            - name: VITE_CREDIT_CARD_REQUIRED_DOMAINS
+              value: ""
+            - name: VITE_CRISP_WEBSITE_ID
+              value: ""
+            - name: VITE_DATAGRID_LICENSE_KEY
+              value: "1562842fe4dffce93855a342848a3609T1JERVI6NDA5ODIsRVhQSVJZPTE2ODA0NzEzNDkwMDAsS0VZVkVSU0lPTj0x"
+            - name: VITE_DOCS_QA_DELETE_COLLECTIONS
+              value: "false"
+            - name: VITE_DOCS_QA_EMBEDDINGS
+              value: ""
+            - name: VITE_DOCS_QA_ENABLE_REDIRECT
+              value: "false"
+            - name: VITE_DOCS_QA_ENABLE_STANDALONE
+              value: "false"
+            - name: VITE_DOCS_QA_MAX_UPLOAD_SIZE_MB
+              value: "2"
+            - name: VITE_DOCS_QA_STANDALONE_PATH
+              value: ""
+            - name: VITE_ENABLE_COMPANY_REGISTRATION
+              value: "false"
+            - name: VITE_ENABLE_EVENTS_GRAPHS
+              value: "false"
+            - name: VITE_ENABLE_FEATURE_RESOURCE_COSTS
+              value: "false"
+            - name: VITE_ENABLE_GOOGLE_ANALYTICS
+              value: "false"
+            - name: VITE_ENABLE_MIXPANEL
+              value: "false"
+            - name: VITE_ENABLE_PAGESENSE
+              value: "false"
+            - name: VITE_ENABLE_PROMPT_TEMPLATES
+              value: "false"
+            - name: VITE_ENABLE_SCHEMA_VISUALISER
+              value: "false"
+            - name: VITE_ENABLE_SENTRY
+              value: "false"
+            - name: VITE_ENABLE_SUPERFLOW
+              value: "false"
+            - name: VITE_ENABLE_TOOLS_AGENTS
+              value: "false"
+            - name: VITE_ENABLE_WORKFLOWS
+              value: "false"
+            - name: VITE_EXPORT_AS_HELM_TYPES
+              value: "service,volume,helm"
+            - name: VITE_FUSIONAUTH_URL
+              value: "https://login.truefoundry.com"
+            - name: VITE_LLM_PLAYGROUND_API_URL
+              value: "/api/llm"
+            - name: VITE_LLM_PLAYGROUND_ENABLED
+              value: "false"
+            - name: VITE_LLM_PLAYGROUND_ENABLE_REDIRECT
+              value: "false"
+            - name: VITE_LLM_PLAYGROUND_ENABLE_STANDALONE
+              value: "false"
+            - name: VITE_LLM_PLAYGROUND_PATH
+              value: "llm-gateway"
+            - name: VITE_LOGO_URL
+              value: ""
+            - name: VITE_MANAGED_CLUSTER_ONBOARDING_ENABLED
+              value: "false"
+            - name: VITE_MANAGED_CLUSTER_ONBOARDING_SERVICE_URL
+              value: ""
+            - name: VITE_MIXPANEL_TOKEN
+              value: ""
+            - name: VITE_MLFOUNDRY_URL
+              value: "/api/ml"
+            - name: VITE_MONITORINGFOUNDRY_URL
+              value: "/api/monitoring"
+            - name: VITE_MULTITENANT_ENABLED
+              value: "false"
+            - name: VITE_NATS_URL
+              value: ""
+            - name: VITE_OLD_LLM_PLAYGROUND_PATH
+              value: "llm-playground"
+            - name: VITE_QA_FOUNDRY_JOB_FQN
+              value: ""
+            - name: VITE_QA_FOUNDRY_LLM_HOST
+              value: ""
+            - name: VITE_QA_FOUNDRY_LLM_KEY
+              value: ""
+            - name: VITE_QA_FOUNDRY_ML_REPO
+              value: ""
+            - name: VITE_QA_FOUNDRY_URL
+              value: ""
+            - name: VITE_SENTRY_AUTH_TOKEN
+              value: ""
+            - name: VITE_SENTRY_DSN
+              value: ""
+            - name: VITE_SENTRY_ENVIRONMENT
+              value: ""
+            - name: VITE_SOCKET_URL
+              value: ""
+            - name: VITE_STRIPE_PUBLISHABLE_KEY
+              value: ""
+            - name: VITE_SVCFOUNDRY_URL
+              value: "/api/svc"
+            - name: VITE_TENANT_BASE_DOMAIN
+              value: ""
+            - name: VITE_TENANT_NAME
+              value: ""
+          image: "truefoundrycloud/truefoundry-frontend-app:v0.3.154"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 5000
+              protocol: TCP
+          resources:
+            limits:
+              cpu: 200m
+              ephemeral-storage: 256Mi
+              memory: 512Mi
+            requests:
+              cpu: 25m
+              ephemeral-storage: 128Mi
+              memory: 256Mi
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /livez
+              port: 5000
+              scheme: HTTP
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /readyz
+              port: 5000
+              scheme: HTTP
+          volumeMounts:
+            []
+      volumes:
+        []
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      tolerations:
+        - effect: NoSchedule
+          key: class.truefoundry.io/control-plane
+          operator: Exists
+        - effect: NoSchedule
+          key: cloud.google.com/gke-spot
+          operator: Equal
+          value: "true"
+        - effect: NoSchedule
+          key: kubernetes.azure.com/scalesetpriority
+          operator: Equal
+          value: spot
+---
+# Source: truefoundry/charts/nats/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-truefoundry-nats
+  namespace: default
+  labels:
+    helm.sh/chart: nats-0.19.1
+    app.kubernetes.io/name: nats
+    app.kubernetes.io/instance: my-truefoundry
+    app.kubernetes.io/version: "2.9.8"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: nats
+      app.kubernetes.io/instance: my-truefoundry
+  replicas: 3
+  serviceName: my-truefoundry-nats
+
+  podManagementPolicy: Parallel
+
+  template:
+    metadata:
+      annotations:
+        prometheus.io/path: /metrics
+        prometheus.io/port: "7777"
+        prometheus.io/scrape: "true"
+        checksum/config: 8600d2d1058ba618a87e20091a34ffd059c38a836c0e8629aaab699070cfea55
+      labels:
+        app.kubernetes.io/name: nats
+        app.kubernetes.io/instance: my-truefoundry
+    spec:
+      dnsPolicy: ClusterFirst
+      # Common volumes for the containers.
+      volumes:
+      - name: config-volume
+        configMap:
+          name: my-truefoundry-nats-config
+
+      # Local volume shared with the reloader.
+      - name: pid
+        emptyDir: {}
+      - name: resolver-volume
+        configMap:
+          name: nats-accounts
+
+      #################
+      #               #
+      #  TLS Volumes  #
+      #               #
+      #################
+
+      serviceAccountName: my-truefoundry-nats
+
+      # Required to be able to HUP signal and apply config
+      # reload to the server without restarting the pod.
+      shareProcessNamespace: true
+
+      #################
+      #               #
+      #  NATS Server  #
+      #               #
+      #################
+      terminationGracePeriodSeconds: 60
+      containers:
+      - name: nats
+        image: nats:2.10.18-alpine3.20
+        imagePullPolicy: IfNotPresent
+        resources:
+          limits:
+            cpu: 50m
+            memory: 512Mi
+          requests:
+            cpu: 25m
+            memory: 256Mi
+        ports:
+        - containerPort: 4222
+          name: client
+        - containerPort: 6222
+          name: cluster
+        - containerPort: 8222
+          name: monitor
+        - containerPort: 443
+          name: websocket
+
+        command:
+        - "nats-server"
+        - "--config"
+        - "/etc/nats-config/nats.conf"
+
+        # Required to be able to define an environment variable
+        # that refers to other environment variables.  This env var
+        # is later used as part of the configuration file.
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: SERVER_NAME
+          value: $(POD_NAME)
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: CLUSTER_ADVERTISE
+          value: $(POD_NAME).my-truefoundry-nats.$(POD_NAMESPACE).svc.cluster.local
+        volumeMounts:
+        - name: config-volume
+          mountPath: /etc/nats-config
+        - name: pid
+          mountPath: /var/run/nats
+        - name: resolver-volume
+          mountPath: /etc/nats-config/accounts
+        - name: my-truefoundry-nats-js-pvc
+          mountPath: /data
+        
+
+        #######################
+        #                     #
+        # Healthcheck Probes  #
+        #                     #
+        #######################
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /
+            port: 8222
+          initialDelaySeconds: 10
+          periodSeconds: 30
+          successThreshold: 1
+          timeoutSeconds: 5
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /
+            port: 8222
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 5
+        startupProbe:
+          # for NATS server versions >=2.7.1, /healthz will be enabled
+          # startup probe checks that the JS server is enabled, is current with the meta leader,
+          # and that all streams and consumers assigned to this JS server are current
+          failureThreshold: 30
+          httpGet:
+            path: /healthz
+            port: 8222
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 5
+
+        # Gracefully stop NATS Server on pod deletion or image upgrade.
+        #
+        lifecycle:
+          preStop:
+            exec:
+              # send the lame duck shutdown signal to trigger a graceful shutdown
+              # nats-server will ignore the TERM signal it receives after this
+              #
+              command:
+              - "nats-server"
+              - "-sl=ldm=/var/run/nats/nats.pid"
+
+      #################################
+      #                               #
+      #  NATS Configuration Reloader  #
+      #                               #
+      #################################
+      - name: reloader
+        image: natsio/nats-server-config-reloader:0.14.3
+        imagePullPolicy: IfNotPresent
+        resources:
+          null
+        command:
+        - "nats-server-config-reloader"
+        - "-pid"
+        - "/var/run/nats/nats.pid"
+        - "-config"
+        - "/etc/nats-config/nats.conf"
+        volumeMounts:
+        - name: config-volume
+          mountPath: /etc/nats-config
+        - name: pid
+          mountPath: /var/run/nats
+        
+
+      ##############################
+      #                            #
+      #  NATS Prometheus Exporter  #
+      #                            #
+      ##############################
+      - name: metrics
+        image: natsio/prometheus-nats-exporter:0.15.0
+        imagePullPolicy: IfNotPresent
+        resources:
+          {}
+        args:
+        - -connz
+        - -routez
+        - -subz
+        - -varz
+        - -prefix=nats
+        - -use_internal_server_id
+        - -jsz=all
+        - http://localhost:8222/
+        ports:
+        - containerPort: 7777
+          name: metrics
+
+  volumeClaimTemplates:
+  #####################################
+  #                                   #
+  #  Jetstream New Persistent Volume  #
+  #                                   #
+  #####################################
+    - metadata:
+        name: my-truefoundry-nats-js-pvc
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 10Gi
+---
+# Source: truefoundry/templates/tfy-build/build-workflow-workflow-template.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: build
+spec:
+  serviceAccountName: tfy-build
+  workflowMetadata:
+    labelsFrom:
+      "truefoundry.com/buildName":
+        expression: workflow.name
+  entrypoint: build
+  activeDeadlineSeconds: 14400
+  onExit: exit-handler
+  arguments:
+    parameters:
+      - name: callbackURL
+      - name: buildSource
+      - name: buildConfig
+      - name: dockerRegistryURL
+      - name: dockerRegistryUsername
+      - name: dockerRegistryPassword
+      - name: dockerRepo
+      - name: dockerTag
+      - name: buildkitServiceURL
+  templates:
+  - name: build
+    inputs:
+      parameters:
+        - name: buildSource
+        - name: buildConfig
+        - name: dockerRegistryURL
+        - name: dockerRegistryUsername
+        - name: dockerRegistryPassword
+        - name: dockerRepo
+        - name: dockerTag
+        - name: buildkitServiceURL
+    steps:
+    - - name: build-and-push
+        template: build-and-push
+        arguments:
+          parameters:
+          - name: buildSource
+            value: "{{inputs.parameters.buildSource}}"
+          - name: buildConfig
+            value: "{{inputs.parameters.buildConfig}}"
+          - name: dockerRegistryURL
+            value: "{{inputs.parameters.dockerRegistryURL}}"
+          - name: dockerRegistryUsername
+            value: "{{inputs.parameters.dockerRegistryUsername}}"
+          - name: dockerRegistryPassword
+            value: "{{inputs.parameters.dockerRegistryPassword}}"
+          - name: dockerRepo
+            value: "{{inputs.parameters.dockerRepo}}"
+          - name: dockerTag
+            value: "{{inputs.parameters.dockerTag}}"
+          - name: buildkitServiceURL
+            value: "127.0.0.1:1234"
+  - name: build-and-push
+    # activeDeadlineSeconds is the maximum time the step will run(It will be restarted after every retry)
+    activeDeadlineSeconds: 5400
+    metadata:
+      annotations:
+        cluster-autoscaler.kubernetes.io/safe-to-evict: 'false'
+        karpenter.sh/do-not-disrupt: 'true'
+        karpenter.sh/do-not-evict: 'true'
+    retryStrategy:
+      limit: 2
+      retryPolicy: "Always"
+    inputs:
+      parameters:
+        - name: buildSource
+        - name: buildConfig
+        - name: dockerRegistryURL
+        - name: dockerRegistryUsername
+        - name: dockerRegistryPassword
+        - name: dockerRepo
+        - name: dockerTag
+        - name: buildkitServiceURL
+    volumes:
+    - name: truefoundry-docker-config
+      secret:
+        items:
+        - key: .dockerconfigjson
+          path: base_config.json
+        secretName: truefoundry-image-pull-secret
+    script:
+      image: public.ecr.aws/truefoundrycloud/sfy-builder:v0.8.0
+      command: [bash]
+      workingDir: /mnt/vol
+      source: |
+        #!/bin/bash
+        set -e -o pipefail
+
+        mkdir -p /root/.docker/
+        cp /root/.truefoundry/.docker/base_config.json /root/.docker/config.json
+
+        BUILD_SOURCE='{{inputs.parameters.buildSource}}'
+        BUILD_TYPE=$(echo $BUILD_SOURCE | jq -r '.type')
+        
+        rm -f -R ./source-code
+
+        if [[ $BUILD_TYPE == "remote" ]]; then
+          REMOTE_URL=$(echo $BUILD_SOURCE | jq -r '.remote_uri')
+          printf "\033[36m[Start]\033[0m Downloading source code from remote source\n"
+          mkdir -p source-code
+          curl -s -o project-files.tar.gz $REMOTE_URL
+          tar -xf project-files.tar.gz -C source-code
+          cd source-code
+        elif [[ $BUILD_TYPE == "git" || $BUILD_TYPE == "github" ]]; then
+          GIT_URL=$(echo $BUILD_SOURCE | jq -r '.repo_url')
+          GIT_REF=$(echo $BUILD_SOURCE | jq -r '.ref')
+
+          git config --global url."https://github.com/".insteadOf git@github.com:
+          git config --global url."https://".insteadOf git://
+
+          # Example of GIT_URL="https://x-access-token:<token>@github.com/user_name/repo_name"
+          # Example of TRIMMED_URL="https://github.com/user_name/repo_name"
+
+          TOKEN=$(echo "$GIT_URL" | sed -n 's/.*x-access-token:\([^@]*\).*/\1/p')
+          TRIMMED_URL=$(echo "$GIT_URL" | sed 's~x-access-token:[^@]*@~~')
+
+          printf "\033[36m[Start]\033[0m Downloading source code from $TRIMMED_URL\n"
+          
+          # Set auth token
+
+          git config --system credential.helper store
+          echo "https://x-access-token:$TOKEN@github.com" > ~/.git-credentials
+
+          git clone --recursive $TRIMMED_URL source-code
+          cd source-code && git reset --hard $GIT_REF
+        elif [[ $BUILD_TYPE == "bitbucket" ]]; then
+          GIT_URL=$(echo $BUILD_SOURCE | jq -r '.repo_url')
+          GIT_REF=$(echo $BUILD_SOURCE | jq -r '.ref')
+
+          git config --global url."https://bitbucket.org/".insteadOf git@bitbucket.org:
+          git config --global url."https://".insteadOf git://
+
+          # Example of GIT_URL="https://x-token-auth:<token>@bitbucket.org/user_name/repo_name"
+          # Example of TRIMMED_URL="https://bitbucket.org/user_name/repo_name"
+
+          TOKEN=$(echo "$GIT_URL" | sed -n 's/.*x-token-auth:\([^@]*\).*/\1/p')
+          TRIMMED_URL=$(echo "$GIT_URL" | sed 's~x-token-auth:[^@]*@~~')
+
+          printf "\033[36m[Start]\033[0m Downloading source code from $TRIMMED_URL\n"
+          
+          # Set auth token
+
+          git config --system credential.helper store
+          echo "https://x-token-auth:$TOKEN@bitbucket.org" > ~/.git-credentials
+
+          git clone --recurse-submodules $TRIMMED_URL source-code
+          cd source-code && git reset --hard $GIT_REF
+        elif [[ $BUILD_TYPE == "gitlab" ]]; then
+          GIT_URL=$(echo $BUILD_SOURCE | jq -r '.repo_url')
+          GIT_REF=$(echo $BUILD_SOURCE | jq -r '.ref')
+
+          git config --global url."https://gitlab.com/".insteadOf git@gitlab.com:
+          git config --global url."https://".insteadOf git://
+
+          # Example of GIT_URL="https://oauth2:<token>@gitlab.com/user_name/repo_name"
+          # Example of TRIMMED_URL="https://gitlab.com/user_name/repo_name"
+
+          TOKEN=$(echo "$GIT_URL" | sed -n 's/.*oauth2:\([^@]*\).*/\1/p')
+          TRIMMED_URL=$(echo "$GIT_URL" | sed 's~oauth2:[^@]*@~~')
+
+          printf "\033[36m[Start]\033[0m Downloading source code from $TRIMMED_URL\n"
+          
+          # Set auth token
+
+          git config --system credential.helper store
+          echo "https://oauth2:$TOKEN@gitlab.com" > ~/.git-credentials
+
+          git clone --recurse-submodules $TRIMMED_URL source-code
+          cd source-code && git reset --hard $GIT_REF
+        elif [[ $BUILD_TYPE == "azure" ]]; then
+          GIT_URL=$(echo $BUILD_SOURCE | jq -r '.repo_url')
+          GIT_REF=$(echo $BUILD_SOURCE | jq -r '.ref')
+
+          git config --global url."https://dev.azure.com/".insteadOf git@ssh.dev.azure.com:v3/
+          git config --global url."https://".insteadOf git://
+
+          # Example of GIT_URL="https://x-token-auth:<token>@dev.azure.com/organization/project/_git/repo_name"
+          # Example of TRIMMED_URL="https://dev.azure.com/organization/project/_git/repo_name"
+
+          TOKEN=$(echo "$GIT_URL" | sed -n 's/.*x-token-auth:\([^@]*\).*/\1/p')
+          TRIMMED_URL=$(echo "$GIT_URL" | sed 's~x-token-auth:[^@]*@~~')
+
+          printf "\033[36m[Start]\033[0m Downloading source code from $TRIMMED_URL\n"
+          
+          # Set auth token
+          git config --system credential.helper store
+          echo "https://x-token-auth:$TOKEN@dev.azure.com" > ~/.git-credentials
+
+          git clone --recurse-submodules $TRIMMED_URL source-code
+          cd source-code && git reset --hard $GIT_REF
+        elif [[ $BUILD_TYPE == "notebook_build" ]]; then
+          :
+        else
+          printf "\u001b[31m[Error]\u001b[0m Source type '$BUILD_TYPE' not supported.\n"
+          exit 1
+        fi
+        printf "\u001b[32m[Done]\u001b[0m Download code completed\n"
+        printf "\033[36m[Start]\033[0m Building and pushing the docker container. Please find the logs below\n"
+      
+        DOCKER_USERNAME="{{inputs.parameters.dockerRegistryUsername}}"
+        DOCKER_PASSWORD=$(echo '{{inputs.parameters.dockerRegistryPassword}}' | base64 -d)
+        REGISTRY="{{inputs.parameters.dockerRegistryURL}}"
+        REPOSITORY="{{inputs.parameters.dockerRepo}}"
+        IMAGE="${REGISTRY}/${REPOSITORY}"
+        TAG="{{inputs.parameters.dockerTag}}"
+
+        # if $REGISTRY starts with "index.docker.io" or "registry-1.docker.io" or "registry.hub.docker.com" or "docker.io"
+        # then skip mentioning url in docker login, because dockerhub has non standard behaviors
+        # This is a short term fix till we decouple registry url and login url
+        _REGISTRY=$(echo "${REGISTRY}" | sed -e 's~http[s]*://~~g')
+        if [[ $_REGISTRY == index.docker.io* ]] || [[ $_REGISTRY == registry-1.docker.io* ]] || [[ $_REGISTRY == registry.hub.docker.com* ]] || [[ $_REGISTRY == docker.io* ]]; then
+          docker login -u "${DOCKER_USERNAME}" -p "${DOCKER_PASSWORD}" 2>&1 || { echo "Error: Docker login failed, make sure your authentication credentials are correct in registry!" >&2; exit 1; }
+        else
+          docker login -u "${DOCKER_USERNAME}" -p "${DOCKER_PASSWORD}" "${REGISTRY}" 2>&1 || { echo "Error: Docker login failed, make sure your authentication credentials are correct in registry!" >&2; exit 1; }
+        fi
+
+        # Split buildkitServiceURL into host and port
+        IFS=':' read -r -a BUILDKIT_SERVICE_URL_PARTS <<< "{{inputs.parameters.buildkitServiceURL}}"
+        BUILDKIT_HOST="${BUILDKIT_SERVICE_URL_PARTS[0]}"
+        BUILDKIT_PORT="${BUILDKIT_SERVICE_URL_PARTS[1]}"
+
+        ######################################################################################
+        # Test connectivity using nc (netcat) with a timeout of 2 minutes
+        end=$((SECONDS+120))
+        # Loop until the timeout is reached
+        while [ $SECONDS -lt $end ]; do
+            # Check if the port is open
+            if nc -z "$BUILDKIT_HOST" "$BUILDKIT_PORT"; then
+                # If successful, continue with the script
+                echo "Port is open. Continuing with the script..."
+                break
+            fi
+            # Wait for 1 second before trying again
+            sleep 1
+        done
+        # port is not open after 120 seconds
+        if [ $SECONDS -ge $end ]; then
+            echo echo "Error: Unable to connect to buildkit service at $BUILDKIT_HOST:$BUILDKIT_PORT"
+            exit 1
+        fi
+        ######################################################################################
+
+        printf "\033[36m[==== Docker logs start ====]\033[0m\n"
+        docker buildx create --name remote-kubernetes --driver remote tcp://{{inputs.parameters.buildkitServiceURL}}
+                
+        # image-manifest=true is needed for ecr and works for others - https://github.com/aws/containers-roadmap/issues/876#issuecomment-1665121877
+        set +e
+        set +o pipefail
+        tfy build --build-config={{inputs.parameters.buildConfig}} --name="${IMAGE}:${TAG}" --tag="${IMAGE}:${TAG}" --tag="${IMAGE}:latest" --cache-to="type=registry,ref=${IMAGE}:cache-latest,image-manifest=true,mode=max" --cache-from=type=registry,ref="${IMAGE}:cache-latest" --build-context tfy-secrets=/var/run/secrets/ --builder=remote-kubernetes --output=type=image,push=true,compression=gzip,compression-level=0,force-compression=true || exit 210
+        set -o pipefail
+        set -e
+        printf "\033[36m[==== Docker logs end ====]\033[0m\n"
+        printf "\u001b[32m[Done]\u001b[0m Docker image built and pushed\n"
+      volumeMounts:
+      - name: workdir
+        mountPath: /mnt/vol
+      - name: truefoundry-docker-config
+        mountPath: /root/.truefoundry/.docker/
+      resources:
+        limits:
+          cpu: 1
+          ephemeral-storage: 20Gi
+          memory: 2Gi
+        requests:
+          cpu: 200m
+          ephemeral-storage: 10Gi
+          memory: 500Mi
+    sidecars:
+    - name: buildkitd
+      image: public.ecr.aws/truefoundrycloud/tfy-buildkit:0.1.0
+      command:
+        - /usr/local/bin/entrypoint.sh
+      resources:
+        limits:
+          cpu: 2
+          ephemeral-storage: 70Gi
+          memory: 8Gi
+        requests:
+          cpu: 2
+          ephemeral-storage: 70Gi
+          memory: 8Gi
+      securityContext:
+        privileged: true
+      ports:
+        - name: grpc-buidkitd
+          containerPort: 1234
+          protocol: TCP
+      readinessProbe:
+        exec:
+          command:
+            - buildctl
+            - debug
+            - workers
+      livenessProbe:
+        exec:
+          command:
+            - buildctl
+            - debug
+            - workers
+  - name: exit-handler
+    inputs:
+      parameters:
+        - name: callbackURL
+        - name: dockerRegistryURL
+        - name: dockerRepo
+        - name: dockerTag
+        - name: dockerRegistryUsername
+        - name: dockerRegistryPassword
+    steps:
+    - - name: success-callback
+        when: "{{workflow.status}} == Succeeded"
+        template: send-api-request
+        arguments:
+          parameters:
+          - name: url
+            value: "{{inputs.parameters.callbackURL}}"
+          - name: method
+            value: "PATCH"
+          - name: payload
+            value: '{"status": "SUCCEEDED", "imageUri": "{{inputs.parameters.dockerRegistryURL}}/{{inputs.parameters.dockerRepo}}:{{inputs.parameters.dockerTag}}"}'
+          - name: token
+            value: ""
+      - name: failure-callback
+        when: "{{workflow.status}} != Succeeded"
+        template: send-api-request
+        arguments:
+          parameters:
+          - name: url
+            value: "{{inputs.parameters.callbackURL}}"
+          - name: method
+            value: "PATCH"
+          - name: payload
+            value: '{"status": "FAILED"}'
+          - name: token
+            value: ""
+    - - name: end-marker
+        template: end-marker
+    - - name: should-build-soci-index
+        template: should-build-soci-index
+        when: >-
+          'false' == 'true'
+            &&
+          {{workflow.status}} == Succeeded
+        arguments:
+          parameters:
+            - name: dockerRegistryURL
+              value: "{{inputs.parameters.dockerRegistryURL}}"
+            - name: dockerRegistryUsername
+              value: "{{inputs.parameters.dockerRegistryUsername}}"
+            - name: dockerRegistryPassword
+              value: "{{inputs.parameters.dockerRegistryPassword}}"
+            - name: dockerRepo
+              value: "{{inputs.parameters.dockerRepo}}"
+            - name: dockerTag
+              value: "{{inputs.parameters.dockerTag}}"
+    - - name: build-and-push-soci-index
+        template: build-and-push-soci-index
+        when: >-
+          {{steps.should-build-soci-index.status}} == Succeeded
+            && 
+          '{{steps.should-build-soci-index.outputs.parameters.result}}' == 'true'
+        arguments:
+          parameters:
+            - name: dockerRegistryURL
+              value: "{{inputs.parameters.dockerRegistryURL}}"
+            - name: dockerRegistryUsername
+              value: "{{inputs.parameters.dockerRegistryUsername}}"
+            - name: dockerRegistryPassword
+              value: "{{inputs.parameters.dockerRegistryPassword}}"
+            - name: dockerRepo
+              value: "{{inputs.parameters.dockerRepo}}"
+            - name: dockerTag
+              value: "{{inputs.parameters.dockerTag}}"
+  - name: end-marker
+    # activeDeadlineSeconds is the maximum time the step will run(It will be restarted after every retry)
+    activeDeadlineSeconds: 300
+    retryStrategy:
+      limit: 2
+      retryPolicy: "Always"
+    script:
+      resources:
+        limits:
+          cpu: 20m
+          ephemeral-storage: 256Mi
+          memory: 100Mi
+        requests:
+          cpu: 10m
+          ephemeral-storage: 128Mi
+          memory: 50Mi
+      image: ubuntu
+      command: [bash]
+      source: |
+        #!/bin/bash
+        set -e
+        if [[ "{{workflow.status}}" == "Succeeded" ]]; then
+          echo -e "\u001b[32m[Done]\u001b[0m Image Built Successfully."
+          echo -e "\u001b[32m[Done]\u001b[0m Kubernetes deployment triggered. It may take 5-10s for the application to be live."
+        else
+          echo -e "\u001b[31m[Error]\u001b[0m Error occured while building and pushing docker image."
+          echo -e "\u001b[31m[Error]\u001b[0m Build Image Failed."
+        fi
+        echo "PIPELINE_RUN_{{workflow.name}}_ENDED"
+  - name: send-api-request
+    # activeDeadlineSeconds is the maximum time the step will run(It will be restarted after every retry)
+    activeDeadlineSeconds: 300
+    retryStrategy:
+      limit: 4
+      retryPolicy: "Always"
+      backoff:
+        duration: 1s
+        factor: 2
+        # maxDuration is for the whole node and not for every retry
+        # maxDuration will only be considered if there was atleast one retry
+        maxDuration: 30m
+    inputs:
+      parameters:
+        - name: url
+        - name: method
+        - name: payload
+        - name: token
+    script:
+      resources:
+        limits:
+          cpu: 20m
+          ephemeral-storage: 256Mi
+          memory: 100Mi
+        requests:
+          cpu: 10m
+          ephemeral-storage: 128Mi
+          memory: 50Mi
+      image: nyurik/alpine-python3-requests@sha256:e0553236e3ebaa240752b41b8475afb454c5ab4c17eb023a2a904637eda16cf6
+      command: [python3]
+      source: |
+        import logging
+        import requests
+        import sys
+        import time
+        import json
+
+        def api_call():
+            try:
+                payload = '{{inputs.parameters.payload}}'
+                url= "{{inputs.parameters.url}}"
+                method= "{{inputs.parameters.method}}"
+                token= "{{inputs.parameters.token}}"
+                msg = "\033[36m[Start]\033[0m Sending request to url: {} with json {}".format(url, payload)
+                print(msg)
+                r = requests.request(method, url=url, json=json.loads(payload), headers={"authorization": "Bearer "+ token}, timeout=10)
+                r.raise_for_status()
+            except Exception as e:
+                print("\u001b[31m[Error]\u001b[0m Error occured while notifying server")
+                print("Error occured", e)
+                time.sleep(60)
+                sys.exit(1)
+        api_call()
+  - name: should-build-soci-index
+    # activeDeadlineSeconds is the maximum time the step will run(It will be restarted after every retry)
+    activeDeadlineSeconds: 600
+    metrics:
+      prometheus:
+        - name: tfy_build_soci_index_status
+          help: "SOCI index build and push status"
+          labels:
+            - key: name
+              value: "{{steps.name}}"
+            - key: status
+              value: "{{status}}"
+          when: "{{status}} != Skipped"
+          counter:
+            value: "1"
+        - name: tfy_build_soci_index_duration_sec
+          help: "SOCI index build and push duration"
+          labels:
+            - key: name
+              value: "{{steps.name}}"
+            - key: status
+              value: "{{status}}"
+          when: "{{status}} != Skipped"
+          gauge: 
+            value: "{{duration}}"
+    inputs:
+      parameters:
+        - name: dockerRegistryURL
+        - name: dockerRegistryUsername
+        - name: dockerRegistryPassword
+        - name: dockerRepo
+        - name: dockerTag
+    retryStrategy:
+      backoff:
+        duration: 1s
+        factor: 2
+        # maxDuration is for the whole node and not for every retry
+        # maxDuration will only be considered if there was atleast one retry
+        maxDuration: 1h
+      limit: 3
+      retryPolicy: Always
+    outputs:
+      parameters:
+      - name: result
+        valueFrom:
+          path: /tmp/result
+    script:
+      command: [bash]
+      image: public.ecr.aws/truefoundrycloud/soci-index-builder:0.2.0-rc.1
+      resources:
+        requests:
+          cpu: 50m
+          ephemeral-storage: 10Mi
+          memory: 50Mi
+        limits:
+          cpu: 50m
+          ephemeral-storage: 10Mi
+          memory: 50Mi
+      source: |
+        #!/bin/bash
+
+        set -eu -o pipefail
+
+        ENCODED_PASSWORD="{{inputs.parameters.dockerRegistryPassword}}"
+        PASSWORD=$(echo $ENCODED_PASSWORD | base64 -d)
+        USERNAME="{{inputs.parameters.dockerRegistryUsername}}"
+        REGISTRY="{{inputs.parameters.dockerRegistryURL}}"
+        REPOSITORY="{{inputs.parameters.dockerRepo}}"
+        TAG="{{inputs.parameters.dockerTag}}"
+        IMAGE=$REGISTRY/$REPOSITORY:$TAG
+        IMAGE_SIZE_THRESHOLD=$(printf '%.0f' "419430400")
+
+        echo Registry is $REGISTRY
+        if [[ $REGISTRY != *"amazonaws.com"* ]]; then
+          echo Registry is not from ECR. Skipping SOCI index creation.
+          echo -n "false" > /tmp/result
+          exit 0
+        fi
+
+        # if $REGISTRY starts with "index.docker.io" or "registry-1.docker.io" or "registry.hub.docker.com" or "docker.io"
+        # then skip mentioning url in docker login, because dockerhub has non standard behaviors
+        # This is a short term fix till we decouple registry url and login url
+        _REGISTRY=$(echo "${REGISTRY}" | sed -e 's~http[s]*://~~g')
+        if [[ $_REGISTRY == index.docker.io* ]] || [[ $_REGISTRY == registry-1.docker.io* ]] || [[ $_REGISTRY == registry.hub.docker.com* ]] || [[ $_REGISTRY == docker.io* ]]; then
+          docker login -u "${USERNAME}" -p "${PASSWORD}" 2>&1 || { echo "Error: Docker login failed, make sure your authentication credentials are correct in registry!" >&2; exit 1; }
+        else
+          docker login -u "${USERNAME}" -p "${PASSWORD}" "${REGISTRY}" 2>&1 || { echo "Error: Docker login failed, make sure your authentication credentials are correct in registry!" >&2; exit 1; }
+        fi
+
+        MANFEST=$(docker manifest inspect --verbose $IMAGE)
+        IMAGE_SIZE=$(echo $MANFEST | jq '.[] | .OCIManifest.layers | .[] | select(.mediaType | contains("oci.image.layer.v1.tar+gzip")) | .size' | awk '{sum+=$0} END{print sum}')
+        echo Image Size: $IMAGE_SIZE
+        echo Threshold: $IMAGE_SIZE_THRESHOLD
+
+        if [[ "$IMAGE_SIZE" -lt "$IMAGE_SIZE_THRESHOLD" ]]; then
+            echo Image size is less than $IMAGE_SIZE_THRESHOLD. Skipping SOCI index creation.
+            echo -n "false" > /tmp/result
+            exit 0
+        fi
+
+        echo SOCI index will be built and pushed.
+        echo -n "true" > /tmp/result
+  - name: build-and-push-soci-index
+    # activeDeadlineSeconds is the maximum time the step will run(It will be restarted after every retry)
+    activeDeadlineSeconds: 3600
+    metrics:
+      prometheus:
+        - name: tfy_build_soci_index_status
+          help: "SOCI index build and push status"
+          labels:
+            - key: name
+              value: "{{steps.name}}"
+            - key: status
+              value: "{{status}}"
+          when: "{{status}} != Skipped"
+          counter:
+            value: "1"
+        - name: tfy_build_soci_index_duration_sec
+          help: "SOCI index build and push duration"
+          labels:
+            - key: name
+              value: "{{steps.name}}"
+            - key: status
+              value: "{{status}}"
+          when: "{{status}} != Skipped"
+          gauge: 
+            value: "{{duration}}"
+    inputs:
+      parameters:
+        - name: dockerRegistryURL
+        - name: dockerRegistryUsername
+        - name: dockerRegistryPassword
+        - name: dockerRepo
+        - name: dockerTag
+    retryStrategy:
+      limit: 1
+      retryPolicy: Always
+    script:
+      command: [bash]
+      image: public.ecr.aws/truefoundrycloud/soci-index-builder:0.2.0-rc.1
+      resources:
+        requests:
+          cpu: 500m
+          ephemeral-storage: 10Gi
+          memory: 700Mi
+        limits:
+          cpu: 1000m
+          ephemeral-storage: 30Gi
+          memory: 1024Mi
+      securityContext:
+        privileged: true
+      source: |
+        #!/bin/bash
+
+        set -eu -o pipefail
+
+        ENCODED_PASSWORD="{{inputs.parameters.dockerRegistryPassword}}"
+        PASSWORD=$(echo $ENCODED_PASSWORD | base64 -d)
+        USERNAME="{{inputs.parameters.dockerRegistryUsername}}"
+        REGISTRY="{{inputs.parameters.dockerRegistryURL}}"
+        REPOSITORY="{{inputs.parameters.dockerRepo}}"
+        TAG="{{inputs.parameters.dockerTag}}"
+        IMAGE=$REGISTRY/$REPOSITORY:$TAG
+
+        # if $REGISTRY starts with "index.docker.io" or "registry-1.docker.io" or "registry.hub.docker.com" or "docker.io"
+        # then skip mentioning url in docker login, because dockerhub has non standard behaviors
+        # This is a short term fix till we decouple registry url and login url
+        _REGISTRY=$(echo "${REGISTRY}" | sed -e 's~http[s]*://~~g')
+        if [[ $_REGISTRY == index.docker.io* ]] || [[ $_REGISTRY == registry-1.docker.io* ]] || [[ $_REGISTRY == registry.hub.docker.com* ]] || [[ $_REGISTRY == docker.io* ]]; then
+          docker login -u "${USERNAME}" -p "${PASSWORD}" 2>&1 || { echo "Error: Docker login failed, make sure your authentication credentials are correct in registry!" >&2; exit 1; }
+        else
+          docker login -u "${USERNAME}" -p "${PASSWORD}" "${REGISTRY}" 2>&1 || { echo "Error: Docker login failed, make sure your authentication credentials are correct in registry!" >&2; exit 1; }
+        fi
+
+        echo Starting Containerd
+        containerd > /dev/null 2>&1 &
+        sleep 3
+        ctr version > /dev/null
+
+        echo Pulling Container Image $IMAGE
+
+        time ctr content fetch -u "$USERNAME:$PASSWORD" \
+          --platform=linux/amd64 \
+          $IMAGE > /dev/null
+
+
+        echo Creating Soci Index
+
+        time soci create --platform=linux/amd64 $IMAGE
+
+        echo Pushing Soci Index
+        time soci push --platform=linux/amd64 $IMAGE
+
+        echo Done!
+  nodeSelector:
+        kubernetes.io/arch: amd64
+  tolerations:
+    - effect: NoSchedule
+      key: class.truefoundry.io/control-plane
+      operator: Exists
+    - effect: NoSchedule
+      key: cloud.google.com/gke-spot
+      operator: Equal
+      value: "true"
+    - effect: NoSchedule
+      key: kubernetes.azure.com/scalesetpriority
+      operator: Equal
+      value: spot
+---
+# Source: truefoundry/templates/bootstrap/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: truefoundry-bootstrap-job-sa
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+    "argocd.argoproj.io/hook": PreSync
+    "argocd.argoproj.io/sync-wave": "-5"
+    "argocd.argoproj.io/hook-delete-policy": BeforeHookCreation
+---
+# Source: truefoundry/templates/bootstrap/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: truefoundry-bootstrap-cm
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-2"
+    "helm.sh/hook-delete-policy": before-hook-creation
+    "argocd.argoproj.io/hook": PreSync
+    "argocd.argoproj.io/sync-wave": "-2"
+    "argocd.argoproj.io/hook-delete-policy": BeforeHookCreation
+data:
+  truefoundry-bootstrap.sh: |
+    #!/bin/bash
+    # This script will output one set of creds in the current directory.
+    # The script creates a nats resolver config file called resolver.conf
+    TRUEFOUNDRY_NATS_SECRET_NAME=truefoundry-nats-secret
+    TRUEFOUNDRY_CREDS_SECRET_NAME=truefoundry-creds
+    print_green() {
+        echo "$(tput setaf 2)$1$(tput sgr0)"
+    }
+    print_yellow() {
+        echo "$(tput setaf 3)$1$(tput sgr0)"
+    }
+    print_red() {
+        echo "$(tput setaf 1)$1$(tput sgr0)"
+    }
+
+    # function to install binaries - kubectl, nsc, helm
+    install_binaries() {
+      apt update && apt install wget unzip  -y \
+        && wget https://github.com/nats-io/nsc/releases/download/v2.8.6/nsc-linux-amd64.zip \
+        && unzip nsc-linux-amd64.zip \
+        && mv nsc /usr/bin/ \
+        && wget https://storage.googleapis.com/kubernetes-release/release/v1.29.3/bin/linux/amd64/kubectl \
+            && chmod +x kubectl \
+            && mv kubectl /usr/bin/
+    }
+
+    migrate_nats_seed_to_dedicated_secret() {
+      # Get the value of NATS_CONTROLPLANE_ACCOUNT_SEED from the secret
+      NATS_SEED=$(kubectl -n $TRUEFOUNDRY_NAMESPACE get secret servicefoundry-server-env-secret -o jsonpath='{.data.NATS_CONTROLPLANE_ACCOUNT_SEED}' | base64 --decode)
+
+      # Check if the NATS_SEED is empty
+      if [ -z "$NATS_SEED" ]; then
+        print_red "NATS_CONTROLPLANE_ACCOUNT_SEED is not set in the secret servicefoundry-env-secret."
+        exit 1
+      fi
+
+      # Create the new secret using the NATS_SEED
+      kubectl create secret generic $TRUEFOUNDRY_NATS_SECRET_NAME --from-literal=NATS_CONTROLPLANE_ACCOUNT_SEED="$NATS_SEED" -n $TRUEFOUNDRY_NAMESPACE
+    }
+
+    migrate_truefoundry_creds_to_dedicated_secret() {
+      # Get the value of NATS_CONTROLPLANE_ACCOUNT_SEED from the secret
+      DB_HOST=$(kubectl -n $TRUEFOUNDRY_NAMESPACE get secret servicefoundry-server-env-secret -o jsonpath='{.data.DB_HOST}' | base64 --decode)
+      DB_USERNAME=$(kubectl -n $TRUEFOUNDRY_NAMESPACE get secret servicefoundry-server-env-secret -o jsonpath='{.data.DB_USERNAME}' | base64 --decode)
+      DB_PASSWORD=$(kubectl -n $TRUEFOUNDRY_NAMESPACE get secret servicefoundry-server-env-secret -o jsonpath='{.data.DB_PASSWORD}' | base64 --decode)
+      DB_NAME=$(kubectl -n $TRUEFOUNDRY_NAMESPACE get secret servicefoundry-server-env-secret -o jsonpath='{.data.DB_NAME}' | base64 --decode)
+      TFY_API_KEY=$(kubectl -n $TRUEFOUNDRY_NAMESPACE get secret servicefoundry-server-env-secret -o jsonpath='{.data.SVC_FOUNDRY_SERVICE_API_KEY}' | base64 --decode)
+
+      # Check if the DB creds are empty
+      if [ -z "$DB_HOST" ] || [ -z "$DB_USERNAME" ] || [ -z "$DB_PASSWORD" ] || [ -z "$DB_NAME" ] || [ -z "$TFY_API_KEY" ]; then
+        print_red "DB and Tfy API creds not set in the secret servicefoundry-env-secret"
+        exit 1
+      fi
+      # Create the new secret using the DB creds
+      kubectl create secret generic $TRUEFOUNDRY_CREDS_SECRET_NAME \
+        --from-literal=DB_HOST="$DB_HOST" \
+        --from-literal=DB_USERNAME="$DB_USERNAME" \
+        --from-literal=DB_PASSWORD="$DB_PASSWORD" \
+        --from-literal=DB_NAME="$DB_NAME" \
+        --from-literal=TFY_API_KEY="$TFY_API_KEY" \
+        -n $TRUEFOUNDRY_NAMESPACE
+    }
+
+    # check if the following variables are not set
+    if [ -z "$TRUEFOUNDRY_NAMESPACE" ]; then
+        print_red "TRUEFOUNDRY_NAMESPACE is not set."
+        exit 1
+    fi
+
+    install_binaries
+
+    kubectl -n $TRUEFOUNDRY_NAMESPACE get cm $TRUEFOUNDRY_NATS_CONFIGMAP
+    if [ $? -eq 0 ]; then
+      kubectl -n $TRUEFOUNDRY_NAMESPACE get secret $TRUEFOUNDRY_NATS_SECRET_NAME
+      if [ $? -eq 0 ]; then
+        print_red "Secret $TRUEFOUNDRY_NATS_SECRET_NAME already exists. Exiting..."
+        exit 0
+      else
+        print_yellow "We are going to create the secret $TRUEFOUNDRY_NATS_SECRET_NAME and $TRUEFOUNDRY_CREDS_SECRET_NAME from existing seed. This is a migration scenario dated 2024-05-01"
+        migrate_nats_seed_to_dedicated_secret
+        migrate_truefoundry_creds_to_dedicated_secret
+        exit 0
+      fi
+    fi
+    print_yellow "$TRUEFOUNDRY_NATS_CONFIGMAP not found. Creating NATS account and configmap..."
+
+    # Setup NSC env
+    NSC_ROOT=$(pwd)/nsc
+    export NKEYS_PATH=$NSC_ROOT/nkeys
+    export NSC_HOME=$NSC_ROOT/accounts
+    nsc env -s "${NSC_HOME}/nats"
+    nsc env
+
+    # Create Operator
+    nsc add operator --sys --name truefoundry
+
+    # Create tfy-controlplane account. The seed for this account is provided as an environment variable
+    # to servicefoundry-server
+    nsc add account --name tfy-controlplane
+    # enable JS
+    nsc edit account --name tfy-controlplane --js-disk-storage 512M
+
+    # Create user to create a stream.
+    nsc add user --account tfy-controlplane --name js-creator
+    nsc generate creds > "${NSC_ROOT}/user.creds"
+
+    # Store account info.
+    nsc generate config --mem-resolver --config-file "${NSC_ROOT}/resolver.conf"
+
+    # Get seed of the account
+    NKEYS_EXPORT_DIR=$NSC_ROOT/exported-keys
+    nsc export keys --account tfy-controlplane --accounts --dir "${NKEYS_EXPORT_DIR}"
+    NKEYS_FILE_NAME=$(ls "${NKEYS_EXPORT_DIR}" | grep "A*.nk" | head -1)
+    NKEYS_PATH="${NKEYS_EXPORT_DIR}/${NKEYS_FILE_NAME}"
+    SEED=$(cat "${NKEYS_PATH}")
+    cat "${NKEYS_PATH}" > nsc/tfy.seed
+
+    # Create K8s config map to store the account resolver.
+    # This will be imported by the main config file.
+    kubectl create configmap $TRUEFOUNDRY_NATS_CONFIGMAP --from-file "nsc/resolver.conf" -n $TRUEFOUNDRY_NAMESPACE -o yaml --dry-run | kubectl apply -f -
+
+    # copy the nats seed to /tfy.seed
+    NATS_SEED=$(cat nsc/tfy.seed)
+
+    # creating the secret
+    kubectl create -f -<<EOF
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: $TRUEFOUNDRY_NATS_SECRET_NAME
+      namespace: $TRUEFOUNDRY_NAMESPACE
+    stringData:
+      NATS_CONTROLPLANE_ACCOUNT_SEED: $NATS_SEED
+    ---
+    EOF
+---
+# Source: truefoundry/templates/bootstrap/role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: truefoundry-bootstrap-job-role
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-4"
+    "helm.sh/hook-delete-policy": before-hook-creation
+    "argocd.argoproj.io/hook": PreSync
+    "argocd.argoproj.io/sync-wave": "-4"
+    "argocd.argoproj.io/hook-delete-policy": BeforeHookCreation
+rules:
+- apiGroups: [""]
+  resources: ["configmaps", "secrets"]
+  verbs: ["get", "list", "watch", "create", "patch", "update"]
+---
+# Source: truefoundry/templates/bootstrap/rolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: truefoundry-bootstrap-job-rolebinding
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-3"
+    "helm.sh/hook-delete-policy": before-hook-creation
+    "argocd.argoproj.io/hook": PreSync
+    "argocd.argoproj.io/sync-wave": "-3"
+    "argocd.argoproj.io/hook-delete-policy": BeforeHookCreation
+subjects:
+- kind: ServiceAccount
+  name: truefoundry-bootstrap-job-sa
+  namespace: "default"
+roleRef:
+  kind: Role
+  name: truefoundry-bootstrap-job-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: truefoundry/charts/nats/templates/tests/test-request-reply.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-truefoundry-nats-test-request-reply"
+  labels:
+    chart: nats-0.19.1
+    app: my-truefoundry-nats-test-request-reply
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+  - name: nats-box
+    image: synadia/nats-box
+    env:
+    - name: NATS_HOST
+      value: my-truefoundry-nats
+    command:
+    - /bin/sh
+    - -ec
+    - |
+      nats reply -s nats://$NATS_HOST:4222 'name.>' --command "echo 1" &
+    - |
+      "&&"
+    - |
+      name=$(nats request -s nats://$NATS_HOST:4222 name.test '' 2>/dev/null)
+    - |
+      "&&"
+    - |
+      [ $name = test ]
+
+  restartPolicy: Never
+---
+# Source: truefoundry/templates/bootstrap/job.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: truefoundry-bootstrap-job
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-1"
+    "helm.sh/hook-delete-policy": before-hook-creation
+    "argocd.argoproj.io/hook": PreSync
+    "argocd.argoproj.io/sync-wave": "-1"
+    "argocd.argoproj.io/hook-delete-policy": BeforeHookCreation
+spec:
+  template:
+    metadata:
+      name: truefoundry-bootstrap-job
+    spec:
+      serviceAccountName: truefoundry-bootstrap-job-sa
+      containers:
+      - name: truefoundry-bootstrap-job
+        image: docker.io/library/ubuntu:latest
+        command: ["/truefoundry/truefoundry-bootstrap.sh"]
+        env:
+        - name: TRUEFOUNDRY_NATS_CONFIGMAP
+          value: "nats-accounts"
+        - name: TRUEFOUNDRY_NAMESPACE
+          value: "default"
+        volumeMounts:
+        - name: truefoundry-bootstrap-script
+          mountPath: "/truefoundry"
+      volumes:
+      - name: truefoundry-bootstrap-script
+        configMap:
+          name: truefoundry-bootstrap-cm
+          defaultMode: 0700
+      restartPolicy: Never
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      tolerations:
+        - effect: NoSchedule
+          key: class.truefoundry.io/control-plane
+          operator: Exists
+        - effect: NoSchedule
+          key: cloud.google.com/gke-spot
+          operator: Equal
+          value: "true"
+        - effect: NoSchedule
+          key: kubernetes.azure.com/scalesetpriority
+          operator: Equal
+          value: spot
+  backoffLimit: 2

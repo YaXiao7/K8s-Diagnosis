@@ -1,0 +1,335 @@
+---
+# Source: snyk-monitor/templates/networkpolicy.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: my-snyk-monitor
+  labels:
+    app.kubernetes.io/name: my-snyk-monitor
+    helm.sh/chart: snyk-monitor-2.15.5
+    app.kubernetes.io/instance: my-snyk-monitor
+    app.kubernetes.io/managed-by: Helm
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: my-snyk-monitor
+      app.kubernetes.io/instance: my-snyk-monitor
+      app.kubernetes.io/managed-by: Helm
+  policyTypes:
+  - Ingress
+  - Egress
+  # Ingress is denied hence there is no "ingress" block.
+  # Egress is allowed for any traffic.
+  egress:
+  - {}
+---
+# Source: snyk-monitor/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-snyk-monitor
+  labels:
+    app.kubernetes.io/name: my-snyk-monitor
+    helm.sh/chart: snyk-monitor-2.15.5
+    app.kubernetes.io/instance: my-snyk-monitor
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: snyk-monitor/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: snyk-monitor-workload-policies
+  labels:
+    app.kubernetes.io/name: my-snyk-monitor
+    helm.sh/chart: snyk-monitor-2.15.5
+    app.kubernetes.io/instance: my-snyk-monitor
+    app.kubernetes.io/managed-by: Helm
+data:
+  workload-events.rego: |-
+    package snyk
+
+    orgs := []
+
+    default workload_events = false
+
+    workload_events {
+      input.kind != "Job"
+      input.kind != "Pod"
+    }
+---
+# Source: snyk-monitor/templates/clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-snyk-monitor
+  labels:
+    app.kubernetes.io/name: my-snyk-monitor
+    helm.sh/chart: snyk-monitor-2.15.5
+    app.kubernetes.io/instance: my-snyk-monitor
+    app.kubernetes.io/managed-by: Helm
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - namespaces
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - replicationcontrollers
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - batch
+  resources:
+  - cronjobs
+  - jobs
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - replicasets
+  - daemonsets
+  - deployments
+  - statefulsets
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - apps.openshift.io
+  resources:
+  - deploymentconfigs
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - argoproj.io
+  resources:
+  - rollouts
+  verbs:
+  - get
+  - list
+  - watch
+---
+# Source: snyk-monitor/templates/clusterrolebinding.yaml
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-snyk-monitor
+  labels:
+    app.kubernetes.io/name: my-snyk-monitor
+    helm.sh/chart: snyk-monitor-2.15.5
+    app.kubernetes.io/instance: my-snyk-monitor
+    app.kubernetes.io/managed-by: Helm
+subjects:
+- kind: ServiceAccount
+  name: my-snyk-monitor
+  namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-snyk-monitor
+---
+# Source: snyk-monitor/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-snyk-monitor
+  labels:
+    app.kubernetes.io/name: my-snyk-monitor
+    helm.sh/chart: snyk-monitor-2.15.5
+    app.kubernetes.io/instance: my-snyk-monitor
+    app.kubernetes.io/managed-by: Helm
+spec:
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: my-snyk-monitor
+      app.kubernetes.io/instance: my-snyk-monitor
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: my-snyk-monitor
+        app.kubernetes.io/instance: my-snyk-monitor
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                - key: "kubernetes.io/arch"
+                  operator: In
+                  values:
+                    - amd64
+                - key: "kubernetes.io/os"
+                  operator: In
+                  values:
+                    - linux
+      serviceAccountName: my-snyk-monitor
+      restartPolicy: Always
+      initContainers:
+        - name: volume-permissions
+          image: "busybox:latest"
+          command: ['sh', '-c', 'chmod -R go+rwX /var/tmp || true']
+          volumeMounts:
+            - name: temporary-storage
+              mountPath: "/var/tmp"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "100Mi"
+            limits:
+              cpu: "100m"
+              memory: "100Mi"
+          securityContext:
+            privileged: false
+            runAsNonRoot: false
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+      containers:
+        - name: my-snyk-monitor
+          image: "snyk/kubernetes-monitor:2.15.5"
+          imagePullPolicy: Always
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+          - name: docker-config
+            readOnly: true
+            mountPath: "/srv/app/.docker"
+          - name: temporary-storage
+            mountPath: "/var/tmp"
+          - name: ssl-certs
+            mountPath: "/srv/app/certs"
+          - name: workload-policies
+            mountPath: "/tmp/policies"
+            readOnly: true
+          - name: registries-conf
+            mountPath: "/srv/app/.config/containers"
+          env:
+          - name: NODE_EXTRA_CA_CERTS
+            value: /srv/app/certs/ca.pem
+          - name: SNYK_INTEGRATION_ID
+            valueFrom:
+              secretKeyRef:
+                name: snyk-monitor
+                key: integrationId
+          - name: SNYK_SERVICE_ACCOUNT_API_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: snyk-monitor
+                key: serviceAccountApiToken
+                optional: true
+          - name: SNYK_WATCH_NAMESPACE
+            value: 
+          - name: SNYK_DEPLOYMENT_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          - name: SNYK_DEPLOYMENT_NAME
+            value: my-snyk-monitor
+          - name: SNYK_INTEGRATION_API
+            value: 
+          - name: SNYK_CLUSTER_NAME
+            value: 
+          - name: SNYK_MONITOR_VERSION
+            value: 2.15.5
+          - name: HOME
+            value: /srv/app
+          - name: CLOUDSDK_CONFIG
+            value: /var/tmp/gcloud
+          - name: HTTP_PROXY
+            value: 
+          - name: HTTPS_PROXY
+            value: 
+          - name: NO_PROXY
+            value: 
+          - name: USE_KEEPALIVE
+            value: "true"
+          - name: LOG_LEVEL
+            value: 
+          - name: SKIP_K8S_JOBS
+            value: 
+          - name: SNYK_SKOPEO_COMPRESSION_LEVEL
+            value: "6"
+          - name: SNYK_WORKERS_COUNT
+            value: "5"
+          - name: SNYK_SYSDIG_POLLING_INTERVAL_MINS
+            value: "30"
+          - name: V8_MAX_OLD_SPACE_SIZE
+            value: "2048"
+          - name: UV_THREADPOOL_SIZE
+            value: "24"
+          - name: NODE_OPTIONS
+            value: --max_old_space_size=2048
+          resources:
+            requests:
+              cpu: 250m
+              memory: 400Mi
+            limits:
+              cpu: "1"
+              memory: 2Gi
+          livenessProbe:
+            exec:
+              command:
+              - "true"
+          readinessProbe:
+            exec:
+              command:
+              - "true"
+          securityContext:
+            privileged: false
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+      volumes:
+        - name: docker-config
+          secret:
+            secretName: snyk-monitor
+            optional: true
+            items:
+              - key: dockercfg.json
+                path: config.json
+        - name: temporary-storage
+          emptyDir:
+            sizeLimit: 50Gi
+        - name: ssl-certs
+          configMap:
+            name: snyk-monitor-certs
+            optional: true
+        - name: workload-policies
+          configMap:
+            name: snyk-monitor-workload-policies
+            optional: true
+        - name: registries-conf
+          configMap:
+            name: snyk-monitor-registries-conf
+            optional: true
+---
+# Source: snyk-monitor/templates/pvc.yaml
+# We create a PVC only if requested.

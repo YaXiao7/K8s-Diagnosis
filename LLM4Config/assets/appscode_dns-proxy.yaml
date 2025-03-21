@@ -1,0 +1,110 @@
+---
+# Source: dns-proxy/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-dns-proxy-cred
+  namespace: default
+  labels:
+    helm.sh/chart: dns-proxy-v2023.11.14
+    app.kubernetes.io/name: dns-proxy
+    app.kubernetes.io/instance: my-dns-proxy
+    app.kubernetes.io/version: "v0.0.3"
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+stringData:
+  api-token: ''
+---
+# Source: dns-proxy/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-dns-proxy
+  namespace: default
+  labels:
+    helm.sh/chart: dns-proxy-v2023.11.14
+    app.kubernetes.io/name: dns-proxy
+    app.kubernetes.io/instance: my-dns-proxy
+    app.kubernetes.io/version: "v0.0.3"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+    - port: 8080
+      targetPort: metrics
+      protocol: TCP
+      name: metrics
+  selector:
+    app.kubernetes.io/name: dns-proxy
+    app.kubernetes.io/instance: my-dns-proxy
+---
+# Source: dns-proxy/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-dns-proxy
+  namespace: default
+  labels:
+    helm.sh/chart: dns-proxy-v2023.11.14
+    app.kubernetes.io/name: dns-proxy
+    app.kubernetes.io/instance: my-dns-proxy
+    app.kubernetes.io/version: "v0.0.3"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: dns-proxy
+      app.kubernetes.io/instance: my-dns-proxy
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: dns-proxy
+        app.kubernetes.io/instance: my-dns-proxy
+    spec:
+      serviceAccountName: default
+      securityContext:
+        {}
+      containers:
+        - name: dns-proxy
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65534
+            seccompProfile:
+              type: RuntimeDefault
+          image: "ghcr.io/appscode/cloudflare-dns-proxy:v0.0.3"
+          imagePullPolicy: IfNotPresent
+          args:
+          - run
+          env:
+          - name: CLOUDFLARE_API_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: my-dns-proxy-cred
+                key: api-token
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+            - name: metrics
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: metrics
+          readinessProbe:
+            httpGet:
+              path: /
+              port: metrics
+          resources:
+            {}

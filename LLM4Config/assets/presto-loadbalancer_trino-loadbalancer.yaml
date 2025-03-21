@@ -1,0 +1,233 @@
+---
+# Source: trino-loadbalancer/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-trino-loadbalancer
+  labels:
+    helm.sh/chart: trino-loadbalancer-0.3.0
+    app.kubernetes.io/name: trino-loadbalancer
+    app.kubernetes.io/instance: my-trino-loadbalancer
+    version: "0.3.0"
+    app.kubernetes.io/version: "0.3.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: trino-loadbalancer/templates/configmap.yml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-trino-loadbalancer-configmap
+  labels:
+    chart: trino-loadbalancer-0.3.0
+    release: my-trino-loadbalancer
+data:
+  config.yml: |
+      clusters:
+        healthcheck:
+          delay: 5s
+          enabled: true
+        statistics:
+          delay: 5s
+          enabled: true
+        sync:
+          delay: 10s
+      controller:
+        features:
+          slow_worker_drainer:
+            analyzer:
+              std_deviation_ratio: 3
+            drainThreshold: 3
+            dryRun: true
+            enabled: false
+            gracePeriodSeconds: 300
+            k8s:
+              namespaceSelector: {}
+            provider: k8s
+      discovery:
+        providers:
+        - enabled: false
+          provider: static
+          static:
+            clusters:
+            - enabled: true
+              name: cluster-0
+              tags:
+                env: dev
+                local: true
+              url: http://localhost:8080
+        - aws:
+            access_key_id: ""
+            region: eu-west-1
+            secret_key: ""
+          enabled: false
+          provider: aws-emr
+        - enabled: false
+          k8s:
+            cluster_domain: cluster.local
+            kube_config: tdac-test
+            selector_tags:
+              component: coordinator
+              deployment: trino
+          provider: k8s
+      notifier:
+        slack:
+          webhook: ""
+      persistence:
+        postgres:
+          db: postgres
+          host: 127.0.0.1
+          password: trino
+          port: 5432
+          ssl_mode: disable
+          username: trinohub
+      proxy:
+        port: 8998
+      routing:
+        rule: round-robin
+        users:
+          default:
+            behaviour: default
+            cluster: {}
+          rules: []
+      session:
+        store:
+          redis:
+            opts:
+              max_ttl: 24h
+              prefix: 'trino::'
+            sentinel:
+              db: 0
+              enabled: false
+              hosts:
+              - ""
+              - ""
+              master: mymaster
+              password: ""
+            standalone:
+              db: 0
+              enabled: true
+              host: 127.0.0.1:6379
+              password: ""
+---
+# Source: trino-loadbalancer/templates/cluster-roles.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-trino-loadbalancer
+rules:
+  - apiGroups:
+      - apps
+    resources:
+      - deployments
+      - deployments/scale
+    verbs:
+      - get
+      - update
+      - patch
+      - list
+  - apiGroups:
+      - ""
+    resources:
+      - services
+      - namespaces
+      - pods
+      - deployments
+    verbs:
+      - get
+      - watch
+      - list
+      - update
+---
+# Source: trino-loadbalancer/templates/cluster-roles-binding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-trino-loadbalancer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-trino-loadbalancer
+subjects:
+  - kind: ServiceAccount
+    name: my-trino-loadbalancer
+    namespace: default
+---
+# Source: trino-loadbalancer/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-trino-loadbalancer
+  labels:
+    helm.sh/chart: trino-loadbalancer-0.3.0
+    app.kubernetes.io/name: trino-loadbalancer
+    app.kubernetes.io/instance: my-trino-loadbalancer
+    version: "0.3.0"
+    app.kubernetes.io/version: "0.3.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8888
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: trino-loadbalancer
+    app.kubernetes.io/instance: my-trino-loadbalancer
+---
+# Source: trino-loadbalancer/templates/deployment-proxy.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-trino-loadbalancer-proxy
+  labels:
+    helm.sh/chart: trino-loadbalancer-0.3.0
+    app.kubernetes.io/name: trino-loadbalancer
+    app.kubernetes.io/instance: my-trino-loadbalancer
+    version: "0.3.0"
+    app.kubernetes.io/version: "0.3.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: trino-loadbalancer
+      app.kubernetes.io/instance: my-trino-loadbalancer
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: trino-loadbalancer
+        app.kubernetes.io/instance: my-trino-loadbalancer
+        version: "0.3.0"
+    spec:
+      serviceAccountName: my-trino-loadbalancer
+      securityContext:
+        {}
+      volumes:
+        - name: config-volume
+          configMap:
+            name: my-trino-loadbalancer-configmap
+      containers:
+        - name: trino-loadbalancer
+          securityContext:
+            {}
+          image: "datappeal/trino-loadbalancer:sha-1f5bbb74"
+          imagePullPolicy: Always
+          args: ["proxy", "--config", "/config/config.yml", "--static-files", "/ui"]
+          volumeMounts:
+            - name: config-volume
+              mountPath: /config
+          ports:
+            - name: http
+              containerPort: 8998
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+          resources:
+            {}

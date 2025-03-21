@@ -1,0 +1,83 @@
+---
+# Source: ara/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: ara
+  name: ara-my-ara-service
+spec:
+  ports:
+    - port: 8000
+      protocol: TCP
+      targetPort: 8000
+  selector:
+    app: ara
+  type: ClusterIP
+---
+# Source: ara/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ara-my-ara
+  labels:
+    app: ara
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ara
+  template:
+    metadata:
+      labels:
+        app: ara
+    spec:
+      securityContext: 
+        fsGroup: 2000
+        runAsGroup: 2000
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+      - image: docker.io/recordsansible/ara-api:latest
+        imagePullPolicy: IfNotPresent
+        name: ara
+        volumeMounts:
+        - mountPath: /opt/ara
+          name: ara
+        ports:
+          - containerPort: 8000
+        livenessProbe:
+          httpGet:
+            port: 8000
+            path: /healthcheck/
+            httpHeaders:
+              - name: Host
+                value: ara.domain
+          initialDelaySeconds: 30
+          failureThreshold: 3
+          timeoutSeconds: 1
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            port: 8000
+            path: /healthcheck/
+            httpHeaders:
+              - name: Host
+                value: ara.domain
+          initialDelaySeconds: 30
+          failureThreshold: 3
+          timeoutSeconds: 1
+          periodSeconds: 10
+        startupProbe:
+          httpGet:
+            port: 8000
+            path: /healthcheck/
+            httpHeaders:
+              - name: Host
+                value: ara.domain
+          initialDelaySeconds: 30
+          failureThreshold: 30
+          timeoutSeconds: 1
+      volumes:
+      - name: ara
+        emptyDir: {}

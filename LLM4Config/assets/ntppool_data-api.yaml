@@ -1,0 +1,142 @@
+---
+# Source: data-api/templates/common.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-data-api
+  labels:
+    app.kubernetes.io/instance: my-data-api
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: my-data-api
+    app.kubernetes.io/service: my-data-api
+    app.kubernetes.io/version: 0.2.1
+    helm.sh/chart: data-api-0.9.1
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9019
+      targetPort: 9019
+      protocol: TCP
+      name: health
+    - port: 80
+      targetPort: 8030
+      protocol: TCP
+      name: http
+    - port: 9020
+      targetPort: 9020
+      protocol: TCP
+      name: metrics
+  selector:
+    app.kubernetes.io/component: main
+    app.kubernetes.io/instance: my-data-api
+    app.kubernetes.io/name: my-data-api
+---
+# Source: data-api/templates/common.yaml
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-data-api
+  labels:
+    app: data-api
+    app.kubernetes.io/component: main
+    app.kubernetes.io/instance: my-data-api
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: my-data-api
+    app.kubernetes.io/version: 0.2.1
+    helm.sh/chart: data-api-0.9.1
+    tier: api
+spec:
+  revisionHistoryLimit: 3
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: main
+      app.kubernetes.io/name: my-data-api
+      app.kubernetes.io/instance: my-data-api
+  template:
+    metadata:
+      labels: 
+        app: data-api
+        app.kubernetes.io/component: main
+        app.kubernetes.io/instance: my-data-api
+        app.kubernetes.io/name: my-data-api
+        tier: api
+    spec: 
+      enableServiceLinks: true
+      serviceAccountName: default
+      automountServiceAccountToken: true
+      hostIPC: false
+      hostNetwork: false
+      hostPID: false
+      dnsPolicy: ClusterFirst
+      containers: 
+        - command:
+          - /app/data-api
+          - server
+          env:
+          - name: TZ
+            value: UTC
+          image: harbor.ntppool.org/ntppool/data-api:0.2.1
+          imagePullPolicy: IfNotPresent
+          livenessProbe:
+            failureThreshold: 2
+            httpGet:
+              path: /__health
+              port: 9020
+              scheme: HTTP
+            initialDelaySeconds: 4
+            periodSeconds: 3
+            successThreshold: 1
+            timeoutSeconds: 1
+          name: main
+          readinessProbe:
+            failureThreshold: 2
+            httpGet:
+              path: /__health
+              port: 9020
+              scheme: HTTP
+            initialDelaySeconds: 4
+            periodSeconds: 3
+            successThreshold: 1
+            timeoutSeconds: 1
+          resources:
+            limits:
+              cpu: 2
+              memory: 1024Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+          startupProbe:
+            failureThreshold: 30
+            initialDelaySeconds: 0
+            periodSeconds: 5
+            tcpSocket:
+              port: 8030
+            timeoutSeconds: 1
+---
+# Source: data-api/templates/common.yaml
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: my-data-api
+  labels:
+    app.kubernetes.io/instance: my-data-api
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: my-data-api
+    app.kubernetes.io/version: 0.2.1
+    helm.sh/chart: data-api-0.9.1
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/service: my-data-api
+      app.kubernetes.io/name: my-data-api
+      app.kubernetes.io/instance: my-data-api
+  endpoints:
+    - interval: 20s
+      path: /metrics
+      port: metrics
+      scheme: http
+      scrapeTimeout: 15s

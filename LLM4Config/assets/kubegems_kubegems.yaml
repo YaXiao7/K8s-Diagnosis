@@ -1,0 +1,3334 @@
+---
+# Source: kubegems/charts/redis/templates/networkpolicy.yaml
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: my-kubegems-redis
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/version: 7.2.5
+    helm.sh/chart: redis-19.6.2
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: my-kubegems
+      app.kubernetes.io/name: redis
+  policyTypes:
+    - Ingress
+    - Egress
+  egress:
+    - {}
+  ingress:
+    # Allow inbound connections
+    - ports:
+        - port: 6379
+---
+# Source: kubegems/charts/redis/templates/master/pdb.yaml
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: my-kubegems-redis-master
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/version: 7.2.5
+    helm.sh/chart: redis-19.6.2
+    app.kubernetes.io/component: master
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: my-kubegems
+      app.kubernetes.io/name: redis
+      app.kubernetes.io/component: master
+---
+# Source: kubegems/charts/argo-cd/templates/application-controller/service-account.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-kubegems-argo-cd-argocd-app-controller
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: argo-cd
+    helm.sh/chart: argo-cd-3.3.5
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "2.3.4"
+    app.kubernetes.io/component: controller
+automountServiceAccountToken: true
+---
+# Source: kubegems/charts/argo-cd/templates/repo-server/service-account.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-kubegems-argo-cd-argocd-repo-server
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: argo-cd
+    helm.sh/chart: argo-cd-3.3.5
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "2.3.4"
+    app.kubernetes.io/component: repo-server
+automountServiceAccountToken: true
+---
+# Source: kubegems/charts/argo-cd/templates/server/service-account.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-kubegems-argo-cd-argocd-server
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: argo-cd
+    helm.sh/chart: argo-cd-3.3.5
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "2.3.4"
+    app.kubernetes.io/component: server
+automountServiceAccountToken: true
+---
+# Source: kubegems/charts/mysql/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-kubegems-mysql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: mysql
+    helm.sh/chart: mysql-9.7.2
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "8.0.33"
+  annotations:
+automountServiceAccountToken: true
+secrets:
+  - name: my-kubegems-mysql
+---
+# Source: kubegems/charts/redis/templates/master/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+automountServiceAccountToken: false
+metadata:
+  name: my-kubegems-redis-master
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/version: 7.2.5
+    helm.sh/chart: redis-19.6.2
+---
+# Source: kubegems/charts/argo-cd/templates/argocd-secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  # Mandatory hardcoded name.
+  # Ref: https://github.com/argoproj/argo-cd/blob/master/docs/operator-manual/argocd-secret.yaml
+  name: argocd-secret
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: argo-cd
+    helm.sh/chart: argo-cd-3.3.5
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "2.3.4"
+    # Mandatory label
+    # Ref: https://argoproj.github.io/argo-cd/operator-manual/declarative-setup/#atomic-configuration
+    app.kubernetes.io/part-of: argocd
+type: Opaque
+data:
+  clearPassword: M3dEZEI2R044Zw==
+  # The password needs to be bcrypt hashed
+  admin.password: JDJhJDEwJGlIZ1p0Mlpiak9Sci5MVEdYQS5DWHVaZ2xLd3VVakFUaG9WQi9OSUpKekx3c3BGVkdSYkVh
+  admin.passwordMtime: MjAyNC0wOS0xNlQwODozNDozMlo=
+---
+# Source: kubegems/charts/chartmuseum/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-kubegems-chartmuseum
+  labels:
+    helm.sh/chart: chartmuseum-3.8.0
+    app.kubernetes.io/name: chartmuseum
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/version: "0.14.0"
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+---
+# Source: kubegems/charts/gitea/templates/gitea/config.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-kubegems-gitea-inline-config
+  labels:
+    helm.sh/chart: gitea-5.0.8
+    app: gitea
+    app.kubernetes.io/name: gitea
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/version: "1.16.8"
+    version: "1.16.8"
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+stringData:
+  _generals_: ""
+  database: DB_TYPE=sqlite3
+  metrics: ENABLED=false
+  repository: ROOT=/data/git/gitea-repositories
+  security: INSTALL_LOCK=true
+  server: |-
+    APP_DATA_PATH=/data
+    DOMAIN=git.example.com
+    ENABLE_PPROF=false
+    HTTP_PORT=3000
+    PROTOCOL=http
+    ROOT_URL=http://git.example.com
+    SSH_DOMAIN=git.example.com
+    SSH_LISTEN_PORT=22
+    SSH_PORT=22
+---
+# Source: kubegems/charts/gitea/templates/gitea/config.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-kubegems-gitea
+  labels:
+    helm.sh/chart: gitea-5.0.8
+    app: gitea
+    app.kubernetes.io/name: gitea
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/version: "1.16.8"
+    version: "1.16.8"
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+stringData:
+  config_environment.sh: |-
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    function env2ini::log() {
+      printf "${1}\n"
+    }
+
+    function env2ini::read_config_to_env() {
+      local section="${1}"
+      local line="${2}"
+
+      if [[ -z "${line}" ]]; then
+        # skip empty line
+        return
+      fi
+      
+      # 'xargs echo -n' trims all leading/trailing whitespaces and a trailing new line
+      local setting="$(awk -F '=' '{print $1}' <<< "${line}" | xargs echo -n)"
+
+      if [[ -z "${setting}" ]]; then
+        env2ini::log '  ! invalid setting'
+        exit 1
+      fi
+
+      local value=''
+      local regex="^${setting}(\s*)=(\s*)(.*)"
+      if [[ $line =~ $regex ]]; then
+        value="${BASH_REMATCH[3]}"
+      else
+        env2ini::log '  ! invalid setting'
+        exit 1
+      fi
+
+      env2ini::log "    + '${setting}'"
+
+      if [[ -z "${section}" ]]; then
+        export "ENV_TO_INI____${setting^^}=${value}"                           # '^^' makes the variable content uppercase
+        return
+      fi
+
+      local masked_section="${section//./_0X2E_}"                            # '//' instructs to replace all matches
+      masked_section="${masked_section//-/_0X2D_}"
+
+      export "ENV_TO_INI__${masked_section^^}__${setting^^}=${value}"        # '^^' makes the variable content uppercase
+    }
+
+    function env2ini::reload_preset_envs() {
+      env2ini::log "Reloading preset envs..."
+
+      while read -r line; do
+        if [[ -z "${line}" ]]; then
+          # skip empty line
+          return
+        fi
+
+        # 'xargs echo -n' trims all leading/trailing whitespaces and a trailing new line
+        local setting="$(awk -F '=' '{print $1}' <<< "${line}" | xargs echo -n)"
+
+        if [[ -z "${setting}" ]]; then
+          env2ini::log '  ! invalid setting'
+          exit 1
+        fi
+
+        local value=''
+        local regex="^${setting}(\s*)=(\s*)(.*)"
+        if [[ $line =~ $regex ]]; then
+          value="${BASH_REMATCH[3]}"
+        else
+          env2ini::log '  ! invalid setting'
+          exit 1
+        fi
+
+        env2ini::log "  + '${setting}'"
+
+        export "${setting^^}=${value}"                           # '^^' makes the variable content uppercase
+      done < "/tmp/existing-envs"
+
+      rm /tmp/existing-envs
+    }
+
+
+    function env2ini::process_config_file() {
+      local config_file="${1}"
+      local section="$(basename "${config_file}")"
+
+      if [[ $section == '_generals_' ]]; then
+        env2ini::log "  [ini root]"
+        section=''
+      else
+        env2ini::log "  ${section}"
+      fi
+
+      while read -r line; do
+        env2ini::read_config_to_env "${section}" "${line}"
+      done < <(awk 1 "${config_file}")                             # Helm .toYaml trims the trailing new line which breaks line processing; awk 1 ... adds it back while reading
+    }
+
+    function env2ini::load_config_sources() {
+      local path="${1}"
+
+      env2ini::log "Processing $(basename "${path}")..."
+
+      while read -d '' configFile; do
+        env2ini::process_config_file "${configFile}"
+      done < <(find "${path}" -type l -not -name '..data' -print0)
+
+      env2ini::log "\n"
+    }
+
+    function env2ini::generate_initial_secrets() {
+      # These environment variables will either be
+      #   - overwritten with user defined values,
+      #   - initially used to set up Gitea
+      # Anyway, they won't harm existing app.ini files
+
+      export ENV_TO_INI__SECURITY__INTERNAL_TOKEN=$(gitea generate secret INTERNAL_TOKEN)
+      export ENV_TO_INI__SECURITY__SECRET_KEY=$(gitea generate secret SECRET_KEY)
+      export ENV_TO_INI__OAUTH2__JWT_SECRET=$(gitea generate secret JWT_SECRET)
+
+      env2ini::log "...Initial secrets generated\n"
+    }
+
+    env | (grep ENV_TO_INI || [[ $? == 1 ]]) > /tmp/existing-envs
+    
+    # MUST BE CALLED BEFORE OTHER CONFIGURATION
+    env2ini::generate_initial_secrets
+
+    env2ini::load_config_sources '/env-to-ini-mounts/inlines/'
+    env2ini::load_config_sources '/env-to-ini-mounts/additionals/'
+
+    # load existing envs to override auto generated envs
+    env2ini::reload_preset_envs
+
+    env2ini::log "=== All configuration sources loaded ===\n"
+
+    # safety to prevent rewrite of secret keys if an app.ini already exists
+    if [ -f ${GITEA_APP_INI} ]; then
+      env2ini::log 'An app.ini file already exists. To prevent overwriting secret keys, these settings are dropped and remain unchanged:'
+      env2ini::log '  - security.INTERNAL_TOKEN'
+      env2ini::log '  - security.SECRET_KEY'
+      env2ini::log '  - oauth2.JWT_SECRET'
+
+      unset ENV_TO_INI__SECURITY__INTERNAL_TOKEN
+      unset ENV_TO_INI__SECURITY__SECRET_KEY
+      unset ENV_TO_INI__OAUTH2__JWT_SECRET
+    fi
+
+    environment-to-ini -o $GITEA_APP_INI -p ENV_TO_INI
+---
+# Source: kubegems/charts/gitea/templates/gitea/init.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-kubegems-gitea-init
+  labels:
+    helm.sh/chart: gitea-5.0.8
+    app: gitea
+    app.kubernetes.io/name: gitea
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/version: "1.16.8"
+    version: "1.16.8"
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+stringData:
+  init_directory_structure.sh: |-
+    #!/usr/bin/env bash
+
+    set -euo pipefail
+
+    set -x
+    chown 1000:1000 /data
+    mkdir -p /data/git/.ssh
+    chmod -R 700 /data/git/.ssh
+    [ ! -d /data/gitea ] && mkdir -p /data/gitea/conf
+
+    # prepare temp directory structure
+    mkdir -p "${GITEA_TEMP}"
+    chown 1000:1000 "${GITEA_TEMP}"
+    chmod ug+rwx "${GITEA_TEMP}"
+
+  configure_gitea.sh: |-
+    #!/usr/bin/env bash
+
+    set -euo pipefail
+
+    echo '==== BEGIN GITEA CONFIGURATION ===='
+
+    { # try
+      gitea migrate
+    } || { # catch
+      echo "Gitea migrate might fail due to database connection...This init-container will try again in a few seconds"
+      exit 1
+    }
+    function configure_admin_user() {
+      local ACCOUNT_ID=$(gitea admin user list --admin | grep -e "\s\+${GITEA_ADMIN_USERNAME}\s\+" | awk -F " " "{printf \$1}")
+      if [[ -z "${ACCOUNT_ID}" ]]; then
+        echo "No admin user '${GITEA_ADMIN_USERNAME}' found. Creating now..."
+        gitea admin user create --admin --username "${GITEA_ADMIN_USERNAME}" --password "${GITEA_ADMIN_PASSWORD}" --email "gitea@local.domain" --must-change-password=false
+        echo '...created.'
+      else
+        echo "Admin account '${GITEA_ADMIN_USERNAME}' already exist. Running update to sync password..."
+        gitea admin user change-password --username "${GITEA_ADMIN_USERNAME}" --password "${GITEA_ADMIN_PASSWORD}"
+        echo '...password sync done.'
+      fi
+    }
+
+    configure_admin_user
+
+    function configure_ldap() {
+        echo 'no ldap configuration... skipping.'
+    }
+
+    configure_ldap
+
+    function configure_oauth() {
+        echo 'no oauth configuration... skipping.'
+    }
+
+    configure_oauth
+
+    echo '==== END GITEA CONFIGURATION ===='
+---
+# Source: kubegems/charts/mysql/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-kubegems-mysql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: mysql
+    helm.sh/chart: mysql-9.7.2
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "8.0.33"
+type: Opaque
+data:
+  mysql-root-password: "TlROZmNLUnhFSw=="
+  mysql-password: "c0pqRXduakttVg=="
+---
+# Source: kubegems/charts/redis/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-kubegems-redis
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/version: 7.2.5
+    helm.sh/chart: redis-19.6.2
+type: Opaque
+data:
+  redis-password: "cW4zMXZ4YzZiTw=="
+---
+# Source: kubegems/templates/api/jwt-secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-kubegems-api-jwt
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: kubegems
+    helm.sh/chart: kubegems-1.24.6
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "1.24.6"
+    app.kubernetes.io/component: agent
+type: kubernetes.io/tls
+data:
+  tls.crt: "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSURlRENDQW1DZ0F3SUJBZ0lSQUtkRk1nYVNVQWJpM1lIV1k4N1JOQ293RFFZSktvWklodmNOQVFFTEJRQXcKRmpFVU1CSUdBMVVFQXhNTGEzVmlaV2RsYlhNdFkyRXdIaGNOTWpRd09URTJNRGd6TkRNeVdoY05NalV3T1RFMgpNRGd6TkRNeVdqQWFNUmd3RmdZRFZRUURFdzl0ZVMxcmRXSmxaMlZ0Y3kxaGNHa3dnZ0VpTUEwR0NTcUdTSWIzCkRRRUJBUVVBQTRJQkR3QXdnZ0VLQW9JQkFRRGs4UFpoS29GTHphNDlMNjlkSkErbzlybVllWmFGMVV1MUkrZXkKOWNpTXBmU0F6QXpNM0pvczNzWmZLN2pvTnVLb2dHVWZqT1ZuTUppY0wrMEYzN0lFTkoxSWh1NXRaNlpMajlzdQp1a2w1NHNseG5hcFRrZTRORkJKcFFvZlQ4K3YyK0tXdWYrVHhVMDZYbnk4VmczeFpVOWpkdThTODJqeXFOUVUzCkU0Y1JnS2VjY3E0a0x5cWorMHVCQ1JZdTN3eXQxM084NHdNSU5SV3pPUnRDZTlmV3dvbVhRNis3WGNZQ294dkgKT0M3OUEzdDA5VEpRTTZzVEJ0TjRoZnJIczJ0TEZNa00yejAxOHVXbXNmNUJHblRVeU0vWkF4ay9XSjB2MjVzagpBK3lVU1dudFY4OEJGOUNmNDQ5OURqU2tJc2pMS1MrKytEUDRlNWRsT084S04xbk5BZ01CQUFHamdid3dnYmt3CkRnWURWUjBQQVFIL0JBUURBZ1dnTUIwR0ExVWRKUVFXTUJRR0NDc0dBUVVGQndNQkJnZ3JCZ0VGQlFjREFqQU0KQmdOVkhSTUJBZjhFQWpBQU1COEdBMVVkSXdRWU1CYUFGQjlnQW91QjVzSG9ZTjIxUW1UU1hheTBMZVZuTUZrRwpBMVVkRVFSU01GQ0NHMjE1TFd0MVltVm5aVzF6TFdGd2FTNWtaV1poZFd4MExuTjJZNEl4YlhrdGEzVmlaV2RsCmJYTXRZWEJwTFhkbFltaHZiMnN1WkdWbVlYVnNkQzV6ZG1NdVkyeDFjM1JsY2k1c2IyTmhiREFOQmdrcWhraUcKOXcwQkFRc0ZBQU9DQVFFQVJnVE51SjdqR3Vqa1RBUFhIdUxKN1ozRCtpS281R1IyZVdhd1ZkZ1J6NjJGY3hmaAppVHc5NUxoenU2K0s4YmtCdEEya2c5WTM5Y0xYNlNQc1EwNEZvZ3k2U0s5UjNHV1VOeGpRZTVacmZZcGhnVmpCClZpU2RkcXpJb1laYjZtUjR3djY4RHJUcW96eWdnTDVmZ1pMWmRCcVpkbGdYcUQyWjJlZmJWZ0l4T21jd2xXQjgKUXpkY25ZR05EQUlZemRpN0t2V0FZVnBndDdYR3lCRjlpc2VRVUJHaEVmWGdKTGw5QjRiaU9DS3JOQitBSDJWSQowc2VTRVZxUWFBU1FSZWpLSmxUWW9Jc3d1MGgraS9Ra242eWVOUDlOV0lweDZ6ejNHelRkajFjT2czV1JOZVh5CkZxMTVlYkdoZmt5UXFIOU5kZ3Z5LzBib1VhZXhBU1lJcXJpd2pRPT0KLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQo="
+  tls.key: "LS0tLS1CRUdJTiBSU0EgUFJJVkFURSBLRVktLS0tLQpNSUlFcFFJQkFBS0NBUUVBNVBEMllTcUJTODJ1UFMrdlhTUVBxUGE1bUhtV2hkVkx0U1Buc3ZYSWpLWDBnTXdNCnpOeWFMTjdHWHl1NDZEYmlxSUJsSDR6bFp6Q1luQy90QmQreUJEU2RTSWJ1YldlbVM0L2JMcnBKZWVMSmNaMnEKVTVIdURSUVNhVUtIMC9Qcjl2aWxybi9rOFZOT2w1OHZGWU44V1ZQWTNidkV2Tm84cWpVRk54T0hFWUNubkhLdQpKQzhxby90TGdRa1dMdDhNcmRkenZPTURDRFVWc3prYlFudlgxc0tKbDBPdnUxM0dBcU1ieHpndS9RTjdkUFV5ClVET3JFd2JUZUlYNng3TnJTeFRKRE5zOU5mTGxwckgrUVJwMDFNalAyUU1aUDFpZEw5dWJJd1BzbEVscDdWZlAKQVJmUW4rT1BmUTQwcENMSXl5a3Z2dmd6K0h1WFpUanZDamRaelFJREFRQUJBb0lCQURwMEg2UU5jemZFaXpGSwpKSTgyYnQwb0taajVxbW4vWExZaU5iMW1yYzdqYkhzYUhrYU1LTDArSUE0YW5ycURrUG1PMXNMb2VZWVFUVmJMCmtjd0hJbSthYzNJYUtYUTdtNlQ5Vk93b1dpeEpzRDlYRHk4Sk9tdVNiV1Q4dkt0c1F4b3F3RHErb3RqTytXa1QKRnJWNmZkeGM0U2swRVBaYkRsUXk5MkxwbEhudUVMMDBhaDRNbW85VG9BZGtkczcrS2tnUmozZzlFWnIzM1JidAplbHVwOXNGSy9xRGNoK1FlYXBheko3TFVyZkN4b1pCV1VSVEZwQ1JqUXBrdlhiUUQ4L0Z0dEEzc3lmVVV5NGpICmxDa09Iek5UeWo5NUNzdURtSVF3dGRTa0krVnZ6YzljQzVQcXZxWWhTUm0wRzdBcFpwMGFicmdPSzNjOE9TbmUKc1N5cGNlMENnWUVBODBWbS8yeDZpbmprZXMvemZrbTVEaVl6amJ3K3VQL3paWElMQ0lvNDFtUWlCcnNObFhwTwpqck51akw2Z1RGMFY4S2FWK1JEeXkyOFFLbHB1QW0zNVBwU29iVGlEeFhWaHhJR0dTRyt4dkx1MnhmbENxS0dnClN2NlBTT0lYZk00UU10WGVlWlRnRnRhYlFOWHRXUElUWUYwVXZWVzlXbXRLa09oNUV4c1luc01DZ1lFQThPdWMKNlhseFJRaFhqanR0T1R1SEVCcmRzTFFYa2dPVlRCZ3pSVHc2R0Z5bFlLTm5QMEN6N2tVSkNyNE0zYUdweXpkRAp0Wnk0VEx6czdqdHNMWm5TQ3JvNURhd0g2Z25lWlZiL2l1amJ0L2Y2aDhReGpyTndVcTkzWnowVmZiKzE3Z1ZKCkdMZG9hZ1RFTWlhWTYyczlQMXdHdGdhUlQvbktFay9sQ1FmSnZDOENnWUVBbE85cGhua29jTHhnelZ1ZzdERkEKYll3dnhkZDQ0eFE0TkdSa290N1V1MVRrakJCYTJhZmVqbmtGOW44Q2JwNFN2NW1OZWNYSmo0aTRjZVdaTWoyWAorWnRUbmtLYVVmcHlWN2NndWhvL3k1ZDA1N0dhQU5tcTVCOERKQkRmWmxaV0RubG5VakkyRzJWWitaQy9WZFFtCnpybE42RGlreThXaUNpTjVkSndETDdjQ2dZRUFod0V4VS9BMjFoMWZteGVZRkV0VVcyVUN1QU9qZGJKR1ZuYjEKUENZTTFCd09uSUhVMkxBMFpDQVJlaENYK3hhZHBJQWFsRW4zU1NGUmtBcUNpMmM0T2NTek5nTWlDRGR4aGM1agpzdjdjS1ZKdjlPYXZjcTBCRTRTNlg0THVhU0ltRy9TZ1NwWjBqM3lPU1NBeDd6S1FCdEpWL0dqZnd6WlIwME1zCk1JeEpzd2NDZ1lFQW1nTGNGS1dJTUFMS3plcDUyRFFXSzMrT3VETThQTlRYSDhoc1JNVkxWb3R4WXN0SmhXR3IKMHlXbk51M21TZmh6T2c2MzFhZ2dJNXhxMVJTak1aY1V0YzljVmRuc1RFQm9uT3FBZWF0TUVoMEpXditPS25ZWApMRG1ScWs2TGErT1NMVFVGRFFYd3o5SEZBNzBTMUJ6dWZtU3YyZ1ZRUjlQeUhTK2FSS2NLZEE4PQotLS0tLUVORCBSU0EgUFJJVkFURSBLRVktLS0tLQo="
+  ca.crt: "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSURHRENDQWdDZ0F3SUJBZ0lSQUlmRVljcXdxcGI1UDl2cHlCR2ptU2t3RFFZSktvWklodmNOQVFFTEJRQXcKRmpFVU1CSUdBMVVFQXhNTGEzVmlaV2RsYlhNdFkyRXdIaGNOTWpRd09URTJNRGd6TkRNeVdoY05NelF3T1RFMApNRGd6TkRNeVdqQVdNUlF3RWdZRFZRUURFd3RyZFdKbFoyVnRjeTFqWVRDQ0FTSXdEUVlKS29aSWh2Y05BUUVCCkJRQURnZ0VQQURDQ0FRb0NnZ0VCQUpMQlh4MHBRM2pjcUMxL2J3VlBMRFJ5WTErNG04enZ1R3h1R2o4a0JyMUYKd01HY3VUc1pQcTFENkJBNWMyR203cDcwcUlON3kzbHRwZmNwSkpNRU5ZRnd2OVhqYitHYk1xZTJvOXl1MjU3cApRVTNOcWcyRFNVUXVoeGZzMHpxRlg5Zk92OHNZdDFSd0pDWjZ4NVYwUER2c2g5Lytsd1NaOHFEemtEMUdUUHJXCkJpNkRUSURyMytHTDlnMnJvRzhZa3hyb1c4UU85OXZHWjRub0taNGFhWnVFNVE5OVhrZXpHVVY5V0x0UTZlNHMKT3NZcEgweVVCeGxnOWVZeDloRytHVk9rN2pEZE1DQnlLb05IZVBkbnRzOHJhZm5iSWxrNDhKTTRTOFV4OGxtRQozZkttLzluZUszQ2ZwdkFaZU9rV1R1dG81eFNjWit4OWRpWkpVY0E0b0NNQ0F3RUFBYU5oTUY4d0RnWURWUjBQCkFRSC9CQVFEQWdLa01CMEdBMVVkSlFRV01CUUdDQ3NHQVFVRkJ3TUJCZ2dyQmdFRkJRY0RBakFQQmdOVkhSTUIKQWY4RUJUQURBUUgvTUIwR0ExVWREZ1FXQkJRZllBS0xnZWJCNkdEZHRVSmswbDJzdEMzbFp6QU5CZ2txaGtpRwo5dzBCQVFzRkFBT0NBUUVBVkRQUEtPZVJzQ2RqWEJjRVQ3cTd2bHVNRGNaMEtUVmFEUTNMYkZmRVlWVm1Rb1dFCmI4b1Z6R282N1lDc2JXMEF0R0Z1WTk3Y3V0RVQ4RUZTUWpnc0dzamhWeGJIRzdGWmkvc1ZyL2FxUmhvenZ6dkkKWVREb1J0WmUxU1A5WHpsckdreU40SE10ZXhYTE03RmZ1d1c1S3BWaTd1eVRlR2QvME9ZQW9aYUhibE5KWnJDQgpnWFJmSUl5eE5zQVRudFBNdEx5SWZPbDB5L0NubHd2dWg0bStMTlFrWldRUjBDbjVRTXJXYkd4TTJjYUR0VVJUCnBUL3FLeThCVWxoREVCT2lhRWZMTEdUbFlWLzR1L1d1bjF1ZnVDZHRUZWxCYkk0OVZsVWZRZ3UyQUlTd2VOQWUKVGxsZ013R051eUlKb0RzRjVQc0NQTS9paHQwMmQ4dnp5b3JSMVE9PQotLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0tCg=="
+---
+# Source: kubegems/charts/argo-cd/templates/argocd-cm.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  # Mandatory hardcoded name.
+  # Ref: https://github.com/argoproj/argo-cd/blob/master/docs/operator-manual/argocd-cm.yaml
+  name: argocd-cm
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: argo-cd
+    helm.sh/chart: argo-cd-3.3.5
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "2.3.4"
+    # Mandatory label
+    # Ref: https://argoproj.github.io/argo-cd/operator-manual/declarative-setup/#atomic-configuration
+    app.kubernetes.io/part-of: argocd
+data:
+  application.instanceLabelKey: argocd.argoproj.io/instance
+  dex.config: ""
+  url: ''
+  users.session.duration: "0"
+---
+# Source: kubegems/charts/argo-cd/templates/known-hosts-cm.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  # Mandatory hardcoded name.
+  # Ref: https://argoproj.github.io/argo-cd/operator-manual/declarative-setup/#ssh-known-host-public-keys
+  name: argocd-ssh-known-hosts-cm
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: argo-cd
+    helm.sh/chart: argo-cd-3.3.5
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "2.3.4"
+    # Mandatory label
+    # Ref: https://argoproj.github.io/argo-cd/operator-manual/declarative-setup/#atomic-configuration
+    app.kubernetes.io/part-of: argocd
+data:
+  ssh_known_hosts: |
+    bitbucket.org ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEAubiN81eDcafrgMeLzaFPsw2kNvEcqTKl/VqLat/MaB33pZy0y3rJZtnqwR2qOOvbwKZYKiEO1O6VqNEBxKvJJelCq0dTXWT5pbO2gDXC6h6QDXCaHo6pOHGPUy+YBaGQRGuSusMEASYiWunYN0vCAI8QaXnWMXNMdFP3jHAJH0eDsoiGnLPBlBp4TNm6rYI74nMzgz3B9IikW4WVK+dc8KZJZWYjAuORU3jc1c/NPskD2ASinf8v3xnfXeukU0sJ5N6m5E8VLjObPEO+mN2t/FZTMZLiFqPWc/ALSqnMnnhwrNi2rbfg/rd/IpL8Le3pSBne8+seeFVBoGqzHM9yXw==
+    github.com ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEAq2A7hRGmdnm9tUDbO9IDSwBK6TbQa+PXYPCPy6rbTrTtw7PHkccKrpp0yVhp5HdEIcKr6pLlVDBfOLX9QUsyCOV0wzfjIJNlGEYsdlLJizHhbn2mUjvSAHQqZETYP81eFzLQNnPHt4EVVUh7VfDESU84KezmD5QlWpXLmvU31/yMf+Se8xhHTvKSCZIFImWwoG6mbUoWf9nzpIoaSjB+weqqUUmpaaasXVal72J+UX2B+2RPW3RcT0eOzQgqlJL3RKrTJvdsjE3JEAvGq3lGHSZXy28G3skua2SmVi/w4yCE6gbODqnTWlg7+wC604ydGXA8VJiS5ap43JXiUFFAaQ==
+    gitlab.com ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBFSMqzJeV9rUzU4kWitGjeR4PWSa29SPqJ1fVkhtj3Hw9xjLVXVYrU9QlYWrOLXBpQ6KWjbjTDTdDkoohFzgbEY=
+    gitlab.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAfuCHKVTjquxvt6CM6tdG4SLp1Btn/nOeHHE5UOzRdf
+    gitlab.com ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCsj2bNKTBSpIYDEGk9KxsGh3mySTRgMtXL583qmBpzeQ+jqCMRgBqB98u3z++J1sKlXHWfM9dyhSevkMwSbhoR8XIq/U0tCNyokEi/ueaBMCvbcTHhO7FcwzY92WK4Yt0aGROY5qX2UKSeOvuP4D6TPqKF1onrSzH9bx9XUf2lEdWT/ia1NEKjunUqu1xOB/StKDHMoX4/OKyIzuS0q/T1zOATthvasJFoPrAjkohTyaDUz2LN5JoH839hViyEG82yB+MjcFV5MU3N1l1QL3cVUCh93xSaua1N85qivl+siMkPGbO5xR/En4iEY6K2XPASUEMaieWVNTRCtJ4S8H+9
+    ssh.dev.azure.com ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC7Hr1oTWqNqOlzGJOfGJ4NakVyIzf1rXYd4d7wo6jBlkLvCA4odBlL0mDUyZ0/QUfTTqeu+tm22gOsv+VrVTMk6vwRU75gY/y9ut5Mb3bR5BV58dKXyq9A9UeB5Cakehn5Zgm6x1mKoVyf+FFn26iYqXJRgzIZZcZ5V6hrE0Qg39kZm4az48o0AUbf6Sp4SLdvnuMa2sVNwHBboS7EJkm57XQPVU3/QpyNLHbWDdzwtrlS+ez30S3AdYhLKEOxAG8weOnyrtLJAUen9mTkol8oII1edf7mWWbWVf0nBmly21+nZcmCTISQBtdcyPaEno7fFQMDD26/s0lfKob4Kw8H
+    vs-ssh.visualstudio.com ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC7Hr1oTWqNqOlzGJOfGJ4NakVyIzf1rXYd4d7wo6jBlkLvCA4odBlL0mDUyZ0/QUfTTqeu+tm22gOsv+VrVTMk6vwRU75gY/y9ut5Mb3bR5BV58dKXyq9A9UeB5Cakehn5Zgm6x1mKoVyf+FFn26iYqXJRgzIZZcZ5V6hrE0Qg39kZm4az48o0AUbf6Sp4SLdvnuMa2sVNwHBboS7EJkm57XQPVU3/QpyNLHbWDdzwtrlS+ez30S3AdYhLKEOxAG8weOnyrtLJAUen9mTkol8oII1edf7mWWbWVf0nBmly21+nZcmCTISQBtdcyPaEno7fFQMDD26/s0lfKob4Kw8H
+---
+# Source: kubegems/charts/mysql/templates/primary/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-kubegems-mysql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: mysql
+    helm.sh/chart: mysql-9.7.2
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "8.0.33"
+    app.kubernetes.io/component: primary
+data:
+  my.cnf: |-
+    [mysqld]
+    default_authentication_plugin=mysql_native_password
+    skip-name-resolve
+    explicit_defaults_for_timestamp
+    basedir=/opt/bitnami/mysql
+    plugin_dir=/opt/bitnami/mysql/lib/plugin
+    port=3306
+    socket=/opt/bitnami/mysql/tmp/mysql.sock
+    datadir=/bitnami/mysql/data
+    tmpdir=/opt/bitnami/mysql/tmp
+    max_allowed_packet=16M
+    bind-address=*
+    pid-file=/opt/bitnami/mysql/tmp/mysqld.pid
+    log-error=/opt/bitnami/mysql/logs/mysqld.log
+    character-set-server=UTF8
+    collation-server=utf8_general_ci
+    slow_query_log=0
+    slow_query_log_file=/opt/bitnami/mysql/logs/mysqld.log
+    long_query_time=10.0
+    
+    [client]
+    port=3306
+    socket=/opt/bitnami/mysql/tmp/mysql.sock
+    default-character-set=UTF8
+    plugin_dir=/opt/bitnami/mysql/lib/plugin
+    
+    [manager]
+    port=3306
+    socket=/opt/bitnami/mysql/tmp/mysql.sock
+    pid-file=/opt/bitnami/mysql/tmp/mysqld.pid
+---
+# Source: kubegems/charts/redis/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-kubegems-redis-configuration
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/version: 7.2.5
+    helm.sh/chart: redis-19.6.2
+data:
+  redis.conf: |-
+    # User-supplied common configuration:
+    # Enable AOF https://redis.io/topics/persistence#append-only-file
+    appendonly yes
+    # Disable RDB persistence, AOF persistence already enabled.
+    save ""
+    # End of common configuration
+  master.conf: |-
+    dir /data
+    # User-supplied master configuration:
+    rename-command FLUSHDB ""
+    rename-command FLUSHALL ""
+    # End of master configuration
+  replica.conf: |-
+    dir /data
+    # User-supplied replica configuration:
+    rename-command FLUSHDB ""
+    rename-command FLUSHALL ""
+    # End of replica configuration
+---
+# Source: kubegems/charts/redis/templates/health-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-kubegems-redis-health
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/version: 7.2.5
+    helm.sh/chart: redis-19.6.2
+data:
+  ping_readiness_local.sh: |-
+    #!/bin/bash
+
+    [[ -f $REDIS_PASSWORD_FILE ]] && export REDIS_PASSWORD="$(< "${REDIS_PASSWORD_FILE}")"
+    [[ -n "$REDIS_PASSWORD" ]] && export REDISCLI_AUTH="$REDIS_PASSWORD"
+    response=$(
+      timeout -s 15 $1 \
+      redis-cli \
+        -h localhost \
+        -p $REDIS_PORT \
+        ping
+    )
+    if [ "$?" -eq "124" ]; then
+      echo "Timed out"
+      exit 1
+    fi
+    if [ "$response" != "PONG" ]; then
+      echo "$response"
+      exit 1
+    fi
+  ping_liveness_local.sh: |-
+    #!/bin/bash
+
+    [[ -f $REDIS_PASSWORD_FILE ]] && export REDIS_PASSWORD="$(< "${REDIS_PASSWORD_FILE}")"
+    [[ -n "$REDIS_PASSWORD" ]] && export REDISCLI_AUTH="$REDIS_PASSWORD"
+    response=$(
+      timeout -s 15 $1 \
+      redis-cli \
+        -h localhost \
+        -p $REDIS_PORT \
+        ping
+    )
+    if [ "$?" -eq "124" ]; then
+      echo "Timed out"
+      exit 1
+    fi
+    responseFirstWord=$(echo $response | head -n1 | awk '{print $1;}')
+    if [ "$response" != "PONG" ] && [ "$responseFirstWord" != "LOADING" ] && [ "$responseFirstWord" != "MASTERDOWN" ]; then
+      echo "$response"
+      exit 1
+    fi
+  ping_readiness_master.sh: |-
+    #!/bin/bash
+
+    [[ -f $REDIS_MASTER_PASSWORD_FILE ]] && export REDIS_MASTER_PASSWORD="$(< "${REDIS_MASTER_PASSWORD_FILE}")"
+    [[ -n "$REDIS_MASTER_PASSWORD" ]] && export REDISCLI_AUTH="$REDIS_MASTER_PASSWORD"
+    response=$(
+      timeout -s 15 $1 \
+      redis-cli \
+        -h $REDIS_MASTER_HOST \
+        -p $REDIS_MASTER_PORT_NUMBER \
+        ping
+    )
+    if [ "$?" -eq "124" ]; then
+      echo "Timed out"
+      exit 1
+    fi
+    if [ "$response" != "PONG" ]; then
+      echo "$response"
+      exit 1
+    fi
+  ping_liveness_master.sh: |-
+    #!/bin/bash
+
+    [[ -f $REDIS_MASTER_PASSWORD_FILE ]] && export REDIS_MASTER_PASSWORD="$(< "${REDIS_MASTER_PASSWORD_FILE}")"
+    [[ -n "$REDIS_MASTER_PASSWORD" ]] && export REDISCLI_AUTH="$REDIS_MASTER_PASSWORD"
+    response=$(
+      timeout -s 15 $1 \
+      redis-cli \
+        -h $REDIS_MASTER_HOST \
+        -p $REDIS_MASTER_PORT_NUMBER \
+        ping
+    )
+    if [ "$?" -eq "124" ]; then
+      echo "Timed out"
+      exit 1
+    fi
+    responseFirstWord=$(echo $response | head -n1 | awk '{print $1;}')
+    if [ "$response" != "PONG" ] && [ "$responseFirstWord" != "LOADING" ]; then
+      echo "$response"
+      exit 1
+    fi
+  ping_readiness_local_and_master.sh: |-
+    script_dir="$(dirname "$0")"
+    exit_status=0
+    "$script_dir/ping_readiness_local.sh" $1 || exit_status=$?
+    "$script_dir/ping_readiness_master.sh" $1 || exit_status=$?
+    exit $exit_status
+  ping_liveness_local_and_master.sh: |-
+    script_dir="$(dirname "$0")"
+    exit_status=0
+    "$script_dir/ping_liveness_local.sh" $1 || exit_status=$?
+    "$script_dir/ping_liveness_master.sh" $1 || exit_status=$?
+    exit $exit_status
+---
+# Source: kubegems/charts/redis/templates/scripts-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-kubegems-redis-scripts
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/version: 7.2.5
+    helm.sh/chart: redis-19.6.2
+data:
+  start-master.sh: |
+    #!/bin/bash
+
+    [[ -f $REDIS_PASSWORD_FILE ]] && export REDIS_PASSWORD="$(< "${REDIS_PASSWORD_FILE}")"
+    if [[ -f /opt/bitnami/redis/mounted-etc/master.conf ]];then
+        cp /opt/bitnami/redis/mounted-etc/master.conf /opt/bitnami/redis/etc/master.conf
+    fi
+    if [[ -f /opt/bitnami/redis/mounted-etc/redis.conf ]];then
+        cp /opt/bitnami/redis/mounted-etc/redis.conf /opt/bitnami/redis/etc/redis.conf
+    fi
+    ARGS=("--port" "${REDIS_PORT}")
+    ARGS+=("--requirepass" "${REDIS_PASSWORD}")
+    ARGS+=("--masterauth" "${REDIS_PASSWORD}")
+    ARGS+=("--include" "/opt/bitnami/redis/etc/redis.conf")
+    ARGS+=("--include" "/opt/bitnami/redis/etc/master.conf")
+    exec redis-server "${ARGS[@]}"
+---
+# Source: kubegems/charts/chartmuseum/templates/pvc.yaml
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: my-kubegems-chartmuseum
+  labels:
+    app.kubernetes.io/name: chartmuseum
+    app.kubernetes.io/instance: my-kubegems
+spec:
+  accessModes:
+    - "ReadWriteOnce"
+  resources:
+    requests:
+      storage: "10Gi"
+---
+# Source: kubegems/templates/pvc-data.yaml
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: my-kubegems-data
+  namespace: default
+  labels:
+    app.kubernetes.io/name: kubegems
+    helm.sh/chart: kubegems-1.24.6
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "1.24.6"
+spec:
+  accessModes:
+    - "ReadWriteOnce"
+  resources:
+    requests:
+      storage: "6Gi"
+---
+# Source: kubegems/charts/argo-cd/templates/application-controller/clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-kubegems-argo-cd-app-controller
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: argo-cd
+    helm.sh/chart: argo-cd-3.3.5
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "2.3.4"
+rules:
+  - apiGroups:
+      - '*'
+    resources:
+      - '*'
+    verbs:
+      - '*'
+  - nonResourceURLs:
+      - '*'
+    verbs:
+      - '*'
+---
+# Source: kubegems/charts/argo-cd/templates/server/clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-kubegems-argo-cd-server
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: argo-cd
+    helm.sh/chart: argo-cd-3.3.5
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "2.3.4"
+rules:
+  - apiGroups:
+      - '*'
+    resources:
+      - '*'
+    verbs:
+      - delete
+      - get
+      - patch
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - list
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+      - pods/log
+    verbs:
+      - get
+---
+# Source: kubegems/templates/kuebgems-crd-view.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  annotations:
+    bundle.kubegems.io/ignore-options: OnUpdate
+  labels:
+    app: kubegems-crd-view
+    rbac.authorization.k8s.io/aggregate-to-view: "true"
+  name: kubegems-crd-view
+rules:
+- apiGroups:
+  - argoproj.io
+  resources:
+  - analysisruns
+  - analysistemplates
+  - applications
+  - applicationsets
+  - appprojects
+  - clusteranalysistemplates
+  - experiments
+  verbs:
+  - get
+  - list
+  - watch
+---
+# Source: kubegems/charts/argo-cd/templates/application-controller/clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-kubegems-argo-cd-app-controller
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: argo-cd
+    helm.sh/chart: argo-cd-3.3.5
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "2.3.4"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-kubegems-argo-cd-app-controller
+subjects:
+  - kind: ServiceAccount
+    name: my-kubegems-argo-cd-argocd-app-controller
+    namespace: default
+---
+# Source: kubegems/charts/argo-cd/templates/server/clusterrolebinding.yaml
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-kubegems-argo-cd-server
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: argo-cd
+    helm.sh/chart: argo-cd-3.3.5
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "2.3.4"
+    app.kubernetes.io/component: server
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-kubegems-argo-cd-server
+subjects:
+  - kind: ServiceAccount
+    name: my-kubegems-argo-cd-argocd-server
+    namespace: default
+---
+# Source: kubegems/charts/argo-cd/templates/application-controller/role.yaml
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-kubegems-argo-cd-app-controller
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: argo-cd
+    helm.sh/chart: argo-cd-3.3.5
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "2.3.4"
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+      - configmaps
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - argoproj.io
+    resources:
+      - applications
+      - appprojects
+    verbs:
+      - create
+      - get
+      - list
+      - watch
+      - update
+      - patch
+      - delete
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - create
+      - list
+---
+# Source: kubegems/charts/argo-cd/templates/repo-server/role.yaml
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-kubegems-argo-cd-repo-server
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: argo-cd
+    helm.sh/chart: argo-cd-3.3.5
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "2.3.4"
+rules:
+  - apiGroups:
+      - argoproj.io
+    resources:
+      - applications
+    verbs:
+      - get
+      - list
+      - watch
+---
+# Source: kubegems/charts/argo-cd/templates/server/role.yaml
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-kubegems-argo-cd-server
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: argo-cd
+    helm.sh/chart: argo-cd-3.3.5
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "2.3.4"
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+      - configmaps
+    verbs:
+      - create
+      - get
+      - list
+      - watch
+      - update
+      - patch
+      - delete
+  - apiGroups:
+      - argoproj.io
+    resources:
+      - applications
+      - appprojects
+    verbs:
+      - create
+      - get
+      - list
+      - watch
+      - update
+      - delete
+      - patch
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - create
+      - list
+---
+# Source: kubegems/charts/argo-cd/templates/application-controller/rolebinding.yaml
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-kubegems-argo-cd-app-controller
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: argo-cd
+    helm.sh/chart: argo-cd-3.3.5
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "2.3.4"
+subjects:
+  - kind: ServiceAccount
+    name: my-kubegems-argo-cd-argocd-app-controller
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: my-kubegems-argo-cd-app-controller
+---
+# Source: kubegems/charts/argo-cd/templates/repo-server/rolebinding.yaml
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-kubegems-argo-cd-repo-server
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: argo-cd
+    helm.sh/chart: argo-cd-3.3.5
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "2.3.4"
+subjects:
+  - kind: ServiceAccount
+    name: my-kubegems-argo-cd-argocd-repo-server
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: my-kubegems-argo-cd-repo-server
+---
+# Source: kubegems/charts/argo-cd/templates/server/rolebinding.yaml
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-kubegems-argo-cd-server
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: argo-cd
+    helm.sh/chart: argo-cd-3.3.5
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "2.3.4"
+subjects:
+  - kind: ServiceAccount
+    name: my-kubegems-argo-cd-argocd-server
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: my-kubegems-argo-cd-server
+---
+# Source: kubegems/charts/argo-cd/templates/application-controller/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-kubegems-argo-cd-app-controller
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: argo-cd
+    helm.sh/chart: argo-cd-3.3.5
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "2.3.4"
+    app.kubernetes.io/component: controller
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+    - name: tcp-controller
+      port: 8082
+      targetPort: controller
+      protocol: TCP
+      nodePort: null
+  selector:
+    app.kubernetes.io/name: argo-cd
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/component: controller
+---
+# Source: kubegems/charts/argo-cd/templates/repo-server/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-kubegems-argo-cd-repo-server
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: argo-cd
+    helm.sh/chart: argo-cd-3.3.5
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "2.3.4"
+    app.kubernetes.io/component: repo-server
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+    - name: tcp-repo-server
+      port: 8081
+      targetPort: repo-server
+      protocol: TCP
+      nodePort: null
+  selector:
+    app.kubernetes.io/name: argo-cd
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/component: repo-server
+---
+# Source: kubegems/charts/argo-cd/templates/server/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-kubegems-argo-cd-server
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: argo-cd
+    helm.sh/chart: argo-cd-3.3.5
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "2.3.4"
+    app.kubernetes.io/component: server
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
+      nodePort: null
+    - name: https
+      port: 443
+      # NOTE: Argo CD uses only one port (8080) configured with https and always redirects http request to it, so the target port is the same than for http
+      targetPort: http
+      protocol: TCP
+      nodePort: null
+  selector:
+    app.kubernetes.io/name: argo-cd
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/component: server
+---
+# Source: kubegems/charts/chartmuseum/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-kubegems-chartmuseum
+  labels:
+    helm.sh/chart: chartmuseum-3.8.0
+    app.kubernetes.io/name: chartmuseum
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/version: "0.14.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8080
+    targetPort: http
+    protocol: TCP
+    name: http
+  selector:
+    app.kubernetes.io/name: chartmuseum
+    app.kubernetes.io/instance: my-kubegems
+---
+# Source: kubegems/charts/gitea/templates/gitea/http-svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-kubegems-gitea-http
+  labels:
+    helm.sh/chart: gitea-5.0.8
+    app: gitea
+    app.kubernetes.io/name: gitea
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/version: "1.16.8"
+    version: "1.16.8"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    null
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+  - name: http
+    port: 3000
+    targetPort: 3000
+  selector:
+    app.kubernetes.io/name: gitea
+    app.kubernetes.io/instance: my-kubegems
+---
+# Source: kubegems/charts/gitea/templates/gitea/ssh-svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-kubegems-gitea-ssh
+  labels:
+    helm.sh/chart: gitea-5.0.8
+    app: gitea
+    app.kubernetes.io/name: gitea
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/version: "1.16.8"
+    version: "1.16.8"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    null
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+  - name: ssh
+    port: 22
+    targetPort: 22
+    protocol: TCP
+  selector:
+    app.kubernetes.io/name: gitea
+    app.kubernetes.io/instance: my-kubegems
+---
+# Source: kubegems/charts/mysql/templates/primary/svc-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-kubegems-mysql-headless
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: mysql
+    helm.sh/chart: mysql-9.7.2
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "8.0.33"
+    app.kubernetes.io/component: primary
+spec:
+  type: ClusterIP
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+    - name: mysql
+      port: 3306
+      targetPort: mysql
+  selector: 
+    app.kubernetes.io/name: mysql
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/component: primary
+---
+# Source: kubegems/charts/mysql/templates/primary/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-kubegems-mysql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: mysql
+    helm.sh/chart: mysql-9.7.2
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "8.0.33"
+    app.kubernetes.io/component: primary
+  annotations:
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+    - name: mysql
+      port: 3306
+      protocol: TCP
+      targetPort: mysql
+      nodePort: null
+  selector: 
+    app.kubernetes.io/name: mysql
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/component: primary
+---
+# Source: kubegems/charts/redis/templates/headless-svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-kubegems-redis-headless
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/version: 7.2.5
+    helm.sh/chart: redis-19.6.2
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: tcp-redis
+      port: 6379
+      targetPort: redis
+  selector:
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/name: redis
+---
+# Source: kubegems/charts/redis/templates/master/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-kubegems-redis-master
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/version: 7.2.5
+    helm.sh/chart: redis-19.6.2
+    app.kubernetes.io/component: master
+spec:
+  type: ClusterIP
+  internalTrafficPolicy: Cluster
+  sessionAffinity: None
+  ports:
+    - name: tcp-redis
+      port: 6379
+      targetPort: redis
+      nodePort: null
+  selector:
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/component: master
+---
+# Source: kubegems/templates/api/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-kubegems-api
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: kubegems
+    helm.sh/chart: kubegems-1.24.6
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "1.24.6"
+    app.kubernetes.io/component: api
+  annotations:
+    prometheus.io/port: '9100'
+    prometheus.io/scrape: "true"
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      protocol: TCP
+      targetPort: http
+    - name: metrics
+      port: 9100
+      targetPort: metrics
+      protocol: TCP
+      nodePort: null
+  selector:
+    app.kubernetes.io/name: kubegems
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/component: api
+---
+# Source: kubegems/templates/dashboard/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-kubegems-dashboard
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: kubegems
+    helm.sh/chart: kubegems-1.24.6
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "1.24.6"
+    app.kubernetes.io/component: dashboard
+  annotations:
+    prometheus.io/port: '9100'
+    prometheus.io/scrape: "true"
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      protocol: TCP
+      targetPort: http
+    - name: metrics
+      port: 9100
+      targetPort: metrics
+      protocol: TCP
+      nodePort: null
+  selector:
+    app.kubernetes.io/name: kubegems
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/component: dashboard
+---
+# Source: kubegems/templates/msgbus/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-kubegems-msgbus
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: kubegems
+    helm.sh/chart: kubegems-1.24.6
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "1.24.6"
+    app.kubernetes.io/component: msgbus
+  annotations:
+    prometheus.io/port: '9100'
+    prometheus.io/scrape: "true"
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      protocol: TCP
+      targetPort: http
+    - name: metrics
+      port: 9100
+      targetPort: metrics
+      protocol: TCP
+      nodePort: null
+  selector:
+    app.kubernetes.io/name: kubegems
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/component: msgbus
+---
+# Source: kubegems/templates/worker/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-kubegems-worker
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: kubegems
+    helm.sh/chart: kubegems-1.24.6
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "1.24.6"
+    app.kubernetes.io/component: worker
+  annotations:
+    prometheus.io/port: '9100'
+    prometheus.io/scrape: "true"
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      protocol: TCP
+      targetPort: http
+    - name: metrics
+      port: 9100
+      targetPort: metrics
+      protocol: TCP
+      nodePort: null
+  selector:
+    app.kubernetes.io/name: kubegems
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/component: worker
+---
+# Source: kubegems/charts/argo-cd/templates/application-controller/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-kubegems-argo-cd-app-controller
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: argo-cd
+    helm.sh/chart: argo-cd-3.3.5
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "2.3.4"
+    app.kubernetes.io/component: controller
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: argo-cd
+      app.kubernetes.io/instance: my-kubegems
+      app.kubernetes.io/component: controller
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: argo-cd
+        helm.sh/chart: argo-cd-3.3.5
+        app.kubernetes.io/instance: my-kubegems
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/version: "2.3.4"
+        app.kubernetes.io/component: controller
+    spec:
+      serviceAccountName: my-kubegems-argo-cd-argocd-app-controller
+      
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/instance: my-kubegems
+                    app.kubernetes.io/name: argo-cd
+                    app.kubernetes.io/component: controller
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+      initContainers:
+        - name: wait-for-redis
+          image: docker.io/kubegems/redis:6.2.7-debian-10-r21
+          imagePullPolicy: "IfNotPresent"
+          command:
+            - /bin/bash
+          args:
+            - -ec
+            - |
+                #!/bin/bash
+
+                set -o errexit
+                set -o nounset
+                set -o pipefail
+
+                . /opt/bitnami/scripts/libos.sh
+                . /opt/bitnami/scripts/liblog.sh
+
+                check_redis_connection() {
+                  local result="$(redis-cli -h kubegems-redis-headless -p 6379 PING)"
+                  if [[ "$result" != "PONG" ]]; then
+                    false
+                  fi
+                }
+
+                info "Checking redis connection..."
+                if ! retry_while "check_redis_connection"; then
+                    error "Could not connect to the Redis server"
+                    return 1
+                else
+                    info "Connected to the Redis instance"
+                fi
+          env:
+            - name: REDISCLI_AUTH
+              valueFrom:
+                secretKeyRef:
+                  name: kubegems-redis
+                  key: redis-password
+      containers:
+        - name: controller
+          image: docker.io/kubegems/argo-cd:2.3.4-debian-10-r2
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - all
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 1001
+          args:
+            - argocd-application-controller
+            - --status-processors
+            - "20"
+            - --operation-processors
+            - "10"
+            - --app-resync
+            - "180"
+            - --self-heal-timeout-seconds
+            - "5"
+            - --repo-server
+            - my-kubegems-argo-cd-repo-server:8081
+            - --logformat
+            - text
+            - --loglevel
+            - info
+            # TODO(miguelaeh): Test the chart using redis sentinel enabled: https://github.com/argoproj/argo-cd/blob/2a410187565e15633b6f2a8c8d8da22cf02b257d/util/cache/cache.go#L40
+            - --redis
+            - kubegems-redis-headless:6379
+            - --redisdb
+            - "1"
+          ports:
+            - name: controller
+              containerPort: 8082
+              protocol: TCP
+            - name: metrics
+              containerPort: 8082
+              protocol: TCP
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: 'redis-password'
+                  name: 'kubegems-redis'
+          envFrom:
+          resources:
+            limits: {}
+            requests: {}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8082
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 1
+            successThreshold: 1
+            failureThreshold: 3
+          readinessProbe:
+            tcpSocket:
+              port: 8082
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 1
+            successThreshold: 1
+            failureThreshold: 3
+          volumeMounts:
+            # Mounting into a path that will be read by Argo CD.
+            # This secret will be autogenerated by Argo CD repo server unless it already exists. Users can create its own certificate to override it.
+            # Ref: https://argoproj.github.io/argo-cd/operator-manual/tls/#inbound-tls-certificates-used-by-argocd-repo-sever
+            - mountPath: /app/config/server/tls
+              name: argocd-repo-server-tls
+      volumes:
+        - name: argocd-repo-server-tls
+          secret:
+            items:
+              - key: tls.crt
+                path: tls.crt
+              - key: tls.key
+                path: tls.key
+              - key: ca.crt
+                path: ca.crt
+            optional: true
+            secretName: argocd-repo-server-tls
+---
+# Source: kubegems/charts/argo-cd/templates/repo-server/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-kubegems-argo-cd-repo-server
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: argo-cd
+    helm.sh/chart: argo-cd-3.3.5
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "2.3.4"
+    app.kubernetes.io/component: repo-server
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: argo-cd
+      app.kubernetes.io/instance: my-kubegems
+      app.kubernetes.io/component: repo-server
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: argo-cd
+        helm.sh/chart: argo-cd-3.3.5
+        app.kubernetes.io/instance: my-kubegems
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/version: "2.3.4"
+        app.kubernetes.io/component: repo-server
+    spec:
+      serviceAccountName: my-kubegems-argo-cd-argocd-repo-server
+      
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/instance: my-kubegems
+                    app.kubernetes.io/name: argo-cd
+                    app.kubernetes.io/component: repo-server
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+      initContainers:
+        - name: wait-for-redis
+          image: docker.io/kubegems/redis:6.2.7-debian-10-r21
+          imagePullPolicy: "IfNotPresent"
+          command:
+            - /bin/bash
+          args:
+            - -ec
+            - |
+                #!/bin/bash
+
+                set -o errexit
+                set -o nounset
+                set -o pipefail
+
+                . /opt/bitnami/scripts/libos.sh
+                . /opt/bitnami/scripts/liblog.sh
+
+                check_redis_connection() {
+                  local result="$(redis-cli -h kubegems-redis-headless -p 6379 PING)"
+                  if [[ "$result" != "PONG" ]]; then
+                    false
+                  fi
+                }
+
+                info "Checking redis connection..."
+                if ! retry_while "check_redis_connection"; then
+                    error "Could not connect to the Redis server"
+                    return 1
+                else
+                    info "Connected to the Redis instance"
+                fi
+          env:
+            - name: REDISCLI_AUTH
+              valueFrom:
+                secretKeyRef:
+                  name: kubegems-redis
+                  key: redis-password
+      containers:
+        - name: argocd-repo-server
+          image: docker.io/kubegems/argo-cd:2.3.4-debian-10-r2
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - all
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 1001
+          args:
+            - argocd-repo-server
+            - --logformat
+            - text
+            - --loglevel
+            - info
+            - --redis
+            - kubegems-redis-headless:6379
+            - --redisdb
+            - "1"
+          ports:
+            - name: repo-server
+              containerPort: 8081
+              protocol: TCP
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: 'redis-password'
+                  name: 'kubegems-redis'
+          envFrom:
+          resources:
+            limits: {}
+            requests: {}
+          livenessProbe:
+            tcpSocket:
+              port: 8081
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 1
+            successThreshold: 1
+            failureThreshold: 3
+          readinessProbe:
+            tcpSocket:
+              port: 8081
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 1
+            successThreshold: 1
+            failureThreshold: 3
+          volumeMounts:
+            # Mounting into a path that will be read by Argo CD
+            # Ref: https://argoproj.github.io/argo-cd/operator-manual/declarative-setup/#ssh-known-host-public-keys
+            - name: ssh-known-hosts
+              mountPath: /app/config/ssh
+            # Mounting into a path that will be read by Argo CD.
+            # This secret will be autogenerated by Argo CD repo server unless it already exists. Users can create its own certificate to override it.
+            # Ref: https://argoproj.github.io/argo-cd/operator-manual/tls/#inbound-tls-certificates-used-by-argocd-repo-sever
+            - mountPath: /app/config/server/tls
+              name: argocd-repo-server-tls
+            - mountPath: /app/config/gpg/keys
+              name: gpg-keyring
+            - mountPath: /tmp
+              name: tmp-dir
+      volumes:
+        - name: ssh-known-hosts
+          configMap:
+            name: argocd-ssh-known-hosts-cm
+        - name: argocd-repo-server-tls
+          secret:
+            items:
+              - key: tls.crt
+                path: tls.crt
+              - key: tls.key
+                path: tls.key
+              - key: ca.crt
+                path: ca.crt
+            optional: true
+            secretName: argocd-repo-server-tls
+        - emptyDir: {}
+          name: tmp-dir
+        - emptyDir: {}
+          name: gpg-keyring
+---
+# Source: kubegems/charts/argo-cd/templates/server/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-kubegems-argo-cd-server
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: argo-cd
+    helm.sh/chart: argo-cd-3.3.5
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "2.3.4"
+    app.kubernetes.io/component: server
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: argo-cd
+      app.kubernetes.io/instance: my-kubegems
+      app.kubernetes.io/component: server
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: argo-cd
+        helm.sh/chart: argo-cd-3.3.5
+        app.kubernetes.io/instance: my-kubegems
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/version: "2.3.4"
+        app.kubernetes.io/component: server
+    spec:
+      serviceAccountName: my-kubegems-argo-cd-argocd-server
+      
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/instance: my-kubegems
+                    app.kubernetes.io/name: argo-cd
+                    app.kubernetes.io/component: server
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+      initContainers:
+        - name: wait-for-redis
+          image: docker.io/kubegems/redis:6.2.7-debian-10-r21
+          imagePullPolicy: "IfNotPresent"
+          command:
+            - /bin/bash
+          args:
+            - -ec
+            - |
+                #!/bin/bash
+
+                set -o errexit
+                set -o nounset
+                set -o pipefail
+
+                . /opt/bitnami/scripts/libos.sh
+                . /opt/bitnami/scripts/liblog.sh
+
+                check_redis_connection() {
+                  local result="$(redis-cli -h kubegems-redis-headless -p 6379 PING)"
+                  if [[ "$result" != "PONG" ]]; then
+                    false
+                  fi
+                }
+
+                info "Checking redis connection..."
+                if ! retry_while "check_redis_connection"; then
+                    error "Could not connect to the Redis server"
+                    return 1
+                else
+                    info "Connected to the Redis instance"
+                fi
+          env:
+            - name: REDISCLI_AUTH
+              valueFrom:
+                secretKeyRef:
+                  name: kubegems-redis
+                  key: redis-password
+      containers:
+        - name: argocd-server
+          image: docker.io/kubegems/argo-cd:2.3.4-debian-10-r2
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - all
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 1001
+          args:
+            - argocd-server
+            - --staticassets
+            - /opt/bitnami/argo-cd/app
+            - --repo-server
+            - my-kubegems-argo-cd-repo-server:8081
+            - --logformat
+            - text
+            - --loglevel
+            - info
+            # TODO(miguelaeh): Test the chart using redis sentinel enabled: https://github.com/argoproj/argo-cd/blob/2a410187565e15633b6f2a8c8d8da22cf02b257d/util/cache/cache.go#L40
+            - --redis
+            - kubegems-redis-headless:6379
+            - --redisdb
+            - "1"
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: 'redis-password'
+                  name: 'kubegems-redis'
+          envFrom:
+          resources:
+            limits: {}
+            requests: {}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 1
+            successThreshold: 1
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 1
+            successThreshold: 1
+            failureThreshold: 3
+          volumeMounts:
+            # Mounting into a path that will be read by Argo CD
+            # Ref: https://argoproj.github.io/argo-cd/operator-manual/declarative-setup/#ssh-known-host-public-keys
+            - name: ssh-known-hosts
+              mountPath: /app/config/ssh
+            # Mounting into a path that will be read by Argo CD.
+            # This secret will be autogenerated by Argo CD repo server unless it already exists. Users can create its own certificate to override it.
+            # Ref: https://argoproj.github.io/argo-cd/operator-manual/tls/#inbound-tls-certificates-used-by-argocd-repo-sever
+            - mountPath: /app/config/server/tls
+              name: argocd-repo-server-tls
+      volumes:
+        - name: ssh-known-hosts
+          configMap:
+            name: argocd-ssh-known-hosts-cm
+        - name: argocd-repo-server-tls
+          secret:
+            items:
+              - key: tls.crt
+                path: tls.crt
+              - key: tls.key
+                path: tls.key
+              - key: ca.crt
+                path: ca.crt
+            optional: true
+            secretName: argocd-repo-server-tls
+---
+# Source: kubegems/charts/chartmuseum/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-kubegems-chartmuseum
+  labels:
+    helm.sh/chart: chartmuseum-3.8.0
+    app.kubernetes.io/name: chartmuseum
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/version: "0.14.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: chartmuseum
+      app.kubernetes.io/instance: my-kubegems
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  revisionHistoryLimit: 10
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: chartmuseum
+        app.kubernetes.io/instance: my-kubegems
+    spec:
+      securityContext:
+        fsGroup: 1000      
+      containers:
+      - name: chartmuseum
+        image: kubegems/chartmuseum:v0.14.0
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          {}
+        env:
+        - name: "ALLOW_OVERWRITE"
+          value: "true"
+        - name: "CHART_POST_FORM_FIELD_NAME"
+          value: "chart"
+        - name: "DEPTH"
+          value: "1"
+        - name: "DISABLE_METRICS"
+          value: "true"
+        - name: "LOG_JSON"
+          value: "true"
+        - name: "PROV_POST_FORM_FIELD_NAME"
+          value: "prov"
+        - name: "STORAGE"
+          value: "local"
+        args:
+        - --port=8080
+        - --storage-local-rootdir=/storage
+        ports:
+        - name: http
+          containerPort: 8080
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+            scheme: HTTP
+          failureThreshold: 3
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 1
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+            scheme: HTTP
+          failureThreshold: 3
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 1
+        volumeMounts:
+        - mountPath: /storage
+          name: storage-volume
+      serviceAccountName: default
+      automountServiceAccountToken: false
+      volumes:
+      - name: storage-volume
+        persistentVolumeClaim:
+          claimName: my-kubegems-chartmuseum
+---
+# Source: kubegems/templates/api/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-kubegems-api
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: kubegems
+    helm.sh/chart: kubegems-1.24.6
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "1.24.6"
+    app.kubernetes.io/component: api
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kubegems
+      app.kubernetes.io/instance: my-kubegems
+      app.kubernetes.io/component: api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kubegems
+        helm.sh/chart: kubegems-1.24.6
+        app.kubernetes.io/instance: my-kubegems
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/version: "1.24.6"
+        app.kubernetes.io/component: api
+    spec:
+      
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/instance: my-kubegems
+                    app.kubernetes.io/name: kubegems
+                    app.kubernetes.io/component: api
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      initContainers:
+      - name: init
+        image: docker.io/kubegems/kubegems:v1.24.6
+        imagePullPolicy: IfNotPresent
+        args:
+        - service
+        - migrate
+        - --migratemodels
+        - --initdata
+        env:  
+        - name: MYSQL_ADDR
+          value: "my-kubegems-mysql-headless:3306"
+        - name: MYSQL_DATABASE
+          value: kubegems
+        - name: MYSQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: my-kubegems-mysql
+              key: mysql-root-password
+        - name: REDIS_ADDR
+          value: "my-kubegems-redis-headless:6379"
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: my-kubegems-redis
+              key: redis-password
+        resources:
+          limits: {}
+          requests: {}
+      containers:
+        - name: api
+          image: docker.io/kubegems/kubegems:v1.24.6
+          imagePullPolicy: IfNotPresent
+          args:
+            - service
+            - --system-listen=:8080
+            - --jwt-cert=/certs/jwt/tls.crt
+            - --jwt-key=/certs/jwt/tls.key
+            # todo: metrics args here
+          env:            
+            - name: MICROSERVICE_GATEWAYNAMESPACE
+              value: "kubegems-gateway"
+            - name: MICROSERVICE_ISTIOOPERATORNAME
+              value: "kubegems-istio"
+            - name: JWT_ISSUERADDR
+              value: https://dashboard.kubegems.io/api
+            - name: MYSQL_ADDR
+              value: "my-kubegems-mysql-headless:3306"
+            - name: MYSQL_DATABASE
+              value: kubegems
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-kubegems-mysql
+                  key: mysql-root-password
+            - name: REDIS_ADDR
+              value: "my-kubegems-redis-headless:6379"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-kubegems-redis
+                  key: redis-password            
+            - name: APPSTORE_ADDR
+              value: http://my-kubegems-chartmuseum.default:8080
+            - name: ARGO_ADDR
+              value: http://my-kubegems-argo-cd-server:80
+            - name: ARGO_USERNAME
+              value: admin
+            - name: ARGO_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: argocd-secret
+                  key: clearPassword
+            
+            - name: GIT_ADDR
+              value: http://my-kubegems-gitea-http:3000
+            - name: GIT_USERNAME
+              value: gitea_admin
+            - name: GIT_PASSWORD
+              value: r8sA8CPHD9!bt6d            
+            - name: KUBEGEMS_DEBUG
+              value: "false"
+            - name: LOG_LEVEL
+              value: 
+            - name: OTEL_ENABLE
+              value: "true"
+            - name: OTEL_K8S_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: spec.nodeName
+            - name: OTEL_K8S_POD_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.name
+            - name: OTEL_SERVICE_NAME
+              value: kubegems-api
+            - name: OTEL_K8S_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.namespace
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: service.name=$(OTEL_SERVICE_NAME),namespace=$(OTEL_K8S_NAMESPACE),node=$(OTEL_K8S_NODE_NAME),pod=$(OTEL_K8S_POD_NAME)
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://opentelemetry-collector.observability:4318
+            - name: OTEL_EXPORTER_OTLP_INSECURE
+              value: "true"
+          envFrom:
+          resources:
+            limits:
+              cpu: "1"
+              memory: 1Gi
+            requests:
+              cpu: 500m
+              memory: 512Mi
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: metrics
+              containerPort: 9100
+              protocol: TCP
+          livenessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            successThreshold: 1
+            timeoutSeconds: 1
+            httpGet:
+              path: /healthz
+              port: http
+          readinessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            successThreshold: 1
+            timeoutSeconds: 1
+            httpGet:
+              path: /healthz
+              port: http
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+            - name: jwt-certs
+              mountPath: /certs/jwt
+              readOnly: true
+      volumes:
+        - name: jwt-certs
+          secret:
+            secretName: my-kubegems-api-jwt
+            defaultMode: 420
+        - name: data
+          persistentVolumeClaim:
+            claimName: my-kubegems-data
+---
+# Source: kubegems/templates/dashboard/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-kubegems-dashboard
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: kubegems
+    helm.sh/chart: kubegems-1.24.6
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "1.24.6"
+    app.kubernetes.io/component: dashboard
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kubegems
+      app.kubernetes.io/instance: my-kubegems
+      app.kubernetes.io/component: dashboard
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kubegems
+        helm.sh/chart: kubegems-1.24.6
+        app.kubernetes.io/instance: my-kubegems
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/version: "1.24.6"
+        app.kubernetes.io/component: dashboard
+    spec:
+      
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/instance: my-kubegems
+                    app.kubernetes.io/name: kubegems
+                    app.kubernetes.io/component: dashboard
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      containers:
+        - name: dashboard
+          image: docker.io/kubegems/dashboard:v1.24.6
+          imagePullPolicy: IfNotPresent
+          args:
+            # todo: metrics args here
+          env:
+          - name: API_SERVER
+            value: my-kubegems-api:80
+          - name: MESSAGE_SERVER
+            value: my-kubegems-msgbus:80
+          - name: PAI_SERVER
+            value: my-kubegems-api:80
+          envFrom:
+          resources:
+            limits:
+              cpu: "1"
+              memory: 1Gi
+            requests:
+              cpu: 500m
+              memory: 512Mi
+          ports:
+            - name: http
+              containerPort: 8000
+            - name: metrics
+              containerPort: 9100
+              protocol: TCP
+          livenessProbe:
+            failureThreshold: 6
+            periodSeconds: 20
+            successThreshold: 1
+            timeoutSeconds: 1
+            httpGet:
+              path: /healthz
+              port: http
+          readinessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            successThreshold: 1
+            timeoutSeconds: 1
+            httpGet:
+              path: /healthz
+              port: http
+          volumeMounts:
+      volumes:
+---
+# Source: kubegems/templates/msgbus/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-kubegems-msgbus
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: kubegems
+    helm.sh/chart: kubegems-1.24.6
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "1.24.6"
+    app.kubernetes.io/component: msgbus
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kubegems
+      app.kubernetes.io/instance: my-kubegems
+      app.kubernetes.io/component: msgbus
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kubegems
+        helm.sh/chart: kubegems-1.24.6
+        app.kubernetes.io/instance: my-kubegems
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/version: "1.24.6"
+        app.kubernetes.io/component: msgbus
+    spec:
+      
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/instance: my-kubegems
+                    app.kubernetes.io/name: kubegems
+                    app.kubernetes.io/component: msgbus
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      initContainers:
+      - name: init
+        image: docker.io/kubegems/kubegems:v1.24.6
+        imagePullPolicy: IfNotPresent
+        args:
+        - service
+        - migrate
+        - --migratemodels
+        - --initdata
+        env:  
+        - name: MYSQL_ADDR
+          value: "my-kubegems-mysql-headless:3306"
+        - name: MYSQL_DATABASE
+          value: kubegems
+        - name: MYSQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: my-kubegems-mysql
+              key: mysql-root-password
+        - name: REDIS_ADDR
+          value: "my-kubegems-redis-headless:6379"
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: my-kubegems-redis
+              key: redis-password
+        resources:
+          limits: {}
+          requests: {}
+      containers:
+        - name: msgbus
+          image: docker.io/kubegems/kubegems:v1.24.6
+          imagePullPolicy: IfNotPresent
+          args:
+            - msgbus
+            - --system-listen=:8080
+            - --jwt-cert=/certs/jwt/tls.crt
+            - --jwt-key=/certs/jwt/tls.key
+          env:            
+            - name: MYSQL_ADDR
+              value: "my-kubegems-mysql-headless:3306"
+            - name: MYSQL_DATABASE
+              value: kubegems
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-kubegems-mysql
+                  key: mysql-root-password
+            - name: REDIS_ADDR
+              value: "my-kubegems-redis-headless:6379"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-kubegems-redis
+                  key: redis-password            
+            - name: APPSTORE_ADDR
+              value: http://my-kubegems-chartmuseum.default:8080
+            - name: ARGO_ADDR
+              value: http://my-kubegems-argo-cd-server:80
+            - name: ARGO_USERNAME
+              value: admin
+            - name: ARGO_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: argocd-secret
+                  key: clearPassword
+            
+            - name: GIT_ADDR
+              value: http://my-kubegems-gitea-http:3000
+            - name: GIT_USERNAME
+              value: gitea_admin
+            - name: GIT_PASSWORD
+              value: r8sA8CPHD9!bt6d            
+            - name: KUBEGEMS_DEBUG
+              value: "false"
+            - name: LOG_LEVEL
+              value: 
+          envFrom:
+          resources:
+            limits:
+              cpu: "1"
+              memory: 1Gi
+            requests:
+              cpu: 500m
+              memory: 512Mi
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: metrics
+              containerPort: 9100
+              protocol: TCP
+          livenessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            successThreshold: 1
+            timeoutSeconds: 1
+            httpGet:
+              path: /healthz
+              port: http
+          readinessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            successThreshold: 1
+            timeoutSeconds: 1
+            httpGet:
+              path: /healthz
+              port: http
+          volumeMounts:
+            - name: jwt-certs
+              mountPath: /certs/jwt
+              readOnly: true
+      volumes:
+        - name: jwt-certs
+          secret:
+            secretName: my-kubegems-api-jwt
+            defaultMode: 420
+---
+# Source: kubegems/templates/worker/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-kubegems-worker
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: kubegems
+    helm.sh/chart: kubegems-1.24.6
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "1.24.6"
+    app.kubernetes.io/component: worker
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kubegems
+      app.kubernetes.io/instance: my-kubegems
+      app.kubernetes.io/component: worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kubegems
+        helm.sh/chart: kubegems-1.24.6
+        app.kubernetes.io/instance: my-kubegems
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/version: "1.24.6"
+        app.kubernetes.io/component: worker
+    spec:
+      
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/instance: my-kubegems
+                    app.kubernetes.io/name: kubegems
+                    app.kubernetes.io/component: worker
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      initContainers:
+      - name: init
+        image: docker.io/kubegems/kubegems:v1.24.6
+        imagePullPolicy: IfNotPresent
+        args:
+        - service
+        - migrate
+        - --migratemodels
+        - --initdata
+        env:  
+        - name: MYSQL_ADDR
+          value: "my-kubegems-mysql-headless:3306"
+        - name: MYSQL_DATABASE
+          value: kubegems
+        - name: MYSQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: my-kubegems-mysql
+              key: mysql-root-password
+        - name: REDIS_ADDR
+          value: "my-kubegems-redis-headless:6379"
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: my-kubegems-redis
+              key: redis-password
+        resources:
+          limits: {}
+          requests: {}
+      containers:
+        - name: worker
+          image: docker.io/kubegems/kubegems:v1.24.6
+          imagePullPolicy: IfNotPresent
+          args:
+            - worker
+            # todo: metrics args here
+          env:            
+            - name: MYSQL_ADDR
+              value: "my-kubegems-mysql-headless:3306"
+            - name: MYSQL_DATABASE
+              value: kubegems
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-kubegems-mysql
+                  key: mysql-root-password
+            - name: REDIS_ADDR
+              value: "my-kubegems-redis-headless:6379"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-kubegems-redis
+                  key: redis-password            
+            - name: KUBEGEMS_DEBUG
+              value: "false"
+            - name: LOG_LEVEL
+              value:             
+            - name: APPSTORE_ADDR
+              value: http://my-kubegems-chartmuseum.default:8080
+            - name: ARGO_ADDR
+              value: http://my-kubegems-argo-cd-server:80
+            - name: ARGO_USERNAME
+              value: admin
+            - name: ARGO_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: argocd-secret
+                  key: clearPassword
+            
+            - name: GIT_ADDR
+              value: http://my-kubegems-gitea-http:3000
+            - name: GIT_USERNAME
+              value: gitea_admin
+            - name: GIT_PASSWORD
+              value: r8sA8CPHD9!bt6d
+          envFrom:
+          resources:
+            limits:
+              cpu: "1"
+              memory: 1Gi
+            requests:
+              cpu: 500m
+              memory: 512Mi
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: metrics
+              containerPort: 9100
+              protocol: TCP
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: my-kubegems-data
+---
+# Source: kubegems/charts/gitea/templates/gitea/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-kubegems-gitea
+  annotations:
+  labels:
+    helm.sh/chart: gitea-5.0.8
+    app: gitea
+    app.kubernetes.io/name: gitea
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/version: "1.16.8"
+    version: "1.16.8"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: gitea
+      app.kubernetes.io/instance: my-kubegems
+  serviceName: my-kubegems-gitea
+  template:
+    metadata:
+      annotations:
+        checksum/config: fd540ac76444cb0d44631d7a4dd573b0df2883f67950b6c61fc4b29b7843d723
+      labels:
+        helm.sh/chart: gitea-5.0.8
+        app: gitea
+        app.kubernetes.io/name: gitea
+        app.kubernetes.io/instance: my-kubegems
+        app.kubernetes.io/version: "1.16.8"
+        version: "1.16.8"
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      securityContext:
+        fsGroup: 1000
+      initContainers:
+        - name: init-directories
+          image: "kubegems/gitea:1.16.8"
+          imagePullPolicy: IfNotPresent
+          command: ["/usr/sbin/init_directory_structure.sh"]
+          env:
+            - name: GITEA_APP_INI
+              value: /data/gitea/conf/app.ini
+            - name: GITEA_CUSTOM
+              value: /data/gitea
+            - name: GITEA_WORK_DIR
+              value: /data
+            - name: GITEA_TEMP
+              value: /tmp/gitea
+          volumeMounts:
+            - name: init
+              mountPath: /usr/sbin
+            - name: temp
+              mountPath: /tmp
+            - name: data
+              mountPath: /data
+          securityContext:
+            {}
+        - name: init-app-ini
+          image: "kubegems/gitea:1.16.8"
+          imagePullPolicy: IfNotPresent
+          command: ["/usr/sbin/config_environment.sh"]
+          env:
+            - name: GITEA_APP_INI
+              value: /data/gitea/conf/app.ini
+            - name: GITEA_CUSTOM
+              value: /data/gitea
+            - name: GITEA_WORK_DIR
+              value: /data
+            - name: GITEA_TEMP
+              value: /tmp/gitea
+          volumeMounts:
+            - name: config
+              mountPath: /usr/sbin
+            - name: temp
+              mountPath: /tmp
+            - name: data
+              mountPath: /data
+            - name: inline-config-sources
+              mountPath: /env-to-ini-mounts/inlines/
+          securityContext:
+            {}
+        - name: configure-gitea
+          image: "kubegems/gitea:1.16.8"
+          command: ["/usr/sbin/configure_gitea.sh"]
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsUser: 1000
+          env:
+            - name: GITEA_APP_INI
+              value: /data/gitea/conf/app.ini
+            - name: GITEA_CUSTOM
+              value: /data/gitea
+            - name: GITEA_WORK_DIR
+              value: /data
+            - name: GITEA_TEMP
+              value: /tmp/gitea
+            - name: GITEA_ADMIN_USERNAME
+              value: "gitea_admin"
+            - name: GITEA_ADMIN_PASSWORD
+              value: "r8sA8CPHD9!bt6d"
+          volumeMounts:
+            - name: init
+              mountPath: /usr/sbin
+            - name: temp
+              mountPath: /tmp
+            - name: data
+              mountPath: /data
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: gitea
+          image: "kubegems/gitea:1.16.8"
+          imagePullPolicy: IfNotPresent
+          env:
+            # SSH Port values have to be set here as well for openssh configuration
+            - name: SSH_LISTEN_PORT
+              value: "22"
+            - name: SSH_PORT
+              value: "22"
+            - name: GITEA_APP_INI
+              value: /data/gitea/conf/app.ini
+            - name: GITEA_CUSTOM
+              value: /data/gitea
+            - name: GITEA_WORK_DIR
+              value: /data
+            - name: GITEA_TEMP
+              value: /tmp/gitea
+            - name: TMPDIR
+              value: /tmp/gitea
+          ports:
+            - name: ssh
+              containerPort: 22
+            - name: http
+              containerPort: 3000
+          livenessProbe:
+            failureThreshold: 10
+            initialDelaySeconds: 200
+            periodSeconds: 10
+            successThreshold: 1
+            tcpSocket:
+              port: http
+            timeoutSeconds: 1
+          readinessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            tcpSocket:
+              port: http
+            timeoutSeconds: 1
+          resources:
+            {}
+          securityContext:
+            {}
+          volumeMounts:
+            - name: temp
+              mountPath: /tmp
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: init
+          secret:
+            secretName: my-kubegems-gitea-init
+            defaultMode: 110
+        - name: config
+          secret:
+            secretName: my-kubegems-gitea
+            defaultMode: 110
+        - name: inline-config-sources
+          secret:
+            secretName: my-kubegems-gitea-inline-config
+        - name: temp
+          emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+            - "ReadWriteOnce"
+        
+        resources:
+          requests:
+            storage: "10Gi"
+---
+# Source: kubegems/charts/mysql/templates/primary/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-kubegems-mysql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: mysql
+    helm.sh/chart: mysql-9.7.2
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "8.0.33"
+    app.kubernetes.io/component: primary
+spec:
+  replicas: 1
+  podManagementPolicy: ""
+  selector:
+    matchLabels: 
+      app.kubernetes.io/name: mysql
+      app.kubernetes.io/instance: my-kubegems
+      app.kubernetes.io/component: primary
+  serviceName: my-kubegems-mysql
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations:
+        checksum/configuration: cda633fbae0f476d4680ea2ab51e1f4a7927c3ef5bed221679361c5f6f96449f
+      labels:
+        app.kubernetes.io/name: mysql
+        helm.sh/chart: mysql-9.7.2
+        app.kubernetes.io/instance: my-kubegems
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/version: "8.0.33"
+        app.kubernetes.io/component: primary
+    spec:
+      serviceAccountName: my-kubegems-mysql
+      
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/instance: my-kubegems
+                    app.kubernetes.io/name: mysql
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+      initContainers:
+      containers:
+        - name: mysql
+          image: docker.io/kubegems/mysql:8.0.33-debian-11-r0
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-kubegems-mysql
+                  key: mysql-root-password
+            - name: MYSQL_DATABASE
+              value: "kubegems"
+          envFrom:
+          ports:
+            - name: mysql
+              containerPort: 3306
+          livenessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+            exec:
+              command:
+                - /bin/bash
+                - -ec
+                - |
+                  password_aux="${MYSQL_ROOT_PASSWORD:-}"
+                  if [[ -f "${MYSQL_ROOT_PASSWORD_FILE:-}" ]]; then
+                      password_aux=$(cat "$MYSQL_ROOT_PASSWORD_FILE")
+                  fi
+                  mysqladmin status -uroot -p"${password_aux}"
+          readinessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+            exec:
+              command:
+                - /bin/bash
+                - -ec
+                - |
+                  password_aux="${MYSQL_ROOT_PASSWORD:-}"
+                  if [[ -f "${MYSQL_ROOT_PASSWORD_FILE:-}" ]]; then
+                      password_aux=$(cat "$MYSQL_ROOT_PASSWORD_FILE")
+                  fi
+                  mysqladmin status -uroot -p"${password_aux}"
+          startupProbe:
+            failureThreshold: 10
+            initialDelaySeconds: 15
+            periodSeconds: 40
+            successThreshold: 1
+            timeoutSeconds: 1
+            exec:
+              command:
+                - /bin/bash
+                - -ec
+                - |
+                  password_aux="${MYSQL_ROOT_PASSWORD:-}"
+                  if [[ -f "${MYSQL_ROOT_PASSWORD_FILE:-}" ]]; then
+                      password_aux=$(cat "$MYSQL_ROOT_PASSWORD_FILE")
+                  fi
+                  mysqladmin status -uroot -p"${password_aux}"
+          resources: 
+            limits: {}
+            requests: {}
+          volumeMounts:
+            - name: data
+              mountPath: /bitnami/mysql
+            - name: config
+              mountPath: /opt/bitnami/mysql/conf/my.cnf
+              subPath: my.cnf
+      volumes:
+        - name: config
+          configMap:
+            name: my-kubegems-mysql
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels: 
+          app.kubernetes.io/name: mysql
+          app.kubernetes.io/instance: my-kubegems
+          app.kubernetes.io/component: primary
+        annotations:
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "8Gi"
+---
+# Source: kubegems/charts/redis/templates/master/application.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-kubegems-redis-master
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/version: 7.2.5
+    helm.sh/chart: redis-19.6.2
+    app.kubernetes.io/component: master
+spec:
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: my-kubegems
+      app.kubernetes.io/name: redis
+      app.kubernetes.io/component: master
+  serviceName: my-kubegems-redis-headless
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: my-kubegems
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: redis
+        app.kubernetes.io/version: 7.2.5
+        helm.sh/chart: redis-19.6.2
+        app.kubernetes.io/component: master
+      annotations:
+        checksum/configmap: 86bcc953bb473748a3d3dc60b7c11f34e60c93519234d4c37f42e22ada559d47
+        checksum/health: aff24913d801436ea469d8d374b2ddb3ec4c43ee7ab24663d5f8ff1a1b6991a9
+        checksum/scripts: 560c33ff34d845009b51830c332aa05fa211444d1877d3526d3599be7543aaa5
+        checksum/secret: 552f42916a42565f3cf7eadd35c020468a3e04f9329cca72365078fb90d244cf
+    spec:
+      
+      securityContext:
+        fsGroup: 1001
+        fsGroupChangePolicy: Always
+        supplementalGroups: []
+        sysctls: []
+      serviceAccountName: my-kubegems-redis-master
+      automountServiceAccountToken: false
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/instance: my-kubegems
+                    app.kubernetes.io/name: redis
+                    app.kubernetes.io/component: master
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      enableServiceLinks: true
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: redis
+          image: docker.io/kubegems/redis:7.2.5-debian-12-r2
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+            runAsGroup: 1001
+            runAsNonRoot: true
+            runAsUser: 1001
+            seLinuxOptions: {}
+            seccompProfile:
+              type: RuntimeDefault
+          command:
+            - /bin/bash
+          args:
+            - -c
+            - /opt/bitnami/scripts/start-scripts/start-master.sh
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: REDIS_REPLICATION_MODE
+              value: master
+            - name: ALLOW_EMPTY_PASSWORD
+              value: "no"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-kubegems-redis
+                  key: redis-password
+            - name: REDIS_TLS_ENABLED
+              value: "no"
+            - name: REDIS_PORT
+              value: "6379"
+          ports:
+            - name: redis
+              containerPort: 6379
+          livenessProbe:
+            initialDelaySeconds: 20
+            periodSeconds: 5
+            # One second longer than command timeout should prevent generation of zombie processes.
+            timeoutSeconds: 6
+            successThreshold: 1
+            failureThreshold: 5
+            exec:
+              command:
+                - sh
+                - -c
+                - /health/ping_liveness_local.sh 5
+          readinessProbe:
+            initialDelaySeconds: 20
+            periodSeconds: 5
+            timeoutSeconds: 2
+            successThreshold: 1
+            failureThreshold: 5
+            exec:
+              command:
+                - sh
+                - -c
+                - /health/ping_readiness_local.sh 1
+          resources:
+            limits:
+              cpu: 150m
+              ephemeral-storage: 1024Mi
+              memory: 192Mi
+            requests:
+              cpu: 100m
+              ephemeral-storage: 50Mi
+              memory: 128Mi
+          volumeMounts:
+            - name: start-scripts
+              mountPath: /opt/bitnami/scripts/start-scripts
+            - name: health
+              mountPath: /health
+            - name: redis-data
+              mountPath: /data
+            - name: config
+              mountPath: /opt/bitnami/redis/mounted-etc
+            - name: empty-dir
+              mountPath: /opt/bitnami/redis/etc/
+              subPath: app-conf-dir
+            - name: empty-dir
+              mountPath: /tmp
+              subPath: tmp-dir
+      initContainers:
+        - name: volume-permissions
+          image: docker.io/kubegems/bitnami-shell:12-debian-12-r24
+          imagePullPolicy: "IfNotPresent"
+          command:
+            - /bin/bash
+            - -ec
+            - |
+              chown -R 1001:1001 /data
+          securityContext:
+            runAsUser: 0
+            seLinuxOptions: {}
+          resources:
+            limits:
+              cpu: 150m
+              ephemeral-storage: 1024Mi
+              memory: 192Mi
+            requests:
+              cpu: 100m
+              ephemeral-storage: 50Mi
+              memory: 128Mi
+          volumeMounts:
+            - name: empty-dir
+              mountPath: /tmp
+              subPath: tmp-dir
+            - name: redis-data
+              mountPath: /data
+      volumes:
+        - name: start-scripts
+          configMap:
+            name: my-kubegems-redis-scripts
+            defaultMode: 0755
+        - name: health
+          configMap:
+            name: my-kubegems-redis-health
+            defaultMode: 0755
+        - name: config
+          configMap:
+            name: my-kubegems-redis-configuration
+        - name: empty-dir
+          emptyDir: {}
+  volumeClaimTemplates:
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: redis-data
+        labels:
+          app.kubernetes.io/instance: my-kubegems
+          app.kubernetes.io/name: redis
+          app.kubernetes.io/component: master
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "8Gi"
+---
+# Source: kubegems/templates/job-charts-init.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: my-kubegems-charts-init
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: kubegems
+    helm.sh/chart: kubegems-1.24.6
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "1.24.6"
+    app.kubernetes.io/component: kubegems
+spec:
+  backoffLimit: 10
+  parallelism: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kubegems
+        helm.sh/chart: kubegems-1.24.6
+        app.kubernetes.io/instance: my-kubegems
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/version: "1.24.6"
+        app.kubernetes.io/component: kubegems
+    spec:
+      restartPolicy: OnFailure
+      
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/instance: my-kubegems
+                    app.kubernetes.io/name: kubegems
+                    app.kubernetes.io/component: init
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      containers:
+        - name: charts-init
+          image: docker.io/kubegems/appstore-charts:latest
+          imagePullPolicy: IfNotPresent
+          args:
+            - --wait
+            - --repo=kubegems
+            - --server=http://my-kubegems-chartmuseum.default:8080
+          envFrom:
+---
+# Source: kubegems/templates/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: my-kubegems
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: kubegems
+    helm.sh/chart: kubegems-1.24.6
+    app.kubernetes.io/instance: my-kubegems
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "1.24.6"
+    app.kubernetes.io/component: kubegems
+    networking.kubegems.io/ingressClass: default-gateway
+  annotations:
+    nginx.org/proxy-buffering: "false"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    nginx.org/websocket-services: my-kubegems-dashboard
+spec:
+  ingressClassName: default-gateway
+  rules:
+    - host: "dashboard.kubegems.io"
+      http:
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: my-kubegems-dashboard
+                port:
+                  name: http

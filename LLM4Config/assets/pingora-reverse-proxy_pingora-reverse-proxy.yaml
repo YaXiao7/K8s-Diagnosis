@@ -1,0 +1,98 @@
+---
+# Source: pingora-reverse-proxy/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-pingora-reverse-proxy
+  labels:
+    helm.sh/chart: pingora-reverse-proxy-0.1.0
+    app.kubernetes.io/name: pingora-reverse-proxy
+    app.kubernetes.io/instance: my-pingora-reverse-proxy
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+automountServiceAccountToken: true
+---
+# Source: pingora-reverse-proxy/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-pingora-reverse-proxy
+  labels:
+    helm.sh/chart: pingora-reverse-proxy-0.1.0
+    app.kubernetes.io/name: pingora-reverse-proxy
+    app.kubernetes.io/instance: my-pingora-reverse-proxy
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: pingora-reverse-proxy
+    app.kubernetes.io/instance: my-pingora-reverse-proxy
+---
+# Source: pingora-reverse-proxy/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-pingora-reverse-proxy
+  labels:
+    helm.sh/chart: pingora-reverse-proxy-0.1.0
+    app.kubernetes.io/name: pingora-reverse-proxy
+    app.kubernetes.io/instance: my-pingora-reverse-proxy
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pingora-reverse-proxy
+      app.kubernetes.io/instance: my-pingora-reverse-proxy
+  template:
+    metadata:
+      labels:
+        helm.sh/chart: pingora-reverse-proxy-0.1.0
+        app.kubernetes.io/name: pingora-reverse-proxy
+        app.kubernetes.io/instance: my-pingora-reverse-proxy
+        app.kubernetes.io/version: "1.16.0"
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      serviceAccountName: my-pingora-reverse-proxy
+      securityContext:
+        {}
+      containers:
+        - name: pingora-reverse-proxy
+          securityContext:
+            {}
+          image: "ghcr.io/dps0340/pingora-reverse-proxy:latest"
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          resources:
+            {}
+---
+# Source: pingora-reverse-proxy/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-pingora-reverse-proxy-test-connection"
+  labels:
+    helm.sh/chart: pingora-reverse-proxy-0.1.0
+    app.kubernetes.io/name: pingora-reverse-proxy
+    app.kubernetes.io/instance: my-pingora-reverse-proxy
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-pingora-reverse-proxy:8080']
+  restartPolicy: Never

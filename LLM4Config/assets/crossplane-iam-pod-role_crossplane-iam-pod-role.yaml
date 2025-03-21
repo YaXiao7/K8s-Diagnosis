@@ -1,0 +1,60 @@
+
+---
+# Source: crossplane-iam-pod-role/templates/service-account.yaml
+apiVersion: v1
+automountServiceAccountToken: true
+kind: ServiceAccount
+metadata:
+  annotations:
+    helm.sh/hook: pre-install
+    eks.amazonaws.com/role-arn: "arn:aws:iam::1234567890:role/crossplane-my-cluster-name-my-pod-name"
+    eks.amazonaws.com/sts-regional-endpoints: "true"
+  labels:
+    null
+  name: "my-pod-name-sa"
+---
+# Source: crossplane-iam-pod-role/templates/iam-role.yaml
+apiVersion: iam.aws.crossplane.io/v1beta1
+kind: Role
+metadata:
+  name: "crossplane-my-cluster-name-my-pod-name"
+  annotations:
+    helm.sh/hook: pre-install
+  labels:
+    addToInstanceProfile: "crossplane-my-cluster-name-my-pod-name"  
+spec:
+  forProvider:
+    assumeRolePolicyDocument: |
+      {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Principal": {
+                    "Federated": "arn:aws:iam::1234567890:oidc-provider/oidc.eks.eu-west-1.amazonaws.com/id/1111111111222222222GGGGGGGGGPPPPPPPPPP"
+                },
+                "Action": "sts:AssumeRoleWithWebIdentity",
+                "Condition": {
+                    "StringLike": {
+                        "oidc.eks.eu-west-1.amazonaws.com/id/1111111111222222222GGGGGGGGGPPPPPPPPPP:sub": "system:serviceaccount:default:my-pod-name-sa*"
+                    }
+                }
+            }]
+      }
+    tags:
+      - key: Component
+        value: "k8s"
+      - key: Environment
+        value: "dev"
+      - key: ManageBy
+        value: "crossplane-my-cluster-name"
+      - key: Name
+        value: "crossplane-k8s-my-pod"
+      - key: crossplane-kind
+        value: "role.iam.aws.crossplane.io"
+      - key: crossplane-providerconfig
+        value: "aws-provider"
+      - key: crossplane-name
+        value: "crossplane-my-cluster-name-my-pod-name"
+  providerConfigRef:
+    name: aws-provider

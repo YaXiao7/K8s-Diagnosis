@@ -1,0 +1,176 @@
+---
+# Source: cluster-auth-agent/templates/namespace.yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: default
+---
+# Source: cluster-auth-agent/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-cluster-auth-agent
+  namespace: default
+  labels:
+    helm.sh/chart: cluster-auth-agent-v2024.8.9
+    app.kubernetes.io/name: cluster-auth-agent
+    app.kubernetes.io/instance: my-cluster-auth-agent
+    app.kubernetes.io/version: "v0.0.4"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: cluster-auth-agent/templates/cluster-role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-cluster-auth-agent
+  labels:
+    helm.sh/chart: cluster-auth-agent-v2024.8.9
+    app.kubernetes.io/name: cluster-auth-agent
+    app.kubernetes.io/instance: my-cluster-auth-agent
+    app.kubernetes.io/version: "v0.0.4"
+    app.kubernetes.io/managed-by: Helm
+rules:
+# Get cluster id
+- apiGroups:
+  - ""
+  resources:
+  - namespaces
+  verbs: ["get"]
+# create/update rbac objects
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - clusterroles
+  - clusterrolebindings
+  - roles
+  - rolebindings
+  verbs: ["*"]
+---
+# Source: cluster-auth-agent/templates/cluster-role-binding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-cluster-auth-agent
+  labels:
+    helm.sh/chart: cluster-auth-agent-v2024.8.9
+    app.kubernetes.io/name: cluster-auth-agent
+    app.kubernetes.io/instance: my-cluster-auth-agent
+    app.kubernetes.io/version: "v0.0.4"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-cluster-auth-agent
+subjects:
+- kind: ServiceAccount
+  name: my-cluster-auth-agent
+  namespace: default
+---
+# Source: cluster-auth-agent/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-cluster-auth-agent
+  namespace: default
+  labels:
+    helm.sh/chart: cluster-auth-agent-v2024.8.9
+    app.kubernetes.io/name: cluster-auth-agent
+    app.kubernetes.io/instance: my-cluster-auth-agent
+    app.kubernetes.io/version: "v0.0.4"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  ports:
+  # Port used to expose admission webhook apiserver
+  - name: telemetry
+    port: 8080
+    targetPort: 8080
+  selector:
+    app.kubernetes.io/name: cluster-auth-agent
+    app.kubernetes.io/instance: my-cluster-auth-agent
+---
+# Source: cluster-auth-agent/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cluster-auth-agent
+  namespace: default
+  labels:
+    helm.sh/chart: cluster-auth-agent-v2024.8.9
+    app.kubernetes.io/name: cluster-auth-agent
+    app.kubernetes.io/instance: my-cluster-auth-agent
+    app.kubernetes.io/version: "v0.0.4"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cluster-auth-agent
+      app.kubernetes.io/instance: my-cluster-auth-agent
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: cluster-auth-agent
+        app.kubernetes.io/instance: my-cluster-auth-agent
+      annotations:
+    spec:
+      
+      serviceAccountName: my-cluster-auth-agent
+      containers:
+      - name: agent
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 65534
+          seccompProfile:
+            type: RuntimeDefault
+        image: ghcr.io/kluster-manager/cluster-auth:v0.0.4
+        imagePullPolicy: IfNotPresent
+        args:
+        - agent
+        - --v=3
+        ports:
+        - containerPort: 8080
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        resources:
+          {}
+        volumeMounts:
+      volumes:
+      securityContext:
+        fsGroup: 65535
+      nodeSelector:
+        kubernetes.io/os: linux
+---
+# Source: cluster-auth-agent/templates/servicemonitor.yaml
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: my-cluster-auth-agent
+  namespace: default
+  labels:
+    app.kubernetes.io/name: cluster-auth-agent
+    app.kubernetes.io/instance: my-cluster-auth-agent
+spec:
+  namespaceSelector:
+    matchNames:
+    - default
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cluster-auth-agent
+      app.kubernetes.io/instance: my-cluster-auth-agent
+  endpoints:
+  - port: telemetry
+    bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+    scheme: http
+    interval: 10s

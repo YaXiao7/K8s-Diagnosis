@@ -1,0 +1,974 @@
+---
+# Source: convoy/charts/redis/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+automountServiceAccountToken: true
+metadata:
+  name: redis
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: redis
+    helm.sh/chart: redis-17.11.3
+    app.kubernetes.io/instance: my-convoy
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: convoy/charts/postgresql/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgresql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: postgresql
+    helm.sh/chart: postgresql-12.5.6
+    app.kubernetes.io/instance: my-convoy
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  postgres-password: "cG9zdGdyZXM="
+  password: "cG9zdGdyZXM="
+  # We don't auto-generate LDAP password when it's not provided as we do for other passwords
+---
+# Source: convoy/charts/redis/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: redis
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: redis
+    helm.sh/chart: redis-17.11.3
+    app.kubernetes.io/instance: my-convoy
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  redis-password: "Y29udm95"
+---
+# Source: convoy/charts/redis/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-configuration
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: redis
+    helm.sh/chart: redis-17.11.3
+    app.kubernetes.io/instance: my-convoy
+    app.kubernetes.io/managed-by: Helm
+data:
+  redis.conf: |-
+    # User-supplied common configuration:
+    # Enable AOF https://redis.io/topics/persistence#append-only-file
+    appendonly yes
+    # Disable RDB persistence, AOF persistence already enabled.
+    save ""
+    # End of common configuration
+  master.conf: |-
+    dir /data
+    # User-supplied master configuration:
+    rename-command FLUSHDB ""
+    rename-command FLUSHALL ""
+    # End of master configuration
+  replica.conf: |-
+    dir /data
+    # User-supplied replica configuration:
+    rename-command FLUSHDB ""
+    rename-command FLUSHALL ""
+    # End of replica configuration
+---
+# Source: convoy/charts/redis/templates/health-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-health
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: redis
+    helm.sh/chart: redis-17.11.3
+    app.kubernetes.io/instance: my-convoy
+    app.kubernetes.io/managed-by: Helm
+data:
+  ping_readiness_local.sh: |-
+    #!/bin/bash
+
+    [[ -f $REDIS_PASSWORD_FILE ]] && export REDIS_PASSWORD="$(< "${REDIS_PASSWORD_FILE}")"
+    [[ -n "$REDIS_PASSWORD" ]] && export REDISCLI_AUTH="$REDIS_PASSWORD"
+    response=$(
+      timeout -s 15 $1 \
+      redis-cli \
+        -h localhost \
+        -p $REDIS_PORT \
+        ping
+    )
+    if [ "$?" -eq "124" ]; then
+      echo "Timed out"
+      exit 1
+    fi
+    if [ "$response" != "PONG" ]; then
+      echo "$response"
+      exit 1
+    fi
+  ping_liveness_local.sh: |-
+    #!/bin/bash
+
+    [[ -f $REDIS_PASSWORD_FILE ]] && export REDIS_PASSWORD="$(< "${REDIS_PASSWORD_FILE}")"
+    [[ -n "$REDIS_PASSWORD" ]] && export REDISCLI_AUTH="$REDIS_PASSWORD"
+    response=$(
+      timeout -s 15 $1 \
+      redis-cli \
+        -h localhost \
+        -p $REDIS_PORT \
+        ping
+    )
+    if [ "$?" -eq "124" ]; then
+      echo "Timed out"
+      exit 1
+    fi
+    responseFirstWord=$(echo $response | head -n1 | awk '{print $1;}')
+    if [ "$response" != "PONG" ] && [ "$responseFirstWord" != "LOADING" ] && [ "$responseFirstWord" != "MASTERDOWN" ]; then
+      echo "$response"
+      exit 1
+    fi
+  ping_readiness_master.sh: |-
+    #!/bin/bash
+
+    [[ -f $REDIS_MASTER_PASSWORD_FILE ]] && export REDIS_MASTER_PASSWORD="$(< "${REDIS_MASTER_PASSWORD_FILE}")"
+    [[ -n "$REDIS_MASTER_PASSWORD" ]] && export REDISCLI_AUTH="$REDIS_MASTER_PASSWORD"
+    response=$(
+      timeout -s 15 $1 \
+      redis-cli \
+        -h $REDIS_MASTER_HOST \
+        -p $REDIS_MASTER_PORT_NUMBER \
+        ping
+    )
+    if [ "$?" -eq "124" ]; then
+      echo "Timed out"
+      exit 1
+    fi
+    if [ "$response" != "PONG" ]; then
+      echo "$response"
+      exit 1
+    fi
+  ping_liveness_master.sh: |-
+    #!/bin/bash
+
+    [[ -f $REDIS_MASTER_PASSWORD_FILE ]] && export REDIS_MASTER_PASSWORD="$(< "${REDIS_MASTER_PASSWORD_FILE}")"
+    [[ -n "$REDIS_MASTER_PASSWORD" ]] && export REDISCLI_AUTH="$REDIS_MASTER_PASSWORD"
+    response=$(
+      timeout -s 15 $1 \
+      redis-cli \
+        -h $REDIS_MASTER_HOST \
+        -p $REDIS_MASTER_PORT_NUMBER \
+        ping
+    )
+    if [ "$?" -eq "124" ]; then
+      echo "Timed out"
+      exit 1
+    fi
+    responseFirstWord=$(echo $response | head -n1 | awk '{print $1;}')
+    if [ "$response" != "PONG" ] && [ "$responseFirstWord" != "LOADING" ]; then
+      echo "$response"
+      exit 1
+    fi
+  ping_readiness_local_and_master.sh: |-
+    script_dir="$(dirname "$0")"
+    exit_status=0
+    "$script_dir/ping_readiness_local.sh" $1 || exit_status=$?
+    "$script_dir/ping_readiness_master.sh" $1 || exit_status=$?
+    exit $exit_status
+  ping_liveness_local_and_master.sh: |-
+    script_dir="$(dirname "$0")"
+    exit_status=0
+    "$script_dir/ping_liveness_local.sh" $1 || exit_status=$?
+    "$script_dir/ping_liveness_master.sh" $1 || exit_status=$?
+    exit $exit_status
+---
+# Source: convoy/charts/redis/templates/scripts-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-scripts
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: redis
+    helm.sh/chart: redis-17.11.3
+    app.kubernetes.io/instance: my-convoy
+    app.kubernetes.io/managed-by: Helm
+data:
+  start-master.sh: |
+    #!/bin/bash
+
+    [[ -f $REDIS_PASSWORD_FILE ]] && export REDIS_PASSWORD="$(< "${REDIS_PASSWORD_FILE}")"
+    if [[ -f /opt/bitnami/redis/mounted-etc/master.conf ]];then
+        cp /opt/bitnami/redis/mounted-etc/master.conf /opt/bitnami/redis/etc/master.conf
+    fi
+    if [[ -f /opt/bitnami/redis/mounted-etc/redis.conf ]];then
+        cp /opt/bitnami/redis/mounted-etc/redis.conf /opt/bitnami/redis/etc/redis.conf
+    fi
+    ARGS=("--port" "${REDIS_PORT}")
+    ARGS+=("--requirepass" "${REDIS_PASSWORD}")
+    ARGS+=("--masterauth" "${REDIS_PASSWORD}")
+    ARGS+=("--include" "/opt/bitnami/redis/etc/redis.conf")
+    ARGS+=("--include" "/opt/bitnami/redis/etc/master.conf")
+    exec redis-server "${ARGS[@]}"
+---
+# Source: convoy/charts/agent/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: convoy-agent
+  labels: 
+    helm.sh/chart: agent-1.0.0
+    app.kubernetes.io/name: convoy-agent
+    app.kubernetes.io/instance: my-convoy
+    app.kubernetes.io/version: "v24.8.2"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector: 
+    app.kubernetes.io/name: convoy-agent
+    app.kubernetes.io/instance: my-convoy
+---
+# Source: convoy/charts/postgresql/templates/primary/svc-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgresql-hl
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: postgresql
+    helm.sh/chart: postgresql-12.5.6
+    app.kubernetes.io/instance: my-convoy
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: primary
+    # Use this annotation in addition to the actual publishNotReadyAddresses
+    # field below because the annotation will stop being respected soon but the
+    # field is broken in some versions of Kubernetes:
+    # https://github.com/kubernetes/kubernetes/issues/58662
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+spec:
+  type: ClusterIP
+  clusterIP: None
+  # We want all pods in the StatefulSet to have their addresses published for
+  # the sake of the other Postgresql pods even before they're ready, since they
+  # have to be able to talk to each other in order to become ready.
+  publishNotReadyAddresses: true
+  ports:
+    - name: tcp-postgresql
+      port: 5432
+      targetPort: tcp-postgresql
+  selector:
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/instance: my-convoy
+    app.kubernetes.io/component: primary
+---
+# Source: convoy/charts/postgresql/templates/primary/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgresql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: postgresql
+    helm.sh/chart: postgresql-12.5.6
+    app.kubernetes.io/instance: my-convoy
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: primary
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+    - name: tcp-postgresql
+      port: 5432
+      targetPort: tcp-postgresql
+      nodePort: null
+  selector:
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/instance: my-convoy
+    app.kubernetes.io/component: primary
+---
+# Source: convoy/charts/redis/templates/headless-svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-headless
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: redis
+    helm.sh/chart: redis-17.11.3
+    app.kubernetes.io/instance: my-convoy
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: tcp-redis
+      port: 6379
+      targetPort: redis
+  selector:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/instance: my-convoy
+---
+# Source: convoy/charts/redis/templates/master/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-master
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: redis
+    helm.sh/chart: redis-17.11.3
+    app.kubernetes.io/instance: my-convoy
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: master
+spec:
+  type: ClusterIP
+  internalTrafficPolicy: Cluster
+  sessionAffinity: None
+  ports:
+    - name: tcp-redis
+      port: 6379
+      targetPort: redis
+      nodePort: null
+  selector:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/instance: my-convoy
+    app.kubernetes.io/component: master
+---
+# Source: convoy/charts/server/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: convoy-server
+  labels: 
+    helm.sh/chart: server-1.0.0
+    app.kubernetes.io/name: convoy-server
+    app.kubernetes.io/instance: my-convoy
+    app.kubernetes.io/version: "v24.8.2"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector: 
+    app.kubernetes.io/name: convoy-server
+    app.kubernetes.io/instance: my-convoy
+---
+# Source: convoy/charts/agent/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: convoy-agent
+  labels:
+    app.kubernetes.io/name: convoy-agent
+    helm.sh/chart: agent-1.0.0
+    app.kubernetes.io/instance: my-convoy
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: convoy-agent
+      app.kubernetes.io/instance: my-convoy
+  template:
+    metadata:
+      annotations:
+        prometheus.io/path: /metrics
+        prometheus.io/port: '5008'
+        prometheus.io/scrape: "true"
+        updatedAt: "2024-09-16 17:43:54.328396798 +0930 ACST m=+1.665647692"
+      labels:
+        app.kubernetes.io/name: convoy-agent
+        app.kubernetes.io/instance: my-convoy
+    spec:
+      initContainers:
+        - name: wait-for-migrate
+          image: "getconvoy/convoy:v24.8.2"
+          env:
+            - name: CONVOY_DB_SCHEME
+              value: postgresql
+            - name: CONVOY_DB_HOST
+              value: "postgresql"
+            - name: CONVOY_DB_PORT
+              value: "5432"
+            - name: CONVOY_DB_USERNAME
+              value: "postgres"
+            - name: CONVOY_DB_PASSWORD
+              value: "postgres"
+            - name: CONVOY_DB_DATABASE
+              value: "convoy"
+            - name: CONVOY_DB_OPTIONS
+              value: "sslmode=disable&connect_timeout=30"
+          command: [ "/cmd" ]
+          args: [ "migrate", "up" ]
+
+      containers:
+        - name: agent
+          image: "getconvoy/convoy:v24.8.2"
+          imagePullPolicy: IfNotPresent
+          command: ["/cmd"]
+          args: ["agent"]
+          ports:
+            - name: http
+              containerPort: 5008
+              protocol: TCP
+          env:
+            - name: SERVICE_NAME
+              value: agent
+            - name: PORT
+              value: "5008"
+            - name: HTTP_PROXY
+              value: ""
+            - name: CONVOY_LOGGER_LEVEL
+              value: "error"
+            - name: CONVOY_ENV
+              value: "oss"
+            - name: CONVOY_SIGNUP_ENABLED
+              value: "false"
+            - name: CONVOY_DB_SCHEME
+              value: postgresql
+            - name: CONVOY_DB_HOST
+              value: "postgresql"
+            - name: CONVOY_DB_PORT
+              value: "5432"
+            - name: CONVOY_DB_USERNAME
+              value: "postgres"
+            - name: CONVOY_DB_PASSWORD
+              value: "postgres"
+            - name: CONVOY_DB_DATABASE
+              value: "convoy"
+            - name: CONVOY_DB_OPTIONS
+              value: "sslmode=disable&connect_timeout=30"
+            - name: CONVOY_REDIS_HOST
+              value: "redis-master"
+            - name: CONVOY_REDIS_PASSWORD
+              value: "convoy"
+            - name: CONVOY_REDIS_PORT
+              value: "6379"
+            - name : CONVOY_REDIS_TYPE
+              value: "NATIVE"
+
+            - name: CONVOY_INSTANCE_INGEST_RATE
+              value: "100"
+            - name: CONVOY_ANALYTICS_ENABLED
+              value: "true"
+            - name: CONVOY_ENABLE_PROFILING
+              value: "false"
+
+            - name: CONVOY_LICENSE_KEY
+              value: ""
+            - name: CONVOY_ENABLE_FEATURE_FLAG
+              value: "[]"
+            - name: CONVOY_CONSUMER_POOL_SIZE
+              value: "100"
+            - name: CONVOY_WORKER_EXECUTION_MODE
+              value: "default"
+            - name: CONVOY_MAX_RETRY_SECONDS
+              value: "7200"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+          resources:
+            {}
+---
+# Source: convoy/charts/server/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: convoy-server
+  labels:
+    app.kubernetes.io/name: convoy-server
+    helm.sh/chart: server-1.0.0
+    app.kubernetes.io/instance: my-convoy
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: convoy-server
+      app.kubernetes.io/instance: my-convoy
+  template:
+    metadata:
+      annotations:
+        prometheus.io/path: /metrics
+        prometheus.io/port: '5005'
+        prometheus.io/scrape: "true"
+        updatedAt: "2024-09-16 17:43:54.327176176 +0930 ACST m=+1.664427080"
+      labels:
+        app.kubernetes.io/name: convoy-server
+        app.kubernetes.io/instance: my-convoy
+    spec:
+      initContainers:
+        - name: wait-for-migrate
+          image: "getconvoy/convoy:v24.8.2"
+          env:
+            - name: CONVOY_DB_SCHEME
+              value: postgresql
+            - name: CONVOY_DB_HOST
+              value: "postgresql"
+            - name: CONVOY_DB_PORT
+              value: "5432"
+            - name: CONVOY_DB_USERNAME
+              value: "postgres"
+            - name: CONVOY_DB_PASSWORD
+              value: "postgres"
+            - name: CONVOY_DB_DATABASE
+              value: "convoy"
+            - name: CONVOY_DB_OPTIONS
+              value: "sslmode=disable&connect_timeout=30"
+          command: [ "/cmd" ]
+          args: [ "migrate", "up" ]
+
+      containers:
+        - name: server
+          image: "getconvoy/convoy:v24.8.2"
+          imagePullPolicy: IfNotPresent
+
+          command: ["/cmd"]
+          args: ["server"]
+          ports:
+            - name: http
+              containerPort: 5005
+              protocol: TCP
+          env:
+            - name: SERVICE_NAME
+              value: server
+            - name: PORT
+              value: "5005"
+            - name: CONVOY_ENV
+              value: "oss"
+            - name: CONVOY_HOST
+              value: ""
+            - name: CONVOY_LOGGER_LEVEL
+              value: "error"
+            - name: CONVOY_SIGNUP_ENABLED
+              value: "false"
+            - name: CONVOY_MAX_RESPONSE_SIZE
+              value: "50"
+            - name: CONVOY_DB_SCHEME
+              value: postgresql
+            - name: CONVOY_DB_HOST
+              value: "postgresql"
+            - name: CONVOY_DB_PORT
+              value: "5432"
+            - name: CONVOY_DB_USERNAME
+              value: "postgres"
+            - name: CONVOY_DB_PASSWORD
+              value: "postgres"
+            - name: CONVOY_DB_DATABASE
+              value: "convoy"
+            - name: CONVOY_DB_OPTIONS
+              value: "sslmode=disable&connect_timeout=30"
+            - name: CONVOY_REDIS_HOST
+              value: "redis-master"
+            - name: CONVOY_REDIS_PASSWORD
+              value: "convoy"
+            - name: CONVOY_REDIS_PORT
+              value: "6379"
+            - name: CONVOY_REDIS_TYPE
+              value: "NATIVE"
+
+            - name: CONVOY_INSTANCE_INGEST_RATE
+              value: "100"
+            - name: CONVOY_ENABLE_FEATURE_FLAG
+              value: "[]"
+            - name: CONVOY_ANALYTICS_ENABLED
+              value: "true"
+            - name: CONVOY_ENABLE_PROFILING
+              value: "false"
+            - name: CONVOY_API_VERSION
+              value: "2024-01-01"
+            - name: CONVOY_ENABLE_PYROSCOPE_PROFILING
+              value: "false"
+            - name: CONVOY_PYROSCOPE_URL
+              value: ""
+            - name: CONVOY_PYROSCOPE_USERNAME
+              value: ""
+            - name: CONVOY_PYROSCOPE_PASSWORD
+              value: ""
+            - name: CONVOY_PYROSCOPE_PROFILE_ID
+              value: ""
+
+            - name: CONVOY_LICENSE_KEY
+              value: ""
+            - name: CONVOY_MAX_RETRY_SECONDS
+              value: "7200"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+          resources:
+            {}
+---
+# Source: convoy/charts/postgresql/templates/primary/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgresql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: postgresql
+    helm.sh/chart: postgresql-12.5.6
+    app.kubernetes.io/instance: my-convoy
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: primary
+spec:
+  replicas: 1
+  serviceName: postgresql-hl
+  updateStrategy:
+    rollingUpdate: {}
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgresql
+      app.kubernetes.io/instance: my-convoy
+      app.kubernetes.io/component: primary
+  template:
+    metadata:
+      name: postgresql
+      labels:
+        app.kubernetes.io/name: postgresql
+        helm.sh/chart: postgresql-12.5.6
+        app.kubernetes.io/instance: my-convoy
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/component: primary
+    spec:
+      serviceAccountName: default
+      
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: postgresql
+                    app.kubernetes.io/instance: my-convoy
+                    app.kubernetes.io/component: primary
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+      hostNetwork: false
+      hostIPC: false
+      containers:
+        - name: postgresql
+          image: docker.io/bitnami/postgresql:15.3.0-debian-11-r7
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            runAsUser: 1001
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: POSTGRESQL_PORT_NUMBER
+              value: "5432"
+            - name: POSTGRESQL_VOLUME_DIR
+              value: "/bitnami/postgresql"
+            - name: PGDATA
+              value: "/bitnami/postgresql/data"
+            # Authentication
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgresql
+                  key: postgres-password
+            - name: POSTGRES_DB
+              value: "convoy"
+            # Replication
+            # Initdb
+            # Standby
+            # LDAP
+            - name: POSTGRESQL_ENABLE_LDAP
+              value: "no"
+            # TLS
+            - name: POSTGRESQL_ENABLE_TLS
+              value: "no"
+            # Audit
+            - name: POSTGRESQL_LOG_HOSTNAME
+              value: "false"
+            - name: POSTGRESQL_LOG_CONNECTIONS
+              value: "false"
+            - name: POSTGRESQL_LOG_DISCONNECTIONS
+              value: "false"
+            - name: POSTGRESQL_PGAUDIT_LOG_CATALOG
+              value: "off"
+            # Others
+            - name: POSTGRESQL_CLIENT_MIN_MESSAGES
+              value: "error"
+            - name: POSTGRESQL_SHARED_PRELOAD_LIBRARIES
+              value: "pgaudit"
+          ports:
+            - name: tcp-postgresql
+              containerPort: 5432
+          livenessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - exec pg_isready -U "postgres" -d "dbname=convoy" -h 127.0.0.1 -p 5432
+          readinessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - -e
+                
+                - |
+                  exec pg_isready -U "postgres" -d "dbname=convoy" -h 127.0.0.1 -p 5432
+                  [ -f /opt/bitnami/postgresql/tmp/.initialized ] || [ -f /bitnami/postgresql/.initialized ]
+          resources:
+            limits: {}
+            requests:
+              cpu: 250m
+              memory: 256Mi
+          volumeMounts:
+            - name: dshm
+              mountPath: /dev/shm
+            - name: data
+              mountPath: /bitnami/postgresql
+      volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "8Gi"
+---
+# Source: convoy/charts/redis/templates/master/application.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis-master
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: redis
+    helm.sh/chart: redis-17.11.3
+    app.kubernetes.io/instance: my-convoy
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: master
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: redis
+      app.kubernetes.io/instance: my-convoy
+      app.kubernetes.io/component: master
+  serviceName: redis-headless
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: redis
+        helm.sh/chart: redis-17.11.3
+        app.kubernetes.io/instance: my-convoy
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/component: master
+      annotations:
+        checksum/configmap: 2e369f10f432ce6e3de9101ff668e9c9a6438f864c3ad6ea90d67f13b1a790cb
+        checksum/health: 4270e317ebd86f105ed36c4abde8ab695a1b36493ac2c830fda8f801d2932595
+        checksum/scripts: 9295b34d67fdffe062c5430d2b88a910ffe30e9ee508514a19c757ea9b76e8bd
+        checksum/secret: 942be9eef400073d0fcf65589c09b4b11ef4e99d79e5284d9725c1aa5b398fd0
+    spec:
+      
+      securityContext:
+        fsGroup: 1001
+      serviceAccountName: redis
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: redis
+                    app.kubernetes.io/instance: my-convoy
+                    app.kubernetes.io/component: master
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: redis
+          image: docker.io/bitnami/redis:7.0.11-debian-11-r12
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            runAsUser: 1001
+          command:
+            - /bin/bash
+          args:
+            - -c
+            - /opt/bitnami/scripts/start-scripts/start-master.sh
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: REDIS_REPLICATION_MODE
+              value: master
+            - name: ALLOW_EMPTY_PASSWORD
+              value: "no"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis
+                  key: redis-password
+            - name: REDIS_TLS_ENABLED
+              value: "no"
+            - name: REDIS_PORT
+              value: "6379"
+          ports:
+            - name: redis
+              containerPort: 6379
+          livenessProbe:
+            initialDelaySeconds: 20
+            periodSeconds: 5
+            # One second longer than command timeout should prevent generation of zombie processes.
+            timeoutSeconds: 6
+            successThreshold: 1
+            failureThreshold: 5
+            exec:
+              command:
+                - sh
+                - -c
+                - /health/ping_liveness_local.sh 5
+          readinessProbe:
+            initialDelaySeconds: 20
+            periodSeconds: 5
+            timeoutSeconds: 2
+            successThreshold: 1
+            failureThreshold: 5
+            exec:
+              command:
+                - sh
+                - -c
+                - /health/ping_readiness_local.sh 1
+          resources:
+            limits: {}
+            requests: {}
+          volumeMounts:
+            - name: start-scripts
+              mountPath: /opt/bitnami/scripts/start-scripts
+            - name: health
+              mountPath: /health
+            - name: redis-data
+              mountPath: /data
+            - name: config
+              mountPath: /opt/bitnami/redis/mounted-etc
+            - name: redis-tmp-conf
+              mountPath: /opt/bitnami/redis/etc/
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: start-scripts
+          configMap:
+            name: redis-scripts
+            defaultMode: 0755
+        - name: health
+          configMap:
+            name: redis-health
+            defaultMode: 0755
+        - name: config
+          configMap:
+            name: redis-configuration
+        - name: redis-tmp-conf
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: redis-data
+        labels:
+          app.kubernetes.io/name: redis
+          app.kubernetes.io/instance: my-convoy
+          app.kubernetes.io/component: master
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "8Gi"
+---
+# Source: convoy/charts/agent/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "convoy-agent-test-connection"
+  labels:
+    helm.sh/chart: agent-1.0.0
+    app.kubernetes.io/name: convoy-agent
+    app.kubernetes.io/instance: my-convoy
+    app.kubernetes.io/version: "v24.8.2"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['convoy-agent:80/health']
+  restartPolicy: Never
+---
+# Source: convoy/charts/server/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "convoy-server-test-connection"
+  labels:
+    helm.sh/chart: server-1.0.0
+    app.kubernetes.io/name: convoy-server
+    app.kubernetes.io/instance: my-convoy
+    app.kubernetes.io/version: "v24.8.2"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['convoy-server:80/health']
+  restartPolicy: Never

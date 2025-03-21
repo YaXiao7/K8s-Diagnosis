@@ -1,0 +1,170 @@
+---
+# Source: mysqldump/templates/secret-mysql.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: "my-mysqldump"
+  labels:
+    helm.sh/chart: mysqldump-6.4.0
+    app.kubernetes.io/name: mysqldump
+    app.kubernetes.io/instance: my-mysqldump
+    app.kubernetes.io/version: "v3.2.0"
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  MYSQL_PWD: "SWswU2llN0ZmdHZuR3RxcFNTNk9IaWxnc3gxajZGUGJybDJYa2s3Mg=="
+---
+# Source: mysqldump/templates/configmap-script.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-mysqldump-script
+  labels:
+    helm.sh/chart: mysqldump-6.4.0
+    app.kubernetes.io/name: mysqldump
+    app.kubernetes.io/instance: my-mysqldump
+    app.kubernetes.io/version: "v3.2.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+  backup.sh: |-
+    #!/bin/sh
+    #
+    # mysql backup script
+    #
+    
+
+    
+    echo "no mysql.host set in values file... nothing to do... exiting :)"
+---
+# Source: mysqldump/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-mysqldump
+  labels:
+    helm.sh/chart: mysqldump-6.4.0
+    app.kubernetes.io/name: mysqldump
+    app.kubernetes.io/instance: my-mysqldump
+    app.kubernetes.io/version: "v3.2.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+  MYSQL_HOST: ""
+  MYSQL_USERNAME: "root"
+  MYSQL_PORT: "3306"
+  MYSQL_OPTS: "--opt --single-transaction"
+  KEEP_DAYS: "10"
+---
+# Source: mysqldump/templates/pvc.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: my-mysqldump
+  labels:
+    helm.sh/chart: mysqldump-6.4.0
+    app.kubernetes.io/name: mysqldump
+    app.kubernetes.io/instance: my-mysqldump
+    app.kubernetes.io/version: "v3.2.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 8Gi
+---
+# Source: mysqldump/templates/job.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: my-mysqldump
+  labels:
+    helm.sh/chart: mysqldump-6.4.0
+    app.kubernetes.io/name: mysqldump
+    app.kubernetes.io/instance: my-mysqldump
+    app.kubernetes.io/version: "v3.2.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  backoffLimit: 1
+  template:
+    
+    spec:
+      containers:
+      - name: mysql-backup
+        image: "quay.io/monotek/gcloud-mysql:v3.2.0"
+        imagePullPolicy: "IfNotPresent"
+        command: ["/bin/bash", "/scripts/backup.sh"]
+        envFrom:
+        - configMapRef:
+            name: "my-mysqldump"
+        - secretRef:
+            name: "my-mysqldump"
+        volumeMounts:
+        - name: backups
+          mountPath: /backup
+        - name: mysql-backup-script
+          mountPath: /scripts
+        resources: 
+          {}
+      restartPolicy: Never
+      volumes:
+      - name: backups
+        persistentVolumeClaim:
+          claimName: my-mysqldump
+      - name: mysql-backup-script
+        configMap:
+          name: my-mysqldump-script
+---
+# Source: mysqldump/templates/cron.yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: my-mysqldump
+  labels:
+    helm.sh/chart: mysqldump-6.4.0
+    app.kubernetes.io/name: mysqldump
+    app.kubernetes.io/instance: my-mysqldump
+    app.kubernetes.io/version: "v3.2.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  schedule: "0 3 * * *"
+  successfulJobsHistoryLimit: 5
+  failedJobsHistoryLimit: 5
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    metadata:
+      labels:
+        helm.sh/chart: mysqldump-6.4.0
+        app.kubernetes.io/name: mysqldump
+        app.kubernetes.io/instance: my-mysqldump
+        app.kubernetes.io/version: "v3.2.0"
+        app.kubernetes.io/managed-by: Helm
+        cronjob-name: my-mysqldump
+    spec:
+      backoffLimit: 1
+      template:
+        
+        spec:
+          containers:
+          - name: mysql-backup
+            image: "quay.io/monotek/gcloud-mysql:v3.2.0"
+            imagePullPolicy: "IfNotPresent"
+            command: ["/bin/bash", "/scripts/backup.sh"]
+            envFrom:
+            - configMapRef:
+                name: "my-mysqldump"
+            - secretRef:
+                name: "my-mysqldump"
+            volumeMounts:
+            - name: backups
+              mountPath: /backup
+            - name: mysql-backup-script
+              mountPath: /scripts
+            resources: 
+              {}
+          restartPolicy: Never
+          volumes:
+          - name: backups
+            persistentVolumeClaim:
+              claimName: my-mysqldump
+          - name: mysql-backup-script
+            configMap:
+              name: my-mysqldump-script

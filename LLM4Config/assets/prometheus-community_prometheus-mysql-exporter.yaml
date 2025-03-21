@@ -1,0 +1,106 @@
+---
+# Source: prometheus-mysql-exporter/templates/secret-config.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-prometheus-mysql-exporter-config
+  namespace: default
+  labels:
+    helm.sh/chart: prometheus-mysql-exporter-2.6.1
+    app.kubernetes.io/name: prometheus-mysql-exporter
+    app.kubernetes.io/instance: my-prometheus-mysql-exporter
+    app.kubernetes.io/version: "v0.15.1"
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+stringData:
+  my.cnf: |
+      [client]
+      host=localhost
+      port=3306
+      user=exporter
+      password=password
+---
+# Source: prometheus-mysql-exporter/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-prometheus-mysql-exporter
+  namespace: default
+  labels:
+    helm.sh/chart: prometheus-mysql-exporter-2.6.1
+    app.kubernetes.io/name: prometheus-mysql-exporter
+    app.kubernetes.io/instance: my-prometheus-mysql-exporter
+    app.kubernetes.io/version: "v0.15.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9104
+      targetPort: 9104
+      protocol: TCP
+      name: mysql-exporter
+  selector:
+    app.kubernetes.io/name: prometheus-mysql-exporter
+    app.kubernetes.io/instance: my-prometheus-mysql-exporter
+---
+# Source: prometheus-mysql-exporter/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-prometheus-mysql-exporter
+  namespace: default
+  labels:
+    helm.sh/chart: prometheus-mysql-exporter-2.6.1
+    app.kubernetes.io/name: prometheus-mysql-exporter
+    app.kubernetes.io/instance: my-prometheus-mysql-exporter
+    app.kubernetes.io/version: "v0.15.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus-mysql-exporter
+      app.kubernetes.io/instance: my-prometheus-mysql-exporter
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: prometheus-mysql-exporter
+        app.kubernetes.io/instance: my-prometheus-mysql-exporter
+      annotations:
+        checksum/credentials: f115289d25b146b5f2a93b3c0c5f363c3c36e06efa5728b978722fc2a4aad394
+        prometheus.io/path: /metrics
+        prometheus.io/port: "9104"
+        prometheus.io/scrape: "true"
+    spec:
+      serviceAccountName: default
+      securityContext:
+        {}
+      containers:
+        - name: prometheus-mysql-exporter
+          securityContext:
+            {}
+          image: "quay.io/prometheus/mysqld-exporter:v0.15.1"
+          imagePullPolicy: IfNotPresent
+          args:
+            - "--config.my-cnf=/etc/cnf/my.cnf"
+          env:
+          ports:
+            - containerPort: 9104
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 9104
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 9104
+          volumeMounts:
+            - name: secret-config
+              mountPath: /etc/cnf/
+              readOnly: true
+          resources:
+            {}
+      volumes:
+        - name: secret-config
+          secret:
+            secretName: my-prometheus-mysql-exporter-config

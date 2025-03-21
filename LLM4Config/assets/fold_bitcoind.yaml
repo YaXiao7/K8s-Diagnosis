@@ -1,0 +1,123 @@
+---
+# Source: bitcoind/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-bitcoind
+  labels:
+    app: bitcoind
+    chart: bitcoind-0.3.2
+    release: my-bitcoind
+    heritage: Helm
+data:
+  bitcoin.conf: |-
+    server=1
+    printtoconsole=1
+    rpcuser=rpcuser
+    rpcpassword=rpcpassword
+---
+# Source: bitcoind/templates/pvc.yaml
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: my-bitcoind
+  annotations:
+    "helm.sh/resource-policy": keep
+  labels:
+    app: bitcoind
+    chart: "bitcoind-0.3.2"
+    release: "my-bitcoind"
+    heritage: "Helm"
+spec:
+  accessModes:
+    - "ReadWriteOnce"
+  resources:
+    requests:
+      storage: "300Gi"
+---
+# Source: bitcoind/templates/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-bitcoind
+  labels:
+    app: bitcoind
+    chart: bitcoind-0.3.2
+    release: my-bitcoind
+    heritage: Helm
+spec:
+  ports:
+    - name: rpc
+      port: 8332
+      targetPort: rpc
+    - name: p2p
+      port: 8333
+      targetPort: p2p
+    - name: testnet
+      port: 18332
+    - name: testnet-p2p
+      port: 18333
+  selector:
+    app: bitcoind
+    release: my-bitcoind
+---
+# Source: bitcoind/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-bitcoind
+  labels:
+    app: bitcoind
+    chart: bitcoind-0.3.2
+    release: my-bitcoind
+    heritage: Helm
+spec:
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: bitcoind
+      release: my-bitcoind
+  template:
+    metadata:
+      labels:
+        app: bitcoind
+        release: my-bitcoind
+    spec:
+      terminationGracePeriodSeconds: 30
+      initContainers:
+        - name: copy-bitcoind-config
+          image: busybox
+          command: ['sh', '-c', 'cp /configmap/bitcoin.conf /bitcoin/.bitcoin/bitcoin.conf']
+          volumeMounts:
+            - name: configmap
+              mountPath: /configmap
+            - name: data
+              mountPath: /bitcoin
+      containers:
+        - name: my-bitcoind
+          image: "thesisrobot/bitcoind:v23.0"
+          imagePullPolicy: "IfNotPresent"
+          resources:
+            {}
+          ports:
+            - name: rpc
+              containerPort: 8332
+            - name: p2p
+              containerPort: 8333
+            - name: testnet
+              containerPort: 18332
+            - name: testnetp2pport
+              containerPort: 18333
+          volumeMounts:
+            - name: data
+              mountPath: /bitcoin
+      volumes:
+        - name: config
+          emptyDir: {}
+        - name: configmap
+          configMap:
+            name: my-bitcoind
+        - name: data
+          persistentVolumeClaim:
+            claimName: my-bitcoind

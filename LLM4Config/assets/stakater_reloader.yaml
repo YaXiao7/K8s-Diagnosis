@@ -1,0 +1,188 @@
+---
+# Source: reloader/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  annotations:
+    meta.helm.sh/release-namespace: "default"
+    meta.helm.sh/release-name: "my-reloader"
+  labels:
+    app: my-reloader-reloader
+    chart: "reloader-1.1.0"
+    release: "my-reloader"
+    heritage: "Helm"
+    app.kubernetes.io/managed-by: "Helm"
+  name: my-reloader-reloader
+  namespace: default
+---
+# Source: reloader/templates/clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+
+kind: ClusterRole
+metadata:
+  annotations:
+    meta.helm.sh/release-namespace: "default"
+    meta.helm.sh/release-name: "my-reloader"
+  labels:
+    app: my-reloader-reloader
+    chart: "reloader-1.1.0"
+    release: "my-reloader"
+    heritage: "Helm"
+    app.kubernetes.io/managed-by: "Helm"
+  name: my-reloader-reloader-role
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+      - configmaps
+    verbs:
+      - list
+      - get
+      - watch
+  - apiGroups:
+      - "apps"
+    resources:
+      - deployments
+      - daemonsets
+      - statefulsets
+    verbs:
+      - list
+      - get
+      - update
+      - patch
+  - apiGroups:
+      - "extensions"
+    resources:
+      - deployments
+      - daemonsets
+    verbs:
+      - list
+      - get
+      - update
+      - patch
+  - apiGroups:
+      - "batch"
+    resources:
+      - cronjobs
+    verbs:
+      - list
+      - get
+  - apiGroups:
+      - "batch"
+    resources:
+      - jobs
+    verbs:
+      - create
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - create
+      - patch
+---
+# Source: reloader/templates/clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+
+kind: ClusterRoleBinding
+metadata:
+  annotations:
+    meta.helm.sh/release-namespace: "default"
+    meta.helm.sh/release-name: "my-reloader"
+  labels:
+    app: my-reloader-reloader
+    chart: "reloader-1.1.0"
+    release: "my-reloader"
+    heritage: "Helm"
+    app.kubernetes.io/managed-by: "Helm"
+  name: my-reloader-reloader-role-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-reloader-reloader-role
+subjects:
+  - kind: ServiceAccount
+    name: my-reloader-reloader
+    namespace: default
+---
+# Source: reloader/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    meta.helm.sh/release-namespace: "default"
+    meta.helm.sh/release-name: "my-reloader"
+  labels:
+    app: my-reloader-reloader
+    chart: "reloader-1.1.0"
+    release: "my-reloader"
+    heritage: "Helm"
+    app.kubernetes.io/managed-by: "Helm"
+    group: com.stakater.platform
+    provider: stakater
+    version: v1.1.0
+  name: my-reloader-reloader
+  namespace: default
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app: my-reloader-reloader
+      release: "my-reloader"
+  template:
+    metadata:
+      labels:
+        app: my-reloader-reloader
+        chart: "reloader-1.1.0"
+        release: "my-reloader"
+        heritage: "Helm"
+        app.kubernetes.io/managed-by: "Helm"
+        group: com.stakater.platform
+        provider: stakater
+        version: v1.1.0
+    spec:
+      containers:
+      - image: "ghcr.io/stakater/reloader:v1.1.0"
+        imagePullPolicy: IfNotPresent
+        name: my-reloader-reloader
+        env:
+        - name: GOMAXPROCS
+          valueFrom:
+            resourceFieldRef:
+              resource: limits.cpu
+        - name: GOMEMLIMIT
+          valueFrom:
+            resourceFieldRef:
+              resource: limits.memory
+        ports:
+        - name: http
+          containerPort: 9090
+        livenessProbe:
+          httpGet:
+            path: /live
+            port: http
+          timeoutSeconds: 5
+          failureThreshold: 5
+          periodSeconds: 10
+          successThreshold: 1
+          initialDelaySeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /metrics
+            port: http
+          timeoutSeconds: 5
+          failureThreshold: 5
+          periodSeconds: 10
+          successThreshold: 1
+          initialDelaySeconds: 10
+
+        securityContext:
+          {}
+      securityContext: 
+        runAsNonRoot: true
+        runAsUser: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      serviceAccountName: my-reloader-reloader

@@ -1,0 +1,500 @@
+---
+# Source: mongooseim/templates/mongoose-cm.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mongooseim
+  labels:
+    app: mongooseim
+data:
+  mongooseim.toml: |-
+    [general]
+      loglevel = "warning"
+      default_server_domain = "localhost"
+      hosts = ["localhost"]
+      registration_timeout = "infinity"
+      language = "en"
+      all_metrics_are_global = false
+      sm_backend = "mnesia"
+      component_backend = "mnesia"
+      s2s_backend = "mnesia"
+      max_fsm_queue = 1000
+    
+    [[listen.http]]
+      port = 5280
+      transport.num_acceptors = 10
+      transport.max_connections = 1024
+    
+      [[listen.http.handlers.mod_bosh]]
+        host = "_"
+        path = "/http-bind"
+    
+      [[listen.http.handlers.mod_websockets]]
+        host = "_"
+        path = "/ws-xmpp"
+    
+    [[listen.http]]
+      port = 5285
+      transport.num_acceptors = 10
+      transport.max_connections = 1024
+      tls.verify_mode = "none"
+      tls.certfile = "priv/ssl/fake_cert.pem"
+      tls.keyfile = "priv/ssl/fake_key.pem"
+      tls.password = ""
+    
+      [[listen.http.handlers.mod_bosh]]
+        host = "_"
+        path = "/http-bind"
+    
+      [[listen.http.handlers.mod_websockets]]
+        host = "_"
+        path = "/ws-xmpp"
+    
+    [[listen.http]]
+      ip_address = "127.0.0.1"
+      port = 8088
+      transport.num_acceptors = 10
+      transport.max_connections = 1024
+    
+      [[listen.http.handlers.mongoose_admin_api]]
+        host = "localhost"
+        path = "/api"
+    
+    [[listen.http]]
+      port = 8089
+      transport.num_acceptors = 10
+      transport.max_connections = 1024
+      protocol.compress = true
+      tls.verify_mode = "none"
+      tls.certfile = "priv/ssl/fake_cert.pem"
+      tls.keyfile = "priv/ssl/fake_key.pem"
+      tls.password = ""
+    
+      [[listen.http.handlers.mongoose_client_api]]
+        host = "_"
+        path = "/api"
+    
+    [[listen.http]]
+      ip_address = "127.0.0.1"
+      port = 5551
+      transport.num_acceptors = 10
+      transport.max_connections = 1024
+    
+      [[listen.http.handlers.mongoose_graphql_handler]]
+        host = "localhost"
+        path = "/api/graphql"
+        schema_endpoint = "admin"
+        username = "admin"
+        password = "secret"
+    
+    [[listen.http]]
+      ip_address = "0.0.0.0"
+      port = 5541
+      transport.num_acceptors = 10
+      transport.max_connections = 1024
+    
+      [[listen.http.handlers.mongoose_graphql_handler]]
+        host = "_"
+        path = "/api/graphql"
+        schema_endpoint = "domain_admin"
+    
+    [[listen.http]]
+      ip_address = "0.0.0.0"
+      port = 5561
+      transport.num_acceptors = 10
+      transport.max_connections = 1024
+    
+      [[listen.http.handlers.mongoose_graphql_handler]]
+        host = "_"
+        path = "/api/graphql"
+        schema_endpoint = "user"
+    
+    [[listen.c2s]]
+      port = 5222
+      access = "c2s"
+      shaper = "c2s_shaper"
+      max_stanza_size = 65536
+      tls.verify_mode = "none"
+      tls.certfile = "priv/ssl/fake_server.pem"
+    
+    [[listen.c2s]]
+      port = 5223
+      access = "c2s"
+      shaper = "c2s_shaper"
+      max_stanza_size = 65536
+      tls.mode = "tls"
+      tls.verify_mode = "none"
+      tls.certfile = "priv/ssl/fake_server.pem"
+    
+    [[listen.s2s]]
+      port = 5269
+      shaper = "s2s_shaper"
+      max_stanza_size = 131072
+    
+    [[listen.service]]
+      port = 8888
+      access = "all"
+      shaper_rule = "fast"
+      ip_address = "127.0.0.1"
+      password = "secret"
+    
+    [auth]
+    
+      [auth.password]
+        format = "scram"
+        hash = ["sha256"]
+        scram_iterations = 64
+    
+      [auth.internal]
+    
+    [internal_databases.mnesia]
+    
+    [services.service_mongoose_system_metrics]
+    
+    [modules.mod_adhoc]
+    
+    [modules.mod_disco]
+      users_can_see_hidden_services = false
+    
+    [modules.mod_last]
+      backend = "mnesia"
+    
+    [modules.mod_stream_management]
+      backend = "mnesia"
+    
+    [modules.mod_offline]
+      access_max_user_messages = "max_user_offline_messages"
+      backend = "mnesia"
+    
+    [modules.mod_privacy]
+      backend = "mnesia"
+    
+    [modules.mod_blocking]
+      backend = "mnesia"
+    
+    [modules.mod_private]
+      backend = "mnesia"
+    
+    [modules.mod_register]
+      ip_access = [
+        {address = "127.0.0.0/8", policy = "allow"},
+        {address = "0.0.0.0/0", policy = "deny"}
+      ]
+      access = "register"
+    
+    [modules.mod_presence]
+    
+    [modules.mod_roster]
+      backend = "mnesia"
+    
+    [modules.mod_sic]
+    
+    [modules.mod_vcard]
+      host = "vjud.@HOST@"
+      backend = "mnesia"
+    
+    [modules.mod_bosh]
+      backend = "mnesia"
+    
+    [modules.mod_carboncopy]
+    
+    [shaper.normal]
+      max_rate = 1000
+    
+    [shaper.fast]
+      max_rate = 50_000
+    
+    [shaper.mam_shaper]
+      max_rate = 1
+    
+    [shaper.mam_global_shaper]
+      max_rate = 1000
+    
+    [acl]
+      local = [
+        {user_regexp = ""}
+      ]
+    
+    [access]
+      max_user_sessions = [
+        {acl = "all", value = 10}
+      ]
+    
+      max_user_offline_messages = [
+        {acl = "admin", value = 5000},
+        {acl = "all", value = 100}
+      ]
+    
+      local = [
+        {acl = "local", value = "allow"}
+      ]
+    
+      c2s = [
+        {acl = "blocked", value = "deny"},
+        {acl = "all", value = "allow"}
+      ]
+    
+      c2s_shaper = [
+        {acl = "admin", value = "none"},
+        {acl = "all", value = "normal"}
+      ]
+    
+      s2s_shaper = [
+        {acl = "all", value = "fast"}
+      ]
+    
+      muc_admin = [
+        {acl = "admin", value = "allow"}
+      ]
+    
+      muc_create = [
+        {acl = "local", value = "allow"}
+      ]
+    
+      muc = [
+        {acl = "all", value = "allow"}
+      ]
+    
+      register = [
+        {acl = "all", value = "allow"}
+      ]
+    
+      mam_set_prefs = [
+        {acl = "all", value = "default"}
+      ]
+    
+      mam_get_prefs = [
+        {acl = "all", value = "default"}
+      ]
+    
+      mam_lookup_messages = [
+        {acl = "all", value = "default"}
+      ]
+    
+      mam_set_prefs_shaper = [
+        {acl = "all", value = "mam_shaper"}
+      ]
+    
+      mam_get_prefs_shaper = [
+        {acl = "all", value = "mam_shaper"}
+      ]
+    
+      mam_lookup_messages_shaper = [
+        {acl = "all", value = "mam_shaper"}
+      ]
+    
+      mam_set_prefs_global_shaper = [
+        {acl = "all", value = "mam_global_shaper"}
+      ]
+    
+      mam_get_prefs_global_shaper = [
+        {acl = "all", value = "mam_global_shaper"}
+      ]
+    
+      mam_lookup_messages_global_shaper = [
+        {acl = "all", value = "mam_global_shaper"}
+      ]
+    
+    [s2s]
+      use_starttls = "optional"
+      certfile = "priv/ssl/fake_server.pem"
+      default_policy = "deny"
+      outgoing.port = 5269
+    
+    #[[host_config]]
+    #  host = "anonymous.localhost"
+    #
+    #  [host_config.auth]
+    #    methods = ["anonymous"]
+    #    anonymous.allow_multiple_connections = true
+    #    anonymous.protocol = "both"
+    
+  vm.args: |-
+    ## Name of the node.
+    -name mongooseim
+    
+    ## Cookie for distributed erlang
+    -setcookie mongooseim
+    
+    ## Enable more processes (10M)
+    +P 10000000
+    
+    ## Increase number of concurrent ports/sockets
+    -env ERL_MAX_PORTS 250000
+    
+    ## Tweak GC to run more often
+    -env ERL_FULLSWEEP_AFTER 2
+    
+    ## With lager sasl reports are redundant so turn them off
+    -sasl sasl_error_logger false
+    
+    -kernel inet_dist_listen_min 9100
+    -kernel inet_dist_listen_max 9100
+    
+    ## Use a custom Erlang Port Mapper (EPMD) module
+    ## This module uses RDBMS and CETS to resolve node IP addresses
+---
+# Source: mongooseim/templates/mongoose-svc-lb.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongooseim-lb
+  namespace:
+  labels:
+spec:
+  ports:
+  - name: c2s
+    protocol: TCP
+    port: 5222
+    targetPort: 5222
+  - name: c2s-tls
+    protocol: TCP
+    port: 5223
+    targetPort: 5223
+  - name: bosh-ws
+    protocol: TCP
+    port: 5280
+    targetPort: 5280
+  - name: bosh-wss
+    protocol: TCP
+    port: 5285
+    targetPort: 5285
+  - name: gql-dom-admin
+    protocol: TCP
+    port: 5541
+    targetPort: 5541
+  - name: gql-user
+    protocol: TCP
+    port: 5561
+    targetPort: 5561
+  selector:
+    app: mongooseim
+  type: LoadBalancer
+---
+# Source: mongooseim/templates/mongoose-svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongooseim
+  labels:
+    app: mongooseim
+spec:
+  ports:
+  - name: epmd
+    port: 4369
+    targetPort: 4369
+  - name: c2s
+    port: 5222
+    targetPort: 5222
+  - name: c2s-tls
+    port: 5223
+    targetPort: 5223
+  - name: s2s
+    port: 5269
+    targetPort: 5269
+  - name: bosh-ws
+    port: 5280
+    targetPort: 5280
+  - name: bosh-wss
+    port: 5285
+    targetPort: 5285
+  - name: erlang-dist
+    port: 9100
+    targetPort: 9100
+  - name: gql-admin
+    port: 5551
+    targetPort: 5551
+  - name: gql-dom-admin
+    port: 5541
+    targetPort: 5541
+  - name: gql-user
+    port: 5561
+    targetPort: 5561
+  # Headless service
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    app: mongooseim
+---
+# Source: mongooseim/templates/mongoose-sts.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mongooseim
+  namespace:
+  labels:
+    type: statefulset
+spec:
+  serviceName: mongooseim
+  replicas: 1
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: mongooseim
+  template:
+    metadata:
+      labels:
+        app: mongooseim
+      annotations:
+        rollout: YNAG9maoRuOHKP0Y6rCoixdX
+    spec:
+      subdomain: mongooseim
+      containers:
+      - name: mongooseim
+        image: mongooseim/mongooseim:6.2.1
+        imagePullPolicy: IfNotPresent
+        env:
+          - name: MASTER_ORDINAL
+            value: "0"
+          - name: NODE_TYPE
+            value: "name"
+          - name: NODE_NAME
+            value: mongooseim
+          - name: MIM_NODE_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+        ports:
+        - name: epmd
+          containerPort: 4369
+        - name: c2s
+          containerPort: 5222
+        - name: c2s-tls
+          containerPort: 5223
+        - name: s2s
+          containerPort: 5269
+        - name: bosh-ws
+          containerPort: 5280
+        - name: bosh-wss
+          containerPort: 5285
+        - name: erlang-dist
+          containerPort: 9100
+        - name: gql-admin
+          containerPort: 5551
+        - name: gql-dom-admin
+          containerPort: 5541
+        - name: gql-user
+          containerPort: 5561
+        readinessProbe:
+          tcpSocket:
+            port: c2s
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        volumeMounts:
+        - name: config-map
+          mountPath: /member
+        - name: mnesia
+          mountPath: /var/lib/mongooseim
+      volumes:
+      - name: config-map
+        configMap:
+          name: mongooseim
+  volumeClaimTemplates:
+  - metadata:
+      name: mnesia
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 1Gi

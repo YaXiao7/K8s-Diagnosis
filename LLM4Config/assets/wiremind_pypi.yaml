@@ -1,0 +1,120 @@
+---
+# Source: pypi/templates/secret.yaml
+apiVersion: v1
+data:
+  auth: OiQyYSQxMCRxTnd5V3ZtZXh0SEJDbFMwVVJOeWV1NnN0Zmo5TEY4VVp5Q3E1bXF5ZmNodW96MGtZdDlqVw==
+kind: Secret
+metadata:
+  name:  default-basic-auth-upload-htpasswd
+---
+# Source: pypi/templates/pvc.yaml
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: my-pypi
+  labels:
+    app: my-pypi
+    chart: "pypi-0.2.1"
+    release: "my-pypi"
+    heritage: "Helm"
+spec:
+  accessModes:
+    - "ReadWriteOnce"
+  resources:
+    requests:
+      storage: "1Gi"
+---
+# Source: pypi/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-pypi
+  labels:
+    app: pypi
+    chart: pypi-0.2.1
+    release: my-pypi
+    heritage: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app: pypi
+    release: my-pypi
+---
+# Source: pypi/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-pypi
+  labels:
+    app: pypi
+    chart: pypi-0.2.1
+    release: my-pypi
+    heritage: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pypi
+      release: my-pypi
+  template:
+    metadata:
+      labels:
+        app: pypi
+        release: my-pypi
+    spec:
+      containers:
+        - name: pypi
+          image: "codekoala/pypi:1.2.1"
+          imagePullPolicy: IfNotPresent
+          env:
+          - name: "PYPI_PASSWD_FILE"
+            value: "/htpasswd/auth"
+          - name: "PYPI_PORT"
+            value: "80"
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            failureThreshold: 3
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            successThreshold: 1
+            timeoutSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            failureThreshold: 3
+            initialDelaySeconds: 5
+            periodSeconds: 30
+            successThreshold: 1
+            timeoutSeconds: 10
+          resources:
+            limits:
+              cpu: 100m
+              memory: 128Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+          volumeMounts:
+          - name: data
+            mountPath: /srv/pypi
+          - name: htpasswd
+            readOnly: true
+            mountPath: "/htpasswd"
+      volumes:
+      - name: htpasswd
+        secret:
+          secretName: default-basic-auth-upload-htpasswd
+      - name: data
+        persistentVolumeClaim:
+          claimName: my-pypi

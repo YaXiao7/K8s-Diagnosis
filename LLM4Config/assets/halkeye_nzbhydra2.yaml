@@ -1,0 +1,111 @@
+---
+# Source: nzbhydra2/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-nzbhydra2
+  labels:
+    app.kubernetes.io/name: nzbhydra2
+    helm.sh/chart: nzbhydra2-2.30.1
+    app.kubernetes.io/instance: my-nzbhydra2
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5076
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: nzbhydra2
+    app.kubernetes.io/instance: my-nzbhydra2
+---
+# Source: nzbhydra2/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-nzbhydra2
+  labels:
+    app.kubernetes.io/name: nzbhydra2
+    helm.sh/chart: nzbhydra2-2.30.1
+    app.kubernetes.io/instance: my-nzbhydra2
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: nzbhydra2
+      app.kubernetes.io/instance: my-nzbhydra2
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: nzbhydra2
+        app.kubernetes.io/instance: my-nzbhydra2
+    spec:
+      initContainers:
+        - name: init-chown-data
+          image: busybox:1.30.0
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsUser: 0
+          command: ["chown", "-R", "1000:1000", "/config"]
+          volumeMounts:
+            - name: nzbhydra2-config
+              mountPath: /config
+      containers:
+        - name: nzbhydra2
+          image: "binhex/arch-nzbhydra2:3.1.0-1-01"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: PGID
+              value: "1000"
+            - name: PUID
+              value: "1000"
+            - name: UMASK
+              value: "0"
+          ports:
+            - name: http
+              containerPort: 5076
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          volumeMounts:
+          - name: nzbhydra2-config
+            mountPath: /config
+          - name: nzbhydra2-data
+            mountPath: /data
+          resources:
+            {}
+      volumes:
+      - name: nzbhydra2-config
+        emptyDir: {}
+      - name: nzbhydra2-data
+        emptyDir: {}
+---
+# Source: nzbhydra2/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-nzbhydra2-test-connection"
+  labels:
+    app.kubernetes.io/name: nzbhydra2
+    helm.sh/chart: nzbhydra2-2.30.1
+    app.kubernetes.io/instance: my-nzbhydra2
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args:  ['my-nzbhydra2:5076']
+  restartPolicy: Never

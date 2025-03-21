@@ -1,0 +1,1435 @@
+---
+# Source: repman/charts/minio/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-repman-minio
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: minio
+    helm.sh/chart: minio-12.1.10
+    app.kubernetes.io/instance: my-repman
+    app.kubernetes.io/managed-by: Helm
+automountServiceAccountToken: true
+secrets:
+  - name: my-repman-minio
+---
+# Source: repman/charts/minio/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-repman-minio
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: minio
+    helm.sh/chart: minio-12.1.10
+    app.kubernetes.io/instance: my-repman
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  root-user: "YWRtaW4="
+  root-password: "WlBOYzdSZ0w1MA=="
+---
+# Source: repman/templates/common.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-repman
+  labels:
+    helm.sh/chart: repman-3.51.3
+    app.kubernetes.io/name: repman
+    app.kubernetes.io/instance: my-repman
+    app.kubernetes.io/version: "1.4.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    
+type: Opaque
+stringData:
+  APP_SECRET: JfLDFqmXLEEQEhGzHkRbaMQrwcC9HLUI
+  MAILER_DSN: ''
+  MAILER_SENDER: ''
+  OAUTH_BITBUCKET_CLIENT_ID: ''
+  OAUTH_BITBUCKET_CLIENT_SECRET: ''
+  OAUTH_BUDDY_CLIENT_ID: ''
+  OAUTH_BUDDY_CLIENT_SECRET: ''
+  OAUTH_GITHUB_CLIENT_ID: ''
+  OAUTH_GITHUB_CLIENT_SECRET: ''
+  OAUTH_GITLAB_CLIENT_ID: ''
+  OAUTH_GITLAB_CLIENT_SECRET: ''
+---
+# Source: repman/templates/common.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-repman-files
+  labels:
+    app.kubernetes.io/instance: my-repman
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: repman
+    app.kubernetes.io/version: 1.4.0
+    helm.sh/chart: repman-3.51.3
+data:
+  Version20210115094614.php: |-
+    <?php
+    declare(strict_types=1);
+    namespace Buddy\Repman\Migrations;
+    use Doctrine\DBAL\Schema\Schema;
+    use Doctrine\Migrations\AbstractMigration;
+    /**
+    * Auto-generated Migration: Please modify to your needs!
+    */
+    final class Version20210115094614 extends AbstractMigration
+    {
+        public function getDescription() : string
+        {
+            return 'add sessions to database';
+        }
+        public function up(Schema $schema) : void
+        {
+            $this->addSql('CREATE TABLE sessions (sess_id VARCHAR(128) NOT NULL PRIMARY KEY,sess_data BYTEA NOT NULL,sess_lifetime INTEGER NOT NULL, sess_time INTEGER NOT NULL);');
+        }
+        public function down(Schema $schema) : void
+        {
+            // this down() migration is auto-generated, please modify it to your needs
+        }
+    }
+  nginx.conf: |-
+    user nginx;
+    worker_processes auto;
+  
+    error_log /var/log/nginx/error.log warn;
+    pid /var/run/nginx.pid;
+  
+    events {
+        worker_connections 1024;
+    }
+  
+    http {
+        server_tokens off;
+        fastcgi_read_timeout 300;
+        client_max_body_size 200M;
+        log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+                        '$status $body_bytes_sent "$http_referer" '
+                        '"$http_user_agent" "$http_x_forwarded_for" '
+                        '$upstream_response_time';
+  
+        access_log  /var/log/nginx/access.log  main;
+  
+        sendfile            on;
+        tcp_nopush          on;
+        tcp_nodelay         on;
+        keepalive_timeout   65;
+        types_hash_max_size 2048;
+  
+        include             /etc/nginx/mime.types;
+        default_type        application/octet-stream;
+  
+        server {
+            listen       80;
+            listen       [::]:80;
+            server_name _;
+            root /app/public;
+  
+            add_header Strict-Transport-Security "max-age=31536000; includeSubDomains";
+            add_header X-Frame-Options DENY;
+            add_header X-Content-Type-Options nosniff;
+            add_header X-XSS-Protection "1; mode=block";
+  
+            location / {
+                try_files $uri /index.php$is_args$args;
+            }
+  
+            location ~ ^/index\.php(/|$) {
+                fastcgi_split_path_info ^(.+\.php)(/.*)$;
+                fastcgi_pass localhost:9000;
+                fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
+                fastcgi_param DOCUMENT_ROOT $realpath_root;
+                include fastcgi_params;
+                internal;
+            }
+        }
+    }
+  php-overrides.ini: |2-
+  
+    date.timezone="Europe/Warsaw"
+    opcache.interned_strings_buffer=16
+    opcache.max_accelerated_files=10000
+    opcache.memory_consumption=256
+    opcache.validate_timestamps=1
+  services_prod.yaml: |-
+    parameters:
+      aws_s3_region: '%env(STORAGE_AWS_REGION)%'
+      aws_s3_default_endpoint: 'https://s3.%aws_s3_region%.amazonaws.com'
+    services:
+      Aws\S3\S3Client:
+        lazy: true
+        arguments:
+        - version: 'latest'
+          region: '%aws_s3_region%'
+          endpoint: '%env(default:aws_s3_default_endpoint:STORAGE_AWS_ENDPOINT)%'
+          use_path_style_endpoint: '%env(bool:STORAGE_AWS_PATH_STYLE_ENDPOINT)%'
+          credentials:
+            key: '%env(STORAGE_AWS_KEY)%'
+            secret: '%env(STORAGE_AWS_SECRET)%'
+      Symfony\Component\HttpFoundation\Session\Storage\Handler\PdoSessionHandler:
+        arguments:
+          - 'postgresql://%env(DATABASE_USER)%:%env(DATABASE_PASSWORD)%@%env(DATABASE_HOSTNAME)%:5432/%env(DATABASE_DATABASE)%?serverVersion=%env(DATABASE_VERSION)%&charset=utf8'
+    framework:
+      session:
+        handler_id: Symfony\Component\HttpFoundation\Session\Storage\Handler\PdoSessionHandler
+    doctrine:
+      dbal:
+        url: 'postgresql://%env(DATABASE_USER)%:%env(DATABASE_PASSWORD)%@%env(DATABASE_HOSTNAME)%:5432/%env(DATABASE_DATABASE)%?serverVersion=%env(DATABASE_VERSION)%&charset=utf8'
+---
+# Source: repman/templates/common.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-repman-postgresql
+  labels:
+    app.kubernetes.io/instance: my-repman
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: repman
+    app.kubernetes.io/version: 1.4.0
+    helm.sh/chart: repman-3.51.3
+data:
+  postgresql.conf.sample: huge_pages = off
+---
+# Source: repman/charts/minio/templates/pvc.yaml
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: my-repman-minio
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: minio
+    helm.sh/chart: minio-12.1.10
+    app.kubernetes.io/instance: my-repman
+    app.kubernetes.io/managed-by: Helm
+spec:
+  accessModes:
+    - "ReadWriteOnce"
+  resources:
+    requests:
+      storage: "50Gi"
+---
+# Source: repman/templates/common.yaml
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: my-repman-public
+  labels:
+    app.kubernetes.io/instance: my-repman
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: repman
+    app.kubernetes.io/version: 1.4.0
+    helm.sh/chart: repman-3.51.3
+  annotations:
+spec:
+  accessModes:
+    - "ReadWriteMany"
+  resources:
+    requests:
+      storage: "1Gi"
+---
+# Source: repman/templates/common.yaml
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: my-repman-var
+  labels:
+    app.kubernetes.io/instance: my-repman
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: repman
+    app.kubernetes.io/version: 1.4.0
+    helm.sh/chart: repman-3.51.3
+  annotations:
+spec:
+  accessModes:
+    - "ReadWriteMany"
+  resources:
+    requests:
+      storage: "4Gi"
+---
+# Source: repman/charts/minio/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-repman-minio
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: minio
+    helm.sh/chart: minio-12.1.10
+    app.kubernetes.io/instance: my-repman
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - name: minio-api
+      port: 9000
+      targetPort: minio-api
+      nodePort: null
+    - name: minio-console
+      port: 9001
+      targetPort: minio-console
+      nodePort: null
+  selector:
+    app.kubernetes.io/name: minio
+    app.kubernetes.io/instance: my-repman
+---
+# Source: repman/templates/common.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-repman
+  labels:
+    app.kubernetes.io/instance: my-repman
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: repman
+    app.kubernetes.io/version: 1.4.0
+    helm.sh/chart: repman-3.51.3
+  annotations:
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: http
+    protocol: TCP
+    name: http
+  selector:
+    app.kubernetes.io/instance: my-repman
+    app.kubernetes.io/name: repman
+    role: app
+---
+# Source: repman/charts/minio/templates/standalone/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-repman-minio
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: minio
+    helm.sh/chart: minio-12.1.10
+    app.kubernetes.io/instance: my-repman
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: minio
+      app.kubernetes.io/instance: my-repman
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: minio
+        helm.sh/chart: minio-12.1.10
+        app.kubernetes.io/instance: my-repman
+        app.kubernetes.io/managed-by: Helm
+      annotations:
+        checksum/credentials-secret: c82d35de4248fce9ffe71a2ac48c73a70e42566366a2d85615f377fc0b3033df
+    spec:
+      
+      serviceAccountName: my-repman-minio
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: minio
+                    app.kubernetes.io/instance: my-repman
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+      containers:
+        - name: minio
+          image: docker.io/bitnami/minio:2023.2.27-debian-11-r1
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: MINIO_SCHEME
+              value: "http"
+            - name: MINIO_FORCE_NEW_KEYS
+              value: "no"
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: my-repman-minio
+                  key: root-user
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-repman-minio
+                  key: root-password
+            - name: MINIO_DEFAULT_BUCKETS
+              value: repman
+            - name: MINIO_BROWSER
+              value: "on"
+            - name: MINIO_PROMETHEUS_AUTH_TYPE
+              value: "public"
+            - name: MINIO_CONSOLE_PORT_NUMBER
+              value: "9001"
+          envFrom:
+          ports:
+            - name: minio-api
+              containerPort: 9000
+              protocol: TCP
+            - name: minio-console
+              containerPort: 9001
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /minio/health/live
+              port: minio-api
+              scheme: "HTTP"
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 5
+          readinessProbe:
+            tcpSocket:
+              port: minio-api
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 1
+            successThreshold: 1
+            failureThreshold: 5
+          resources:
+            limits: {}
+            requests: {}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: my-repman-minio
+---
+# Source: repman/templates/common.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-repman
+  labels:
+    app.kubernetes.io/instance: my-repman
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: repman
+    app.kubernetes.io/version: 1.4.0
+    helm.sh/chart: repman-3.51.3
+    role: app
+spec:
+  revisionHistoryLimit: 3
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: my-repman
+      app.kubernetes.io/name: repman
+      role: app
+  template:
+    metadata:
+      annotations:
+        
+        checksum/config: 4ae964f1ef1fb4913ed5cf99feb8df7356972f82589fd2fc1f006fa8abe77900
+      labels:
+        app.kubernetes.io/instance: my-repman
+        app.kubernetes.io/name: repman
+        role: app
+    spec:
+      
+      serviceAccountName: default
+      automountServiceAccountToken: true
+      dnsPolicy: ClusterFirst
+      enableServiceLinks: true
+      initContainers:
+        []
+      containers:
+        - name: my-repman
+          image: "buddy/repman:1.4.0"
+          imagePullPolicy: IfNotPresent
+          
+          env:
+            - name: APP_ALLOWED_PACKAGE_TYPES
+              value: git,github,gitlab,bitbucket,subversion,mercurial,pear,artifact,path
+            - name: APP_DEBUG
+              value: "0"
+            - name: APP_ENV
+              value: prod
+            - name: APP_GITLAB_API_URL
+              value: https://gitlab.com
+            - name: APP_HOST
+              value: example.com
+            - name: APP_URL_SCHEME
+              value: http
+            - name: DATABASE_DATABASE
+              value: repman
+            - name: DATABASE_HOSTNAME
+              value: repman-my-repman-postgresql-pooler
+            - name: DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: password
+                  name: repman.repman-my-repman-postgresql.credentials.postgresql.acid.zalan.do
+            - name: DATABASE_USER
+              valueFrom:
+                secretKeyRef:
+                  key: username
+                  name: repman.repman-my-repman-postgresql.credentials.postgresql.acid.zalan.do
+            - name: DATABASE_VERSION
+              value: "14"
+            - name: EWZ_RECAPTCHA_ENABLED
+              value: "false"
+            - name: EWZ_RECAPTCHA_SECRET
+              value: none
+            - name: EWZ_RECAPTCHA_SITE_KEY
+              value: none
+            - name: MESSENGER_TRANSPORT_DSN
+              value: doctrine://default
+            - name: PACKAGES_DIST_DIR
+              value: var/repo
+            - name: PROXY_DIST_DIR
+              value: var/proxy
+            - name: SECURITY_ADVISORIES_DB_DIR
+              value: var/security-advisories
+            - name: STORAGE_AWS_BUCKET
+              value: repman
+            - name: STORAGE_AWS_ENDPOINT
+              value: http://my-repman-minio:9000
+            - name: STORAGE_AWS_KEY
+              valueFrom:
+                secretKeyRef:
+                  key: root-user
+                  name: my-repman-minio
+            - name: STORAGE_AWS_OPAQUE_AUTH
+              value: "true"
+            - name: STORAGE_AWS_PATH_STYLE_ENDPOINT
+              value: "true"
+            - name: STORAGE_AWS_REGION
+              value: us-east-1
+            - name: STORAGE_AWS_SECRET
+              valueFrom:
+                secretKeyRef:
+                  key: root-password
+                  name: my-repman-minio
+            - name: STORAGE_SOURCE
+              value: storage.s3
+            - name: TRUSTED_PROXIES
+              value: 127.0.0.0/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
+          envFrom:
+            - secretRef:
+                name: my-repman
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          volumeMounts:
+            - name: php-overrides
+              mountPath: /usr/local/etc/php/conf.d/php-overrides.ini
+              subPath: php-overrides.ini
+            - name: public
+              mountPath: /app/public
+            - name: services-prod
+              mountPath: /app/config/services_prod.yaml
+              subPath: services_prod.yaml
+              readOnly: true
+            - name: var
+              mountPath: /var
+          livenessProbe:
+            tcpSocket:
+              port: 80
+            initialDelaySeconds: 0
+            failureThreshold: 3
+            timeoutSeconds: 1
+            periodSeconds: 10
+          readinessProbe:
+            tcpSocket:
+              port: 80
+            initialDelaySeconds: 0
+            failureThreshold: 3
+            timeoutSeconds: 1
+            periodSeconds: 10
+          startupProbe:
+            tcpSocket:
+              port: 80
+            initialDelaySeconds: 0
+            failureThreshold: 30
+            timeoutSeconds: 1
+            periodSeconds: 5
+        - image: nginx:1.27.1@sha256:135fbc7ed19c8f644ddf678e68292e678696908451dad7ee2fd4e0cf861f4b6f
+          name: nginx
+          volumeMounts:
+          - mountPath: /app/public
+            name: public
+            readOnly: true
+          - mountPath: /etc/nginx/nginx.conf
+            name: nginx
+            subPath: nginx.conf
+      volumes:
+        - name: nginx
+          configMap:
+            name: my-repman-files
+        - name: php-overrides
+          configMap:
+            name: my-repman-files
+        - name: public
+          persistentVolumeClaim:
+            claimName: my-repman-public
+        - name: services-prod
+          configMap:
+            name: my-repman-files
+        - name: var
+          persistentVolumeClaim:
+            claimName: my-repman-var
+---
+# Source: repman/templates/common.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-repman-consumers
+  labels:
+    app.kubernetes.io/instance: my-repman
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: repman
+    app.kubernetes.io/version: 1.4.0
+    helm.sh/chart: repman-3.51.3
+    role: consumers
+spec:
+  revisionHistoryLimit: 
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: my-repman
+      app.kubernetes.io/name: repman
+      role: consumers
+  template:
+    metadata:
+      annotations:
+        
+        checksum/config: 4ae964f1ef1fb4913ed5cf99feb8df7356972f82589fd2fc1f006fa8abe77900
+      labels:
+        app.kubernetes.io/instance: my-repman
+        app.kubernetes.io/name: repman
+        role: consumers
+    spec:
+      
+      serviceAccountName: default
+      automountServiceAccountToken: true
+      dnsPolicy: ClusterFirst
+      enableServiceLinks: true
+      initContainers:
+        []
+      containers:
+        - name: my-repman-consumers
+          image: "buddy/repman:1.4.0"
+          imagePullPolicy: IfNotPresent
+          command:
+              
+            - sh
+            - -c
+            - |
+              set -xeuo pipefail
+              bin/console messenger:consume async --limit=100 -vv
+          
+          env:
+            - name: APP_ALLOWED_PACKAGE_TYPES
+              value: git,github,gitlab,bitbucket,subversion,mercurial,pear,artifact,path
+            - name: APP_DEBUG
+              value: "0"
+            - name: APP_ENV
+              value: prod
+            - name: APP_GITLAB_API_URL
+              value: https://gitlab.com
+            - name: APP_HOST
+              value: example.com
+            - name: APP_URL_SCHEME
+              value: http
+            - name: DATABASE_DATABASE
+              value: repman
+            - name: DATABASE_HOSTNAME
+              value: repman-my-repman-postgresql-pooler
+            - name: DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: password
+                  name: repman.repman-my-repman-postgresql.credentials.postgresql.acid.zalan.do
+            - name: DATABASE_USER
+              valueFrom:
+                secretKeyRef:
+                  key: username
+                  name: repman.repman-my-repman-postgresql.credentials.postgresql.acid.zalan.do
+            - name: DATABASE_VERSION
+              value: "14"
+            - name: EWZ_RECAPTCHA_ENABLED
+              value: "false"
+            - name: EWZ_RECAPTCHA_SECRET
+              value: none
+            - name: EWZ_RECAPTCHA_SITE_KEY
+              value: none
+            - name: MESSENGER_TRANSPORT_DSN
+              value: doctrine://default
+            - name: PACKAGES_DIST_DIR
+              value: var/repo
+            - name: PROXY_DIST_DIR
+              value: var/proxy
+            - name: SECURITY_ADVISORIES_DB_DIR
+              value: var/security-advisories
+            - name: STORAGE_AWS_BUCKET
+              value: repman
+            - name: STORAGE_AWS_ENDPOINT
+              value: http://my-repman-minio:9000
+            - name: STORAGE_AWS_KEY
+              valueFrom:
+                secretKeyRef:
+                  key: root-user
+                  name: my-repman-minio
+            - name: STORAGE_AWS_OPAQUE_AUTH
+              value: "true"
+            - name: STORAGE_AWS_PATH_STYLE_ENDPOINT
+              value: "true"
+            - name: STORAGE_AWS_REGION
+              value: us-east-1
+            - name: STORAGE_AWS_SECRET
+              valueFrom:
+                secretKeyRef:
+                  key: root-password
+                  name: my-repman-minio
+            - name: STORAGE_SOURCE
+              value: storage.s3
+            - name: TRUSTED_PROXIES
+              value: 127.0.0.0/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
+          envFrom:
+            - secretRef:
+                name: my-repman
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          volumeMounts:
+            - name: php-overrides
+              mountPath: /usr/local/etc/php/conf.d/php-overrides.ini
+              subPath: php-overrides.ini
+            - name: services-prod
+              mountPath: /app/config/services_prod.yaml
+              subPath: services_prod.yaml
+              readOnly: true
+            - name: var
+              mountPath: /var
+          
+      volumes:
+        - name: nginx
+          configMap:
+            name: my-repman-files
+        - name: php-overrides
+          configMap:
+            name: my-repman-files
+        - name: services-prod
+          configMap:
+            name: my-repman-files
+        - name: var
+          persistentVolumeClaim:
+            claimName: my-repman-var
+---
+# Source: repman/templates/common.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: my-repman-install
+  labels:
+    app.kubernetes.io/instance: my-repman
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: repman
+    app.kubernetes.io/version: 1.4.0
+    helm.sh/chart: repman-3.51.3
+  annotations:
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  template:
+    metadata:
+      name: my-repman-install
+      labels:
+        app.kubernetes.io/instance: my-repman
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: repman
+        app.kubernetes.io/version: 1.4.0
+        helm.sh/chart: repman-3.51.3
+      annotations:
+        
+        checksum/config: 4ae964f1ef1fb4913ed5cf99feb8df7356972f82589fd2fc1f006fa8abe77900
+    spec:
+      restartPolicy: OnFailure
+      
+      serviceAccountName: default
+      automountServiceAccountToken: true
+      dnsPolicy: ClusterFirst
+      enableServiceLinks: true
+      initContainers:
+        - command:
+          - sh
+          - -c
+          - |
+            set -euo pipefail
+            apk add --no-cache rsync
+            rsync -avu --delete /app/public/ /mnt/public/
+          image: buddy/repman:1.4.0
+          imagePullPolicy: IfNotPresent
+          name: copy-public
+          volumeMounts:
+          - mountPath: /mnt/public
+            name: public
+      containers:
+        - name: my-repman-install
+          image: "buddy/repman:1.4.0"
+          imagePullPolicy: IfNotPresent
+          command:
+              
+            - sh
+            - -c
+            - |
+              set -euo pipefail
+              bin/console d:m:m --no-interaction
+              bin/console messenger:setup-transports --no-interaction
+              bin/console assets:install --env=prod --no-interaction
+          
+          env:
+            - name: APP_ALLOWED_PACKAGE_TYPES
+              value: git,github,gitlab,bitbucket,subversion,mercurial,pear,artifact,path
+            - name: APP_DEBUG
+              value: "0"
+            - name: APP_ENV
+              value: prod
+            - name: APP_GITLAB_API_URL
+              value: https://gitlab.com
+            - name: APP_HOST
+              value: example.com
+            - name: APP_URL_SCHEME
+              value: http
+            - name: DATABASE_DATABASE
+              value: repman
+            - name: DATABASE_HOSTNAME
+              value: repman-my-repman-postgresql-pooler
+            - name: DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: password
+                  name: repman.repman-my-repman-postgresql.credentials.postgresql.acid.zalan.do
+            - name: DATABASE_USER
+              valueFrom:
+                secretKeyRef:
+                  key: username
+                  name: repman.repman-my-repman-postgresql.credentials.postgresql.acid.zalan.do
+            - name: DATABASE_VERSION
+              value: "14"
+            - name: EWZ_RECAPTCHA_ENABLED
+              value: "false"
+            - name: EWZ_RECAPTCHA_SECRET
+              value: none
+            - name: EWZ_RECAPTCHA_SITE_KEY
+              value: none
+            - name: MESSENGER_TRANSPORT_DSN
+              value: doctrine://default
+            - name: PACKAGES_DIST_DIR
+              value: var/repo
+            - name: PROXY_DIST_DIR
+              value: var/proxy
+            - name: SECURITY_ADVISORIES_DB_DIR
+              value: var/security-advisories
+            - name: STORAGE_AWS_BUCKET
+              value: repman
+            - name: STORAGE_AWS_ENDPOINT
+              value: http://my-repman-minio:9000
+            - name: STORAGE_AWS_KEY
+              valueFrom:
+                secretKeyRef:
+                  key: root-user
+                  name: my-repman-minio
+            - name: STORAGE_AWS_OPAQUE_AUTH
+              value: "true"
+            - name: STORAGE_AWS_PATH_STYLE_ENDPOINT
+              value: "true"
+            - name: STORAGE_AWS_REGION
+              value: us-east-1
+            - name: STORAGE_AWS_SECRET
+              valueFrom:
+                secretKeyRef:
+                  key: root-password
+                  name: my-repman-minio
+            - name: STORAGE_SOURCE
+              value: storage.s3
+            - name: TRUSTED_PROXIES
+              value: 127.0.0.0/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
+          envFrom:
+            - secretRef:
+                name: my-repman
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          volumeMounts:
+            - name: database-session
+              mountPath: /app/src/Migrations/Version20210115094614.php
+              subPath: Version20210115094614.php
+            - name: php-overrides
+              mountPath: /usr/local/etc/php/conf.d/php-overrides.ini
+              subPath: php-overrides.ini
+            - name: public
+              mountPath: /app/public
+            - name: services-prod
+              mountPath: /app/config/services_prod.yaml
+              subPath: services_prod.yaml
+              readOnly: true
+            - name: var
+              mountPath: /var
+          
+      volumes:
+        - name: database-session
+          configMap:
+            name: my-repman-files
+        - name: nginx
+          configMap:
+            name: my-repman-files
+        - name: php-overrides
+          configMap:
+            name: my-repman-files
+        - name: public
+          persistentVolumeClaim:
+            claimName: my-repman-public
+        - name: services-prod
+          configMap:
+            name: my-repman-files
+        - name: var
+          persistentVolumeClaim:
+            claimName: my-repman-var
+---
+# Source: repman/templates/common.yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: "my-repman-cronjob-package-clear-old-dists"
+  labels:
+    app.kubernetes.io/instance: my-repman
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: repman
+    app.kubernetes.io/version: 1.4.0
+    helm.sh/chart: repman-3.51.3
+spec:
+  concurrencyPolicy: "Forbid"
+  failedJobsHistoryLimit: 1
+  successfulJobsHistoryLimit: 1
+  schedule: "0 1 * * *"
+  jobTemplate:
+    metadata:
+      name: "my-repman-cronjob-package-clear-old-dists"
+      labels:
+        app.kubernetes.io/instance: my-repman
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: repman
+        app.kubernetes.io/version: 1.4.0
+        helm.sh/chart: repman-3.51.3
+    spec:
+      template:
+        metadata:
+          name: my-repman-cronjob-package-clear-old-dists
+          labels:
+            app.kubernetes.io/instance: my-repman
+            app.kubernetes.io/managed-by: Helm
+            app.kubernetes.io/name: repman
+            app.kubernetes.io/version: 1.4.0
+            helm.sh/chart: repman-3.51.3
+          annotations:
+            
+            checksum/config: 4ae964f1ef1fb4913ed5cf99feb8df7356972f82589fd2fc1f006fa8abe77900
+        spec:
+          restartPolicy: Never
+          
+          serviceAccountName: default
+          automountServiceAccountToken: true
+          dnsPolicy: ClusterFirst
+          enableServiceLinks: true
+          initContainers:
+            []
+          containers:
+            - name: my-repman-cronjob-package-clear-old-dists
+              image: "buddy/repman:1.4.0"
+              imagePullPolicy: IfNotPresent
+              command:
+                  
+                - sh
+                - -c
+                - |
+                  set -euo pipefail
+                  /app/bin/console "repman:package:clear-old-dists"
+              
+              env:
+                - name: APP_ALLOWED_PACKAGE_TYPES
+                  value: git,github,gitlab,bitbucket,subversion,mercurial,pear,artifact,path
+                - name: APP_DEBUG
+                  value: "0"
+                - name: APP_ENV
+                  value: prod
+                - name: APP_GITLAB_API_URL
+                  value: https://gitlab.com
+                - name: APP_HOST
+                  value: example.com
+                - name: APP_URL_SCHEME
+                  value: http
+                - name: DATABASE_DATABASE
+                  value: repman
+                - name: DATABASE_HOSTNAME
+                  value: repman-my-repman-postgresql-pooler
+                - name: DATABASE_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      key: password
+                      name: repman.repman-my-repman-postgresql.credentials.postgresql.acid.zalan.do
+                - name: DATABASE_USER
+                  valueFrom:
+                    secretKeyRef:
+                      key: username
+                      name: repman.repman-my-repman-postgresql.credentials.postgresql.acid.zalan.do
+                - name: DATABASE_VERSION
+                  value: "14"
+                - name: EWZ_RECAPTCHA_ENABLED
+                  value: "false"
+                - name: EWZ_RECAPTCHA_SECRET
+                  value: none
+                - name: EWZ_RECAPTCHA_SITE_KEY
+                  value: none
+                - name: MESSENGER_TRANSPORT_DSN
+                  value: doctrine://default
+                - name: PACKAGES_DIST_DIR
+                  value: var/repo
+                - name: PROXY_DIST_DIR
+                  value: var/proxy
+                - name: SECURITY_ADVISORIES_DB_DIR
+                  value: var/security-advisories
+                - name: STORAGE_AWS_BUCKET
+                  value: repman
+                - name: STORAGE_AWS_ENDPOINT
+                  value: http://my-repman-minio:9000
+                - name: STORAGE_AWS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      key: root-user
+                      name: my-repman-minio
+                - name: STORAGE_AWS_OPAQUE_AUTH
+                  value: "true"
+                - name: STORAGE_AWS_PATH_STYLE_ENDPOINT
+                  value: "true"
+                - name: STORAGE_AWS_REGION
+                  value: us-east-1
+                - name: STORAGE_AWS_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      key: root-password
+                      name: my-repman-minio
+                - name: STORAGE_SOURCE
+                  value: storage.s3
+                - name: TRUSTED_PROXIES
+                  value: 127.0.0.0/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
+              envFrom:
+                - secretRef:
+                    name: my-repman
+              ports:
+                - name: http
+                  containerPort: 80
+                  protocol: TCP
+              volumeMounts:
+                - name: php-overrides
+                  mountPath: /usr/local/etc/php/conf.d/php-overrides.ini
+                  subPath: php-overrides.ini
+                - name: services-prod
+                  mountPath: /app/config/services_prod.yaml
+                  subPath: services_prod.yaml
+                  readOnly: true
+                - name: var
+                  mountPath: /var
+              
+          volumes:
+            - name: nginx
+              configMap:
+                name: my-repman-files
+            - name: php-overrides
+              configMap:
+                name: my-repman-files
+            - name: services-prod
+              configMap:
+                name: my-repman-files
+            - name: var
+              persistentVolumeClaim:
+                claimName: my-repman-var
+---
+# Source: repman/templates/common.yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: "my-repman-cronjob-security-update-db"
+  labels:
+    app.kubernetes.io/instance: my-repman
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: repman
+    app.kubernetes.io/version: 1.4.0
+    helm.sh/chart: repman-3.51.3
+spec:
+  concurrencyPolicy: "Forbid"
+  failedJobsHistoryLimit: 1
+  successfulJobsHistoryLimit: 1
+  schedule: "0 */2 * * *"
+  jobTemplate:
+    metadata:
+      name: "my-repman-cronjob-security-update-db"
+      labels:
+        app.kubernetes.io/instance: my-repman
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: repman
+        app.kubernetes.io/version: 1.4.0
+        helm.sh/chart: repman-3.51.3
+    spec:
+      template:
+        metadata:
+          name: my-repman-cronjob-security-update-db
+          labels:
+            app.kubernetes.io/instance: my-repman
+            app.kubernetes.io/managed-by: Helm
+            app.kubernetes.io/name: repman
+            app.kubernetes.io/version: 1.4.0
+            helm.sh/chart: repman-3.51.3
+          annotations:
+            
+            checksum/config: 4ae964f1ef1fb4913ed5cf99feb8df7356972f82589fd2fc1f006fa8abe77900
+        spec:
+          restartPolicy: Never
+          
+          serviceAccountName: default
+          automountServiceAccountToken: true
+          dnsPolicy: ClusterFirst
+          enableServiceLinks: true
+          initContainers:
+            []
+          containers:
+            - name: my-repman-cronjob-security-update-db
+              image: "buddy/repman:1.4.0"
+              imagePullPolicy: IfNotPresent
+              command:
+                  
+                - sh
+                - -c
+                - |
+                  set -euo pipefail
+                  /app/bin/console "repman:security:update-db"
+              
+              env:
+                - name: APP_ALLOWED_PACKAGE_TYPES
+                  value: git,github,gitlab,bitbucket,subversion,mercurial,pear,artifact,path
+                - name: APP_DEBUG
+                  value: "0"
+                - name: APP_ENV
+                  value: prod
+                - name: APP_GITLAB_API_URL
+                  value: https://gitlab.com
+                - name: APP_HOST
+                  value: example.com
+                - name: APP_URL_SCHEME
+                  value: http
+                - name: DATABASE_DATABASE
+                  value: repman
+                - name: DATABASE_HOSTNAME
+                  value: repman-my-repman-postgresql-pooler
+                - name: DATABASE_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      key: password
+                      name: repman.repman-my-repman-postgresql.credentials.postgresql.acid.zalan.do
+                - name: DATABASE_USER
+                  valueFrom:
+                    secretKeyRef:
+                      key: username
+                      name: repman.repman-my-repman-postgresql.credentials.postgresql.acid.zalan.do
+                - name: DATABASE_VERSION
+                  value: "14"
+                - name: EWZ_RECAPTCHA_ENABLED
+                  value: "false"
+                - name: EWZ_RECAPTCHA_SECRET
+                  value: none
+                - name: EWZ_RECAPTCHA_SITE_KEY
+                  value: none
+                - name: MESSENGER_TRANSPORT_DSN
+                  value: doctrine://default
+                - name: PACKAGES_DIST_DIR
+                  value: var/repo
+                - name: PROXY_DIST_DIR
+                  value: var/proxy
+                - name: SECURITY_ADVISORIES_DB_DIR
+                  value: var/security-advisories
+                - name: STORAGE_AWS_BUCKET
+                  value: repman
+                - name: STORAGE_AWS_ENDPOINT
+                  value: http://my-repman-minio:9000
+                - name: STORAGE_AWS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      key: root-user
+                      name: my-repman-minio
+                - name: STORAGE_AWS_OPAQUE_AUTH
+                  value: "true"
+                - name: STORAGE_AWS_PATH_STYLE_ENDPOINT
+                  value: "true"
+                - name: STORAGE_AWS_REGION
+                  value: us-east-1
+                - name: STORAGE_AWS_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      key: root-password
+                      name: my-repman-minio
+                - name: STORAGE_SOURCE
+                  value: storage.s3
+                - name: TRUSTED_PROXIES
+                  value: 127.0.0.0/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
+              envFrom:
+                - secretRef:
+                    name: my-repman
+              ports:
+                - name: http
+                  containerPort: 80
+                  protocol: TCP
+              volumeMounts:
+                - name: php-overrides
+                  mountPath: /usr/local/etc/php/conf.d/php-overrides.ini
+                  subPath: php-overrides.ini
+                - name: services-prod
+                  mountPath: /app/config/services_prod.yaml
+                  subPath: services_prod.yaml
+                  readOnly: true
+                - name: var
+                  mountPath: /var
+              
+          volumes:
+            - name: nginx
+              configMap:
+                name: my-repman-files
+            - name: php-overrides
+              configMap:
+                name: my-repman-files
+            - name: services-prod
+              configMap:
+                name: my-repman-files
+            - name: var
+              persistentVolumeClaim:
+                claimName: my-repman-var
+---
+# Source: repman/templates/common.yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: "my-repman-cronjob-telemetry-send"
+  labels:
+    app.kubernetes.io/instance: my-repman
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: repman
+    app.kubernetes.io/version: 1.4.0
+    helm.sh/chart: repman-3.51.3
+spec:
+  concurrencyPolicy: "Forbid"
+  failedJobsHistoryLimit: 1
+  successfulJobsHistoryLimit: 1
+  schedule: "0 0 * * *"
+  jobTemplate:
+    metadata:
+      name: "my-repman-cronjob-telemetry-send"
+      labels:
+        app.kubernetes.io/instance: my-repman
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: repman
+        app.kubernetes.io/version: 1.4.0
+        helm.sh/chart: repman-3.51.3
+    spec:
+      template:
+        metadata:
+          name: my-repman-cronjob-telemetry-send
+          labels:
+            app.kubernetes.io/instance: my-repman
+            app.kubernetes.io/managed-by: Helm
+            app.kubernetes.io/name: repman
+            app.kubernetes.io/version: 1.4.0
+            helm.sh/chart: repman-3.51.3
+          annotations:
+            
+            checksum/config: 4ae964f1ef1fb4913ed5cf99feb8df7356972f82589fd2fc1f006fa8abe77900
+        spec:
+          restartPolicy: Never
+          
+          serviceAccountName: default
+          automountServiceAccountToken: true
+          dnsPolicy: ClusterFirst
+          enableServiceLinks: true
+          initContainers:
+            []
+          containers:
+            - name: my-repman-cronjob-telemetry-send
+              image: "buddy/repman:1.4.0"
+              imagePullPolicy: IfNotPresent
+              command:
+                  
+                - sh
+                - -c
+                - |
+                  set -euo pipefail
+                  /app/bin/console "repman:telemetry:send"
+              
+              env:
+                - name: APP_ALLOWED_PACKAGE_TYPES
+                  value: git,github,gitlab,bitbucket,subversion,mercurial,pear,artifact,path
+                - name: APP_DEBUG
+                  value: "0"
+                - name: APP_ENV
+                  value: prod
+                - name: APP_GITLAB_API_URL
+                  value: https://gitlab.com
+                - name: APP_HOST
+                  value: example.com
+                - name: APP_URL_SCHEME
+                  value: http
+                - name: DATABASE_DATABASE
+                  value: repman
+                - name: DATABASE_HOSTNAME
+                  value: repman-my-repman-postgresql-pooler
+                - name: DATABASE_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      key: password
+                      name: repman.repman-my-repman-postgresql.credentials.postgresql.acid.zalan.do
+                - name: DATABASE_USER
+                  valueFrom:
+                    secretKeyRef:
+                      key: username
+                      name: repman.repman-my-repman-postgresql.credentials.postgresql.acid.zalan.do
+                - name: DATABASE_VERSION
+                  value: "14"
+                - name: EWZ_RECAPTCHA_ENABLED
+                  value: "false"
+                - name: EWZ_RECAPTCHA_SECRET
+                  value: none
+                - name: EWZ_RECAPTCHA_SITE_KEY
+                  value: none
+                - name: MESSENGER_TRANSPORT_DSN
+                  value: doctrine://default
+                - name: PACKAGES_DIST_DIR
+                  value: var/repo
+                - name: PROXY_DIST_DIR
+                  value: var/proxy
+                - name: SECURITY_ADVISORIES_DB_DIR
+                  value: var/security-advisories
+                - name: STORAGE_AWS_BUCKET
+                  value: repman
+                - name: STORAGE_AWS_ENDPOINT
+                  value: http://my-repman-minio:9000
+                - name: STORAGE_AWS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      key: root-user
+                      name: my-repman-minio
+                - name: STORAGE_AWS_OPAQUE_AUTH
+                  value: "true"
+                - name: STORAGE_AWS_PATH_STYLE_ENDPOINT
+                  value: "true"
+                - name: STORAGE_AWS_REGION
+                  value: us-east-1
+                - name: STORAGE_AWS_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      key: root-password
+                      name: my-repman-minio
+                - name: STORAGE_SOURCE
+                  value: storage.s3
+                - name: TRUSTED_PROXIES
+                  value: 127.0.0.0/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
+              envFrom:
+                - secretRef:
+                    name: my-repman
+              ports:
+                - name: http
+                  containerPort: 80
+                  protocol: TCP
+              volumeMounts:
+                - name: php-overrides
+                  mountPath: /usr/local/etc/php/conf.d/php-overrides.ini
+                  subPath: php-overrides.ini
+                - name: services-prod
+                  mountPath: /app/config/services_prod.yaml
+                  subPath: services_prod.yaml
+                  readOnly: true
+                - name: var
+                  mountPath: /var
+              
+          volumes:
+            - name: nginx
+              configMap:
+                name: my-repman-files
+            - name: php-overrides
+              configMap:
+                name: my-repman-files
+            - name: services-prod
+              configMap:
+                name: my-repman-files
+            - name: var
+              persistentVolumeClaim:
+                claimName: my-repman-var
+---
+# Source: repman/templates/pgsql.yaml
+apiVersion: acid.zalan.do/v1
+kind: postgresql
+metadata:
+  labels:
+    team: repman
+    helm.sh/chart: repman-3.51.3
+    app.kubernetes.io/name: repman
+    app.kubernetes.io/instance: my-repman
+    app.kubernetes.io/version: "1.4.0"
+    app.kubernetes.io/managed-by: Helm
+  name: repman-my-repman-postgresql
+spec:
+  allowedSourceRanges: []
+  enableConnectionPooler: true
+  numberOfInstances: 1
+  postgresql:
+    version: "14"
+    parameters: 
+      {}
+  resources: 
+    limits:
+      cpu: 500m
+      memory: 2Gi
+    requests:
+      cpu: 100m
+      memory: 1Gi
+  teamId: repman
+  users:
+    repman: []
+  volume: 
+    size: 10Gi
+  preparedDatabases:
+    repman: {}
+  additionalVolumes:
+  - name: workaround
+    mountPath: /usr/share/postgresql/14/postgresql.conf.sample
+    subPath: postgresql.conf.sample
+    targetContainers:
+    - postgres
+    volumeSource:
+      configMap:
+        name: 'my-repman-postgresql'

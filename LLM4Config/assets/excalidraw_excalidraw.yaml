@@ -1,0 +1,81 @@
+---
+# Source: excalidraw/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-excalidraw
+  labels:
+    helm.sh/chart: excalidraw-0.1.1
+    app.kubernetes.io/name: excalidraw
+    app.kubernetes.io/instance: my-excalidraw
+    app.kubernetes.io/version: "v0.15.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: excalidraw/templates/service-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-excalidraw-headless
+  labels:
+    helm.sh/chart: excalidraw-0.1.1
+    app.kubernetes.io/name: excalidraw
+    app.kubernetes.io/instance: my-excalidraw
+    app.kubernetes.io/version: "v0.15.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: excalidraw
+    app.kubernetes.io/instance: my-excalidraw
+---
+# Source: excalidraw/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-excalidraw
+  labels:
+    helm.sh/chart: excalidraw-0.1.1
+    app.kubernetes.io/name: excalidraw
+    app.kubernetes.io/instance: my-excalidraw
+    app.kubernetes.io/version: "v0.15.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: excalidraw
+      app.kubernetes.io/instance: my-excalidraw
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: excalidraw
+        app.kubernetes.io/instance: my-excalidraw
+    spec:
+      serviceAccountName: my-excalidraw
+      securityContext:
+        {}
+      containers:
+        - name: excalidraw
+          securityContext:
+            {}
+          image: "excalidraw/excalidraw:latest"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+            {}

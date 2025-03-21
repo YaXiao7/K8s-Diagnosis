@@ -1,0 +1,1028 @@
+---
+# Source: openproject/charts/memcached/templates/networkpolicy.yaml
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: my-openproject-memcached
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-openproject
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: memcached
+    app.kubernetes.io/version: 1.6.24
+    helm.sh/chart: memcached-6.14.0
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: my-openproject
+      app.kubernetes.io/managed-by: Helm
+      app.kubernetes.io/name: memcached
+      app.kubernetes.io/version: 1.6.24
+      helm.sh/chart: memcached-6.14.0
+  policyTypes:
+    - Ingress
+    - Egress
+  egress:
+    - {}
+  ingress:
+    - ports:
+        - port: 11211
+---
+# Source: openproject/charts/memcached/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+automountServiceAccountToken: false
+metadata:
+  name: my-openproject-memcached
+  namespace: default
+  labels:
+    app.kubernetes.io/instance: my-openproject
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: memcached
+    app.kubernetes.io/version: 1.6.24
+    helm.sh/chart: memcached-6.14.0
+---
+# Source: openproject/templates/serviceaccount.yaml
+apiVersion: "v1"
+kind: "ServiceAccount"
+metadata:
+  name: my-openproject
+  labels:
+    app.kubernetes.io/name: openproject
+    helm.sh/chart: openproject-7.0.0
+    app.kubernetes.io/instance: my-openproject
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "14"
+...
+---
+# Source: openproject/charts/postgresql/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-openproject-postgresql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-openproject
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/version: 15.4.0
+    helm.sh/chart: postgresql-12.12.10
+type: Opaque
+data:
+  postgres-password: "N0ZtT2pVVksxUA=="
+  password: "TFh4Z1JjVG43Yw=="
+  # We don't auto-generate LDAP password when it's not provided as we do for other passwords
+---
+# Source: openproject/templates/secret_core.yaml
+apiVersion: "v1"
+kind: "Secret"
+metadata:
+  name: "my-openproject-core"
+  labels:
+    app.kubernetes.io/name: openproject
+    helm.sh/chart: openproject-7.0.0
+    app.kubernetes.io/instance: my-openproject
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "14"
+stringData:
+  DATABASE_HOST: "my-openproject-postgresql.default.svc.cluster.local"
+  DATABASE_PORT: "5432"
+  DATABASE_URL: "postgresql://openproject@my-openproject-postgresql:5432/openproject"
+  OPENPROJECT_SEED_ADMIN_USER_PASSWORD: "admin"
+  OPENPROJECT_SEED_ADMIN_USER_PASSWORD_RESET: "true"
+  OPENPROJECT_SEED_ADMIN_USER_NAME: "OpenProject Admin"
+  OPENPROJECT_SEED_ADMIN_USER_MAIL: "admin@example.net"
+  OPENPROJECT_HTTPS: "true"
+  OPENPROJECT_SEED_LOCALE: "en"
+  OPENPROJECT_HOST__NAME: "openproject.example.com"
+  OPENPROJECT_HSTS: "true"
+  OPENPROJECT_RAILS__CACHE__STORE: "memcache"
+  OPENPROJECT_RAILS__RELATIVE__URL__ROOT: ""
+  POSTGRES_STATEMENT_TIMEOUT: "120s"
+...
+---
+# Source: openproject/templates/secret_memcached.yaml
+apiVersion: "v1"
+kind: "Secret"
+metadata:
+  name: "my-openproject-memcached"
+  labels:
+    app.kubernetes.io/name: openproject
+    helm.sh/chart: openproject-7.0.0
+    app.kubernetes.io/instance: my-openproject
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "14"
+data: # reset data to make sure only keys defined below remain
+stringData:
+  OPENPROJECT_CACHE__MEMCACHE__SERVER: "my-openproject-memcached:11211"
+...
+---
+# Source: openproject/templates/persistentvolumeclaim.yaml
+apiVersion: "v1"
+kind: "PersistentVolumeClaim"
+metadata:
+  name: my-openproject
+  labels:
+    app.kubernetes.io/name: openproject
+    helm.sh/chart: openproject-7.0.0
+    app.kubernetes.io/instance: my-openproject
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "14"
+spec:
+  accessModes: [ReadWriteMany]
+  resources:
+    requests:
+      storage: "1Gi"
+...
+---
+# Source: openproject/charts/memcached/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-openproject-memcached
+  namespace: default
+  labels:
+    app.kubernetes.io/instance: my-openproject
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: memcached
+    app.kubernetes.io/version: 1.6.24
+    helm.sh/chart: memcached-6.14.0
+spec:
+  type: ClusterIP
+  ports:
+    - name: memcache
+      port: 11211
+      targetPort: memcache
+      nodePort: null
+  selector:
+    app.kubernetes.io/instance: my-openproject
+    app.kubernetes.io/name: memcached
+---
+# Source: openproject/charts/postgresql/templates/primary/svc-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-openproject-postgresql-hl
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-openproject
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/version: 15.4.0
+    helm.sh/chart: postgresql-12.12.10
+    app.kubernetes.io/component: primary
+  annotations:
+    # Use this annotation in addition to the actual publishNotReadyAddresses
+    # field below because the annotation will stop being respected soon but the
+    # field is broken in some versions of Kubernetes:
+    # https://github.com/kubernetes/kubernetes/issues/58662
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+spec:
+  type: ClusterIP
+  clusterIP: None
+  # We want all pods in the StatefulSet to have their addresses published for
+  # the sake of the other Postgresql pods even before they're ready, since they
+  # have to be able to talk to each other in order to become ready.
+  publishNotReadyAddresses: true
+  ports:
+    - name: tcp-postgresql
+      port: 5432
+      targetPort: tcp-postgresql
+  selector:
+    app.kubernetes.io/instance: my-openproject
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/component: primary
+---
+# Source: openproject/charts/postgresql/templates/primary/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-openproject-postgresql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-openproject
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/version: 15.4.0
+    helm.sh/chart: postgresql-12.12.10
+    app.kubernetes.io/component: primary
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+    - name: tcp-postgresql
+      port: 5432
+      targetPort: tcp-postgresql
+      nodePort: null
+  selector:
+    app.kubernetes.io/instance: my-openproject
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/component: primary
+---
+# Source: openproject/templates/service.yaml
+apiVersion: "v1"
+kind: "Service"
+metadata:
+  name: my-openproject
+  labels:
+    app.kubernetes.io/name: openproject
+    helm.sh/chart: openproject-7.0.0
+    app.kubernetes.io/instance: my-openproject
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "14"
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: openproject
+    app.kubernetes.io/instance: my-openproject
+    openproject/process: web
+...
+---
+# Source: openproject/charts/memcached/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-openproject-memcached
+  namespace: default
+  labels:
+    app.kubernetes.io/instance: my-openproject
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: memcached
+    app.kubernetes.io/version: 1.6.24
+    helm.sh/chart: memcached-6.14.0
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: my-openproject
+      app.kubernetes.io/name: memcached
+  replicas: 1
+  strategy:
+    rollingUpdate: {}
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: my-openproject
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: memcached
+        app.kubernetes.io/version: 1.6.24
+        helm.sh/chart: memcached-6.14.0
+      annotations:
+    spec:
+      
+      automountServiceAccountToken: false
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/instance: my-openproject
+                    app.kubernetes.io/name: memcached
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+        fsGroupChangePolicy: Always
+        supplementalGroups: []
+        sysctls: []
+      serviceAccountName: my-openproject-memcached
+      containers:
+        - name: memcached
+          image: docker.io/bitnami/memcached:1.6.24-debian-12-r0
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            readOnlyRootFilesystem: false
+            runAsGroup: 1001
+            runAsNonRoot: true
+            runAsUser: 1001
+            seccompProfile:
+              type: RuntimeDefault
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: MEMCACHED_PORT_NUMBER
+              value: "11211"
+          ports:
+            - name: memcache
+              containerPort: 11211
+          livenessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+            tcpSocket:
+              port: memcache
+          readinessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            successThreshold: 1
+            timeoutSeconds: 3
+            tcpSocket:
+              port: memcache
+          volumeMounts:
+            - name: empty-dir
+              mountPath: /opt/bitnami/memcached/conf
+              subPath: app-conf-dir
+            - name: empty-dir
+              mountPath: /tmp
+              subPath: tmp-dir
+      volumes:
+        - name: empty-dir
+          emptyDir: {}
+---
+# Source: openproject/templates/web-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-openproject-web
+  labels:
+    app.kubernetes.io/name: openproject
+    helm.sh/chart: openproject-7.0.0
+    app.kubernetes.io/instance: my-openproject
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "14"
+    openproject/process: web
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: openproject
+      app.kubernetes.io/instance: my-openproject
+      openproject/process: web
+  template:
+    metadata:
+      annotations:
+        
+        # annotate pods with env value checksums so changes trigger re-deployments
+        
+        checksum/env-core: 4663cee96f144bd5622035817df30d753b1a96d4ad065e5b66f4efeffb7e55a5
+        checksum/env-memcached: 3518e1fb465442d0983258a195805b6f2541707f1126869eec810412a918bf52
+        checksum/env-oidc: 01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b
+        checksum/env-s3: 01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b
+        checksum/env-environment: 01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b
+      labels:
+        app.kubernetes.io/name: openproject
+        helm.sh/chart: openproject-7.0.0
+        app.kubernetes.io/instance: my-openproject
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/version: "14"
+        openproject/process: web
+    spec:            
+      securityContext:
+        fsGroup: 1000
+      serviceAccountName: my-openproject
+      volumes:        
+        - name: tmp
+          # we can't use emptyDir due to the sticky bit issue
+          # see: https://github.com/kubernetes/kubernetes/issues/110835
+          ephemeral:
+            volumeClaimTemplate:
+              metadata:
+                creationTimestamp: null
+              spec:
+                accessModes: ["ReadWriteOnce"]
+                resources:
+                  requests:
+                    storage: 5Gi
+        - name: app-tmp
+          # we can't use emptyDir due to the sticky bit / world writable issue
+          # see: https://github.com/kubernetes/kubernetes/issues/110835
+          ephemeral:
+            volumeClaimTemplate:
+              metadata:
+                creationTimestamp: null
+              spec:
+                accessModes: ["ReadWriteOnce"]
+                resources:
+                  requests:
+                    storage: 5Gi
+        - name: "data"
+          persistentVolumeClaim:
+            claimName: my-openproject        
+      initContainers:
+        - name: wait-for-db          
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+            runAsGroup: 1000
+            runAsNonRoot: true
+            runAsUser: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          image: docker.io/openproject/openproject:14-slim
+          imagePullPolicy: Always
+          envFrom:
+            - secretRef:
+                name: my-openproject-core
+            - secretRef:
+                name: my-openproject-memcached
+          env:
+            
+            - name: OPENPROJECT_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-openproject-postgresql
+                  key: password
+          command:
+            - bash
+            - /app/docker/prod/wait-for-db
+      containers:
+        - name: "openproject"          
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+            runAsGroup: 1000
+            runAsNonRoot: true
+            runAsUser: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          image: docker.io/openproject/openproject:14-slim
+          imagePullPolicy: Always
+          envFrom:
+            - secretRef:
+                name: my-openproject-core
+            - secretRef:
+                name: my-openproject-memcached
+          env:
+            
+            - name: OPENPROJECT_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-openproject-postgresql
+                  key: password
+          command:
+            - bash
+            - /app/docker/prod/web
+          volumeMounts:            
+            - mountPath: /tmp
+              name: tmp
+            - mountPath: /app/tmp
+              name: app-tmp
+            - name: "data"
+              mountPath: "/var/openproject/assets"            
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: "/health_checks/default"
+              port: 8080
+              httpHeaders:
+                # required otherwise health check will return 404 because health check is done using the Pod IP, which may cause issues with downstream variants
+                - name: Host
+                  value: localhost
+            initialDelaySeconds: 120
+            timeoutSeconds: 3
+            periodSeconds: 30
+            failureThreshold: 3
+            successThreshold: 1
+          readinessProbe:
+            httpGet:
+              path: "/health_checks/default"
+              port: 8080
+              httpHeaders:
+                # required otherwise health check will return 404 because health check is done using the Pod IP, which may cause issues with downstream variants
+                - name: Host
+                  value: localhost
+            initialDelaySeconds: 30
+            timeoutSeconds: 3
+            periodSeconds: 15
+            failureThreshold: 30
+            successThreshold: 1
+          resources:
+            limits:
+              cpu: "4"
+              memory: 4Gi
+            requests:
+              cpu: 250m
+              memory: 512Mi
+---
+# Source: openproject/templates/worker-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-openproject-worker-default
+  labels:
+    app.kubernetes.io/name: openproject
+    helm.sh/chart: openproject-7.0.0
+    app.kubernetes.io/instance: my-openproject
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "14"
+    openproject/process: worker-default
+spec:
+  replicas: 1
+  strategy:
+    
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: openproject
+      app.kubernetes.io/instance: my-openproject
+      openproject/process: worker-default
+  template:
+    metadata:
+      annotations:
+        
+        # annotate pods with env value checksums so changes trigger re-deployments
+        
+        checksum/env-core: 4663cee96f144bd5622035817df30d753b1a96d4ad065e5b66f4efeffb7e55a5
+        checksum/env-memcached: 3518e1fb465442d0983258a195805b6f2541707f1126869eec810412a918bf52
+        checksum/env-oidc: 01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b
+        checksum/env-s3: 01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b
+        checksum/env-environment: 01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b
+      labels:
+        app.kubernetes.io/name: openproject
+        helm.sh/chart: openproject-7.0.0
+        app.kubernetes.io/instance: my-openproject
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/version: "14"
+        openproject/process: worker-default
+    spec:            
+      securityContext:
+        fsGroup: 1000
+      serviceAccountName: my-openproject
+      volumes:        
+        - name: tmp
+          # we can't use emptyDir due to the sticky bit issue
+          # see: https://github.com/kubernetes/kubernetes/issues/110835
+          ephemeral:
+            volumeClaimTemplate:
+              metadata:
+                creationTimestamp: null
+              spec:
+                accessModes: ["ReadWriteOnce"]
+                resources:
+                  requests:
+                    storage: 5Gi
+        - name: app-tmp
+          # we can't use emptyDir due to the sticky bit / world writable issue
+          # see: https://github.com/kubernetes/kubernetes/issues/110835
+          ephemeral:
+            volumeClaimTemplate:
+              metadata:
+                creationTimestamp: null
+              spec:
+                accessModes: ["ReadWriteOnce"]
+                resources:
+                  requests:
+                    storage: 5Gi
+        - name: "data"
+          persistentVolumeClaim:
+            claimName: my-openproject        
+      initContainers:
+        - name: wait-for-db          
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+            runAsGroup: 1000
+            runAsNonRoot: true
+            runAsUser: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          image: docker.io/openproject/openproject:14-slim
+          imagePullPolicy: Always
+          envFrom:
+            - secretRef:
+                name: my-openproject-core
+            - secretRef:
+                name: my-openproject-memcached
+          env:
+            
+            - name: OPENPROJECT_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-openproject-postgresql
+                  key: password
+          command:
+            - bash
+            - /app/docker/prod/wait-for-db
+      containers:
+        - name: "openproject"          
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+            runAsGroup: 1000
+            runAsNonRoot: true
+            runAsUser: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          image: docker.io/openproject/openproject:14-slim
+          imagePullPolicy: Always
+          envFrom:
+            - secretRef:
+                name: my-openproject-core
+            - secretRef:
+                name: my-openproject-memcached
+          command:
+            - bash
+            - /app/docker/prod/worker
+          env:
+            
+            - name: OPENPROJECT_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-openproject-postgresql
+                  key: password
+            - name: "QUEUE"
+              value: ""
+          volumeMounts:            
+            - mountPath: /tmp
+              name: tmp
+            - mountPath: /app/tmp
+              name: app-tmp
+            - name: "data"
+              mountPath: "/var/openproject/assets"            
+          resources:
+            limits:
+              cpu: "4"
+              memory: 4Gi
+            requests:
+              cpu: 250m
+              memory: 512Mi
+---
+# Source: openproject/charts/postgresql/templates/primary/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-openproject-postgresql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-openproject
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/version: 15.4.0
+    helm.sh/chart: postgresql-12.12.10
+    app.kubernetes.io/component: primary
+spec:
+  replicas: 1
+  serviceName: my-openproject-postgresql-hl
+  updateStrategy:
+    rollingUpdate: {}
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: my-openproject
+      app.kubernetes.io/name: postgresql
+      app.kubernetes.io/component: primary
+  template:
+    metadata:
+      name: my-openproject-postgresql
+      labels:
+        app.kubernetes.io/instance: my-openproject
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: postgresql
+        app.kubernetes.io/version: 15.4.0
+        helm.sh/chart: postgresql-12.12.10
+        app.kubernetes.io/component: primary
+    spec:
+      serviceAccountName: default
+      
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/instance: my-openproject
+                    app.kubernetes.io/name: postgresql
+                    app.kubernetes.io/component: primary
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+      hostNetwork: false
+      hostIPC: false
+      containers:
+        - name: postgresql
+          image: docker.io/bitnami/postgresql:15.4.0-debian-11-r45
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            runAsGroup: 0
+            runAsNonRoot: true
+            runAsUser: 1001
+            seccompProfile:
+              type: RuntimeDefault
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: POSTGRESQL_PORT_NUMBER
+              value: "5432"
+            - name: POSTGRESQL_VOLUME_DIR
+              value: "/bitnami/postgresql"
+            - name: PGDATA
+              value: "/bitnami/postgresql/data"
+            # Authentication
+            - name: POSTGRES_USER
+              value: "openproject"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-openproject-postgresql
+                  key: password
+            - name: POSTGRES_POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-openproject-postgresql
+                  key: postgres-password
+            - name: POSTGRES_DATABASE
+              value: "openproject"
+            # Replication
+            # Initdb
+            # Standby
+            # LDAP
+            - name: POSTGRESQL_ENABLE_LDAP
+              value: "no"
+            # TLS
+            - name: POSTGRESQL_ENABLE_TLS
+              value: "no"
+            # Audit
+            - name: POSTGRESQL_LOG_HOSTNAME
+              value: "false"
+            - name: POSTGRESQL_LOG_CONNECTIONS
+              value: "false"
+            - name: POSTGRESQL_LOG_DISCONNECTIONS
+              value: "false"
+            - name: POSTGRESQL_PGAUDIT_LOG_CATALOG
+              value: "off"
+            # Others
+            - name: POSTGRESQL_CLIENT_MIN_MESSAGES
+              value: "error"
+            - name: POSTGRESQL_SHARED_PRELOAD_LIBRARIES
+              value: "pgaudit"
+          ports:
+            - name: tcp-postgresql
+              containerPort: 5432
+          livenessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - exec pg_isready -U "openproject" -d "dbname=openproject" -h 127.0.0.1 -p 5432
+          readinessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - -e
+                - |
+                  exec pg_isready -U "openproject" -d "dbname=openproject" -h 127.0.0.1 -p 5432
+                  [ -f /opt/bitnami/postgresql/tmp/.initialized ] || [ -f /bitnami/postgresql/.initialized ]
+          resources:
+            limits: {}
+            requests:
+              cpu: 250m
+              memory: 256Mi
+          volumeMounts:
+            - name: dshm
+              mountPath: /dev/shm
+            - name: data
+              mountPath: /bitnami/postgresql
+      volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+  volumeClaimTemplates:
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: data
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "8Gi"
+---
+# Source: openproject/templates/seeder-job.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: my-openproject-seeder-1
+  labels:
+    app.kubernetes.io/name: openproject
+    helm.sh/chart: openproject-7.0.0
+    app.kubernetes.io/instance: my-openproject
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "14"
+spec:
+  ttlSecondsAfterFinished: 6000
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: openproject
+        helm.sh/chart: openproject-7.0.0
+        app.kubernetes.io/instance: my-openproject
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/version: "14"
+        openproject/process: seeder
+    spec:            
+      securityContext:
+        fsGroup: 1000
+      volumes:        
+        - name: tmp
+          # we can't use emptyDir due to the sticky bit issue
+          # see: https://github.com/kubernetes/kubernetes/issues/110835
+          ephemeral:
+            volumeClaimTemplate:
+              metadata:
+                creationTimestamp: null
+              spec:
+                accessModes: ["ReadWriteOnce"]
+                resources:
+                  requests:
+                    storage: 5Gi
+        - name: app-tmp
+          # we can't use emptyDir due to the sticky bit / world writable issue
+          # see: https://github.com/kubernetes/kubernetes/issues/110835
+          ephemeral:
+            volumeClaimTemplate:
+              metadata:
+                creationTimestamp: null
+              spec:
+                accessModes: ["ReadWriteOnce"]
+                resources:
+                  requests:
+                    storage: 5Gi
+        - name: "data"
+          persistentVolumeClaim:
+            claimName: my-openproject        
+      initContainers:
+        - name: check-db-ready
+          image: "docker.io/postgres:13"
+          imagePullPolicy: Always
+          command: [
+            'sh',
+            '-c',
+            'until pg_isready -h $DATABASE_HOST -p $DATABASE_PORT -U openproject; do echo "waiting for database $DATABASE_HOST:$DATABASE_PORT"; sleep 2; done;'
+          ]
+          envFrom:
+            - secretRef:
+                name: my-openproject-core
+            - secretRef:
+                name: my-openproject-memcached
+          env:
+            
+            - name: OPENPROJECT_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-openproject-postgresql
+                  key: password
+          resources:
+            limits:
+              memory: 200Mi
+            requests:
+              memory: 200Mi          
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+            runAsGroup: 1000
+            runAsNonRoot: true
+            runAsUser: 1000
+            seccompProfile:
+              type: RuntimeDefault
+      containers:
+        - name: seeder
+          image: "docker.io/openproject/openproject:14-slim"
+          imagePullPolicy: Always
+          args:
+            - bash
+            - /app/docker/prod/seeder
+          envFrom:
+            - secretRef:
+                name: my-openproject-core
+            - secretRef:
+                name: my-openproject-memcached
+          env:
+            
+            - name: OPENPROJECT_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-openproject-postgresql
+                  key: password
+          volumeMounts:            
+            - mountPath: /tmp
+              name: tmp
+            - mountPath: /app/tmp
+              name: app-tmp
+            - name: "data"
+              mountPath: "/var/openproject/assets"                      
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+            runAsGroup: 1000
+            runAsNonRoot: true
+            runAsUser: 1000
+            seccompProfile:
+              type: RuntimeDefault
+      restartPolicy: OnFailure
+---
+# Source: openproject/templates/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: my-openproject
+  labels:
+    app.kubernetes.io/name: openproject
+    helm.sh/chart: openproject-7.0.0
+    app.kubernetes.io/instance: my-openproject
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "14"
+spec:
+  tls:
+    - hosts:
+        - "openproject.example.com"
+      secretName: ""
+  rules:
+    - host: "openproject.example.com"
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: my-openproject
+                port:
+                  name: http
+...
+---
+# Source: openproject/templates/tests/test-connection.yaml
+apiVersion: "v1"
+kind: "Pod"
+metadata:
+  name: "my-openproject-test-connection"
+  labels:
+    app.kubernetes.io/name: openproject
+    helm.sh/chart: openproject-7.0.0
+    app.kubernetes.io/instance: my-openproject
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "14"
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: "wget"
+      image: "busybox"
+      command: ['wget']
+      args:
+        - '--no-verbose'
+        - '--tries=1'
+        - '--spider'
+        - 'my-openproject:8080/health_check'
+  restartPolicy: "Never"
+...

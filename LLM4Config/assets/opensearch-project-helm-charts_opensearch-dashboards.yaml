@@ -1,0 +1,139 @@
+---
+# Source: opensearch-dashboards/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-opensearch-dashboards-dashboards
+  labels:
+    helm.sh/chart: opensearch-dashboards-2.22.0
+    app.kubernetes.io/name: opensearch-dashboards
+    app.kubernetes.io/instance: my-opensearch-dashboards
+    app.kubernetes.io/version: "2.16.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: opensearch-dashboards/templates/rolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    helm.sh/chart: opensearch-dashboards-2.22.0
+    app.kubernetes.io/name: opensearch-dashboards
+    app.kubernetes.io/instance: my-opensearch-dashboards
+    app.kubernetes.io/version: "2.16.0"
+    app.kubernetes.io/managed-by: Helm
+  name: my-opensearch-dashboards-dashboards-rolebinding
+roleRef:
+  kind: Role
+  name: my-opensearch-dashboards-dashboards
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+- kind: ServiceAccount
+  name: my-opensearch-dashboards-dashboards
+  namespace: default
+---
+# Source: opensearch-dashboards/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-opensearch-dashboards
+  labels:
+    helm.sh/chart: opensearch-dashboards-2.22.0
+    app.kubernetes.io/name: opensearch-dashboards
+    app.kubernetes.io/instance: my-opensearch-dashboards
+    app.kubernetes.io/version: "2.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+  - port: 5601
+    protocol: TCP
+    name: http
+    targetPort: 5601
+  - name: metrics
+    protocol: TCP
+    port: 9601
+  selector:
+    app: opensearch-dashboards
+    release: "my-opensearch-dashboards"
+---
+# Source: opensearch-dashboards/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-opensearch-dashboards
+  labels:
+    helm.sh/chart: opensearch-dashboards-2.22.0
+    app.kubernetes.io/name: opensearch-dashboards
+    app.kubernetes.io/instance: my-opensearch-dashboards
+    app.kubernetes.io/version: "2.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: opensearch-dashboards
+      release: "my-opensearch-dashboards"
+  template:
+    metadata:
+      labels:
+        app: opensearch-dashboards
+        release: "my-opensearch-dashboards"
+      annotations:
+    spec:
+      securityContext:
+        {}
+      serviceAccountName: my-opensearch-dashboards-dashboards
+      volumes:
+      containers:
+      - name: dashboards
+        securityContext:
+          capabilities:
+            drop:
+            - ALL
+          runAsNonRoot: true
+          runAsUser: 1000
+        image: "opensearchproject/opensearch-dashboards:2.16.0"
+        imagePullPolicy: "IfNotPresent"
+        readinessProbe:
+          failureThreshold: 10
+          initialDelaySeconds: 10
+          periodSeconds: 20
+          successThreshold: 1
+          tcpSocket:
+            port: 5601
+          timeoutSeconds: 5
+        livenessProbe:
+          failureThreshold: 10
+          initialDelaySeconds: 10
+          periodSeconds: 20
+          successThreshold: 1
+          tcpSocket:
+            port: 5601
+          timeoutSeconds: 5
+        startupProbe:
+          failureThreshold: 20
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          successThreshold: 1
+          tcpSocket:
+            port: 5601
+          timeoutSeconds: 5
+        env:
+        - name: OPENSEARCH_HOSTS
+          value: "https://opensearch-cluster-master:9200"
+        - name: SERVER_HOST
+          value: "0.0.0.0"
+        ports:
+        - containerPort: 5601
+          name: http
+          protocol: TCP
+        resources:
+          limits:
+            cpu: 100m
+            memory: 512M
+          requests:
+            cpu: 100m
+            memory: 512M
+        volumeMounts:

@@ -1,0 +1,131 @@
+---
+# Source: wildfly/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/instance: my-wildfly
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: my-wildfly
+    helm.sh/chart: wildfly-2.4.0
+  name: my-wildfly
+spec:
+  ports:
+  - port: 8080
+    targetPort: 8080
+  selector:
+    app.kubernetes.io/instance: my-wildfly
+    app.kubernetes.io/name: my-wildfly
+  sessionAffinity: None
+  type: ClusterIP
+---
+# Source: wildfly/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    description: The JGroups ping port for clustering.
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+  labels:
+    app.kubernetes.io/instance: my-wildfly
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: my-wildfly
+    helm.sh/chart: wildfly-2.4.0
+  name: my-wildfly-ping
+spec:
+  clusterIP: None
+  ports:
+  - name: ping
+    port: 8888
+    protocol: TCP
+  publishNotReadyAddresses: true
+  selector:
+    app.kubernetes.io/instance: my-wildfly
+    app.kubernetes.io/name: my-wildfly
+  sessionAffinity: None
+  type: ClusterIP
+---
+# Source: wildfly/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    image.openshift.io/triggers: |-
+      [
+        {
+          "from":{
+            "kind":"ImageStreamTag",
+            "name":"my-wildfly:latest"
+          },
+          "fieldPath":"spec.template.spec.containers[0].image"
+        }
+      ]
+  labels:
+    app.kubernetes.io/instance: my-wildfly
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: my-wildfly
+    helm.sh/chart: wildfly-2.4.0
+  name: my-wildfly
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: my-wildfly
+      app.kubernetes.io/name: my-wildfly
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: my-wildfly
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: my-wildfly
+        helm.sh/chart: wildfly-2.4.0
+      name: my-wildfly
+    spec:
+      containers:
+      - env:
+        - name: JGROUPS_PING_PROTOCOL
+          value: dns.DNS_PING
+        - name: OPENSHIFT_DNS_PING_SERVICE_PORT
+          value: "8888"
+        - name: ENABLE_GENERATE_DEFAULT_DATASOURCE
+          value: "false"
+        - name: OPENSHIFT_DNS_PING_SERVICE_NAME
+          value: my-wildfly-ping
+        - name: ENV_FILES
+          value: /etc/extensions/*
+        image: my-wildfly:latest
+        imagePullPolicy: Always
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: admin
+        name: my-wildfly
+        ports:
+        - containerPort: 8778
+          name: jolokia
+          protocol: TCP
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        - containerPort: 8888
+          name: ping
+          protocol: TCP
+        - containerPort: 9990
+          name: admin
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: admin
+        startupProbe:
+          failureThreshold: 36
+          httpGet:
+            path: /health/live
+            port: admin
+          initialDelaySeconds: 5
+          periodSeconds: 5
+---
+# Source: wildfly/templates/service.yaml
+---

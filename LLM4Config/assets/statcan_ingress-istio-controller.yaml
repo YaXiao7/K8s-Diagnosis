@@ -1,0 +1,187 @@
+---
+# Source: ingress-istio-controller/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-ingress-istio-controller
+  labels:
+    helm.sh/chart: ingress-istio-controller-1.4.0
+    app.kubernetes.io/name: ingress-istio-controller
+    app.kubernetes.io/instance: my-ingress-istio-controller
+    app.kubernetes.io/version: "1.4.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: ingress-istio-controller/templates/clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-ingress-istio-controller
+  labels:
+    helm.sh/chart: ingress-istio-controller-1.4.0
+    app.kubernetes.io/name: ingress-istio-controller
+    app.kubernetes.io/instance: my-ingress-istio-controller
+    app.kubernetes.io/version: "1.4.0"
+    app.kubernetes.io/managed-by: Helm
+rules:
+- apiGroups:
+    - 'networking.istio.io'
+  resources:
+    - 'virtualservices'
+  verbs:
+    - watch
+    - get
+    - list
+    - create
+    - update
+    - delete
+- apiGroups:
+  - networking.istio.io
+  resources:
+  - gateways
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingresses
+  - ingressclasses
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingresses/status
+  verbs:
+  - update
+- apiGroups:
+  - ''
+  resources:
+  - services
+  verbs:
+  - get
+  - list
+  - watch
+---
+# Source: ingress-istio-controller/templates/clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-ingress-istio-controller
+  labels:
+    helm.sh/chart: ingress-istio-controller-1.4.0
+    app.kubernetes.io/name: ingress-istio-controller
+    app.kubernetes.io/instance: my-ingress-istio-controller
+    app.kubernetes.io/version: "1.4.0"
+    app.kubernetes.io/managed-by: Helm
+subjects:
+- kind: ServiceAccount
+  name: my-ingress-istio-controller
+  namespace: default
+roleRef:
+  kind: ClusterRole
+  name: my-ingress-istio-controller
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: ingress-istio-controller/templates/role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: my-ingress-istio-controller
+  labels:
+    helm.sh/chart: ingress-istio-controller-1.4.0
+    app.kubernetes.io/name: ingress-istio-controller
+    app.kubernetes.io/instance: my-ingress-istio-controller
+    app.kubernetes.io/version: "1.4.0"
+    app.kubernetes.io/managed-by: Helm
+rules:
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - create
+- apiGroups:
+  - coordination.k8s.io
+  resourceNames:
+  - ingress-istio-controller # lock-name configuration
+  resources:
+  - leases
+  verbs:
+  - get
+  - update
+  - watch
+  - patch
+---
+# Source: ingress-istio-controller/templates/rolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: my-ingress-istio-controller
+  labels:
+    helm.sh/chart: ingress-istio-controller-1.4.0
+    app.kubernetes.io/name: ingress-istio-controller
+    app.kubernetes.io/instance: my-ingress-istio-controller
+    app.kubernetes.io/version: "1.4.0"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: my-ingress-istio-controller
+subjects:
+- kind: ServiceAccount
+  name: my-ingress-istio-controller
+  namespace: default
+---
+# Source: ingress-istio-controller/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-ingress-istio-controller
+  labels:
+    helm.sh/chart: ingress-istio-controller-1.4.0
+    app.kubernetes.io/name: ingress-istio-controller
+    app.kubernetes.io/instance: my-ingress-istio-controller
+    app.kubernetes.io/version: "1.4.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ingress-istio-controller
+      app.kubernetes.io/instance: my-ingress-istio-controller
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ingress-istio-controller
+        app.kubernetes.io/instance: my-ingress-istio-controller
+    spec:
+      serviceAccountName: my-ingress-istio-controller
+      securityContext:
+        {}
+      containers:
+        - name: istio-ingress-controller
+          securityContext:
+            {}
+          image: "statcan/ingress-istio-controller:1.4.0"
+          imagePullPolicy: IfNotPresent
+          args:
+          resources:
+            limits:
+              cpu: 500m
+              memory: 128Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+          env:
+            - name: "LOCK_IDENTITY"
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: "LOCK_NAMESPACE"
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace

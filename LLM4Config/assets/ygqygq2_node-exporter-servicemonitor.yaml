@@ -1,0 +1,71 @@
+---
+# Source: node-exporter-servicemonitor/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-node-exporter-servicemonitor
+  labels:
+    app: node-exporter-servicemonitor
+    chart: "node-exporter-servicemonitor-1.0.0"
+    heritage: "Helm"
+    release: "my-node-exporter-servicemonitor"
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9100
+      targetPort: 9100
+      protocol: TCP
+      name: metrics
+---
+# Source: node-exporter-servicemonitor/templates/prometheusrule.yaml
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  labels:
+    app: "prometheus"
+    chart: node-exporter-servicemonitor-1.0.0
+    heritage: Helm
+    prometheus: my-node-exporter-servicemonitor
+    release: my-node-exporter-servicemonitor
+    release: prometheus-operator 
+  name: my-node-exporter-servicemonitor
+spec:
+  
+  groups:
+  - name: linux.rules
+    rules:
+    - record: disk_usage_percent
+      expr: (node_filesystem_avail_bytes{fstype !~ "selinuxfs|nfs|rpc_pipefs|rootfs|tmpfs",mountpoint !~ "/boot|/net|/selinux"} / node_filesystem_size_bytes{fstype !~ "selinuxfs|nfs|rpc_pipefs|rootfs|tmpfs",mountpoint !~ "/boot|/net|/selinux"})*100
+    - alert: MySQLGaleraNotReady
+      expr: mysql_global_status_wsrep_ready != 1
+      for: 5m
+      labels:
+        severity: critical
+      annotations:
+        description: '\{\{$labels.job}} on \{\{$labels.instance}} is not ready.'
+        summary: Galera cluster node not ready
+---
+# Source: node-exporter-servicemonitor/templates/servicemonitor.yaml
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: ServiceMonitor
+metadata:
+  labels:
+    app: node-exporter-servicemonitor
+    chart: "node-exporter-servicemonitor-1.0.0"
+    heritage: "Helm"
+    release: "my-node-exporter-servicemonitor"
+    prometheus: my-node-exporter-servicemonitor
+    release: prometheus-operator    
+  name: my-node-exporter-servicemonitor
+spec:
+  selector:
+    matchLabels:
+      app: node-exporter-servicemonitor
+      release: "my-node-exporter-servicemonitor"      
+  namespaceSelector:
+    matchNames:
+      - monitoring
+  endpoints:
+  - port: "metrics"
+    interval: 15s
+    #bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token

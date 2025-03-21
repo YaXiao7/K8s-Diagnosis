@@ -1,0 +1,119 @@
+---
+# Source: victoria-metrics-single/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    helm.sh/chart: victoria-metrics-single-0.11.2
+    app.kubernetes.io/managed-by: Helm
+  name: my-victoria-metrics-single
+  namespace: default
+---
+# Source: victoria-metrics-single/templates/server-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: default
+  labels: 
+    app: server
+    app.kubernetes.io/name: victoria-metrics-single
+    app.kubernetes.io/instance: my-victoria-metrics-single
+    helm.sh/chart: victoria-metrics-single-0.11.2
+    app.kubernetes.io/managed-by: Helm
+  name: my-victoria-metrics-single-server
+spec:
+  clusterIP: None
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8428
+      protocol: TCP
+      targetPort: http
+  selector: 
+    app: server
+    app.kubernetes.io/name: victoria-metrics-single
+    app.kubernetes.io/instance: my-victoria-metrics-single
+---
+# Source: victoria-metrics-single/templates/server-statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  namespace: default
+  labels: 
+    app: server
+    app.kubernetes.io/name: victoria-metrics-single
+    app.kubernetes.io/instance: my-victoria-metrics-single
+    helm.sh/chart: victoria-metrics-single-0.11.2
+    app.kubernetes.io/managed-by: Helm
+  name: my-victoria-metrics-single-server
+spec:
+  serviceName: my-victoria-metrics-single-server
+  selector:
+    matchLabels: 
+      app: server
+      app.kubernetes.io/name: victoria-metrics-single
+      app.kubernetes.io/instance: my-victoria-metrics-single
+  replicas: 1
+  podManagementPolicy: OrderedReady
+  template:
+    metadata:
+      labels: 
+        app: server
+        app.kubernetes.io/name: victoria-metrics-single
+        app.kubernetes.io/instance: my-victoria-metrics-single
+        helm.sh/chart: victoria-metrics-single-0.11.2
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      automountServiceAccountToken: true
+      containers:
+        - name: vmsingle
+          securityContext: 
+            {}
+          image: victoriametrics/victoria-metrics:v1.103.0
+          imagePullPolicy: IfNotPresent
+          args: 
+            - --envflag.enable=true
+            - --envflag.prefix=VM_
+            - --loggerFormat=json
+            - --retentionPeriod=1
+            - --storageDataPath=/storage
+          ports:
+            - name: http
+              containerPort: 8428
+          readinessProbe: 
+            failureThreshold: 3
+            httpGet:
+              path: /health
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 5
+            periodSeconds: 15
+            timeoutSeconds: 5
+          livenessProbe: 
+            failureThreshold: 10
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            tcpSocket:
+              port: http
+            timeoutSeconds: 5
+          volumeMounts:
+            - name: server-volume
+              mountPath: /storage
+            
+      securityContext: 
+        {}
+      serviceAccountName: my-victoria-metrics-single
+      terminationGracePeriodSeconds: 60
+      volumes:
+        
+  volumeClaimTemplates:
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: server-volume
+      spec:
+        accessModes: 
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 16Gi

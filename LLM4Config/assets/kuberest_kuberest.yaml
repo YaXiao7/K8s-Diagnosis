@@ -1,0 +1,120 @@
+---
+# Source: kuberest/templates/rbac.yaml
+# Scoped service account
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kuberest
+  labels:
+    app: kuberest
+    app.kubernetes.io/name: kuberest
+    app.kubernetes.io/version: "1.0.0"
+  namespace: default
+automountServiceAccountToken: true
+---
+# Source: kuberest/templates/rbac.yaml
+# Access for the service account
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: kuberest
+rules:
+  - apiGroups: ["kuberest.solidite.fr"]
+    resources: ["restendpoints", "restendpoints/status", "restendpoints/finalizers"]
+    verbs: ["get", "list", "watch", "patch", "update"]
+  - apiGroups: [""]
+    resources: ["secrets", "configmaps"]
+    verbs: ["*"]
+  - apiGroups: ["events.k8s.io"]
+    resources: ["events"]
+    verbs: ["create"]
+---
+# Source: kuberest/templates/rbac.yaml
+# Binding the role to the account
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: kuberest
+subjects:
+- kind: ServiceAccount
+  namespace: default
+  name: kuberest
+roleRef:
+  kind: ClusterRole
+  name: kuberest
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: kuberest/templates/service.yaml
+# Expose the http port of the service
+apiVersion: v1
+kind: Service
+metadata:
+  name: kuberest
+  namespace: default
+  labels:
+    app: kuberest
+    app.kubernetes.io/name: kuberest
+    app.kubernetes.io/version: "1.0.0"
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  selector:
+    app: kuberest
+---
+# Source: kuberest/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kuberest
+  namespace: default
+  labels:
+    app: kuberest
+    app.kubernetes.io/name: kuberest
+    app.kubernetes.io/version: "1.0.0"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kuberest
+  template:
+    metadata:
+      labels:
+        app: kuberest
+      annotations:
+        kubectl.kubernetes.io/default-container: kuberest
+    spec:
+      serviceAccountName: kuberest
+      securityContext:
+        {}
+      containers:
+      - name: kuberest
+        image: sebt3/kuberest:1.0.0
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          {}
+        resources:
+          limits:
+            cpu: 200m
+            memory: 256Mi
+          requests:
+            cpu: 50m
+            memory: 100Mi
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        env:
+        - name: RUST_LOG
+          value: info,kube=debug,controller=debug
+        - name: MULTI_TENANT
+          value: "true"
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 5

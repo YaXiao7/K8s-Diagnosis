@@ -1,0 +1,454 @@
+---
+# Source: musicociel/templates/keycloak.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: "my-musicociel-keycloak-admin"
+type: kubernetes.io/basic-auth
+data:
+  username: "YWRtaW4="
+  password: "RFZ0eXBCSkNJNEg0M0pCNHJld3VESENETg=="
+---
+# Source: musicociel/templates/postgresql.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: "my-musicociel-postgresql-admin"
+type: kubernetes.io/basic-auth
+data:
+  username: "YWRtaW4="
+  password: "UVhwR25EUEJaRGg4UFFaRGV3RDhUYzJqSA=="
+---
+# Source: musicociel/templates/postgresql.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: "my-musicociel-postgresql-keycloak"
+type: kubernetes.io/basic-auth
+data:
+  username: "a2V5Y2xvYWs="
+  password: "Wmw3WGl6Zk5jYUtGSGNHSXFMa3BSeUptZw=="
+---
+# Source: musicociel/templates/postgresql.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: "my-musicociel-postgresql-musicociel"
+type: kubernetes.io/basic-auth
+data:
+  username: "bXVzaWNvY2llbA=="
+  password: "a3Q0WkpUZ0Y3cjJ5cXNJTDhEaFdJb1FvQg=="
+---
+# Source: musicociel/templates/postgresql.yaml
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: "my-musicociel-postgresql"
+  labels:
+    app.kubernetes.io/name: "postgresql"
+    app.kubernetes.io/instance: "my-musicociel"
+    app.kubernetes.io/managed-by: "Helm"
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: "1Gi"
+---
+# Source: musicociel/templates/keycloak.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: "my-musicociel-keycloak"
+  labels:
+    app.kubernetes.io/name: "keycloak"
+    app.kubernetes.io/instance: "my-musicociel"
+    app.kubernetes.io/managed-by: "Helm"
+spec:
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+  selector:
+    app.kubernetes.io/name: "keycloak"
+    app.kubernetes.io/instance: "my-musicociel"
+    app.kubernetes.io/managed-by: "Helm"
+---
+# Source: musicociel/templates/musicociel.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: "my-musicociel-musicociel"
+  labels:
+    app.kubernetes.io/name: "musicociel"
+    app.kubernetes.io/instance: "my-musicociel"
+    app.kubernetes.io/managed-by: "Helm"
+spec:
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+  selector:
+    app.kubernetes.io/name: "musicociel"
+    app.kubernetes.io/instance: "my-musicociel"
+    app.kubernetes.io/managed-by: "Helm"
+---
+# Source: musicociel/templates/postgresql.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: "my-musicociel-postgresql"
+  labels:
+    app.kubernetes.io/name: "postgresql"
+    app.kubernetes.io/instance: "my-musicociel"
+    app.kubernetes.io/managed-by: "Helm"
+spec:
+  ports:
+  - name: postgresql
+    port: 5432
+    targetPort: 5432
+  selector:
+    app.kubernetes.io/name: "postgresql"
+    app.kubernetes.io/instance: "my-musicociel"
+    app.kubernetes.io/managed-by: "Helm"
+---
+# Source: musicociel/templates/keycloak.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "my-musicociel-keycloak"
+  labels:
+    app.kubernetes.io/name: "keycloak"
+    app.kubernetes.io/instance: "my-musicociel"
+    app.kubernetes.io/managed-by: "Helm"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: "keycloak"
+      app.kubernetes.io/instance: "my-musicociel"
+      app.kubernetes.io/managed-by: "Helm"
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: "keycloak"
+        app.kubernetes.io/instance: "my-musicociel"
+        app.kubernetes.io/managed-by: "Helm"
+    spec:
+      containers:
+      - name: keycloak
+        image: "quay.io/keycloak/keycloak:23.0.3"
+        args:
+          - start
+          - "--health-enabled=true"
+          - "--proxy=edge"
+          - "--hostname-url=http://keycloak.local"
+          - "--db=postgres"
+          - "--db-url=jdbc:postgresql://my-musicociel-postgresql/keycloak"
+          - "--db-username=$(DB_USER)"
+          - "--db-password=$(DB_PASSWORD)"
+        env:
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: "my-musicociel-postgresql-keycloak"
+              key: username
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: "my-musicociel-postgresql-keycloak"
+              key: password
+        - name: KEYCLOAK_ADMIN
+          valueFrom:
+            secretKeyRef:
+              name: "my-musicociel-keycloak-admin"
+              key: username
+        - name: KEYCLOAK_ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: "my-musicociel-keycloak-admin"
+              key: password
+        ports:
+        - name: http
+          containerPort: 8080
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8080
+            httpHeaders:
+            - name: X-Forwarded-For
+              value: "127.0.0.1"
+            - name: X-Forwarded-Proto
+              value: "http"
+            - name: X-Forwarded-Host
+              value: "keycloak.local"
+---
+# Source: musicociel/templates/musicociel.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "my-musicociel-musicociel"
+  labels:
+    app.kubernetes.io/name: "musicociel"
+    app.kubernetes.io/instance: "my-musicociel"
+    app.kubernetes.io/managed-by: "Helm"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: "musicociel"
+      app.kubernetes.io/instance: "my-musicociel"
+      app.kubernetes.io/managed-by: "Helm"
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: "musicociel"
+        app.kubernetes.io/instance: "my-musicociel"
+        app.kubernetes.io/managed-by: "Helm"
+    spec:
+      containers:
+      - name: musicociel
+        image: 'docker.io/davdiv/musicociel:dev'
+        env:
+        - name: MUSICOCIEL_PORT
+          value: "8080"
+        - name: MUSICOCIEL_ADDRESS
+          value: "http://musicociel.local"
+        - name: MUSICOCIEL_TRUST_PROXY
+          value: "true"
+        - name: MUSICOCIEL_OIDC
+          value: '{"authority":"http://keycloak.local/realms/musicociel","client_id":"musicociel"}'
+        - name: MUSICOCIEL_DATABASE
+          value: "postgresql://my-musicociel-postgresql:5432/musicociel"
+        - name: MUSICOCIEL_DATABASE_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: "my-musicociel-postgresql-musicociel"
+              key: username
+        - name: MUSICOCIEL_DATABASE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: "my-musicociel-postgresql-musicociel"
+              key: password
+        ports:
+        - name: http
+          containerPort: 8080
+        readinessProbe:
+          httpGet:
+            httpHeaders:
+            - name: X-Forwarded-For
+              value: "127.0.0.1"
+            - name: X-Forwarded-Proto
+              value: "http"
+            - name: X-Forwarded-Host
+              value: "musicociel.local"
+            path: "/musicociel.json"
+            port: 8080
+---
+# Source: musicociel/templates/postgresql.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "my-musicociel-postgresql"
+  labels:
+    app.kubernetes.io/name: "postgresql"
+    app.kubernetes.io/instance: "my-musicociel"
+    app.kubernetes.io/managed-by: "Helm"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: "postgresql"
+      app.kubernetes.io/instance: "my-musicociel"
+      app.kubernetes.io/managed-by: "Helm"
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: "postgresql"
+        app.kubernetes.io/instance: "my-musicociel"
+        app.kubernetes.io/managed-by: "Helm"
+    spec:
+      containers:
+      - name: postgresql
+        image: "docker.io/library/postgres:15.2-alpine"
+        env:
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: "my-musicociel-postgresql-admin"
+              key: username
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: "my-musicociel-postgresql-admin"
+              key: password
+        - name: POSTGRES_DB
+          value: "admin"
+        - name: PGDATA
+          value: "/var/lib/postgresql/data/pgdata"
+        ports:
+        - name: postgresql
+          containerPort: 5432
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/postgresql/data
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: "my-musicociel-postgresql"
+---
+# Source: musicociel/templates/keycloak.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: "my-musicociel-keycloak"
+spec:
+  rules:
+  - host: "keycloak.local"
+    http:
+      paths:
+      - pathType: Prefix
+        path: "/"
+        backend:
+          service:
+            name: "my-musicociel-keycloak"
+            port:
+              name: http
+---
+# Source: musicociel/templates/musicociel.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: "my-musicociel-musicociel"
+spec:
+  rules:
+  - host: "musicociel.local"
+    http:
+      paths:
+      - pathType: Prefix
+        path: "/"
+        backend:
+          service:
+            name: "my-musicociel-musicociel"
+            port:
+              name: http
+---
+# Source: musicociel/templates/keycloak.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "my-musicociel-keycloak-postinstall"
+  labels:
+    app.kubernetes.io/name: "keycloak-postinstall"
+    app.kubernetes.io/instance: "my-musicociel"
+    app.kubernetes.io/managed-by: "Helm"
+  annotations:
+    "helm.sh/hook": post-install
+    "helm.sh/hook-weight": "-4"
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  template:
+    metadata:
+      name: "my-musicociel-keycloak-postinstall"
+      labels:
+        app.kubernetes.io/name: "keycloak-postinstall"
+        app.kubernetes.io/instance: "my-musicociel"
+        app.kubernetes.io/managed-by: "Helm"
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: keycloak-post-install
+        image: "quay.io/keycloak/keycloak:23.0.3"
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            /opt/keycloak/bin/kcadm.sh config credentials --server http://my-musicociel-keycloak:8080/ --realm master --user "$KEYCLOAK_USER" --password "$KEYCLOAK_PASSWORD" &&
+            /opt/keycloak/bin/kcadm.sh create realms -s realm=musicociel -s enabled=true &&
+            /opt/keycloak/bin/kcadm.sh create clients -r musicociel -s clientId=musicociel -s publicClient=true -s 'baseUrl=http://musicociel.local' -s 'attributes={"post.logout.redirect.uris":"http://musicociel.local/*"}' -s 'redirectUris=["http://musicociel.local/*"]'
+            CLIENT_ID="$(/opt/keycloak/bin/kcadm.sh get clients -r musicociel -q clientId=musicociel --fields id | grep id | sed 's/\s*"id"\s*:\s*"\(.*\)"/\1/' )"
+            /opt/keycloak/bin/kcadm.sh create clients/$CLIENT_ID/protocol-mappers/models -r musicociel -s 'name=musicociel-audience' -s 'protocol=openid-connect' -s 'protocolMapper=oidc-audience-mapper' -s 'config."included.client.audience"=musicociel' -s 'config."access.token.claim"=true'
+        env:
+        - name: KEYCLOAK_USER
+          valueFrom:
+            secretKeyRef:
+              name: "my-musicociel-keycloak-admin"
+              key: username
+        - name: KEYCLOAK_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: "my-musicociel-keycloak-admin"
+              key: password
+---
+# Source: musicociel/templates/postgresql.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "my-musicociel-postgres-postinstall"
+  labels:
+    app.kubernetes.io/name: "postgres-postinstall"
+    app.kubernetes.io/instance: "my-musicociel"
+    app.kubernetes.io/managed-by: "Helm"
+  annotations:
+    "helm.sh/hook": post-install
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  template:
+    metadata:
+      name: "my-musicociel-postgres-postinstall"
+      labels:
+        app.kubernetes.io/name: "postgres-postinstall"
+        app.kubernetes.io/instance: "my-musicociel"
+        app.kubernetes.io/managed-by: "Helm"
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: postgres-post-install
+        image: "docker.io/library/postgres:15.2-alpine"
+        command: ["/bin/sh", "-c"]
+        args:
+          - while ! nc -z "$PGHOST" "$PGPORT"; do sleep 1; done &&
+            echo "$PGHOST:$PGPORT:$PGDATABASE:$PGUSER:$PGPASSWORD" > ~/.pgpass &&
+            echo "
+              CREATE USER $MUSICOCIEL_USER WITH PASSWORD '$MUSICOCIEL_PASSWORD';
+              CREATE DATABASE musicociel OWNER $MUSICOCIEL_USER;
+              CREATE USER $KEYCLOAK_USER WITH PASSWORD '$KEYCLOAK_PASSWORD';
+              CREATE DATABASE keycloak OWNER $KEYCLOAK_USER;
+            " | psql -v ON_ERROR_STOP=1 -w
+        env:
+        - name: PGHOST
+          value: "my-musicociel-postgresql"
+        - name: PGPORT
+          value: "5432"
+        - name: PGUSER
+          valueFrom:
+            secretKeyRef:
+              name: "my-musicociel-postgresql-admin"
+              key: username
+        - name: PGPASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: "my-musicociel-postgresql-admin"
+              key: password
+        - name: PGDATABASE
+          value: "admin"
+        - name: MUSICOCIEL_USER
+          valueFrom:
+            secretKeyRef:
+              name: "my-musicociel-postgresql-musicociel"
+              key: username
+        - name: MUSICOCIEL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: "my-musicociel-postgresql-musicociel"
+              key: password
+        - name: KEYCLOAK_USER
+          valueFrom:
+            secretKeyRef:
+              name: "my-musicociel-postgresql-keycloak"
+              key: username
+        - name: KEYCLOAK_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: "my-musicociel-postgresql-keycloak"
+              key: password

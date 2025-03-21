@@ -1,0 +1,346 @@
+---
+# Source: etcd/templates/networkpolicy.yaml
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: my-etcd
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-etcd
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: etcd
+    app.kubernetes.io/version: 3.5.16
+    helm.sh/chart: etcd-10.2.16
+    app.kubernetes.io/component: etcd
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: my-etcd
+      app.kubernetes.io/name: etcd
+      app.kubernetes.io/component: etcd
+  policyTypes:
+    - Ingress
+    - Egress
+  egress:
+    - {}
+  ingress:
+    # Allow inbound connections
+    - ports:
+        - port: 2379
+        - port: 2380
+---
+# Source: etcd/templates/pdb.yaml
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: my-etcd
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-etcd
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: etcd
+    app.kubernetes.io/version: 3.5.16
+    helm.sh/chart: etcd-10.2.16
+    app.kubernetes.io/component: etcd
+spec:
+  minAvailable: 51%
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: my-etcd
+      app.kubernetes.io/name: etcd
+      app.kubernetes.io/component: etcd
+---
+# Source: etcd/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+automountServiceAccountToken: false
+metadata:
+  name: my-etcd
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-etcd
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: etcd
+    app.kubernetes.io/version: 3.5.16
+    helm.sh/chart: etcd-10.2.16
+---
+# Source: etcd/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-etcd
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-etcd
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: etcd
+    app.kubernetes.io/version: 3.5.16
+    helm.sh/chart: etcd-10.2.16
+    app.kubernetes.io/component: etcd
+type: Opaque
+data:
+  etcd-root-password: "dEtJemNPN3BoUw=="
+---
+# Source: etcd/templates/token-secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-etcd-jwt-token
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-etcd
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: etcd
+    app.kubernetes.io/version: 3.5.16
+    helm.sh/chart: etcd-10.2.16
+type: Opaque
+data:
+  jwt-token.pem: "LS0tLS1CRUdJTiBSU0EgUFJJVkFURSBLRVktLS0tLQpNSUlKS0FJQkFBS0NBZ0VBdlFEdU9RUWFuem0xRk5DdFV1dmZwZVh1M1NzeUl4T21iay9NVEduQmhyNGhreU1LCjcyNVBHbWZKTGIxZStwZ0NUbHpxdE5iSFdONHlWYytiS2VXdWpmSlF2M1hZZnBBZnBWOGplRGdMakY3c2dENzMKQlRETzBKRG42bWlyZkF3dVloSXNTbkdGT2c1Ymxkc2pvUzJyRndQdHY3ZVZOVTFRU2pZVTIvZGdLN0orRTgyMgpRZ0loQ2F3eERCdDBvSjRzeHVKajhQWFJsUCtWY25EMUJxSmwwWW9BUTZOVWNqWWxGL2c5ZVg1L2ZQVW92Ly9EClBzVzljSXhoQXk0VkY5YmdrVVZ6RW5XT2FYZTZSTnZ3K3lrWWVEMTFNaGxjYjMraC9Cc0xETVFKQy9jTStOdmsKVEVmeTlBRmowUENlVGtGQU5YYVF1K2RwclZpalR1T0Vpd0RpR0EzRG9UcW9kZ0VONlhYOXZTY01EaEZtZVlpNApibzZYdXA4ZzFUSWk3dW1ydXdwaVU1QUdNN2xmcm5nSlNZTElyN3ZWYkpMSytmY1hXK1haSmpMTEs0VWlZUTR6CmR5TlF4S2pNK3BlYnMwYzVaU2J6RTJuWm9pcUVoZ1R5NzErNlZqaDR5Zk1BNGMzSkZLeVFMZnZGTi9XVkN0R1kKKzlkRVB6ZmNuVTJnTnZ1d0d4VExTY1M4QWxjY0Nxa3BZUWVEa01nMnEyOERLU0h4dkpGZHZpQzFaTUVTOGpTVgpwS0gveG1qZFp1Z0RhbXUwTUFmempYUTgvSjFCdjhhN21mMDVNWll3RWJldVp3aExXT0xGaWZDbXdrZ0FBalNlCjd3ZUVLeVRSdDlJeC8ybVlwYURJZ2pkRzJRbFRGRVYwaHdxcHVNdmNUMVJnK0JxWmhjVEh6cFNqM2owQ0F3RUEKQVFLQ0FnQXhOdEhSSk9GdHZwQUpXSUVaUzNRVDliaHAvTHAwYWNSM2l1M09vK2NSbCthVU1wYkJXNzdiU0ZVWgpST3M3WTJPT1ZpR0RiejIvUlRSa0pjZm9jL2NzM1FEcnFkcnlzY0tieEJjdlVhQ29MM3R6dFhHSzkzZVMxWGllCkVCMC9Fc2p0SG9CTDdoMWJ6YXRKYlNOczc4QlNJT0xDZmlJckcvT2hMMDNsTFJmc3FQQ3RaVzVrNTdzRWtzSysKdlZOMEUxdmplY1crVTdQOEVVVXY1SHZZKzJaNTFtNVZMbTFwdy9HS3VVZ0FuOURBai9ISmRPYTVMTEkwWVVsTgprNjFJWk5wYTJYT3FSZFFNWUhHdlJub01YRm9UelNUOEk2QnZKQlBnMm9YWkVCNnU3K2gvMEhvMDVyTTdtRFVPCmpla2F4V0RieXdESy9Pb0dpa01UNHFoN3JZSXhnS3hkT0RWcll2VW4yVFdZcmxKU1c0VTU0Q0pjc1RXd2lmbXUKMWpNMnIyWVV1R1N6VTIrRG5PRzlQQUtlaVNuODE5blNKRThvcSttK0tsVEFXVzV4Nm52aXRrWnk2SzBldlIycQp3M2RRdllpV0IyQncxVUE4RUdWUWdQdEk1KzlKU3BoeXVBSWhTQVNDUHJZeHJiYkZ2dEtwcEV3WVJOZytTay9DCkJ6ZXRnNGlzYlRHRmF2S296RWZsazlGVjhlRjJiTEExWHFWMnI1Y3FQUHZ2RHFzK3NoSXF6TlR1TkVYemhzTUQKU0E4TjJRMHdaclEzRFZFTVRxa25lZ01KeTZ3ZWRlMjFESlBVd21KV01JWk9pdUJKc1lkaFpDKzJrU2YxcDhCTwptaXV0djhKUU5Eem1RSXZRQmpmNDUzN2xwWFZJc3RPMTRKNDlqMGxSd2lCRGZaVVl2UUtDQVFFQTNtSmFJQXVhClhpaGprWnJub2J0VkZNTHVoN1A2WW5qbmV2NTdsUVJ1U0pVelJUYkMrSm9Dbzd1eldlVTE3ZXZ0ZTRpQWN3b1UKNmNCSG94WFBiQ0ZhUktMSnlMM1RGRkE5SnVVc0Z3UWZ2elVTaVRvWVdRMVR2d0pNMDR6Y0h2cTRIa3lGSFl0Ugp5UDN0WnFNMHRYTW53VmRobURjL001dnJMU1J3N0x2cWw1T0E1SmJFR0xoRXFOVS9pZTVyUWhySDQvSUhtMDZkCjJCMGlMdk4zd0dTb0s5d1ZGYTJNaExCV3pERWk0YzlNRkJ2dkpXSU5CMS9MemxEN0VTSEcyZHMrdStpWU5xbnIKdURDZVNPSDlXN1p4QXBrRHBhbVpyTDQ1d05QWTc2cHBNTCthR3J2dzRIdGpqU28xQlFYVWZTajMrbWNXUUU4UQpVakwvUEQvU01qRE1Wd0tDQVFFQTJaTFlIVkdDL0t3VjF6a2QyK3N5ajZUNktOQU9hS2tjcnZCODdjK3Z2VnF4CitpbitiaUJBNjQ1Z2lBbllna3cwWHFkS2trRlNrNlJka21SZWxzdjRjNnZmVGxLdlJ4OUMxNXBQbG9JUHBBVU0Kb29RWThDczdHb1pzNGpHMDczZTZLQ0RSYTdOLzBKOGltcmp0ZzlIZWIyNDJ1OHNnOEtNcWJ6cUFRSVhsOFdDeAp6WGRmNEU3OStscUI2MHZxVG9nV2xQMnF5akppNnl4b3dlSEN6ZWxiS0pzVFVpK0gxNlFqSTRzQnZ5YlFTYmZECnhrQlk3dlNKNEYyREQzdGY2bzdHd3p3RGl3NG5EN3RQbk4zZ3FZbk56UTg0MUtONVlBUU5SSVRvbFdyNjczSFoKdWJwREtPT3BxTjB6N1kxamFpa1k1N2JFeitiSjNLdFdLWE9heVkrTml3S0NBUUVBdzNnRnFlY28vNXhXc0pSTgpCMTdIRVNHcVVrT0RVT3plNHNBdTFqUDN6L3E4L3hoOFZkSGhnaE9wT05uOUJpejdLRHM2VkdQSE1CTmZwRnkyClhtQU9uUWZOZjVKQ3A3ZERtUjJWSElIMmViWG5uaEVmZDU3OFBvZUNDZXpsU3FHc0ZvM0I3ODhXeXlsUGM0aisKK29MR3JlM2xqY3I1MVo0MklBN0k1M3poWGV3OFBqQzdHdE5WSG1XYW5OMmhENURFcEhxSDd4NHlKZFN0eUVFZQp3RkI1ZFZ2VWVLSjhRZUZSMmRkU3h0TFVGMVRhWnF5QnNUcWx4S3B2bEladzUrc0xnRldZL1d0c0V4RkEvK1VNCk1vSHhZWXducFlTbTNDeTBUT2FvNXppTmoxaksxcmJkcWlNcXhOa1ZrMTJsZ1lIeVBmcEFsN1FuTDJrOTZiSmIKU3R5VHJ3S0NBUUFqdjR6aXhGSFJValVFZDg0QUpGVGFaVEQxSTdvNldBN3ViM1VYWGRoeU5FU3A1ZHg0RzdTTwovNFc4MUdGT2gxYlRkb2s2SHFHQ3dLN2ZMcjZiNkVlYU9kTW0rMDd4VUtHYTZ5L0lldlkyN04xMmxsM0NtRmZOCnMraVFBYnJJM2RNb1pMd0VCaW9xRFB1U2tHLzJDTFdUZVhoa3dxdFczbmhLYmtKRVY3dkFQVEw1bjNPUlYybEQKaVR0dmZibXh6WXBvVUlXUFUxZ05hKzZLYkoybFY0SXkyY2dDNk94WThnOFQ5L01CaFU4VHphM05GU1dIbllaSgo1eE54cDhQS3RrclNLVG9yenRkOExqcVdlNTQrUFBZaml5eTdRMkRkOWN4NFJaNHhickpzUlRpUTI1bk5UaHJDCk5CWWtJZWNEdWx6dE5ZcUEzbHFzZHpwZzlTMnBrSHloQW9JQkFFYjUwQzlwMUNCNU45Q3FNaW1xNXhaRWUwVHEKRFpJNUlLYjRYOUNwMUN6TzFTcXMxUHBlUDFNSC9JalViMDJtMFRhMG9rSmNXZ2tZRmxmQ0dMc0l3cGNBZHErUwo0YWduWVQwbzRNQ2FZSDMvRDZzUGhScStzWW9GQjdGWlZzaUdMejVIUkF5c3REcUxsdFJIUmhXMy9yOFRHS2F5CkdwSmZhUkVidXliYXRzQWRuaVNPOVNVamNlTmg3Ui80VnhMYlBmVHZNdGx3ZTBDMjZ2MHZRR09KOXRvUkI5akcKSlRoVGJnYkxQMVdsU3JGQVFxYnFjTUtVSC9CU0hrbHBUMUpBMGtvbFgxemt1dStaRmFBbXA0ejJybFZrR2VsZQpTT1IxM01ZZHVUZnlHV1NMMWhOSnNiSjQvN0owQ2I0WlR2UlBuRk5yS3Zwa0RTVkV6VmVXRVp3ZDdpVT0KLS0tLS1FTkQgUlNBIFBSSVZBVEUgS0VZLS0tLS0K"
+---
+# Source: etcd/templates/svc-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-etcd-headless
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-etcd
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: etcd
+    app.kubernetes.io/version: 3.5.16
+    helm.sh/chart: etcd-10.2.16
+    app.kubernetes.io/component: etcd
+  annotations:
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+spec:
+  type: ClusterIP
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+    - name: client
+      port: 2379
+      targetPort: client
+    - name: peer
+      port: 2380
+      targetPort: peer
+  selector:
+    app.kubernetes.io/instance: my-etcd
+    app.kubernetes.io/name: etcd
+    app.kubernetes.io/component: etcd
+---
+# Source: etcd/templates/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-etcd
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-etcd
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: etcd
+    app.kubernetes.io/version: 3.5.16
+    helm.sh/chart: etcd-10.2.16
+    app.kubernetes.io/component: etcd
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+    - name: "client"
+      port: 2379
+      targetPort: client
+      nodePort: null
+    - name: "peer"
+      port: 2380
+      targetPort: peer
+      nodePort: null
+  selector:
+    app.kubernetes.io/instance: my-etcd
+    app.kubernetes.io/name: etcd
+    app.kubernetes.io/component: etcd
+---
+# Source: etcd/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-etcd
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-etcd
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: etcd
+    app.kubernetes.io/version: 3.5.16
+    helm.sh/chart: etcd-10.2.16
+    app.kubernetes.io/component: etcd
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: my-etcd
+      app.kubernetes.io/name: etcd
+      app.kubernetes.io/component: etcd
+  serviceName: my-etcd-headless
+  podManagementPolicy: Parallel
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: my-etcd
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: etcd
+        app.kubernetes.io/version: 3.5.16
+        helm.sh/chart: etcd-10.2.16
+        app.kubernetes.io/component: etcd
+      annotations:
+        checksum/token-secret: a39e9b8d465845ba474a48dd6588f406773ef11301746725f025a5f2e2a49656
+    spec:
+      
+      automountServiceAccountToken: false
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/instance: my-etcd
+                    app.kubernetes.io/name: etcd
+                    app.kubernetes.io/component: etcd
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+        fsGroupChangePolicy: Always
+        supplementalGroups: []
+        sysctls: []
+      serviceAccountName: "my-etcd"
+      containers:
+        - name: etcd
+          image: docker.io/bitnami/etcd:3.5.16-debian-12-r0
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsGroup: 1001
+            runAsNonRoot: true
+            runAsUser: 1001
+            seLinuxOptions: {}
+            seccompProfile:
+              type: RuntimeDefault
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: MY_POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: MY_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: MY_STS_NAME
+              value: "my-etcd"
+            - name: ETCDCTL_API
+              value: "3"
+            - name: ETCD_ON_K8S
+              value: "yes"
+            - name: ETCD_START_FROM_SNAPSHOT
+              value: "no"
+            - name: ETCD_DISASTER_RECOVERY
+              value: "no"
+            - name: ETCD_NAME
+              value: "$(MY_POD_NAME)"
+            - name: ETCD_DATA_DIR
+              value: "/bitnami/etcd/data"
+            - name: ETCD_LOG_LEVEL
+              value: "info"
+            - name: ALLOW_NONE_AUTHENTICATION
+              value: "no"
+            - name: ETCD_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-etcd
+                  key: etcd-root-password
+            - name: ETCD_AUTH_TOKEN
+              value: "jwt,priv-key=/opt/bitnami/etcd/certs/token/jwt-token.pem,sign-method=RS256,ttl=10m"
+            - name: ETCD_ADVERTISE_CLIENT_URLS
+              value: "http://$(MY_POD_NAME).my-etcd-headless.default.svc.cluster.local:2379,http://my-etcd.default.svc.cluster.local:2379"
+            - name: ETCD_LISTEN_CLIENT_URLS
+              value: "http://0.0.0.0:2379"
+            - name: ETCD_INITIAL_ADVERTISE_PEER_URLS
+              value: "http://$(MY_POD_NAME).my-etcd-headless.default.svc.cluster.local:2380"
+            - name: ETCD_LISTEN_PEER_URLS
+              value: "http://0.0.0.0:2380"
+            - name: ETCD_CLUSTER_DOMAIN
+              value: "my-etcd-headless.default.svc.cluster.local"
+          envFrom:
+          ports:
+            - name: client
+              containerPort: 2379
+              protocol: TCP
+            - name: peer
+              containerPort: 2380
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              port: 2379 
+              path: /livez
+              scheme: "HTTP"
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 5
+          readinessProbe:
+            exec:
+              command:
+                - /opt/bitnami/scripts/etcd/healthcheck.sh
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 5
+          resources:
+            limits:
+              cpu: 375m
+              ephemeral-storage: 2Gi
+              memory: 384Mi
+            requests:
+              cpu: 250m
+              ephemeral-storage: 50Mi
+              memory: 256Mi
+          volumeMounts:
+            - name: empty-dir
+              mountPath: /opt/bitnami/etcd/conf/
+              subPath: app-conf-dir
+            - name: empty-dir
+              mountPath: /tmp
+              subPath: tmp-dir
+            - name: data
+              mountPath: /bitnami/etcd
+            - name: etcd-jwt-token
+              mountPath: /opt/bitnami/etcd/certs/token/
+              readOnly: true
+      volumes:
+        - name: empty-dir
+          emptyDir: {}
+        - name: etcd-jwt-token
+          secret:
+            secretName: my-etcd-jwt-token
+            defaultMode: 256
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "8Gi"

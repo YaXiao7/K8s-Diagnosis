@@ -1,0 +1,118 @@
+---
+# Source: infra-jvm-service-helm-chart/templates/service-account.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: -service-account
+---
+# Source: infra-jvm-service-helm-chart/templates/service-account.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: -hazelcast-cluster-role-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: hazelcast-cluster-role
+subjects:
+  - kind: ServiceAccount
+    name: -service-account
+    namespace: default
+---
+# Source: infra-jvm-service-helm-chart/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: 
+  labels:
+    app: 
+    cluster: 
+spec:
+  selector:
+    app: 
+    cluster: 
+  ports:
+---
+# Source: infra-jvm-service-helm-chart/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: 
+  labels:
+    app: 
+    cluster: 
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: 
+      cluster: 
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "false"
+        prometheus.io/path: "/prometheus004"
+        prometheus.io/port: "8888"
+        prometheus.io/scheme: "https"
+        cache-buster-uuid: be73f2e9-69a0-481f-8ce0-192355e1b47a
+        logme: "false"
+      labels:
+        app: 
+        cluster: 
+    spec:
+      serviceAccountName: -service-account
+      containers:
+        - name: 
+          image: "armory-docker-all.jfrog.io/armory/:"
+          env:
+            - name: APPLICATION_NAME
+              value: 
+            - name: HUB_NODE_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: APPLICATION_ENVIRONMENT
+              value: 
+            - name: NEW_RELIC_AGENT_ENABLED
+              value: 'false'
+          ports:
+          volumeMounts:
+            - name: tls-vol
+              mountPath: "/tls"              
+      volumes:
+        - name: tls-vol
+          secret:
+            secretName: -tls
+      imagePullSecrets:
+        - name: regcred
+      terminationGracePeriodSeconds: 30
+---
+# Source: infra-jvm-service-helm-chart/templates/certificate.yaml
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: -cert
+spec:
+  dnsNames:
+    - 
+    - -grpc
+    - .default
+    - "*..default.svc.cluster.local"
+    - localhost
+    - ac.local
+    - host.minikube.internal
+  secretName: -tls
+  commonName: 
+  duration: 8766h
+  issuerRef:
+    name: armory-cloud
+  privateKey:
+    encoding: PKCS8
+    algorithm: RSA
+    size: 2048
+  keystores:
+    pkcs12:
+      create: true
+      passwordSecretRef:
+        key: p12-password
+        name: java-keystore-secret

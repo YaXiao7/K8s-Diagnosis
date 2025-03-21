@@ -1,0 +1,70 @@
+---
+# Source: daemonset/charts/dockerconfigjson/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  namespace: default
+  name: snowplow-sd-dockerhub
+type: kubernetes.io/dockerconfigjson
+data:
+  ".dockerconfigjson": ewogICJhdXRocyI6ewogICAgImh0dHBzOi8vaW5kZXguZG9ja2VyLmlvL3YxLyI6ewogICAgICAidXNlcm5hbWUiOiIiLAogICAgICAicGFzc3dvcmQiOiIiLAogICAgICAiZW1haWwiOiIiLAogICAgICAiYXV0aCI6Ik9nPT0iCiAgICB9CiAgfQp9Cg==
+---
+# Source: daemonset/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-daemonset
+  labels:
+    helm.sh/chart: daemonset-0.4.0
+    app.kubernetes.io/version: "0.4.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: NodePort
+  selector:
+    app: my-daemonset
+  ports:
+  - name: http-port
+    port: 8000
+    protocol: TCP
+    targetPort: 80
+---
+# Source: daemonset/templates/daemonset.yaml
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: my-daemonset
+  labels:
+    helm.sh/chart: daemonset-0.4.0
+    app.kubernetes.io/version: "0.4.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+    matchLabels:
+      app: my-daemonset
+  template:
+    metadata:
+      labels:
+        helm.sh/chart: daemonset-0.4.0
+        app.kubernetes.io/version: "0.4.0"
+        app.kubernetes.io/managed-by: Helm
+        app: my-daemonset
+      annotations:
+    spec:
+      enableServiceLinks: false
+      hostPID: false
+      hostNetwork: false
+      dnsPolicy: ClusterFirst
+      automountServiceAccountToken: true
+      terminationGracePeriodSeconds: 60
+
+      volumes:
+
+      containers:
+      - name: "my-daemonset"
+        image: "nginx:latest"
+        imagePullPolicy: IfNotPresent
+
+        resources:
+          {}
+
+        volumeMounts:

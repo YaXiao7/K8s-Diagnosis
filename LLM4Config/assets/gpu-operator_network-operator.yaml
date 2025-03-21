@@ -1,0 +1,1297 @@
+---
+# Source: network-operator/charts/node-feature-discovery/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: node-feature-discovery
+  namespace: default
+  labels:
+    helm.sh/chart: node-feature-discovery-0.15.6
+    app.kubernetes.io/name: node-feature-discovery
+    app.kubernetes.io/instance: my-network-operator
+    app.kubernetes.io/version: "v0.15.6"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: network-operator/templates/service_account.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-network-operator
+  namespace: default
+---
+# Source: network-operator/charts/node-feature-discovery/templates/nfd-master-conf.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-network-operator-node-feature-discovery-master-conf
+  namespace: default
+  labels:
+    helm.sh/chart: node-feature-discovery-0.15.6
+    app.kubernetes.io/name: node-feature-discovery
+    app.kubernetes.io/instance: my-network-operator
+    app.kubernetes.io/version: "v0.15.6"
+    app.kubernetes.io/managed-by: Helm
+data:
+  nfd-master.conf: |-
+    extraLabelNs:
+    - nvidia.com
+---
+# Source: network-operator/charts/node-feature-discovery/templates/nfd-topologyupdater-conf.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-network-operator-node-feature-discovery-topology-updater-conf
+  namespace: default
+  labels:
+    helm.sh/chart: node-feature-discovery-0.15.6
+    app.kubernetes.io/name: node-feature-discovery
+    app.kubernetes.io/instance: my-network-operator
+    app.kubernetes.io/version: "v0.15.6"
+    app.kubernetes.io/managed-by: Helm
+data:
+  nfd-topology-updater.conf: |-
+    null
+---
+# Source: network-operator/charts/node-feature-discovery/templates/nfd-worker-conf.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-network-operator-node-feature-discovery-worker-conf
+  namespace: default
+  labels:
+    helm.sh/chart: node-feature-discovery-0.15.6
+    app.kubernetes.io/name: node-feature-discovery
+    app.kubernetes.io/instance: my-network-operator
+    app.kubernetes.io/version: "v0.15.6"
+    app.kubernetes.io/managed-by: Helm
+data:
+  nfd-worker.conf: |-
+    sources:
+      pci:
+        deviceClassWhitelist:
+        - "0300"
+        - "0302"
+        deviceLabelFields:
+        - vendor
+---
+# Source: network-operator/charts/node-feature-discovery/templates/clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-network-operator-node-feature-discovery
+  labels:
+    helm.sh/chart: node-feature-discovery-0.15.6
+    app.kubernetes.io/name: node-feature-discovery
+    app.kubernetes.io/instance: my-network-operator
+    app.kubernetes.io/version: "v0.15.6"
+    app.kubernetes.io/managed-by: Helm
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  - nodes/status
+  verbs:
+  - get
+  - patch
+  - update
+  - list
+- apiGroups:
+  - nfd.k8s-sigs.io
+  resources:
+  - nodefeatures
+  - nodefeaturerules
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - create
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  resourceNames:
+  - "nfd-master.nfd.kubernetes.io"
+  verbs:
+  - get
+  - update
+---
+# Source: network-operator/charts/node-feature-discovery/templates/clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-network-operator-node-feature-discovery-gc
+  labels:
+    helm.sh/chart: node-feature-discovery-0.15.6
+    app.kubernetes.io/name: node-feature-discovery
+    app.kubernetes.io/instance: my-network-operator
+    app.kubernetes.io/version: "v0.15.6"
+    app.kubernetes.io/managed-by: Helm
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - nodes/proxy
+  verbs:
+  - get
+- apiGroups:
+  - topology.node.k8s.io
+  resources:
+  - noderesourcetopologies
+  verbs:
+  - delete
+  - list
+- apiGroups:
+  - nfd.k8s-sigs.io
+  resources:
+  - nodefeatures
+  verbs:
+  - delete
+  - list
+---
+# Source: network-operator/templates/role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: my-network-operator
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  - events
+  - persistentvolumeclaims
+  - secrets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - endpoints
+  - namespaces
+  - pods
+  - pods/status
+  - serviceaccounts
+  - services
+  - services/finalizers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - list
+- apiGroups:
+  - ""
+  resources:
+  - pods/eviction
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - admissionregistration.k8s.io
+  resources:
+  - validatingwebhookconfigurations
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apiextensions.k8s.io
+  resources:
+  - customresourcedefinitions
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - controllerrevisions
+  - daemonsets
+  - deployments
+  - replicasets
+  - statefulsets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - daemonsets
+  - deployments
+  - replicasets
+  - statefulsets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - deployments/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - batch
+  resources:
+  - cronjobs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - cert-manager.io
+  resources:
+  - certificates
+  - issuers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - config.openshift.io
+  resources:
+  - clusterversions
+  - proxies
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - events.k8s.io
+  resources:
+  - events
+  verbs:
+  - create
+  - get
+  - patch
+  - update
+- apiGroups:
+  - image.openshift.io
+  resources:
+  - imagestreams
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - k8s.cni.cncf.io
+  resources:
+  - network-attachment-definitions
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - mellanox.com
+  resources:
+  - hostdevicenetworks
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - mellanox.com
+  resources:
+  - hostdevicenetworks/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - mellanox.com
+  resources:
+  - hostdevicenetworks/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - mellanox.com
+  resources:
+  - ipoibnetworks
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - mellanox.com
+  resources:
+  - ipoibnetworks/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - mellanox.com
+  resources:
+  - ipoibnetworks/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - mellanox.com
+  resources:
+  - macvlannetworks
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - mellanox.com
+  resources:
+  - macvlannetworks/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - mellanox.com
+  resources:
+  - macvlannetworks/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - mellanox.com
+  resources:
+  - nicclusterpolicies
+  - nicclusterpolicies/status
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - mellanox.com
+  resources:
+  - nicclusterpolicies/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - monitoring.coreos.com
+  resources:
+  - servicemonitors
+  verbs:
+  - create
+  - get
+  - list
+  - watch
+- apiGroups:
+  - nv-ipam.nvidia.com
+  resources:
+  - ippools
+  - cidrpools
+  verbs:
+  - create
+  - get
+  - list
+  - watch
+- apiGroups:
+  - nv-ipam.nvidia.com
+  resources:
+  - ippools/status
+  - cidrpools/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - clusterrolebindings
+  - clusterroles
+  - rolebindings
+  - roles
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - security.openshift.io
+  resourceNames:
+  - privileged
+  resources:
+  - securitycontextconstraints
+  verbs:
+  - use
+- apiGroups:
+  - whereabouts.cni.cncf.io
+  resources:
+  - ippools
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - whereabouts.cni.cncf.io
+  resources:
+  - overlappingrangeipreservations
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+---
+# Source: network-operator/charts/node-feature-discovery/templates/clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-network-operator-node-feature-discovery
+  labels:
+    helm.sh/chart: node-feature-discovery-0.15.6
+    app.kubernetes.io/name: node-feature-discovery
+    app.kubernetes.io/instance: my-network-operator
+    app.kubernetes.io/version: "v0.15.6"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-network-operator-node-feature-discovery
+subjects:
+- kind: ServiceAccount
+  name: node-feature-discovery
+  namespace: default
+---
+# Source: network-operator/charts/node-feature-discovery/templates/clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-network-operator-node-feature-discovery-gc
+  labels:
+    helm.sh/chart: node-feature-discovery-0.15.6
+    app.kubernetes.io/name: node-feature-discovery
+    app.kubernetes.io/instance: my-network-operator
+    app.kubernetes.io/version: "v0.15.6"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-network-operator-node-feature-discovery-gc
+subjects:
+- kind: ServiceAccount
+  name: node-feature-discovery
+  namespace: default
+---
+# Source: network-operator/templates/role_binding.yaml
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-network-operator
+subjects:
+  - kind: Group
+    apiGroup: rbac.authorization.k8s.io
+    name: system:serviceaccounts:default
+roleRef:
+  kind: ClusterRole
+  name: my-network-operator
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: network-operator/charts/node-feature-discovery/templates/role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: my-network-operator-node-feature-discovery-worker
+  namespace: default
+  labels:
+    helm.sh/chart: node-feature-discovery-0.15.6
+    app.kubernetes.io/name: node-feature-discovery
+    app.kubernetes.io/instance: my-network-operator
+    app.kubernetes.io/version: "v0.15.6"
+    app.kubernetes.io/managed-by: Helm
+rules:
+- apiGroups:
+  - nfd.k8s-sigs.io
+  resources:
+  - nodefeatures
+  verbs:
+  - create
+  - get
+  - update
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - get
+---
+# Source: network-operator/charts/node-feature-discovery/templates/rolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: my-network-operator-node-feature-discovery-worker
+  namespace: default
+  labels:
+    helm.sh/chart: node-feature-discovery-0.15.6
+    app.kubernetes.io/name: node-feature-discovery
+    app.kubernetes.io/instance: my-network-operator
+    app.kubernetes.io/version: "v0.15.6"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: my-network-operator-node-feature-discovery-worker
+subjects:
+- kind: ServiceAccount
+  name: node-feature-discovery
+  namespace: default
+---
+# Source: network-operator/charts/node-feature-discovery/templates/worker.yaml
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name:  my-network-operator-node-feature-discovery-worker
+  namespace: default
+  labels:
+    helm.sh/chart: node-feature-discovery-0.15.6
+    app.kubernetes.io/name: node-feature-discovery
+    app.kubernetes.io/instance: my-network-operator
+    app.kubernetes.io/version: "v0.15.6"
+    app.kubernetes.io/managed-by: Helm
+    role: worker
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: node-feature-discovery
+      app.kubernetes.io/instance: my-network-operator
+      role: worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: node-feature-discovery
+        app.kubernetes.io/instance: my-network-operator
+        role: worker
+    spec:
+      dnsPolicy: ClusterFirstWithHostNet
+      serviceAccountName: node-feature-discovery
+      securityContext:
+        {}
+      containers:
+      - name: worker
+        securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+        image: "registry.k8s.io/nfd/node-feature-discovery:v0.15.6"
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_UID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.uid
+        resources:
+            {}
+        command:
+        - "nfd-worker"
+        args:
+        - "-metrics=8081"
+        ports:
+          - name: metrics
+            containerPort: 8081
+        volumeMounts:
+        - name: host-boot
+          mountPath: "/host-boot"
+          readOnly: true
+        - name: host-os-release
+          mountPath: "/host-etc/os-release"
+          readOnly: true
+        - name: host-sys
+          mountPath: "/host-sys"
+          readOnly: true
+        - name: host-usr-lib
+          mountPath: "/host-usr/lib"
+          readOnly: true
+        - name: host-lib
+          mountPath: "/host-lib"
+          readOnly: true
+        - name: source-d
+          mountPath: "/etc/kubernetes/node-feature-discovery/source.d/"
+          readOnly: true
+        - name: features-d
+          mountPath: "/etc/kubernetes/node-feature-discovery/features.d/"
+          readOnly: true
+        - name: nfd-worker-conf
+          mountPath: "/etc/kubernetes/node-feature-discovery"
+          readOnly: true
+      volumes:
+        - name: host-boot
+          hostPath:
+            path: "/boot"
+        - name: host-os-release
+          hostPath:
+            path: "/etc/os-release"
+        - name: host-sys
+          hostPath:
+            path: "/sys"
+        - name: host-usr-lib
+          hostPath:
+            path: "/usr/lib"
+        - name: host-lib
+          hostPath:
+            path: "/lib"
+        - name: source-d
+          hostPath:
+            path: "/etc/kubernetes/node-feature-discovery/source.d/"
+        - name: features-d
+          hostPath:
+            path: "/etc/kubernetes/node-feature-discovery/features.d/"
+        - name: nfd-worker-conf
+          configMap:
+            name: my-network-operator-node-feature-discovery-worker-conf
+            items:
+              - key: nfd-worker.conf
+                path: nfd-worker.conf
+      tolerations:
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/master
+          operator: Exists
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/control-plane
+          operator: Exists
+        - effect: NoSchedule
+          key: nvidia.com/gpu
+          operator: Exists
+---
+# Source: network-operator/charts/node-feature-discovery/templates/master.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name:  my-network-operator-node-feature-discovery-master
+  namespace: default
+  labels:
+    helm.sh/chart: node-feature-discovery-0.15.6
+    app.kubernetes.io/name: node-feature-discovery
+    app.kubernetes.io/instance: my-network-operator
+    app.kubernetes.io/version: "v0.15.6"
+    app.kubernetes.io/managed-by: Helm
+    role: master
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: node-feature-discovery
+      app.kubernetes.io/instance: my-network-operator
+      role: master
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: node-feature-discovery
+        app.kubernetes.io/instance: my-network-operator
+        role: master
+    spec:
+      serviceAccountName: node-feature-discovery
+      enableServiceLinks: false
+      securityContext:
+        {}
+      containers:
+        - name: master
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+          image: "registry.k8s.io/nfd/node-feature-discovery:v0.15.6"
+          imagePullPolicy: IfNotPresent
+          livenessProbe:
+            grpc:
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            grpc:
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 10
+          ports:
+          - containerPort: 8080
+            name: grpc
+          - containerPort: 8081
+            name: metrics
+          env:
+          - name: NODE_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: spec.nodeName
+          command:
+            - "nfd-master"
+          resources:
+            {}
+          args:
+            ## By default, disable crd controller for other than the default instances
+            - "-crd-controller=true"
+            - "-metrics=8081"
+          volumeMounts:
+            - name: nfd-master-conf
+              mountPath: "/etc/kubernetes/node-feature-discovery"
+              readOnly: true
+      volumes:
+        - name: nfd-master-conf
+          configMap:
+            name: my-network-operator-node-feature-discovery-master-conf
+            items:
+              - key: nfd-master.conf
+                path: nfd-master.conf
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - preference:
+              matchExpressions:
+              - key: node-role.kubernetes.io/master
+                operator: In
+                values:
+                - ""
+            weight: 1
+          - preference:
+              matchExpressions:
+              - key: node-role.kubernetes.io/control-plane
+                operator: In
+                values:
+                - ""
+            weight: 1
+      tolerations:
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/master
+          operator: Equal
+          value: ""
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/control-plane
+          operator: Equal
+          value: ""
+---
+# Source: network-operator/charts/node-feature-discovery/templates/nfd-gc.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-network-operator-node-feature-discovery-gc
+  namespace: default
+  labels:
+    helm.sh/chart: node-feature-discovery-0.15.6
+    app.kubernetes.io/name: node-feature-discovery
+    app.kubernetes.io/instance: my-network-operator
+    app.kubernetes.io/version: "v0.15.6"
+    app.kubernetes.io/managed-by: Helm
+    role: gc
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: node-feature-discovery
+      app.kubernetes.io/instance: my-network-operator
+      role: gc
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: node-feature-discovery
+        app.kubernetes.io/instance: my-network-operator
+        role: gc
+    spec:
+      serviceAccountName: node-feature-discovery
+      dnsPolicy: ClusterFirstWithHostNet
+      securityContext:
+        {}
+      containers:
+      - name: gc
+        image: "registry.k8s.io/nfd/node-feature-discovery:v0.15.6"
+        imagePullPolicy: "IfNotPresent"
+        env:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        command:
+          - "nfd-gc"
+        args:
+          - "-gc-interval=1h"
+        resources:
+            {}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: [ "ALL" ]
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+        ports:
+          - name: metrics
+            containerPort: 8081
+---
+# Source: network-operator/templates/operator.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-network-operator
+  labels:
+    helm.sh/chart: network-operator-24.7.0
+    app.kubernetes.io/name: network-operator
+    app.kubernetes.io/instance: my-network-operator
+    app.kubernetes.io/version: "v24.7.0"
+    app.kubernetes.io/managed-by: Helm
+    control-plane: my-network-operator-controller
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: network-operator
+      app.kubernetes.io/instance: my-network-operator
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: network-operator
+      labels:
+        nvidia.com/ofed-driver-upgrade-drain.skip: "true"
+        control-plane: my-network-operator-controller
+        app.kubernetes.io/name: network-operator
+        app.kubernetes.io/instance: my-network-operator
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - preference:
+              matchExpressions:
+              - key: node-role.kubernetes.io/master
+                operator: In
+                values:
+                - ""
+            weight: 1
+          - preference:
+              matchExpressions:
+              - key: node-role.kubernetes.io/control-plane
+                operator: In
+                values:
+                - ""
+            weight: 1
+      tolerations:
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/master
+          operator: Equal
+          value: ""
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/control-plane
+          operator: Equal
+          value: ""
+      serviceAccountName: my-network-operator
+      imagePullSecrets: []
+      containers:
+        - name: network-operator
+          # Replace this with the built image name
+          image: "nvcr.io/nvidia/cloud-native/network-operator:v24.7.0"
+          command:
+          - /manager
+          args:
+          - --leader-elect
+          env:
+            - name: STATE_MANIFEST_BASE_DIR
+              value: "/manifests"
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: OPERATOR_NAME
+              value: "network-operator"
+            - name: ENABLE_WEBHOOKS
+              value: "false"
+            - name: USE_DTK
+              value: "true"
+            - name: CNI_BIN_DIR
+              value: "/opt/cni/bin"
+            - name: OFED_INIT_CONTAINER_IMAGE
+              value: "ghcr.io/mellanox/network-operator-init-container:v0.0.2"
+          securityContext:
+            allowPrivilegeEscalation: false
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            limits:
+              cpu: 500m
+              memory: 128Mi
+            requests:
+              cpu: 5m
+              memory: 64Mi
+      securityContext:
+        runAsUser: 65532
+      terminationGracePeriodSeconds: 10
+---
+# Source: network-operator/templates/admission_controller.yaml
+---
+---
+# Source: network-operator/templates/admission_controller.yaml
+---
+---
+# Source: network-operator/templates/nodefeaturerules.yaml
+apiVersion: nfd.k8s-sigs.io/v1alpha1
+kind: NodeFeatureRule
+metadata:
+  name: nvidia-nics-rules
+spec:
+  rules:
+    - name: "Nvidia NICs PCI"
+      labels:
+        "pci-15b3.present": "true"
+      matchFeatures:
+        - feature: pci.device
+          matchExpressions:
+            vendor: {op: In, value: ["15b3"]}
+            class: {op: In, value: ["0200", "0207"]}
+---
+# Source: network-operator/templates/scale-down-hook.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-network-operator-hooks-scale-sa
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-delete-policy: hook-succeeded,before-hook-creation
+    helm.sh/hook-weight: "0"
+---
+# Source: network-operator/templates/upgrade-crd-hook.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-network-operator-hooks-sa
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-delete-policy: hook-succeeded,before-hook-creation
+    helm.sh/hook-weight: "0"
+---
+# Source: network-operator/templates/scale-down-hook.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-network-operator-hooks-scale-role
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-delete-policy: hook-succeeded,before-hook-creation
+    helm.sh/hook-weight: "0"
+rules:
+  - apiGroups:
+      - apps
+    resources:
+      - deployments/scale
+    verbs:
+      - "*"
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+    verbs:
+      - "*"
+---
+# Source: network-operator/templates/upgrade-crd-hook.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-network-operator-hooks-role
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-delete-policy: hook-succeeded,before-hook-creation
+    helm.sh/hook-weight: "0"
+rules:
+  - apiGroups:
+      - apiextensions.k8s.io
+    resources:
+      - customresourcedefinitions
+    verbs:
+      - "*"
+---
+# Source: network-operator/templates/scale-down-hook.yaml
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-network-operator-hooks-scale-binding
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-delete-policy: hook-succeeded,before-hook-creation
+    helm.sh/hook-weight: "0"
+subjects:
+  - kind: ServiceAccount
+    name: my-network-operator-hooks-scale-sa
+    namespace: default
+roleRef:
+  kind: ClusterRole
+  name: my-network-operator-hooks-scale-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: network-operator/templates/upgrade-crd-hook.yaml
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-network-operator-hooks-binding
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-delete-policy: hook-succeeded,before-hook-creation
+    helm.sh/hook-weight: "0"
+subjects:
+  - kind: ServiceAccount
+    name: my-network-operator-hooks-sa
+    namespace: default
+roleRef:
+  kind: ClusterRole
+  name: my-network-operator-hooks-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: network-operator/templates/scale-down-hook.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: network-operator-scale-down
+  namespace: default
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
+  labels:
+    helm.sh/chart: network-operator-24.7.0
+    app.kubernetes.io/name: network-operator
+    app.kubernetes.io/instance: my-network-operator
+    app.kubernetes.io/version: "v24.7.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: "network-operator"
+spec:
+  template:
+    metadata:
+      name: network-operator-scale-down
+      labels:
+        helm.sh/chart: network-operator-24.7.0
+        app.kubernetes.io/name: network-operator
+        app.kubernetes.io/instance: my-network-operator
+        app.kubernetes.io/version: "v24.7.0"
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/component: "network-operator"
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - preference:
+              matchExpressions:
+              - key: node-role.kubernetes.io/master
+                operator: In
+                values:
+                - ""
+            weight: 1
+          - preference:
+              matchExpressions:
+              - key: node-role.kubernetes.io/control-plane
+                operator: In
+                values:
+                - ""
+            weight: 1
+      tolerations:
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/master
+          operator: Equal
+          value: ""
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/control-plane
+          operator: Equal
+          value: ""
+      serviceAccountName: my-network-operator-hooks-scale-sa
+      imagePullSecrets: []
+      containers:
+        - name: scale-down
+          image: "nvcr.io/nvidia/cloud-native/network-operator:v24.7.0"
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+            - >
+              kubectl scale -n default deployment my-network-operator --replicas=0 || true;
+              kubectl wait -n default pod -l control-plane=my-network-operator-controller --for=delete --timeout=30s;
+      restartPolicy: OnFailure
+---
+# Source: network-operator/templates/upgrade-crd-hook.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: network-operator-upgrade-crd
+  namespace: default
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
+  labels:
+    helm.sh/chart: network-operator-24.7.0
+    app.kubernetes.io/name: network-operator
+    app.kubernetes.io/instance: my-network-operator
+    app.kubernetes.io/version: "v24.7.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: "network-operator"
+spec:
+  template:
+    metadata:
+      name: network-operator-upgrade-crd
+      labels:
+        helm.sh/chart: network-operator-24.7.0
+        app.kubernetes.io/name: network-operator
+        app.kubernetes.io/instance: my-network-operator
+        app.kubernetes.io/version: "v24.7.0"
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/component: "network-operator"
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - preference:
+              matchExpressions:
+              - key: node-role.kubernetes.io/master
+                operator: In
+                values:
+                - ""
+            weight: 1
+          - preference:
+              matchExpressions:
+              - key: node-role.kubernetes.io/control-plane
+                operator: In
+                values:
+                - ""
+            weight: 1
+      tolerations:
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/master
+          operator: Equal
+          value: ""
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/control-plane
+          operator: Equal
+          value: ""
+      serviceAccountName: my-network-operator-hooks-sa
+      imagePullSecrets: []
+      containers:
+        - name: upgrade-crd
+          image: "nvcr.io/nvidia/cloud-native/network-operator:v24.7.0"
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+            - >
+              kubectl apply -f /crds/network-operator;
+              kubectl apply -f /crds/node-feature-discovery;
+      restartPolicy: OnFailure

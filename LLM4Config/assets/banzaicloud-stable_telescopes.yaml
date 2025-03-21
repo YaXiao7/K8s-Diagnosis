@@ -1,0 +1,90 @@
+---
+# Source: telescopes/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-telescopes
+  labels:
+    app: my-telescopes
+    chart: "telescopes-0.3.0"
+    release: "my-telescopes"
+    heritage: "Helm"
+spec:
+  type: ClusterIP
+  ports:
+    - name: my-telescopes
+      port: 9090
+      targetPort: 9090
+      protocol: TCP
+  selector:
+    app: "my-telescopes"
+    release: my-telescopes
+---
+# Source: telescopes/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "my-telescopes"
+  labels:
+    app: "my-telescopes"
+    chart: "telescopes-0.3.0"
+    release: "my-telescopes"
+    heritage: "Helm"
+  annotations:
+    {}
+spec:
+  replicas: 
+  selector:
+    matchLabels:
+      heritage: "Helm"
+      release: "my-telescopes"
+      app: my-telescopes
+      component: "telescopes"
+  template:
+    metadata:
+      labels:
+        heritage: "Helm"
+        release: "my-telescopes"
+        app: my-telescopes
+        component: "telescopes"
+      annotations:
+        {}
+    spec:
+      containers:
+      - name: telescopes
+        image: "banzaicloud/telescopes:0.5.3"
+        imagePullPolicy: "IfNotPresent"
+        env:
+        - name: TELESCOPES_BASEPATH
+          value: /
+        command:
+        - "/bin/sh"
+        - "-ecx"
+        - |
+          /bin/telescopes \
+          --listen-address=0.0.0.0:9090 \
+          --log-level=info \
+          --cloudinfo-address=https://beta.banzaicloud.io/cloudinfo/api/v1 \
+          --dev-mode
+        ports:
+        - name: http
+          containerPort: 9090
+        livenessProbe:
+          httpGet:
+            path: //status
+            port: http
+          initialDelaySeconds: 120
+          timeoutSeconds: 5
+          failureThreshold: 6
+        readinessProbe:
+          httpGet:
+            path: //status
+            port: http
+            httpHeaders:
+          initialDelaySeconds: 30
+          timeoutSeconds: 3
+          periodSeconds: 5
+        resources:
+          requests:
+            cpu: 120m
+            memory: 256Mi

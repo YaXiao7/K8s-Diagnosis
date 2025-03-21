@@ -1,0 +1,173 @@
+---
+# Source: k8status/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-k8status
+  labels:
+    helm.sh/chart: k8status-0.16.1
+    app.kubernetes.io/name: k8status
+    app.kubernetes.io/instance: my-k8status
+    app: k8status
+    app.kubernetes.io/version: "0.16.1"
+    app.kubernetes.io/managed-by: Helm
+automountServiceAccountToken: false
+---
+# Source: k8status/templates/role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+
+kind: Role
+
+metadata:
+  name: my-k8status
+  labels:
+    helm.sh/chart: k8status-0.16.1
+    app.kubernetes.io/name: k8status
+    app.kubernetes.io/instance: my-k8status
+    app: k8status
+    app.kubernetes.io/version: "0.16.1"
+    app.kubernetes.io/managed-by: Helm
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - services
+  - pods
+  
+  verbs:
+  - list
+  - get
+---
+# Source: k8status/templates/rolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+
+kind: RoleBinding
+
+metadata:
+  name: my-k8status
+  labels:
+    helm.sh/chart: k8status-0.16.1
+    app.kubernetes.io/name: k8status
+    app.kubernetes.io/instance: my-k8status
+    app: k8status
+    app.kubernetes.io/version: "0.16.1"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  
+  kind: Role
+  
+  name: my-k8status
+subjects:
+- kind: ServiceAccount
+  name: my-k8status
+  namespace: default
+---
+# Source: k8status/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-k8status
+  labels:
+    helm.sh/chart: k8status-0.16.1
+    app.kubernetes.io/name: k8status
+    app.kubernetes.io/instance: my-k8status
+    app: k8status
+    app.kubernetes.io/version: "0.16.1"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    k8status.stenic.io/exclude: "true"
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+    - port: 2112
+      targetPort: metrics
+      protocol: TCP
+      name: metrics
+  selector:
+    app.kubernetes.io/name: k8status
+    app.kubernetes.io/instance: my-k8status
+    app: k8status
+---
+# Source: k8status/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-k8status
+  namespace: default
+  labels:
+    helm.sh/chart: k8status-0.16.1
+    app.kubernetes.io/name: k8status
+    app.kubernetes.io/instance: my-k8status
+    app: k8status
+    app.kubernetes.io/version: "0.16.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: k8status
+      app.kubernetes.io/instance: my-k8status
+      app: k8status
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: k8status
+        app.kubernetes.io/instance: my-k8status
+        app: k8status
+    spec:
+      automountServiceAccountToken: true
+      serviceAccountName: my-k8status
+      securityContext:
+        {}
+      containers:
+        - name: k8status
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+            runAsGroup: 100012
+            runAsNonRoot: true
+            runAsUser: 100012
+          image: "ghcr.io/stenic/k8status:0.16.1"
+          imagePullPolicy: Always
+          args: [
+            
+            "--prefix", "/",
+            "--interval", "10",
+            "--mode", "inclusive",
+          ]
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: metrics
+              containerPort: 2112
+              protocol: TCP
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            failureThreshold: 30
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          resources:
+            limits:
+              cpu: 20m
+              memory: 28Mi
+            requests:
+              cpu: 10m
+              memory: 28Mi

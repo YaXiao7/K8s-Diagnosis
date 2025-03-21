@@ -1,0 +1,180 @@
+---
+# Source: fluxcd-addon-manager/templates/k8s/addon.yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: fluxcd-addon
+---
+# Source: fluxcd-addon-manager/templates/k8s/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fluxcd-addon-manager
+  namespace: fluxcd-addon
+---
+# Source: fluxcd-addon-manager/templates/k8s/cluster_role.yaml
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: fluxcd-addon-manager
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps", "events"]
+    verbs: ["get", "list", "watch", "create", "update", "delete", "deletecollection", "patch"]
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["roles", "rolebindings"]
+    verbs: ["get", "list", "watch", "create", "update", "delete"]
+  - apiGroups: ["authorization.k8s.io"]
+    resources: ["subjectaccessreviews"]
+    verbs: ["get", "create"]
+  - apiGroups: ["certificates.k8s.io"]
+    resources: ["certificatesigningrequests", "certificatesigningrequests/approval"]
+    verbs: ["get", "list", "watch", "create", "update"]
+  - apiGroups: ["certificates.k8s.io"]
+    resources: ["signers"]
+    verbs: ["approve"]
+  - apiGroups: ["cluster.open-cluster-management.io"]
+    resources: ["managedclusters"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["work.open-cluster-management.io"]
+    resources: ["manifestworks"]
+    verbs: ["create", "update", "get", "list", "watch", "delete", "deletecollection", "patch"]
+  - apiGroups: ["addon.open-cluster-management.io"]
+    resources: ["managedclusteraddons/finalizers"]
+    verbs: ["update"]
+  - apiGroups: [ "addon.open-cluster-management.io" ]
+    resources: [ "clustermanagementaddons/finalizers" ]
+    verbs: [ "update" ]
+  - apiGroups: ["addon.open-cluster-management.io"]
+    resources: ["clustermanagementaddons/status"]
+    verbs: ["update", "patch"]
+  - apiGroups: ["addon.open-cluster-management.io"]
+    resources: ["clustermanagementaddons"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["addon.open-cluster-management.io"]
+    resources: ["managedclusteraddons"]
+    verbs: ["get", "list", "watch", "create", "update", "delete"]
+  - apiGroups: ["addon.open-cluster-management.io"]
+    resources: ["managedclusteraddons/status"]
+    verbs: ["update", "patch"]
+  - apiGroups: ["addon.open-cluster-management.io"]
+    resources: ["addondeploymentconfigs"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["fluxcd.open-cluster-management.io"]
+    resources: ["fluxcdconfigs"]
+    verbs: ["get", "list", "watch"]
+---
+# Source: fluxcd-addon-manager/templates/k8s/cluster_role_binding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: fluxcd-addon-manager
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: fluxcd-addon-manager
+subjects:
+  - kind: ServiceAccount
+    name: fluxcd-addon-manager
+    namespace: fluxcd-addon
+---
+# Source: fluxcd-addon-manager/templates/deployment.yaml
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: fluxcd-addon-manager
+  namespace: fluxcd-addon
+  labels:
+    app: fluxcd-addon-manager
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fluxcd-addon-manager
+  template:
+    metadata:
+      labels:
+        app: fluxcd-addon-manager
+    spec:
+      serviceAccount: fluxcd-addon-manager
+      automountServiceAccountToken: true
+      containers:
+        - name: manager
+          image: ghcr.io/kluster-manager/fluxcd-addon:v0.0.2
+          imagePullPolicy: IfNotPresent
+          args:
+            - manager
+          volumeMounts:
+      volumes:
+---
+# Source: fluxcd-addon-manager/templates/k8s/addon.yaml
+apiVersion: addon.open-cluster-management.io/v1alpha1
+kind: ClusterManagementAddOn
+metadata:
+  name: fluxcd-addon
+  annotations:
+    addon.open-cluster-management.io/lifecycle: "addon-manager"
+spec:
+  addOnMeta:
+    displayName: fluxcd-addon-manager
+    description: Installs FluxCD in managed clusters
+  installStrategy:
+    type: Placements
+    placements:
+      - name: global
+        namespace: fluxcd-addon
+  supportedConfigs:
+    - group: fluxcd.open-cluster-management.io
+      resource: fluxcdconfigs
+      defaultConfig:
+        name: fluxcd-config
+        namespace: fluxcd-addon
+---
+# Source: fluxcd-addon-manager/templates/k8s/addon.yaml
+apiVersion: fluxcd.open-cluster-management.io/v1alpha1
+kind: FluxCDConfig
+metadata:
+  labels:
+    app.kubernetes.io/name: fluxcdconfig
+    app.kubernetes.io/instance: fluxcdconfig
+    app.kubernetes.io/part-of: api
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: api
+  name: fluxcd-config
+  namespace: fluxcd-addon
+spec:
+  helmController:
+    create: true
+  imageAutomationController:
+    create: false
+  imageReflectionController:
+    create: false
+  installCRDs: true
+  kustomizeController:
+    create: false
+  notificationController:
+    create: false
+  sourceController:
+    create: true
+---
+# Source: fluxcd-addon-manager/templates/k8s/addon.yaml
+apiVersion: cluster.open-cluster-management.io/v1beta2
+kind: ManagedClusterSetBinding
+metadata:
+  name: global
+  namespace: fluxcd-addon
+spec:
+  clusterSet: global
+---
+# Source: fluxcd-addon-manager/templates/k8s/addon.yaml
+apiVersion: cluster.open-cluster-management.io/v1beta1
+kind: Placement
+metadata:
+  name: global
+  namespace: fluxcd-addon
+spec:
+  clusterSets:
+    - global

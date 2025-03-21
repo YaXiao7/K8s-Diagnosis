@@ -1,0 +1,123 @@
+---
+# Source: swift/templates/service-account.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: swift-my-swift
+  namespace: default
+  labels:
+    chart: "swift-v0.12.1"
+    app: "swift"
+    heritage: "Helm"
+    release: "my-swift"
+---
+# Source: swift/templates/cluster-role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: swift-my-swift
+  labels:
+    chart: "swift-v0.12.1"
+    app: "swift"
+    heritage: "Helm"
+    release: "my-swift"
+rules:
+- apiGroups: [""]
+  resources: ["nodes", "services"]
+  verbs: ["list"]
+---
+# Source: swift/templates/cluster-role-binding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: swift-my-swift
+  labels:
+    chart: "swift-v0.12.1"
+    app: "swift"
+    heritage: "Helm"
+    release: "my-swift"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: swift-my-swift
+subjects:
+- kind: ServiceAccount
+  name: swift-my-swift
+  namespace: default
+---
+# Source: swift/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: swift-my-swift
+  namespace: default
+  labels:
+    app: "swift"
+    chart: "swift-v0.12.1"
+    release: "my-swift"
+    heritage: "Helm"
+spec:
+  ports:
+  - name: pt
+    port: 9855
+    targetPort: pt
+  - name: tls
+    port: 50055
+    targetPort: tls
+  - name: ops
+    port: 56790
+    targetPort: ops
+  selector:
+    app: "swift"
+    release: "my-swift"
+---
+# Source: swift/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: swift-my-swift
+  namespace: default
+  labels:
+    chart: "swift-v0.12.1"
+    app: "swift"
+    heritage: "Helm"
+    release: "my-swift"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: "swift"
+      release: "my-swift"
+  template:
+    metadata:
+      labels:
+        app: "swift"
+        release: "my-swift"
+    spec:
+      serviceAccountName: swift-my-swift
+      containers:
+      - name: swift
+        image: appscode/swift:v0.12.1
+        imagePullPolicy: IfNotPresent
+        args:
+        - run
+        - --v=3
+        - --connector=incluster
+        - --tiller-insecure-skip-verify=true
+        - --enable-analytics=true
+        ports:
+        - containerPort: 9855
+          name: pt
+          protocol: TCP
+        - containerPort: 50055
+          name: tls
+          protocol: TCP
+        - containerPort: 56790
+          name: ops
+          protocol: TCP
+        volumeMounts:
+            - mountPath: /tmp
+              name: chart-volume
+      volumes:
+        - name: chart-volume
+          emptyDir: {}

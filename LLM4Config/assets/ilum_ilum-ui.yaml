@@ -1,0 +1,224 @@
+---
+# Source: ilum-ui/templates/ui-cm-nginx-server.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ilum-nginx-server
+data:
+  server.conf.template: |-
+      server {
+          listen 8080;
+          server_name ilum-frontend;
+  
+          location / {
+              root /usr/share/nginx/html;
+              try_files $uri $uri/ /index.html;
+          }
+  
+          # This path will be forward to http://ilum-core-service/
+          location /core/ {
+              proxy_pass ${ILUM_BACKEND_URL}/;
+              proxy_set_header Connection '';
+              proxy_http_version 1.1;
+              chunked_transfer_encoding off;
+              proxy_buffering off;
+              proxy_cache off;
+              proxy_read_timeout 6h;
+          }            
+  
+          # This path will be forward to spark web ui of job with given appid
+          location ~ ^/sparkui/(?<jobid>.+)/(?<random>.+)/(?<port>[0-9]+)/(?<namespace>.+)/proxy/(?<appid>[^/]+)(?<local_path>.*) {
+               resolver kube-dns.kube-system.svc.cluster.local valid=10s;
+  
+               proxy_set_header Accept-Encoding "";
+               proxy_http_version 1.1;
+               proxy_buffering off;
+               proxy_cache off;
+               proxy_read_timeout 6h;
+  
+               sub_filter_types *;
+               sub_filter 'href="/' 'href="/sparkui/$jobid/$random/$port/$namespace/proxy/$appid/';
+               sub_filter 'src="/' 'src="/sparkui/$jobid/$random/$port/$namespace/proxy/$appid/';
+               sub_filter 'action="/' 'action="/sparkui/$jobid/$random/$port/$namespace/proxy/$appid/';
+               sub_filter 'setUIRoot(\'\')' 'setUIRoot(\'/sparkui/$jobid/$random/$port/$namespace/proxy/$appid/\')';
+               sub_filter_once off;
+  
+               if ($local_path = "") {
+                  rewrite ^ /jobs/ break;
+               }
+               if ($local_path = "/") {
+                  rewrite ^ /jobs/ break;
+               }
+               rewrite ^ $local_path break;
+  
+               proxy_pass http://job-$jobid-$random-driver-svc.$namespace.svc.cluster.local:$port;
+          }
+  
+          location /core/api/v1/ {
+              deny all;
+          }
+      }
+---
+# Source: ilum-ui/templates/ui-cm-nginx.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ilum-nginx
+data:
+  nginx.conf: |-
+    worker_processes  auto;
+    
+    error_log  /var/log/nginx/error.log warn;
+    pid        /tmp/nginx.pid;
+    
+    events {
+        worker_connections  1024;
+    }
+
+    http {
+        include       /etc/nginx/mime.types;
+        default_type  application/octet-stream;
+    
+        log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+                          '$status $body_bytes_sent "$http_referer" '
+                          '"$http_user_agent" "$http_x_forwarded_for"';
+    
+        access_log  /var/log/nginx/access.log  main;
+    
+        sendfile        on;
+        server_tokens   off;
+    
+        keepalive_time 6h;
+        keepalive_timeout  6h;
+        client_max_body_size 2G;
+    
+        gzip on;
+        gzip_vary on;
+        gzip_proxied any;
+        gzip_comp_level 6;
+        gzip_buffers 16 8k;
+        gzip_http_version 1.1;
+        gzip_types
+            text/css
+            text/javascript
+            text/xml
+            text/plain
+            text/event-stream
+            application/javascript
+            application/json
+            image/svg+xml;
+    
+      include conf.d/server.conf;
+    
+    }
+---
+# Source: ilum-ui/templates/ui-cm.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ilum-ui
+data:
+  ILUM_DEBUG: "false"
+  ILUM_BACKEND_URL: "http://ilum-core:9888"
+  ILUM_AIRFLOW_URL: "http://ilum-webserver:8080"
+  ILUM_HISTORY_SERVER_URL: "http://ilum-history-server:9666"
+  ILUM_JUPYTER_URL: "http://ilum-jupyter:8888"
+  ILUM_DATA_URL: "http://ilum-minio:9001"
+  ILUM_MLFLOW_URL: "http://mlflow:5000"
+  ILUM_LINEAGE_URL: "http://ilum-marquez-web:9444"
+  ILUM_HISTORY_SERVER_ENABLED: "false"
+  ILUM_JUPYTER_ENABLED: "false"
+  ILUM_AIRFLOW_ENABLED: "false"
+  ILUM_DATA_ENABLED: "false"
+  ILUM_MLFLOW_ENABLED: "false"
+  ILUM_LINEAGE_ENABLED: "false"
+  ILUM_DOC_ENABLED: "true"
+  ILUM_SQL_ENABLED: "false"
+  ILUM_JUPYTER_PATH: "/external/jupyter/lab/tree/work/IlumIntro.ipynb"
+  ILUM_AIRFLOW_PATH: "/external/airflow/"
+  ILUM_DATA_PATH: "/external/minio/"
+  ILUM_MLFLOW_PATH: "/external/mlflow/"
+  ILUM_HISTORY_SERVER_PATH: "/external/history-server/"
+  ILUM_LINEAGE_PATH: "/external/lineage/"
+  ILUM_OAUTH2_CLIENT_ID: "undefined"
+  ILUM_OAUTH2_CLIENT_SECRET: "undefined"
+  ILUM_OAUTH2_ISSUER_URI: "undefined"
+---
+# Source: ilum-ui/templates/ui-svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: ilum-ui
+  labels:
+    app: ilum-ui
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 9777
+      targetPort: 8080
+  selector:
+    app: ilum-ui
+---
+# Source: ilum-ui/templates/ui-deploy.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ilum-ui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ilum-ui
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      annotations:
+        rollme: "wrwtT"
+      labels:
+        app: ilum-ui
+    spec:
+      initContainers:
+        - name: wait-for-ilum-core
+          image: curlimages/curl:8.5.0
+          imagePullPolicy: IfNotPresent
+          command: [ 'sh', '-c', "until curl -sf http://ilum-core:9888/api/dev/reactive/health ; do echo waiting for ilum-core; sleep 2; done" ]
+      containers:
+        - name: ilum-ui
+          image: ilum/ui:6.1.6
+          imagePullPolicy: IfNotPresent
+          resources:
+            limits:
+              memory: 1Gi
+            requests:
+              memory: 1Gi
+          envFrom:
+            - configMapRef:
+                name: ilum-ui
+          volumeMounts:
+            - name: ilum-nginx
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+            - name: ilum-nginx-server
+              mountPath: /etc/nginx/templates/server.conf.template
+              subPath: server.conf.template
+      securityContext:
+        fsGroup: 101 # nginx
+      volumes:
+        - name: ilum-nginx
+          configMap:
+            name: ilum-nginx
+        - name: ilum-nginx-server
+          configMap:
+            name: ilum-nginx-server
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
+                - arm64

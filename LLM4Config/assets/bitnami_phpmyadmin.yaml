@@ -1,0 +1,295 @@
+---
+# Source: phpmyadmin/templates/networkpolicy.yaml
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: my-phpmyadmin
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-phpmyadmin
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: phpmyadmin
+    app.kubernetes.io/version: 5.2.1
+    helm.sh/chart: phpmyadmin-17.0.6
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: my-phpmyadmin
+      app.kubernetes.io/name: phpmyadmin
+  policyTypes:
+    - Ingress
+    - Egress
+  egress:
+    - {}
+  ingress:
+    - ports:
+        - port: 8080
+        - port: 8443
+---
+# Source: phpmyadmin/templates/pdb.yaml
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: my-phpmyadmin
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-phpmyadmin
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: phpmyadmin
+    app.kubernetes.io/version: 5.2.1
+    helm.sh/chart: phpmyadmin-17.0.6
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: my-phpmyadmin
+      app.kubernetes.io/name: phpmyadmin
+---
+# Source: phpmyadmin/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+automountServiceAccountToken: false
+metadata:
+  name: my-phpmyadmin
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-phpmyadmin
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: phpmyadmin
+    app.kubernetes.io/version: 5.2.1
+    helm.sh/chart: phpmyadmin-17.0.6
+---
+# Source: phpmyadmin/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-phpmyadmin
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-phpmyadmin
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: phpmyadmin
+    app.kubernetes.io/version: 5.2.1
+    helm.sh/chart: phpmyadmin-17.0.6
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+    - name: http
+      port: 80
+      protocol: TCP
+      targetPort: http
+      nodePort: null
+    - name: https
+      port: 443
+      protocol: TCP
+      targetPort: https
+      nodePort: null
+  selector:
+    app.kubernetes.io/instance: my-phpmyadmin
+    app.kubernetes.io/name: phpmyadmin
+---
+# Source: phpmyadmin/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-phpmyadmin
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-phpmyadmin
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: phpmyadmin
+    app.kubernetes.io/version: 5.2.1
+    helm.sh/chart: phpmyadmin-17.0.6
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: my-phpmyadmin
+      app.kubernetes.io/name: phpmyadmin
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: my-phpmyadmin
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: phpmyadmin
+        app.kubernetes.io/version: 5.2.1
+        helm.sh/chart: phpmyadmin-17.0.6
+    spec:
+      
+      automountServiceAccountToken: false
+      # yamllint disable rule:indentation
+      hostAliases:
+        - hostnames:
+          - status.localhost
+          ip: 127.0.0.1
+      # yamllint enable rule:indentation
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/instance: my-phpmyadmin
+                    app.kubernetes.io/name: phpmyadmin
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      priorityClassName: ""
+      securityContext:
+        fsGroup: 1001
+        fsGroupChangePolicy: Always
+        supplementalGroups: []
+        sysctls: []
+      serviceAccountName: my-phpmyadmin
+      initContainers:
+        - name: prepare-base-dir
+          image: docker.io/bitnami/phpmyadmin:5.2.1-debian-12-r39
+          imagePullPolicy: "IfNotPresent"
+          resources:
+            limits:
+              cpu: 375m
+              ephemeral-storage: 2Gi
+              memory: 384Mi
+            requests:
+              cpu: 250m
+              ephemeral-storage: 50Mi
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsGroup: 1001
+            runAsNonRoot: true
+            runAsUser: 1001
+            seLinuxOptions: null
+            seccompProfile:
+              type: RuntimeDefault
+          command:
+            - /bin/bash
+          args:
+            - -ec
+            - |
+              #!/bin/bash
+
+              . /opt/bitnami/scripts/liblog.sh
+              . /opt/bitnami/scripts/libfs.sh
+
+              info "Copying base dir to empty dir"
+              # In order to not break the application functionality (such as upgrades or plugins) we need
+              # to make the base directory writable, so we need to copy it to an empty dir volume
+              cp -r --preserve=mode /opt/bitnami/phpmyadmin /emptydir/app-base-dir
+
+              info "Copying symlinks to stdout/stderr"
+              # We copy the logs folder because it has symlinks to stdout and stderr
+              if ! is_dir_empty /opt/bitnami/apache/logs; then
+                cp -r /opt/bitnami/apache/logs /emptydir/apache-logs-dir
+              fi
+              info "Copying php var directory"
+              # PhpMyAdmin will fail to start if the php var folder is not populated
+              if ! is_dir_empty /opt/bitnami/php/var; then
+                cp -r /opt/bitnami/php/var /emptydir/php-var-dir
+              fi
+              info "Copy operation completed"
+          volumeMounts:
+            - name: empty-dir
+              mountPath: /emptydir
+      containers:
+        - name: phpmyadmin
+          image: docker.io/bitnami/phpmyadmin:5.2.1-debian-12-r39
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsGroup: 1001
+            runAsNonRoot: true
+            runAsUser: 1001
+            seLinuxOptions: null
+            seccompProfile:
+              type: RuntimeDefault
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: DATABASE_PORT_NUMBER
+              value: "3306"
+            - name: DATABASE_HOST
+              value: ""
+            - name: PHPMYADMIN_ALLOW_NO_PASSWORD
+              value: "true"
+            - name: PHPMYADMIN_ALLOW_ARBITRARY_SERVER
+              value: "true"
+            - name: DATABASE_ENABLE_SSL
+              value: "no"
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: https
+              containerPort: 8443
+              protocol: TCP
+          livenessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            successThreshold: 1
+            tcpSocket:
+              port: http
+            timeoutSeconds: 30
+          readinessProbe:
+            failureThreshold: 6
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 30
+          resources:
+            limits:
+              cpu: 375m
+              ephemeral-storage: 2Gi
+              memory: 384Mi
+            requests:
+              cpu: 250m
+              ephemeral-storage: 50Mi
+              memory: 256Mi
+          volumeMounts:
+            - name: empty-dir
+              mountPath: /opt/bitnami/apache/conf
+              subPath: apache-conf-dir
+            - name: empty-dir
+              mountPath: /opt/bitnami/apache/logs
+              subPath: apache-logs-dir
+            - name: empty-dir
+              mountPath: /opt/bitnami/apache/var/run
+              subPath: apache-tmp-dir
+            - name: empty-dir
+              mountPath: /opt/bitnami/php/etc
+              subPath: php-conf-dir
+            - name: empty-dir
+              mountPath: /opt/bitnami/php/tmp
+              subPath: php-tmp-dir
+            - name: empty-dir
+              mountPath: /opt/bitnami/php/var
+              subPath: php-var-dir
+            - name: empty-dir
+              mountPath: /tmp
+              subPath: tmp-dir
+            - name: empty-dir
+              mountPath: /opt/bitnami/phpmyadmin
+              subPath: app-base-dir
+      volumes:
+        - name: empty-dir
+          emptyDir: {}

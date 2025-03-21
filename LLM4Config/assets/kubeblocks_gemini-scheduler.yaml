@@ -1,0 +1,201 @@
+---
+# Source: gemini-scheduler/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: gemini-scheduler
+  labels:
+    helm.sh/chart: gemini-scheduler-0.1.1
+    app.kubernetes.io/name: gemini-scheduler
+    app.kubernetes.io/instance: my-gemini-scheduler
+    app.kubernetes.io/version: "0.1.1"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: gemini-scheduler/templates/scheduler-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gemini-scheduler-config
+  labels:
+    helm.sh/chart: gemini-scheduler-0.1.1
+    app.kubernetes.io/name: gemini-scheduler
+    app.kubernetes.io/instance: my-gemini-scheduler
+    app.kubernetes.io/version: "0.1.1"
+    app.kubernetes.io/managed-by: Helm
+data:
+  config.yaml: |
+    apiVersion: kubescheduler.config.k8s.io/v1
+    kind: KubeSchedulerConfiguration
+    leaderElection:
+      leaderElect: false
+    profiles:
+    - pluginConfig:
+      - args:
+          outdatedMetricsDuration: 10m
+          targetCPULoad: 0.7
+          targetMemoryLoad: 0.7
+        name: TargetLoad
+      plugins:
+        multiPoint:
+          enabled:
+          - name: SpecifiedNodeMigration
+          - name: TargetLoad
+      schedulerName: gemini-scheduler
+---
+# Source: gemini-scheduler/templates/rbac/scheduler-clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: gemini-scheduler
+rules:
+- apiGroups: ["metrics.k8s.io"]
+  resources: ["pods", "nodes"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["workloads.kubeblocks.io"]
+  resources: ["instancesets"]
+  verbs: ["get", "list", "watch", "patch", "update"]
+---
+# Source: gemini-scheduler/templates/rbac/scheduler-rolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: gemini-scheduler-schedule
+  labels:
+    helm.sh/chart: gemini-scheduler-0.1.1
+    app.kubernetes.io/name: gemini-scheduler
+    app.kubernetes.io/instance: my-gemini-scheduler
+    app.kubernetes.io/version: "0.1.1"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  kind: ClusterRole
+  name: system:kube-scheduler
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+  - kind: ServiceAccount
+    name: gemini-scheduler
+    namespace: default
+---
+# Source: gemini-scheduler/templates/rbac/scheduler-rolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: gemini-scheduler-volume
+  labels:
+    helm.sh/chart: gemini-scheduler-0.1.1
+    app.kubernetes.io/name: gemini-scheduler
+    app.kubernetes.io/instance: my-gemini-scheduler
+    app.kubernetes.io/version: "0.1.1"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  kind: ClusterRole
+  name: system:volume-scheduler
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+  - kind: ServiceAccount
+    name: gemini-scheduler
+    namespace: default
+---
+# Source: gemini-scheduler/templates/rbac/scheduler-rolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: gemini-scheduler
+  labels:
+    helm.sh/chart: gemini-scheduler-0.1.1
+    app.kubernetes.io/name: gemini-scheduler
+    app.kubernetes.io/instance: my-gemini-scheduler
+    app.kubernetes.io/version: "0.1.1"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  kind: ClusterRole
+  name: gemini-scheduler
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+  - kind: ServiceAccount
+    name: gemini-scheduler
+    namespace: default
+---
+# Source: gemini-scheduler/templates/rbac/scheduler-rolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: gemini-scheduler-extension-apiserver-authentication-reader
+  namespace: kube-system
+  labels:
+    helm.sh/chart: gemini-scheduler-0.1.1
+    app.kubernetes.io/name: gemini-scheduler
+    app.kubernetes.io/instance: my-gemini-scheduler
+    app.kubernetes.io/version: "0.1.1"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  kind: Role
+  name: extension-apiserver-authentication-reader
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+  - kind: ServiceAccount
+    name: gemini-scheduler
+    namespace: default
+---
+# Source: gemini-scheduler/templates/scheduler-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gemini-scheduler
+  labels:
+    helm.sh/chart: gemini-scheduler-0.1.1
+    app.kubernetes.io/name: gemini-scheduler
+    app.kubernetes.io/instance: my-gemini-scheduler
+    app.kubernetes.io/version: "0.1.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: gemini-scheduler
+      app.kubernetes.io/instance: my-gemini-scheduler
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: gemini-scheduler
+        app.kubernetes.io/instance: my-gemini-scheduler
+    spec:
+      serviceAccountName: gemini-scheduler
+      securityContext:
+        runAsNonRoot: true
+      containers:
+        - name: scheduler
+          args:
+            - --config
+            - /etc/scheduler/config.yaml
+            - -v=3
+          image: "docker.io/apecloud/gemini-scheduler:0.1.1"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: health
+              # this is the default port
+              containerPort: 10259
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 10259
+              scheme: HTTPS
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 10259
+              scheme: HTTPS
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            {}
+          volumeMounts:
+          - mountPath: /etc/scheduler
+            name: config
+      volumes:
+        - name: config
+          configMap:
+            name: gemini-scheduler-config
+      terminationGracePeriodSeconds: 10

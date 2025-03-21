@@ -1,0 +1,134 @@
+---
+# Source: kube-auth-proxy/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-kube-auth-proxy
+  namespace: default
+  labels:
+    helm.sh/chart: kube-auth-proxy-v2023.11.14
+    app.kubernetes.io/name: kube-auth-proxy
+    app.kubernetes.io/instance: my-kube-auth-proxy
+    app.kubernetes.io/version: "v0.0.1"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: kube-auth-proxy/templates/cluster-role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-kube-auth-proxy
+  labels:
+    helm.sh/chart: kube-auth-proxy-v2023.11.14
+    app.kubernetes.io/name: kube-auth-proxy
+    app.kubernetes.io/instance: my-kube-auth-proxy
+    app.kubernetes.io/version: "v0.0.1"
+    app.kubernetes.io/managed-by: Helm
+rules:
+- apiGroups:
+  - authentication.appscode.com
+  resources: ["*"]
+  verbs: ["get", "list", "watch"]
+---
+# Source: kube-auth-proxy/templates/cluster-role-binding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-kube-auth-proxy
+  labels:
+    helm.sh/chart: kube-auth-proxy-v2023.11.14
+    app.kubernetes.io/name: kube-auth-proxy
+    app.kubernetes.io/instance: my-kube-auth-proxy
+    app.kubernetes.io/version: "v0.0.1"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-kube-auth-proxy
+subjects:
+- kind: ServiceAccount
+  name: my-kube-auth-proxy
+  namespace: default
+---
+# Source: kube-auth-proxy/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-kube-auth-proxy
+  namespace: default
+  labels:
+    helm.sh/chart: kube-auth-proxy-v2023.11.14
+    app.kubernetes.io/name: kube-auth-proxy
+    app.kubernetes.io/instance: my-kube-auth-proxy
+    app.kubernetes.io/version: "v0.0.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  ports:
+  # Port used to expose admission webhook apiserver
+  - name: api
+    port: 443
+    targetPort: 8443
+  selector:
+    app.kubernetes.io/name: kube-auth-proxy
+    app.kubernetes.io/instance: my-kube-auth-proxy
+---
+# Source: kube-auth-proxy/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-kube-auth-proxy
+  namespace: default
+  labels:
+    helm.sh/chart: kube-auth-proxy-v2023.11.14
+    app.kubernetes.io/name: kube-auth-proxy
+    app.kubernetes.io/instance: my-kube-auth-proxy
+    app.kubernetes.io/version: "v0.0.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kube-auth-proxy
+      app.kubernetes.io/instance: my-kube-auth-proxy
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kube-auth-proxy
+        app.kubernetes.io/instance: my-kube-auth-proxy
+    spec:
+      
+      serviceAccountName: my-kube-auth-proxy
+      securityContext:
+        {}
+      containers:
+        - name: kube-auth-proxy
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65534
+            seccompProfile:
+              type: RuntimeDefault
+          image: ghcr.io/appscode/kube-auth-manager:v0.0.1
+          imagePullPolicy: Always
+          args:
+            - manager
+          ports:
+            - name: metrics
+              containerPort: 8080
+              protocol: TCP
+            - name: http
+              containerPort: 8081
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+          resources:
+            {}

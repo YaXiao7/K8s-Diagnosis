@@ -1,0 +1,102 @@
+---
+# Source: request-dumper/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-request-dumper
+  labels:
+    helm.sh/chart: request-dumper-0.1.2
+    app.kubernetes.io/name: request-dumper
+    app.kubernetes.io/instance: my-request-dumper
+    app.kubernetes.io/version: "0.0.3"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: request-dumper/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-request-dumper
+  labels:
+    helm.sh/chart: request-dumper-0.1.2
+    app.kubernetes.io/name: request-dumper
+    app.kubernetes.io/instance: my-request-dumper
+    app.kubernetes.io/version: "0.0.3"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: NodePort
+  ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
+      name: ruby-rack
+  selector:
+    app.kubernetes.io/name: request-dumper
+    app.kubernetes.io/instance: my-request-dumper
+---
+# Source: request-dumper/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-request-dumper
+  labels:
+    helm.sh/chart: request-dumper-0.1.2
+    app.kubernetes.io/name: request-dumper
+    app.kubernetes.io/instance: my-request-dumper
+    app.kubernetes.io/version: "0.0.3"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: request-dumper
+      app.kubernetes.io/instance: my-request-dumper
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: request-dumper
+        app.kubernetes.io/instance: my-request-dumper
+    spec:
+      serviceAccountName: my-request-dumper
+      securityContext:
+        {}
+      containers:
+        - name: request-dumper
+          securityContext:
+            {}
+          image: "kakakikikeke/request-dumper:latest"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+            {}
+---
+# Source: request-dumper/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-request-dumper-test-connection"
+  labels:
+    helm.sh/chart: request-dumper-0.1.2
+    app.kubernetes.io/name: request-dumper
+    app.kubernetes.io/instance: my-request-dumper
+    app.kubernetes.io/version: "0.0.3"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-request-dumper:8080']
+  restartPolicy: Never

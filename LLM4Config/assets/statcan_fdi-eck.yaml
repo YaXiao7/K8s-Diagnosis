@@ -1,0 +1,172 @@
+---
+# Source: fdi-eck/templates/cm/fluentd-config.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: fdi
+  name: daaas-fdi-fluentd-config
+  labels:
+    app: fluentd
+    kubernetes.io/cluster-service: "true"
+data:
+  fluent.conf: |
+    #we send the logs to Elasticsearch
+    <filter **>
+      @type record_transformer
+      <record>
+        cluster 
+        #kuber_namespace ${record["kubernetes"]["namespace_name"]} 
+      </record>
+      
+    </filter>
+    <filter **>
+      @type grep
+      <regexp>
+        key  $.kubernetes.container_name
+        pattern  (^.*dotstatsuite.*$|^.*istio-proxy.*$)
+      </regexp>
+
+      <exclude>
+        key log
+        pattern (^.*xdsproxy.*$|^.*Microsoft.*$|^.*cached.*$|^.*\/health.*$|^.*\/live.*$|^.*Request finished in.*$|^.*Health check.*$|^.*NSIWebServiceCore.*$)
+      </exclude>
+    </filter>
+
+    <match **>
+      @type elasticsearch
+      hosts fdi-meta-elasticsearch.test.cloud.statcan.ca
+      ssl_version TLSv1_2
+      user elastic
+      password password
+      logstash_prefix k8slogsfilter-${$.kubernetes.namespace_name}-${$.kubernetes.container_name} 
+      logstash_format true
+      logstash_dateformat %Y
+      
+      #must have spae after comma
+      <buffer tag, $.kubernetes.namespace_name, $.kubernetes.container_name>
+          @type file
+          path /var/log/fluentd-buffers/kubernetes.system.buffer
+          flush_mode interval
+          retry_type exponential_backoff
+          flush_thread_count 2
+          flush_interval 5s
+          retry_forever
+          retry_max_interval 30
+          overflow_action block
+      </buffer>
+    </match>
+---
+# Source: fdi-eck/templates/in/elastic_ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  namespace: fdi
+  name: fdi-meta-elasticsearch
+spec:
+  ingressClassName: ingress-istio-controller
+  rules:
+  - host: fdi-meta-elasticsearch.test.cloud.statcan.ca
+    http:
+      paths:
+      - pathType: Prefix
+        path: /
+        backend:
+          service:
+            name: fdi-meta-es-http
+            port:
+              number: 9200
+---
+# Source: fdi-eck/templates/in/kibana_ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  namespace: fdi
+  name: fdi-meta-kibana
+spec:
+  ingressClassName: ingress-istio-controller
+  rules:
+  - host: fdi-meta-kibana.test.cloud.statcan.ca
+    http:
+      paths:
+      - pathType: Prefix
+        path: /
+        backend:
+          service:
+            name: fdi-meta-kb-http
+            port:
+              number: 5601
+---
+# Source: fdi-eck/templates/deploy/elastic.yaml
+apiVersion: elasticsearch.k8s.elastic.co/v1
+kind: Elasticsearch
+metadata:
+  namespace: fdi
+  name: fdi-meta
+spec:
+  http:
+    tls:
+      selfSignedCertificate:
+        disabled: true
+  version: 8.3.3
+  nodeSets:
+  - config:
+      node.roles: 
+        - master
+        - data
+        - ingest
+      node.store.allow_mmap: false
+    count: 1
+    name: node
+    podTemplate:
+      metadata:
+        annotations:
+          traffic.sidecar.istio.io/excludeOutboundPorts: "9300"
+          traffic.sidecar.istio.io/excludeInboundPorts: "9300"
+      spec:
+        automountServiceAccountToken: true
+        containers:
+          - name: elasticsearch
+            env:
+              - name: ES_JAVA_OPTS
+                value: -Xms4g -Xmx4g
+              # - name: ELASTIC_PASSWORD
+              #   value: "password"
+              
+            resources:
+              limits:
+                cpu: 200m
+                memory: 16Gi
+              requests:
+                cpu: 100m
+                memory: 8Gi
+    volumeClaimTemplates:
+    - metadata:
+        name: elasticsearch-data
+      spec:
+        storageClassName: default
+        accessModes:
+        - ReadWriteOnce
+        resources:
+          requests:
+            storage: 32Gi
+---
+# Source: fdi-eck/templates/deploy/kibana.yaml
+apiVersion: kibana.k8s.elastic.co/v1
+kind: Kibana
+metadata:
+  namespace: fdi
+  name: fdi-meta
+spec:
+  version: 8.3.3
+  count: 1
+  elasticsearchRef:
+    name: fdi-meta
+  enterpriseSearchRef:
+    name: ''
+  http:
+    tls:
+      selfSignedCertificate:
+        disabled: true
+  podTemplate:
+    spec:
+      automountServiceAccountToken: true

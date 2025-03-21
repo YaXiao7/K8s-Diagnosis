@@ -1,0 +1,209 @@
+---
+# Source: sqs-to-sns/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-sqs-to-sns
+  labels:
+    helm.sh/chart: sqs-to-sns-1.13.0
+    app.kubernetes.io/name: sqs-to-sns
+    app.kubernetes.io/instance: my-sqs-to-sns
+    app.kubernetes.io/version: "1.13.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: sqs-to-sns/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-sqs-to-sns
+data:
+  AUTOMEMLIMIT_DEBUG: "true"
+  BUFFER: "90"
+  COPY_ATTRIBUTES: "true"
+  DEBUG: "true"
+  DELETE_ERROR_COOLDOWN: 10s
+  EMPTY_RECEIVE_COOLDOWN: 10s
+  HEALTH_ADDR: :8888
+  HEALTH_PATH: /health
+  JAEGER_ENABLE: "false"
+  METRICS_ADDR: :3000
+  METRICS_BUCKETS_LATENCY: 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0
+  METRICS_NAMESPACE: sqstosns
+  METRICS_PATH: /metrics
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger-collector:14268
+  OTEL_PROPAGATORS: b3multi
+  OTEL_TRACES_EXPORTER: jaeger
+  OTEL_TRACES_SAMPLER: parentbased_traceidratio
+  OTEL_TRACES_SAMPLER_ARG: "0.01"
+  OTELCONFIG_EXPORTER: jaeger
+  QUEUES: /etc/sqs-to-sns/queues.yaml
+  READ_ERROR_COOLDOWN: 10s
+  READERS: "3"
+  WRITE_ERROR_COOLDOWN: 10s
+  WRITERS: "45"
+---
+# Source: sqs-to-sns/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-sqs-to-sns-config
+data:
+  queues.yaml: |
+    - id: q1
+      #
+      # required
+      #
+      queue_url: https://sqs.us-east-1.amazonaws.com/111111111111/queue_name1
+      topic_arn: arn:aws:sns:us-east-1:222222222222:topic_name1
+      #
+      # optional
+      #
+      #queue_role_arn: arn:aws:iam::111111111111:role/sqs_consumer1
+      #topic_role_arn: arn:aws:iam::222222222222:role/sns_producer1
+      #readers: 1
+      #writers: 15 # recommended: 15*readers
+      #buffer: 30  # recommended: 30*readers
+      #error_cooldown_read: 10s
+      #error_cooldown_write: 10s
+      #error_cooldown_delete: 10s
+      #empty_receive_cooldown: 10s
+      #copy_attributes: true
+      #debug: true
+    - id: q2
+      #
+      # required
+      #
+      queue_url: https://sqs.us-east-1.amazonaws.com/111111111111/queue_name2
+      topic_arn: arn:aws:sns:us-east-1:222222222222:topic_name2
+      #
+      # optional
+      #
+      #queue_role_arn: arn:aws:iam::111111111111:role/sqs_consumer2
+      #topic_role_arn: arn:aws:iam::222222222222:role/sns_producer2
+      #readers: 1
+      #writers: 15 # recommended: 15*readers
+      #buffer: 30  # recommended: 30*readers
+      #error_cooldown_read: 10s
+      #error_cooldown_write: 10s
+      #error_cooldown_delete: 10s
+      #empty_receive_cooldown: 10s
+      #copy_attributes: true
+      #debug: true
+---
+# Source: sqs-to-sns/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-sqs-to-sns
+  labels:
+    helm.sh/chart: sqs-to-sns-1.13.0
+    app.kubernetes.io/name: sqs-to-sns
+    app.kubernetes.io/instance: my-sqs-to-sns
+    app.kubernetes.io/version: "1.13.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sqs-to-sns
+      app.kubernetes.io/instance: my-sqs-to-sns
+  template:
+    metadata:
+      annotations:
+        rollme: "pvwby"
+        prometheus.io/path: /metrics
+        prometheus.io/port: "3000"
+        prometheus.io/scrape: "true"
+        sidecar.istio.io/inject: "false"
+      labels:
+        app.kubernetes.io/name: sqs-to-sns
+        app.kubernetes.io/instance: my-sqs-to-sns
+        app: sqs-to-sns
+    spec:
+      topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/instance: my-sqs-to-sns
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/instance: my-sqs-to-sns
+      serviceAccountName: my-sqs-to-sns
+      securityContext:
+        {}
+      volumes:
+      - name: config
+        configMap:
+          name: my-sqs-to-sns-config
+      containers:
+        - name: my-sqs-to-sns
+          securityContext:
+            {}
+          image: "udhos/sqs-to-sns:1.13.0"
+          imagePullPolicy: IfNotPresent
+          envFrom:
+          - configMapRef:
+              name: my-sqs-to-sns
+          volumeMounts:
+          - name: config
+            mountPath: /etc/sqs-to-sns
+          ports:
+            - name: health
+              containerPort: 8888
+              protocol: TCP
+          startupProbe:
+            # must initialize within 3*100=300 seconds
+            httpGet:
+              path: /health
+              port: 8888
+            periodSeconds: 3
+            failureThreshold: 100
+          livenessProbe:
+            # kill after 20*6=120 seconds without success
+            httpGet:
+              path: /health
+              port: 8888
+              scheme: HTTP
+            periodSeconds: 20
+            failureThreshold: 6
+            successThreshold: 1
+            timeoutSeconds: 10
+          resources:
+            limits:
+              cpu: 2000m
+              ephemeral-storage: 1Gi
+              memory: 200Mi
+            requests:
+              cpu: 300m
+              ephemeral-storage: 1Gi
+              memory: 100Mi
+---
+# Source: sqs-to-sns/templates/hpa.yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: my-sqs-to-sns
+  labels:
+    helm.sh/chart: sqs-to-sns-1.13.0
+    app.kubernetes.io/name: sqs-to-sns
+    app.kubernetes.io/instance: my-sqs-to-sns
+    app.kubernetes.io/version: "1.13.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: my-sqs-to-sns
+  minReplicas: 1
+  maxReplicas: 100
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        averageUtilization: 80
+        type: Utilization

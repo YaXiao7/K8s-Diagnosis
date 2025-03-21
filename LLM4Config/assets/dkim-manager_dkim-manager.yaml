@@ -1,0 +1,517 @@
+---
+# Source: dkim-manager/templates/rbac.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: 'Helm'
+    app.kubernetes.io/name: 'dkim-manager'
+    app.kubernetes.io/version: '1.2.6'
+    helm.sh/chart: 'dkim-manager-0.1.7'
+  name: 'my-dkim-manager-controller-manager'
+  namespace: 'default'
+---
+# Source: dkim-manager/templates/generated/crds/dkim-manager.atelierhsn.com_dkimkeys.yaml
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    cert-manager.io/inject-ca-from: 'default/my-dkim-manager-serving-cert'
+    controller-gen.kubebuilder.io/version: v0.12.0
+  labels:
+    app.kubernetes.io/managed-by: 'Helm'
+    app.kubernetes.io/name: 'dkim-manager'
+    app.kubernetes.io/version: '1.2.6'
+    helm.sh/chart: 'dkim-manager-0.1.7'
+  name: dkimkeys.dkim-manager.atelierhsn.com
+spec:
+  conversion:
+    strategy: Webhook
+    webhook:
+      clientConfig:
+        service:
+          name: 'my-dkim-manager-webhook-service'
+          namespace: 'default'
+          path: /convert
+      conversionReviewVersions:
+      - v1
+  group: dkim-manager.atelierhsn.com
+  names:
+    kind: DKIMKey
+    listKind: DKIMKeyList
+    plural: dkimkeys
+    singular: dkimkey
+  scope: Namespaced
+  versions:
+  - name: v1
+    schema:
+      openAPIV3Schema:
+        description: DKIMKey is the Schema for the dkimkeys API.
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: DKIMKeySpec defines the desired state of DKIMKey.
+            properties:
+              domain:
+                description: Domain is the domain to which the DKIM record will be
+                  associated.
+                type: string
+              keyLength:
+                default: 2048
+                description: KeyLength represents the bit size for RSA keys.
+                enum:
+                - 1024
+                - 2048
+                - 4096
+                type: integer
+              keyType:
+                default: rsa
+                description: KeyType represents the DKIM key type.
+                enum:
+                - rsa
+                - ed25519
+                type: string
+              secretName:
+                description: SecretName represents the name for the Secret resource
+                  containing the private key.
+                type: string
+              selector:
+                description: Selector is the name to use as a DKIM selector.
+                type: string
+              ttl:
+                default: 86400
+                description: TTL for the DKIM record.
+                type: integer
+            required:
+            - domain
+            - secretName
+            - selector
+            type: object
+          status:
+            description: DKIMKeyStatus defines the observed state of DKIMKey.
+            type: string
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+# Source: dkim-manager/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: 'Helm'
+    app.kubernetes.io/name: 'dkim-manager'
+    app.kubernetes.io/version: '1.2.6'
+    helm.sh/chart: 'dkim-manager-0.1.7'
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+    rbac.authorization.k8s.io/aggregate-to-edit: "true"
+  name: 'my-dkim-manager-dkimkey-editor-role'
+rules:
+- apiGroups:
+  - dkim-manager.atelierhsn.com
+  resources:
+  - dkimkeys
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - dkim-manager.atelierhsn.com
+  resources:
+  - dkimkeys/status
+  verbs:
+  - get
+---
+# Source: dkim-manager/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: 'Helm'
+    app.kubernetes.io/name: 'dkim-manager'
+    app.kubernetes.io/version: '1.2.6'
+    helm.sh/chart: 'dkim-manager-0.1.7'
+    rbac.authorization.k8s.io/aggregate-to-view: "true"
+  name: 'my-dkim-manager-dkimkey-viewer-role'
+rules:
+- apiGroups:
+  - dkim-manager.atelierhsn.com
+  resources:
+  - dkimkeys
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - dkim-manager.atelierhsn.com
+  resources:
+  - dkimkeys/status
+  verbs:
+  - get
+---
+# Source: dkim-manager/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  labels:
+    app.kubernetes.io/managed-by: 'Helm'
+    app.kubernetes.io/name: 'dkim-manager'
+    app.kubernetes.io/version: '1.2.6'
+    helm.sh/chart: 'dkim-manager-0.1.7'
+  name: 'my-dkim-manager-manager-role'
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - dkim-manager.atelierhsn.com
+  resources:
+  - dkimkeys
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - dkim-manager.atelierhsn.com
+  resources:
+  - dkimkeys/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - dkim-manager.atelierhsn.com
+  resources:
+  - dkimkeys/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - externaldns.k8s.io
+  resources:
+  - dnsendpoints
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+---
+# Source: dkim-manager/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: 'Helm'
+    app.kubernetes.io/name: 'dkim-manager'
+    app.kubernetes.io/version: '1.2.6'
+    helm.sh/chart: 'dkim-manager-0.1.7'
+  name: 'my-dkim-manager-manager-rolebinding'
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: 'my-dkim-manager-manager-role'
+subjects:
+- kind: ServiceAccount
+  name: 'my-dkim-manager-controller-manager'
+  namespace: 'default'
+---
+# Source: dkim-manager/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: 'Helm'
+    app.kubernetes.io/name: 'dkim-manager'
+    app.kubernetes.io/version: '1.2.6'
+    helm.sh/chart: 'dkim-manager-0.1.7'
+  name: 'my-dkim-manager-leader-election-role'
+  namespace: 'default'
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+---
+# Source: dkim-manager/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: 'Helm'
+    app.kubernetes.io/name: 'dkim-manager'
+    app.kubernetes.io/version: '1.2.6'
+    helm.sh/chart: 'dkim-manager-0.1.7'
+  name: 'my-dkim-manager-leader-election-rolebinding'
+  namespace: 'default'
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: 'my-dkim-manager-leader-election-role'
+subjects:
+- kind: ServiceAccount
+  name: 'my-dkim-manager-controller-manager'
+  namespace: 'default'
+---
+# Source: dkim-manager/templates/generated/generated.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: 'Helm'
+    app.kubernetes.io/name: 'dkim-manager'
+    app.kubernetes.io/version: '1.2.6'
+    helm.sh/chart: 'dkim-manager-0.1.7'
+  name: 'my-dkim-manager-webhook-service'
+  namespace: 'default'
+spec:
+  ports:
+  - port: 443
+    protocol: TCP
+    targetPort: webhook-server
+  selector:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/name: 'dkim-manager'
+---
+# Source: dkim-manager/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-dkim-manager-controller-manager
+  namespace: default
+  labels:
+    app.kubernetes.io/component: controller
+    helm.sh/chart: dkim-manager-0.1.7
+    app.kubernetes.io/name: dkim-manager
+    app.kubernetes.io/version: "1.2.6"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: controller
+      app.kubernetes.io/name: dkim-manager
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: controller
+        app.kubernetes.io/name: dkim-manager
+    spec:
+      containers:
+        - name: manager
+          image: "ghcr.io/hsn723/dkim-manager:1.2.6"
+          args:
+            - --leader-elect
+          ports:
+            - containerPort: 9443
+              name: webhook-server
+              protocol: TCP
+            - containerPort: 8081
+              name: health
+              protocol: TCP
+            - containerPort: 8080
+              name: metrics
+              protocol: TCP
+          resources: 
+            requests:
+              cpu: 100m
+              memory: 20Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - mountPath: /tmp/k8s-webhook-server/serving-certs
+              name: cert
+              readOnly: true
+      securityContext:
+        runAsNonRoot: true
+      serviceAccountName: my-dkim-manager-controller-manager
+      terminationGracePeriodSeconds: 10
+      volumes:
+        - name: cert
+          secret:
+            defaultMode: 420
+            secretName: webhook-server-cert
+---
+# Source: dkim-manager/templates/certificate.yaml
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: my-dkim-manager-serving-cert
+  namespace: default
+  labels:
+    helm.sh/chart: dkim-manager-0.1.7
+    app.kubernetes.io/name: dkim-manager
+    app.kubernetes.io/version: "1.2.6"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  dnsNames:
+    - my-dkim-manager-webhook-service.default.svc
+    - my-dkim-manager-webhook-service.default.svc.cluster.local
+  issuerRef:
+    kind: Issuer
+    name: my-dkim-manager-selfsigned-issuer
+  secretName: webhook-server-cert
+---
+# Source: dkim-manager/templates/issuer.yaml
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: my-dkim-manager-selfsigned-issuer
+  namespace: default
+  labels:
+    helm.sh/chart: dkim-manager-0.1.7
+    app.kubernetes.io/name: dkim-manager
+    app.kubernetes.io/version: "1.2.6"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selfSigned: {}
+---
+# Source: dkim-manager/templates/generated/generated.yaml
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  annotations:
+    cert-manager.io/inject-ca-from: 'default/my-dkim-manager-serving-cert'
+  labels:
+    app.kubernetes.io/managed-by: 'Helm'
+    app.kubernetes.io/name: 'dkim-manager'
+    app.kubernetes.io/version: '1.2.6'
+    helm.sh/chart: 'dkim-manager-0.1.7'
+  name: 'my-dkim-manager-validating-webhook-configuration'
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: 'my-dkim-manager-webhook-service'
+      namespace: 'default'
+      path: /validate-dkim-manager-atelierhsn-com-v1-dkimkey
+  failurePolicy: Fail
+  name: vdkimkey.kb.io
+  rules:
+  - apiGroups:
+    - dkim-manager.atelierhsn.com
+    apiVersions:
+    - v1
+    operations:
+    - UPDATE
+    resources:
+    - dkimkeys
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: 'my-dkim-manager-webhook-service'
+      namespace: 'default'
+      path: /validate-externaldns-k8s-io-v1alpha1-dnsendpoint
+  failurePolicy: Fail
+  name: vdnsendpoint.kb.io
+  rules:
+  - apiGroups:
+    - externaldns.k8s.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - DELETE
+    resources:
+    - dnsendpoints
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: 'my-dkim-manager-webhook-service'
+      namespace: 'default'
+      path: /validate-secret
+  failurePolicy: Fail
+  name: vsecret.kb.io
+  rules:
+  - apiGroups:
+    - ""
+    apiVersions:
+    - v1
+    operations:
+    - DELETE
+    resources:
+    - secrets
+  sideEffects: None

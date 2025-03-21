@@ -1,0 +1,177 @@
+---
+# Source: prometheus-pve-exporter/templates/podsecuritypolicy.yaml
+apiVersion: policy/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: my-prometheus-pve-exporter
+  labels:
+    app: prometheus-pve-exporter
+    chart: prometheus-pve-exporter-0.1.1
+    heritage: Helm
+    release: my-prometheus-pve-exporter
+  annotations:
+    seccomp.security.alpha.kubernetes.io/allowedProfileNames: 'docker/default'
+    apparmor.security.beta.kubernetes.io/allowedProfileNames: 'runtime/default'
+    seccomp.security.alpha.kubernetes.io/defaultProfileName:  'docker/default'
+    apparmor.security.beta.kubernetes.io/defaultProfileName:  'runtime/default'
+spec:
+  privileged: false
+  allowPrivilegeEscalation: false
+  requiredDropCapabilities:
+    - ALL
+  volumes:
+    - 'configMap'
+    - 'emptyDir'
+    - 'projected'
+    - 'secret'
+    - 'downwardAPI'
+  hostNetwork: false
+  hostIPC: false
+  hostPID: false
+  runAsUser:
+    rule: 'RunAsAny'
+  seLinux:
+    rule: 'RunAsAny'
+  supplementalGroups:
+    rule: 'RunAsAny'
+  fsGroup:
+    rule: 'RunAsAny'
+  readOnlyRootFilesystem: false
+---
+# Source: prometheus-pve-exporter/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-prometheus-pve-exporter
+  labels:
+    app: prometheus-pve-exporter
+    chart: prometheus-pve-exporter-0.1.1
+    release: "my-prometheus-pve-exporter"
+    heritage: "Helm"
+---
+# Source: prometheus-pve-exporter/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-prometheus-pve-exporter
+  labels:
+    app.kubernetes.io/name: prometheus-pve-exporter
+    app.kubernetes.io/instance: my-prometheus-pve-exporter
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: prometheus-pve-exporter-0.1.1
+type: Opaque
+stringData:
+  pve.yml: |-
+    default:
+      user: prometheus@pve
+      password: sEcr3T
+      verify_ssl: true
+---
+# Source: prometheus-pve-exporter/templates/role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: my-prometheus-pve-exporter
+  labels:
+    app: prometheus-pve-exporter
+    chart: prometheus-pve-exporter-0.1.1
+    heritage: Helm
+    release: my-prometheus-pve-exporter
+rules:
+- apiGroups:      ['extensions']
+  resources:      ['podsecuritypolicies']
+  verbs:          ['use']
+  resourceNames:  [my-prometheus-pve-exporter]
+---
+# Source: prometheus-pve-exporter/templates/rolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: my-prometheus-pve-exporter
+  labels:
+    app: prometheus-pve-exporter
+    chart: prometheus-pve-exporter-0.1.1
+    heritage: Helm
+    release: my-prometheus-pve-exporter
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: my-prometheus-pve-exporter
+subjects:
+- kind: ServiceAccount
+  name: my-prometheus-pve-exporter
+---
+# Source: prometheus-pve-exporter/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-prometheus-pve-exporter
+  labels:
+    app: prometheus-pve-exporter
+    chart: prometheus-pve-exporter-0.1.1
+    release: my-prometheus-pve-exporter
+    heritage: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9221
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app: prometheus-pve-exporter
+    release: my-prometheus-pve-exporter
+---
+# Source: prometheus-pve-exporter/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-prometheus-pve-exporter
+  labels:
+    app: prometheus-pve-exporter
+    chart: prometheus-pve-exporter-0.1.1
+    release: my-prometheus-pve-exporter
+    heritage: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus-pve-exporter
+      release: my-prometheus-pve-exporter
+  template:
+    metadata:
+      annotations:
+        checksum/config: 96a827a9d26ae06842e9ab7fa506c5160de2267be0830774ec20ca44816799b3
+      labels:
+        app: prometheus-pve-exporter
+        release: my-prometheus-pve-exporter
+    spec:
+      serviceAccountName: my-prometheus-pve-exporter
+      containers:
+        - name: prometheus-pve-exporter
+          image: "prompve/prometheus-pve-exporter:2.0.1"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 9221
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 60
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 60
+          resources:
+            {}
+          volumeMounts:
+          - name: pve-config
+            mountPath: "/etc/pve.yml"
+            readOnly: true
+            subPath: pve.yml
+      volumes:
+      - name: pve-config
+        secret:
+          secretName: my-prometheus-pve-exporter

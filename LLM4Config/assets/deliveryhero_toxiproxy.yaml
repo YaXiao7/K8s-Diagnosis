@@ -1,0 +1,175 @@
+---
+# Source: toxiproxy/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-toxiproxy
+  labels:
+    app.kubernetes.io/name: toxiproxy
+    helm.sh/chart: toxiproxy-1.3.8
+    app.kubernetes.io/instance: my-toxiproxy
+    app.kubernetes.io/version: "2.7.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: toxiproxy/templates/configmap-config.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-toxiproxy-config
+  labels:
+    app.kubernetes.io/name: toxiproxy
+    helm.sh/chart: toxiproxy-1.3.8
+    app.kubernetes.io/instance: my-toxiproxy
+    app.kubernetes.io/version: "2.7.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+  init.sh: |
+    #!/bin/sh
+  
+    set -eu
+  
+    mkdir -p /working/proxies
+  
+    cp -r /consumer/proxies /working
+---
+# Source: toxiproxy/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-toxiproxy
+  labels:
+    app.kubernetes.io/name: toxiproxy
+    helm.sh/chart: toxiproxy-1.3.8
+    app.kubernetes.io/instance: my-toxiproxy
+    app.kubernetes.io/version: "2.7.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: admin
+      protocol: TCP
+      name: admin
+  selector:
+    component: main
+    app.kubernetes.io/name: toxiproxy
+    app.kubernetes.io/instance: my-toxiproxy
+---
+# Source: toxiproxy/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-toxiproxy
+  labels:
+    app.kubernetes.io/name: toxiproxy
+    helm.sh/chart: toxiproxy-1.3.8
+    app.kubernetes.io/instance: my-toxiproxy
+    app.kubernetes.io/version: "2.7.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      component: main
+      app.kubernetes.io/name: toxiproxy
+      app.kubernetes.io/instance: my-toxiproxy
+  template:
+    metadata:
+      labels:
+        component: main
+        app.kubernetes.io/name: toxiproxy
+        helm.sh/chart: toxiproxy-1.3.8
+        app.kubernetes.io/instance: my-toxiproxy
+        app.kubernetes.io/version: "2.7.0"
+        app.kubernetes.io/managed-by: Helm
+      annotations:
+        checksum/config: 73442a56e75bbb8e461a2ef6acb2e1425c0601eedf5a29d5bfa703a522ea2c5c
+    spec:
+      serviceAccountName: my-toxiproxy
+      securityContext:
+        {}
+      initContainers:
+      - name: copy-mappings
+        image: "busybox:latest"
+        command: ['sh', '/config/init.sh']
+        volumeMounts:
+        - mountPath: /working
+          name: working
+        - mountPath: /consumer/proxies
+          name: proxies
+        - mountPath: /config/init.sh
+          name: config
+          subPath: init.sh
+      containers:
+      - name: toxiproxy
+        resources:
+          {}
+        image: "ghcr.io/shopify/toxiproxy:2.7.0"
+        imagePullPolicy: IfNotPresent
+        ports:
+          - containerPort: 8474
+            name: admin
+            protocol: TCP
+        livenessProbe:
+          periodSeconds: 30
+          initialDelaySeconds: 10
+          timeoutSeconds: 30
+          failureThreshold: 2
+          httpGet:
+            path: /version
+            port: admin
+        readinessProbe:
+          periodSeconds: 30
+          initialDelaySeconds: 10
+          timeoutSeconds: 30
+          failureThreshold: 2
+          httpGet:
+            path: /version
+            port: admin
+        args:
+          - "-host"
+          - "0.0.0.0"
+          - "-port"
+          - "8474"
+          - "-config"
+          - /home/toxiproxy/proxies/config.json
+        volumeMounts:
+        - mountPath: /home/toxiproxy
+          name: working
+      volumes:
+      - name: working
+        emptyDir: {}
+      - name: proxies
+
+        emptyDir: {}
+
+      - name: config
+        configMap:
+          name: my-toxiproxy-config
+      nodeSelector:
+        kubernetes.io/arch: amd64
+        kubernetes.io/os: linux
+---
+# Source: toxiproxy/templates/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: my-toxiproxy
+  labels:
+    app.kubernetes.io/name: toxiproxy
+    helm.sh/chart: toxiproxy-1.3.8
+    app.kubernetes.io/instance: my-toxiproxy
+    app.kubernetes.io/version: "2.7.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  rules:
+    - host: "chart-example.local"
+      http:
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: my-toxiproxy
+                port:
+                  number: 80

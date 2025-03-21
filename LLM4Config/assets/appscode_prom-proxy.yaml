@@ -1,0 +1,81 @@
+---
+# Source: prom-proxy/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-prom-proxy
+  namespace: default
+  labels:
+    helm.sh/chart: prom-proxy-v2023.03.23
+    app.kubernetes.io/name: prom-proxy
+    app.kubernetes.io/instance: my-prom-proxy
+    app.kubernetes.io/version: "v2023.03.23"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: prom-proxy
+    app.kubernetes.io/instance: my-prom-proxy
+---
+# Source: prom-proxy/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-prom-proxy
+  namespace: default
+  labels:
+    helm.sh/chart: prom-proxy-v2023.03.23
+    app.kubernetes.io/name: prom-proxy
+    app.kubernetes.io/instance: my-prom-proxy
+    app.kubernetes.io/version: "v2023.03.23"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: prom-proxy
+      app.kubernetes.io/instance: my-prom-proxy
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: prom-proxy
+        app.kubernetes.io/instance: my-prom-proxy
+    spec:
+      
+      serviceAccountName: default
+      securityContext:
+        {}
+      containers:
+        - name: prom-proxy
+          securityContext:
+            {}
+          image: "ghcr.io/appscode/b3:v2023.03.23"
+          imagePullPolicy: Always
+          args:
+            - prom-proxy
+          ports:
+            - name: http
+              containerPort: 9090
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+            {}
+          env:
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          emptyDir: {}

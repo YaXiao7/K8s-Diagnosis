@@ -1,0 +1,139 @@
+---
+# Source: prometheus-fastly-exporter/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-prometheus-fastly-exporter
+  labels:
+    helm.sh/chart: prometheus-fastly-exporter-0.4.0
+    app.kubernetes.io/name: prometheus-fastly-exporter
+    app.kubernetes.io/instance: my-prometheus-fastly-exporter
+    app.kubernetes.io/version: "v8.1.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: prometheus-fastly-exporter/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-prometheus-fastly-exporter
+  labels:
+    helm.sh/chart: prometheus-fastly-exporter-0.4.0
+    app.kubernetes.io/name: prometheus-fastly-exporter
+    app.kubernetes.io/instance: my-prometheus-fastly-exporter
+    app.kubernetes.io/version: "v8.1.0"
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  fastly-api-token: dG9rZW4=
+---
+# Source: prometheus-fastly-exporter/templates/role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: my-prometheus-fastly-exporter
+  labels:
+    helm.sh/chart: prometheus-fastly-exporter-0.4.0
+    app.kubernetes.io/name: prometheus-fastly-exporter
+    app.kubernetes.io/instance: my-prometheus-fastly-exporter
+    app.kubernetes.io/version: "v8.1.0"
+    app.kubernetes.io/managed-by: Helm
+rules:
+- apiGroups:      ['extensions']
+  resources:      ['podsecuritypolicies']
+  verbs:          ['use']
+  resourceNames:  [my-prometheus-fastly-exporter]
+---
+# Source: prometheus-fastly-exporter/templates/rolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: my-prometheus-fastly-exporter
+  labels:
+    helm.sh/chart: prometheus-fastly-exporter-0.4.0
+    app.kubernetes.io/name: prometheus-fastly-exporter
+    app.kubernetes.io/instance: my-prometheus-fastly-exporter
+    app.kubernetes.io/version: "v8.1.0"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: my-prometheus-fastly-exporter
+subjects:
+- kind: ServiceAccount
+  name: my-prometheus-fastly-exporter
+---
+# Source: prometheus-fastly-exporter/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-prometheus-fastly-exporter
+  labels:
+    helm.sh/chart: prometheus-fastly-exporter-0.4.0
+    app.kubernetes.io/name: prometheus-fastly-exporter
+    app.kubernetes.io/instance: my-prometheus-fastly-exporter
+    app.kubernetes.io/version: "v8.1.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    {}
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: prometheus-fastly-exporter
+    app.kubernetes.io/instance: my-prometheus-fastly-exporter
+---
+# Source: prometheus-fastly-exporter/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-prometheus-fastly-exporter
+  labels:
+    helm.sh/chart: prometheus-fastly-exporter-0.4.0
+    app.kubernetes.io/name: prometheus-fastly-exporter
+    app.kubernetes.io/instance: my-prometheus-fastly-exporter
+    app.kubernetes.io/version: "v8.1.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus-fastly-exporter
+      app.kubernetes.io/instance: my-prometheus-fastly-exporter
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: prometheus-fastly-exporter
+        app.kubernetes.io/instance: my-prometheus-fastly-exporter
+    spec:
+      serviceAccountName: my-prometheus-fastly-exporter
+      containers:
+        - name: prometheus-fastly-exporter
+          image: "ghcr.io/fastly/fastly-exporter:v8.1.0"
+          imagePullPolicy: IfNotPresent
+          args:
+          env:
+            - name: FASTLY_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: my-prometheus-fastly-exporter
+                  key: fastly-api-token
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 30
+            timeoutSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 30
+            timeoutSeconds: 10

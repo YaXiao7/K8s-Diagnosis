@@ -1,0 +1,122 @@
+---
+# Source: registry/templates/registry.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: default-registry
+  labels:
+    app.kubernetes.io/name: registry
+    helm.sh/chart: registry-0.0.1
+    app.kubernetes.io/instance: my-registry
+    app.kubernetes.io/managed-by: Helm
+type: kubernetes.io/dockerconfigjson
+stringData:
+  .dockerconfigjson: |
+    {"auths":{"index.docker.io":{"auth":"Og==","password":"","username":""}}}
+---
+# Source: registry/templates/socket.yaml
+apiVersion: integration.rock8s.com/v1beta1
+kind: Socket
+metadata:
+  name: registry-replicator
+  labels:
+    app.kubernetes.io/name: registry
+    helm.sh/chart: registry-0.0.1
+    app.kubernetes.io/instance: my-registry
+    app.kubernetes.io/managed-by: Helm
+spec:
+  epoch: "1726475660"
+  interface:
+    config:
+      plug: {}
+      socket: {}
+  resources:
+    - when: [coupled, updated]
+      do: recreate
+      template:
+        apiVersion: batch/v1
+        kind: Job
+        metadata:
+          name: registry-replicator-coupled-or-updated-{% .plug.metadata.namespace %}
+        spec:
+          activeDeadlineSeconds: 360
+          backoffLimit: 6
+          ttlSecondsAfterFinished: 360
+          template:
+            metadata:
+              annotations:
+                sidecar.istio.io/inject: 'false'
+            spec:
+              restartPolicy: Never
+              affinity:
+                nodeAffinity:
+                  requiredDuringSchedulingIgnoredDuringExecution:
+                    nodeSelectorTerms:
+                      - matchExpressions:
+                          - key: kubernetes.io/arch
+                            operator: In
+                            values:
+                              - amd64
+              containers:
+                - name: kubectl
+                  image: bitnami/kubectl:1.20.9
+                  command:
+                    - sh
+                    - -c
+                    - |-
+                      cat <<EOF | kubectl get -f - -o yaml | grep -v '^\s*namespace:\s' | kubectl apply -f - --namespace={% .plug.metadata.namespace %}
+                      apiVersion: v1
+                      kind: Secret
+                      metadata:
+                        name: default-registry
+                        namespace: 
+                      EOF
+                      kubectl get pods -n default \
+                        -l job-name=registry-replicator-coupled-or-updated-{% .plug.metadata.namespace %} \
+                        --field-selector status.phase=Failed \
+                        -o yaml | kubectl delete -f -
+---
+# Source: registry/templates/role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: registry-default-default
+  labels:
+    app.kubernetes.io/name: registry
+    helm.sh/chart: registry-0.0.1
+    app.kubernetes.io/instance: my-registry
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: '0'
+    helm.sh/hook-delete-policy: before-hook-creation
+rules:
+  - apiGroups: ['']
+    resources:
+      - pods
+      - secrets
+    verbs:
+      - '*'
+---
+# Source: registry/templates/role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: registry-default-default
+  labels:
+    app.kubernetes.io/name: registry
+    helm.sh/chart: registry-0.0.1
+    app.kubernetes.io/instance: my-registry
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: '0'
+    helm.sh/hook-delete-policy: before-hook-creation
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: registry-default-default
+subjects:
+  - kind: ServiceAccount
+    name: default
+    namespace: default

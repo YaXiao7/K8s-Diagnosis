@@ -1,0 +1,111 @@
+---
+# Source: servicegateway/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-servicegateway
+  labels:
+    app.kubernetes.io/name: servicegateway
+    helm.sh/chart: servicegateway-2.3.3
+    app.kubernetes.io/instance: my-servicegateway
+    app.kubernetes.io/version: "v2.3.3"
+    app.kubernetes.io/managed-by: Helm
+data:
+  servicegateway.json: |
+    {}
+---
+# Source: servicegateway/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-servicegateway
+  labels:
+    app.kubernetes.io/name: servicegateway
+    helm.sh/chart: servicegateway-2.3.3
+    app.kubernetes.io/instance: my-servicegateway
+    app.kubernetes.io/version: "v2.3.3"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 8080
+      protocol: TCP
+      name: http
+    - port: 8081
+      targetPort: 8081
+      protocol: TCP
+      name: admin
+    - port: 8082
+      targetPort: 8082
+      protocol: TCP
+      name: monitoring
+  selector:
+    app.kubernetes.io/name: servicegateway
+    app.kubernetes.io/instance: my-servicegateway
+---
+# Source: servicegateway/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-servicegateway
+  labels:
+    app.kubernetes.io/name: servicegateway
+    helm.sh/chart: servicegateway-2.3.3
+    app.kubernetes.io/instance: my-servicegateway
+    app.kubernetes.io/version: "v2.3.3"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: servicegateway
+      app.kubernetes.io/instance: my-servicegateway
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: servicegateway
+        app.kubernetes.io/instance: my-servicegateway
+      annotations:
+        checksum/config: 115b2b960fbf723f1a8b9ffebd81789b960df3083892c5f1c270db01e6f905b2
+        timestamp: '2024-09-16 19:51:33.492269201 +0930 ACST m=+1.082188025'
+    spec:
+      containers:
+        - name: servicegateway
+          image: "quay.io/mittwald/servicegateway:v2.3.3"
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: admin
+              containerPort: 8081
+              protocol: TCP
+            - name: monitoring
+              containerPort: 8082
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /status
+              port: monitoring
+          readinessProbe:
+            httpGet:
+              path: /status
+              port: monitoring
+          resources:
+            {}
+          args:
+            - -debug=false
+            - -config=/srv/servicegateway/config/servicegateway.json
+            - -port=8080
+            - -monitor-addr=0.0.0.0
+            - -monitor-port=8082
+            - -admin-port=8081
+            - -admin-addr=127.0.0.1
+          volumeMounts:
+            - name: config-volume
+              mountPath: /srv/servicegateway/config
+      volumes:
+        - name: config-volume
+          configMap:
+            name: my-servicegateway

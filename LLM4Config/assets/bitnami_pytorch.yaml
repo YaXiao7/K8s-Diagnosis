@@ -1,0 +1,246 @@
+---
+# Source: pytorch/templates/networkpolicy.yaml
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: my-pytorch
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-pytorch
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: pytorch
+    app.kubernetes.io/version: 2.4.1
+    helm.sh/chart: pytorch-4.2.17
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: my-pytorch
+      app.kubernetes.io/name: pytorch
+  policyTypes:
+    - Ingress
+    - Egress
+  egress:
+    - {}
+  ingress:
+    # Allow inbound connections
+    - ports:
+        - port: 49875
+---
+# Source: pytorch/templates/pdb.yaml
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: my-pytorch
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-pytorch
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: pytorch
+    app.kubernetes.io/version: 2.4.1
+    helm.sh/chart: pytorch-4.2.17
+    app.kubernetes.io/component: master
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: my-pytorch
+      app.kubernetes.io/name: pytorch
+      app.kubernetes.io/component: master
+---
+# Source: pytorch/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-pytorch
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-pytorch
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: pytorch
+    app.kubernetes.io/version: 2.4.1
+    helm.sh/chart: pytorch-4.2.17
+automountServiceAccountToken: false
+---
+# Source: pytorch/templates/pvc.yaml
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: my-pytorch
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-pytorch
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: pytorch
+    app.kubernetes.io/version: 2.4.1
+    helm.sh/chart: pytorch-4.2.17
+spec:
+  accessModes:
+    - "ReadWriteOnce"
+  resources:
+    requests:
+      storage: "8Gi"
+---
+# Source: pytorch/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-pytorch
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-pytorch
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: pytorch
+    app.kubernetes.io/version: 2.4.1
+    helm.sh/chart: pytorch-4.2.17
+    app.kubernetes.io/component: master
+spec:
+  type: ClusterIP
+  ports:
+    - port: 49875
+      targetPort: pytorch
+      name: pytorch
+      nodePort: null
+  selector:
+    app.kubernetes.io/instance: my-pytorch
+    app.kubernetes.io/name: pytorch
+    app.kubernetes.io/component: master
+---
+# Source: pytorch/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-pytorch
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-pytorch
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: pytorch
+    app.kubernetes.io/version: 2.4.1
+    helm.sh/chart: pytorch-4.2.17
+    app.kubernetes.io/component: master
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: my-pytorch
+      app.kubernetes.io/name: pytorch
+      app.kubernetes.io/component: master
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: my-pytorch
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: pytorch
+        app.kubernetes.io/version: 2.4.1
+        helm.sh/chart: pytorch-4.2.17
+        app.kubernetes.io/component: master
+    spec:
+      
+      serviceAccountName: my-pytorch
+      automountServiceAccountToken: false
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/instance: my-pytorch
+                    app.kubernetes.io/name: pytorch
+                    app.kubernetes.io/component: master
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+        fsGroupChangePolicy: Always
+        supplementalGroups: []
+        sysctls: []
+      containers:
+        - name: master
+          image: docker.io/bitnami/pytorch:2.4.1-debian-12-r0
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsGroup: 1001
+            runAsNonRoot: true
+            runAsUser: 1001
+            seLinuxOptions: null
+            seccompProfile:
+              type: RuntimeDefault
+          command:
+            - bash
+            - -c
+            - |
+              sleep infinity
+          env:
+          envFrom:
+          resources:
+            limits:
+              cpu: 750m
+              ephemeral-storage: 2Gi
+              memory: 768Mi
+            requests:
+              cpu: 500m
+              ephemeral-storage: 50Mi
+              memory: 512Mi
+          ports:
+            - name: pytorch
+              containerPort: 49875
+          livenessProbe:
+            failureThreshold: 5
+            initialDelaySeconds: 5
+            periodSeconds: 20
+            successThreshold: 1
+            timeoutSeconds: 20
+            exec:
+              command:
+                - python
+                - -c
+                - import torchvision; print(torchvision.__version__)
+          readinessProbe:
+            failureThreshold: 5
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            successThreshold: 1
+            timeoutSeconds: 20
+            exec:
+              command:
+                - python
+                - -c
+                - import torch; print(torch.__config__.show())
+          startupProbe:
+            failureThreshold: 5
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            successThreshold: 1
+            timeoutSeconds: 20
+            exec:
+              command:
+                - python
+                - -c
+                - import torch; print(torch.__config__.show())
+          volumeMounts:
+            - name: empty-dir
+              mountPath: /app
+              subPath: app-dir
+            - name: empty-dir
+              mountPath: /tmp
+              subPath: tmp-dir
+            - name: data
+              mountPath: /bitnami/pytorch
+      volumes:
+        - name: empty-dir
+          emptyDir: {}
+        - name: data
+          persistentVolumeClaim:
+            claimName: my-pytorch

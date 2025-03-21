@@ -1,0 +1,717 @@
+---
+# Source: blob-csi-driver/templates/serviceaccount-csi-blob-controller.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: csi-blob-controller-sa
+  namespace: default
+  labels:
+    app.kubernetes.io/name: blob-csi-driver
+    app.kubernetes.io/instance: my-blob-csi-driver
+    app.kubernetes.io/component: csi-driver
+    app.kubernetes.io/part-of: blob-csi-driver
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "v1.24.3"
+    helm.sh/chart: blob-csi-driver-v1.24.3
+---
+# Source: blob-csi-driver/templates/serviceaccount-csi-blob-node.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: csi-blob-node-sa
+  namespace: default
+  labels:
+    app.kubernetes.io/name: blob-csi-driver
+    app.kubernetes.io/instance: my-blob-csi-driver
+    app.kubernetes.io/component: csi-driver
+    app.kubernetes.io/part-of: blob-csi-driver
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "v1.24.3"
+    helm.sh/chart: blob-csi-driver-v1.24.3
+---
+# Source: blob-csi-driver/templates/rbac-csi-blob-controller.yaml
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: blob-external-provisioner-role
+  labels:
+    app.kubernetes.io/name: blob-csi-driver
+    app.kubernetes.io/instance: my-blob-csi-driver
+    app.kubernetes.io/component: csi-driver
+    app.kubernetes.io/part-of: blob-csi-driver
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "v1.24.3"
+    helm.sh/chart: blob-csi-driver-v1.24.3
+rules:
+  - apiGroups: [""]
+    resources: ["persistentvolumes"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list", "watch", "update"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["csinodes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+---
+# Source: blob-csi-driver/templates/rbac-csi-blob-controller.yaml
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: blob-external-resizer-role
+  labels:
+    app.kubernetes.io/name: blob-csi-driver
+    app.kubernetes.io/instance: my-blob-csi-driver
+    app.kubernetes.io/component: csi-driver
+    app.kubernetes.io/part-of: blob-csi-driver
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "v1.24.3"
+    helm.sh/chart: blob-csi-driver-v1.24.3
+rules:
+  - apiGroups: [""]
+    resources: ["persistentvolumes"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims/status"]
+    verbs: ["update", "patch"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["list", "watch", "create", "update", "patch"]
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+---
+# Source: blob-csi-driver/templates/rbac-csi-blob-controller.yaml
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: csi-blob-controller-secret-role
+  labels:
+    app.kubernetes.io/name: blob-csi-driver
+    app.kubernetes.io/instance: my-blob-csi-driver
+    app.kubernetes.io/component: csi-driver
+    app.kubernetes.io/part-of: blob-csi-driver
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "v1.24.3"
+    helm.sh/chart: blob-csi-driver-v1.24.3
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "create"]
+---
+# Source: blob-csi-driver/templates/rbac-csi-blob-node.yaml
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: csi-blob-node-secret-role
+  labels:
+    app.kubernetes.io/name: blob-csi-driver
+    app.kubernetes.io/instance: my-blob-csi-driver
+    app.kubernetes.io/component: csi-driver
+    app.kubernetes.io/part-of: blob-csi-driver
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "v1.24.3"
+    helm.sh/chart: blob-csi-driver-v1.24.3
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get"]
+---
+# Source: blob-csi-driver/templates/rbac-csi-blob-controller.yaml
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: blob-csi-provisioner-binding
+  labels:
+    app.kubernetes.io/name: blob-csi-driver
+    app.kubernetes.io/instance: my-blob-csi-driver
+    app.kubernetes.io/component: csi-driver
+    app.kubernetes.io/part-of: blob-csi-driver
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "v1.24.3"
+    helm.sh/chart: blob-csi-driver-v1.24.3
+subjects:
+  - kind: ServiceAccount
+    name: csi-blob-controller-sa
+    namespace: default
+roleRef:
+  kind: ClusterRole
+  name: blob-external-provisioner-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: blob-csi-driver/templates/rbac-csi-blob-controller.yaml
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: blob-csi-resizer-role
+  labels:
+    app.kubernetes.io/name: blob-csi-driver
+    app.kubernetes.io/instance: my-blob-csi-driver
+    app.kubernetes.io/component: csi-driver
+    app.kubernetes.io/part-of: blob-csi-driver
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "v1.24.3"
+    helm.sh/chart: blob-csi-driver-v1.24.3
+subjects:
+  - kind: ServiceAccount
+    name: csi-blob-controller-sa
+    namespace: default
+roleRef:
+  kind: ClusterRole
+  name: blob-external-resizer-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: blob-csi-driver/templates/rbac-csi-blob-controller.yaml
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: csi-blob-controller-secret-binding
+  labels:
+    app.kubernetes.io/name: blob-csi-driver
+    app.kubernetes.io/instance: my-blob-csi-driver
+    app.kubernetes.io/component: csi-driver
+    app.kubernetes.io/part-of: blob-csi-driver
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "v1.24.3"
+    helm.sh/chart: blob-csi-driver-v1.24.3
+subjects:
+  - kind: ServiceAccount
+    name: csi-blob-controller-sa
+    namespace: default
+roleRef:
+  kind: ClusterRole
+  name: csi-blob-controller-secret-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: blob-csi-driver/templates/rbac-csi-blob-node.yaml
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: csi-blob-node-secret-binding
+  labels:
+    app.kubernetes.io/name: blob-csi-driver
+    app.kubernetes.io/instance: my-blob-csi-driver
+    app.kubernetes.io/component: csi-driver
+    app.kubernetes.io/part-of: blob-csi-driver
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "v1.24.3"
+    helm.sh/chart: blob-csi-driver-v1.24.3
+subjects:
+  - kind: ServiceAccount
+    name: csi-blob-node-sa
+    namespace: default
+roleRef:
+  kind: ClusterRole
+  name: csi-blob-node-secret-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: blob-csi-driver/templates/csi-blob-node.yaml
+kind: DaemonSet
+apiVersion: apps/v1
+metadata:
+  name: csi-blob-node
+  namespace: default
+  labels:
+    app: csi-blob-node
+    app.kubernetes.io/name: blob-csi-driver
+    app.kubernetes.io/instance: my-blob-csi-driver
+    app.kubernetes.io/component: csi-driver
+    app.kubernetes.io/part-of: blob-csi-driver
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "v1.24.3"
+    helm.sh/chart: blob-csi-driver-v1.24.3
+spec:
+  updateStrategy:
+    rollingUpdate:
+      maxUnavailable: 1
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: csi-blob-node
+      app.kubernetes.io/name: blob-csi-driver
+      app.kubernetes.io/instance: my-blob-csi-driver
+  template:
+    metadata:
+      labels:
+        app: csi-blob-node
+        app.kubernetes.io/name: blob-csi-driver
+        app.kubernetes.io/instance: my-blob-csi-driver
+        app.kubernetes.io/component: csi-driver
+        app.kubernetes.io/part-of: blob-csi-driver
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/version: "v1.24.3"
+        helm.sh/chart: blob-csi-driver-v1.24.3
+    spec:
+      hostPID: true
+      hostNetwork: true
+      dnsPolicy: Default
+      serviceAccountName: csi-blob-node-sa
+      nodeSelector:
+        kubernetes.io/os: linux
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: type
+                    operator: NotIn
+                    values:
+                      - virtual-kubelet
+      priorityClassName: "system-cluster-critical"
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      tolerations:
+        - operator: Exists
+      initContainers:
+        - name: install-blobfuse-proxy
+          image: "mcr.microsoft.com/oss/kubernetes-csi/blob-csi:v1.24.3"
+          imagePullPolicy: IfNotPresent
+          command:
+            - "/blobfuse-proxy/init.sh"
+          securityContext:
+            privileged: true
+            capabilities:
+              drop:
+              - ALL
+          env:
+            - name: DEBIAN_FRONTEND
+              value: "noninteractive"
+            - name: INSTALL_BLOBFUSE
+              value: "true"
+            - name: BLOBFUSE_VERSION
+              value: "1.4.5"
+            - name: INSTALL_BLOBFUSE2
+              value: "true"
+            - name: BLOBFUSE2_VERSION
+              value: "2.3.2"
+            - name: INSTALL_BLOBFUSE_PROXY
+              value: "true"
+            - name: SET_MAX_OPEN_FILE_NUM
+              value: "true"
+            - name: MAX_FILE_NUM
+              value: "9000000"
+            - name: DISABLE_UPDATEDB
+              value: "true"
+            - name: KUBELET_PATH
+              value: "/var/lib/kubelet"
+          volumeMounts:
+            - name: host-usr
+              mountPath: /host/usr
+            - name: host-usr-local
+              mountPath: /host/usr/local
+            - name: host-etc
+              mountPath: /host/etc
+      containers:
+        - name: liveness-probe
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - mountPath: /csi
+              name: socket-dir
+          image: "mcr.microsoft.com/oss/kubernetes-csi/livenessprobe:v2.13.0"
+          args:
+            - --csi-address=/csi/csi.sock
+            - --probe-timeout=3s
+            - --health-port=29633
+            - --v=2
+          resources:
+            limits:
+              memory: 100Mi
+            requests:
+              cpu: 10m
+              memory: 20Mi
+          securityContext:
+            capabilities:
+              drop:
+              - ALL
+        - name: node-driver-registrar
+          image: "mcr.microsoft.com/oss/kubernetes-csi/csi-node-driver-registrar:v2.12.0"
+          args:
+            - --csi-address=$(ADDRESS)
+            - --kubelet-registration-path=$(DRIVER_REG_SOCK_PATH)
+            - --v=2
+          livenessProbe:
+            exec:
+              command:
+                - /csi-node-driver-registrar
+                - --kubelet-registration-path=$(DRIVER_REG_SOCK_PATH)
+                - --mode=kubelet-registration-probe
+            initialDelaySeconds: 30
+            timeoutSeconds: 15
+          env:
+            - name: ADDRESS
+              value: /csi/csi.sock
+            - name: DRIVER_REG_SOCK_PATH
+              value: /var/lib/kubelet/plugins/blob.csi.azure.com/csi.sock
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
+            - name: registration-dir
+              mountPath: /registration
+          resources:
+            limits:
+              memory: 100Mi
+            requests:
+              cpu: 10m
+              memory: 20Mi
+          securityContext:
+            capabilities:
+              drop:
+              - ALL
+        - name: blob
+          image: "mcr.microsoft.com/oss/kubernetes-csi/blob-csi:v1.24.3"
+          args:
+            - "--v=5"
+            - "--endpoint=$(CSI_ENDPOINT)"
+            - "--blobfuse-proxy-endpoint=$(BLOBFUSE_PROXY_ENDPOINT)"
+            - "--enable-blobfuse-proxy=true"
+            - "--nodeid=$(KUBE_NODE_NAME)"
+            - "--drivername=blob.csi.azure.com"
+            - "--cloud-config-secret-name=azure-cloud-provider"
+            - "--cloud-config-secret-namespace=kube-system"
+            - "--custom-user-agent="
+            - "--user-agent-suffix=OSS-helm"
+            - "--allow-empty-cloud-config=true"
+            - "--enable-get-volume-stats=false"
+            - "--append-timestamp-cache-dir=false"
+            - "--mount-permissions=511"
+            - "--allow-inline-volume-key-access-with-idenitity=false"
+            - "--enable-aznfs-mount=true"
+            - "--metrics-address=0.0.0.0:29635"
+          livenessProbe:
+            failureThreshold: 5
+            httpGet:
+              host: localhost
+              path: /healthz
+              port: 29633
+            initialDelaySeconds: 30
+            timeoutSeconds: 10
+            periodSeconds: 30
+          env:
+            - name: AZURE_CREDENTIAL_FILE
+              valueFrom:
+                configMapKeyRef:
+                  name: azure-cred-file
+                  key: path
+                  optional: true
+            - name: CSI_ENDPOINT
+              value: unix:///csi/csi.sock
+            - name: BLOBFUSE_PROXY_ENDPOINT
+              value: unix:///csi/blobfuse-proxy.sock
+            - name: KUBE_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: spec.nodeName
+            - name: AZURE_GO_SDK_LOG_LEVEL
+              value: 
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            privileged: true
+            capabilities:
+              drop:
+              - ALL
+          volumeMounts:
+            - mountPath: /csi
+              name: socket-dir
+            - mountPath: /var/lib/kubelet/
+              mountPropagation: Bidirectional
+              name: mountpoint-dir
+            - mountPath: /etc/kubernetes/
+              name: azure-cred
+            - mountPath: /mnt
+              name: blob-cache
+            - mountPath: /opt/microsoft/aznfs/data
+              name: aznfs-data
+            - mountPath: /lib/modules
+              name: lib-modules
+              readOnly: true
+          resources:
+            limits:
+              memory: 2100Mi
+            requests:
+              cpu: 10m
+              memory: 20Mi
+        - name: aznfswatchdog
+          image: "mcr.microsoft.com/oss/kubernetes-csi/blob-csi:v1.24.3"
+          command:
+            - "aznfswatchdog"
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            privileged: true
+            capabilities:
+              drop:
+              - ALL
+          resources:
+            limits:
+              memory: 100Mi
+            requests:
+              cpu: 10m
+              memory: 20Mi
+          volumeMounts:
+            - mountPath: /opt/microsoft/aznfs/data
+              name: aznfs-data
+            - mountPath: /var/lib/kubelet/
+              mountPropagation: Bidirectional
+              name: mountpoint-dir
+      volumes:
+        - name: host-usr
+          hostPath:
+            path: /usr
+        - name: host-usr-local
+          hostPath:
+            path: /usr/local
+        - name: host-etc
+          hostPath:
+            path: /etc
+        - hostPath:
+            path: /var/lib/kubelet/plugins/blob.csi.azure.com
+            type: DirectoryOrCreate
+          name: socket-dir
+        - hostPath:
+            path: /var/lib/kubelet/
+            type: DirectoryOrCreate
+          name: mountpoint-dir
+        - hostPath:
+            path: /var/lib/kubelet/plugins_registry/
+            type: DirectoryOrCreate
+          name: registration-dir
+        - hostPath:
+            path: /etc/kubernetes/
+            type: DirectoryOrCreate
+          name: azure-cred
+        - hostPath:
+            path: /mnt
+          name: blob-cache
+        - hostPath:
+            path: /opt/microsoft/aznfs/data
+            type: DirectoryOrCreate
+          name: aznfs-data
+        - name: lib-modules
+          hostPath:
+            path: /lib/modules
+            type: DirectoryOrCreate
+---
+# Source: blob-csi-driver/templates/csi-blob-controller.yaml
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: csi-blob-controller
+  namespace: default
+  labels:
+    app: csi-blob-controller
+    app.kubernetes.io/name: blob-csi-driver
+    app.kubernetes.io/instance: my-blob-csi-driver
+    app.kubernetes.io/component: csi-driver
+    app.kubernetes.io/part-of: blob-csi-driver
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "v1.24.3"
+    helm.sh/chart: blob-csi-driver-v1.24.3
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: csi-blob-controller
+      app.kubernetes.io/name: blob-csi-driver
+      app.kubernetes.io/instance: my-blob-csi-driver
+  template:
+    metadata:
+      labels:
+        app: csi-blob-controller
+        app.kubernetes.io/name: blob-csi-driver
+        app.kubernetes.io/instance: my-blob-csi-driver
+        app.kubernetes.io/component: csi-driver
+        app.kubernetes.io/part-of: blob-csi-driver
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/version: "v1.24.3"
+        helm.sh/chart: blob-csi-driver-v1.24.3
+    spec:
+      hostNetwork: true
+      serviceAccountName: csi-blob-controller-sa
+      nodeSelector:
+        kubernetes.io/os: linux
+      priorityClassName: "system-cluster-critical"
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      tolerations:
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/master
+          operator: Exists
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/controlplane
+          operator: Exists
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/control-plane
+          operator: Exists
+      containers:
+        - name: csi-provisioner
+          image: "mcr.microsoft.com/oss/kubernetes-csi/csi-provisioner:v5.0.1"
+          args:
+            - "-v=2"
+            - "--csi-address=$(ADDRESS)"
+            - "--leader-election"
+            - "--leader-election-namespace=default"
+            - "--timeout=1200s"
+            - "--extra-create-metadata=true"
+            - "--kube-api-qps=50"
+            - "--kube-api-burst=100"
+            - "--feature-gates=HonorPVReclaimPolicy=true"
+          env:
+            - name: ADDRESS
+              value: /csi/csi.sock
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - mountPath: /csi
+              name: socket-dir
+          resources:
+            limits:
+              memory: 500Mi
+            requests:
+              cpu: 10m
+              memory: 20Mi
+          securityContext:
+            capabilities:
+              drop:
+              - ALL
+        - name: liveness-probe
+          image: "mcr.microsoft.com/oss/kubernetes-csi/livenessprobe:v2.13.0"
+          args:
+            - --csi-address=/csi/csi.sock
+            - --probe-timeout=3s
+            - --http-endpoint=localhost:29632
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
+          resources:
+            limits:
+              memory: 100Mi
+            requests:
+              cpu: 10m
+              memory: 20Mi
+          securityContext:
+            capabilities:
+              drop:
+              - ALL
+        - name: blob
+          image: "mcr.microsoft.com/oss/kubernetes-csi/blob-csi:v1.24.3"
+          args:
+            - "--v=5"
+            - "--endpoint=$(CSI_ENDPOINT)"
+            - "--metrics-address=0.0.0.0:29634"
+            - "--drivername=blob.csi.azure.com"
+            - "--custom-user-agent="
+            - "--user-agent-suffix=OSS-helm"
+            - "--cloud-config-secret-name=azure-cloud-provider"
+            - "--cloud-config-secret-namespace=kube-system"
+            - "--allow-empty-cloud-config=true"
+          ports:
+            - containerPort: 29634
+              name: metrics
+              protocol: TCP
+          livenessProbe:
+            failureThreshold: 5
+            httpGet:
+              path: /healthz
+              host: localhost
+              port: 29632
+            initialDelaySeconds: 30
+            timeoutSeconds: 10
+            periodSeconds: 30
+          env:
+            - name: AZURE_CREDENTIAL_FILE
+              valueFrom:
+                configMapKeyRef:
+                  name: azure-cred-file
+                  key: path
+                  optional: true
+            - name: CSI_ENDPOINT
+              value: unix:///csi/csi.sock
+            - name: AZURE_GO_SDK_LOG_LEVEL
+              value: 
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - mountPath: /csi
+              name: socket-dir
+            - mountPath: /etc/kubernetes/
+              name: azure-cred
+          resources:
+            limits:
+              memory: 200Mi
+            requests:
+              cpu: 10m
+              memory: 20Mi
+          securityContext:
+            capabilities:
+              drop:
+              - ALL
+        - name: csi-resizer
+          image: "mcr.microsoft.com/oss/kubernetes-csi/csi-resizer:v1.11.1"
+          args:
+            - "-csi-address=$(ADDRESS)"
+            - "-v=2"
+            - "-leader-election"
+            - "--leader-election-namespace=default"
+            - '-handle-volume-inuse-error=false'
+          env:
+            - name: ADDRESS
+              value: /csi/csi.sock
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
+          resources:
+            limits:
+              memory: 500Mi
+            requests:
+              cpu: 10m
+              memory: 20Mi
+          securityContext:
+            capabilities:
+              drop:
+              - ALL
+      volumes:
+        - name: socket-dir
+          emptyDir: {}
+        - name: azure-cred
+          hostPath:
+            path: /etc/kubernetes/
+            type: DirectoryOrCreate
+---
+# Source: blob-csi-driver/templates/csi-blob-driver.yaml
+apiVersion: storage.k8s.io/v1
+kind: CSIDriver
+metadata:
+  name: blob.csi.azure.com
+  labels:
+    app.kubernetes.io/name: blob-csi-driver
+    app.kubernetes.io/instance: my-blob-csi-driver
+    app.kubernetes.io/component: csi-driver
+    app.kubernetes.io/part-of: blob-csi-driver
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "v1.24.3"
+    helm.sh/chart: blob-csi-driver-v1.24.3
+spec:
+  attachRequired: false
+  podInfoOnMount: true
+  fsGroupPolicy: ReadWriteOnceWithFSType
+  volumeLifecycleModes:
+    - Persistent
+    - Ephemeral
+  tokenRequests:
+    - audience: api://AzureADTokenExchange

@@ -1,0 +1,2516 @@
+---
+# Source: thingsboard/charts/kafka/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-thingsboard-kafka
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: kafka
+    helm.sh/chart: kafka-15.3.4
+    app.kubernetes.io/instance: my-thingsboard
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: kafka
+  annotations:
+automountServiceAccountToken: true
+---
+# Source: thingsboard/charts/redis/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+automountServiceAccountToken: true
+metadata:
+  name: my-thingsboard-redis
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: redis
+    helm.sh/chart: redis-16.4.5
+    app.kubernetes.io/instance: my-thingsboard
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: thingsboard/templates/serviceaccount.yaml
+#
+# Copyright © 2016-2020 The Thingsboard Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-thingsboard
+  labels:
+    helm.sh/chart: thingsboard-0.1.3
+    app.kubernetes.io/name: thingsboard
+    app.kubernetes.io/instance: my-thingsboard
+    app.kubernetes.io/version: "3.4.1"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: thingsboard/charts/postgresql-ha/templates/pgpool/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-thingsboard-pg-pgpool
+  labels:
+    app.kubernetes.io/name: pg
+    helm.sh/chart: postgresql-ha-8.5.2
+    app.kubernetes.io/instance: my-thingsboard
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: pgpool
+type: Opaque
+data:
+  admin-password: "c2V0cGxlYXNl"
+---
+# Source: thingsboard/charts/postgresql-ha/templates/postgresql/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-thingsboard-pg-postgresql
+  labels:
+    app.kubernetes.io/name: pg
+    helm.sh/chart: postgresql-ha-8.5.2
+    app.kubernetes.io/instance: my-thingsboard
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: postgresql
+type: Opaque
+data:
+  postgresql-password: "c2V0cGxlYXNl"
+  repmgr-password: "c2V0cGxlYXNl"
+---
+# Source: thingsboard/charts/redis/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-thingsboard-redis
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: redis
+    helm.sh/chart: redis-16.4.5
+    app.kubernetes.io/instance: my-thingsboard
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  redis-password: "c2V0cGxlYXNl"
+---
+# Source: thingsboard/charts/kafka/charts/zookeeper/templates/scripts-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-thingsboard-zookeeper-scripts
+  namespace: default
+  labels:
+    app.kubernetes.io/name: zookeeper
+    helm.sh/chart: zookeeper-8.1.1
+    app.kubernetes.io/instance: my-thingsboard
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: zookeeper
+data:
+  init-certs.sh: |-
+    #!/bin/bash
+  setup.sh: |-
+    #!/bin/bash
+
+    # Execute entrypoint as usual after obtaining ZOO_SERVER_ID
+    # check ZOO_SERVER_ID in persistent volume via myid
+    # if not present, set based on POD hostname
+    if [[ -f "/bitnami/zookeeper/data/myid" ]]; then
+        export ZOO_SERVER_ID="$(cat /bitnami/zookeeper/data/myid)"
+    else
+        HOSTNAME="$(hostname -s)"
+        if [[ $HOSTNAME =~ (.*)-([0-9]+)$ ]]; then
+            ORD=${BASH_REMATCH[2]}
+            export ZOO_SERVER_ID="$((ORD + 1 ))"
+        else
+            echo "Failed to get index from hostname $HOST"
+            exit 1
+        fi
+    fi
+    exec /entrypoint.sh /run.sh
+---
+# Source: thingsboard/charts/kafka/templates/scripts-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-thingsboard-kafka-scripts
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: kafka
+    helm.sh/chart: kafka-15.3.4
+    app.kubernetes.io/instance: my-thingsboard
+    app.kubernetes.io/managed-by: Helm
+data:
+  setup.sh: |-
+    #!/bin/bash
+
+    ID="${MY_POD_NAME#"my-thingsboard-kafka-"}"
+    if [[ -f "/bitnami/kafka/data/meta.properties" ]]; then
+        export KAFKA_CFG_BROKER_ID="$(grep "broker.id" /bitnami/kafka/data/meta.properties | awk -F '=' '{print $2}')"
+    else
+        export KAFKA_CFG_BROKER_ID="$((ID + 0))"
+    fi
+
+    exec /entrypoint.sh /run.sh
+---
+# Source: thingsboard/charts/postgresql-ha/templates/postgresql/hooks-scripts-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-thingsboard-pg-postgresql-hooks-scripts
+  labels:
+    app.kubernetes.io/name: pg
+    helm.sh/chart: postgresql-ha-8.5.2
+    app.kubernetes.io/instance: my-thingsboard
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: postgresql
+data:
+  pre-stop.sh: |-
+    #!/bin/bash
+    set -o errexit
+    set -o pipefail
+    set -o nounset
+
+    # Debug section
+    exec 3>&1
+    exec 4>&2
+
+    # Load Libraries
+    . /opt/bitnami/scripts/liblog.sh
+    . /opt/bitnami/scripts/libpostgresql.sh
+    . /opt/bitnami/scripts/librepmgr.sh
+
+    # Load PostgreSQL & repmgr environment variables
+    . /opt/bitnami/scripts/postgresql-env.sh
+
+    # Auxiliary functions
+    is_new_primary_ready() {
+        return_value=1
+        currenty_primary_node="$(repmgr_get_primary_node)"
+        currenty_primary_host="$(echo $currenty_primary_node | awk '{print $1}')"
+
+        info "$currenty_primary_host != $REPMGR_NODE_NETWORK_NAME"
+        if [[ $(echo $currenty_primary_node | wc -w) -eq 2 ]] && [[ "$currenty_primary_host" != "$REPMGR_NODE_NETWORK_NAME" ]]; then
+            info "New primary detected, leaving the cluster..."
+            return_value=0
+        else
+            info "Waiting for a new primary to be available..."
+        fi
+        return $return_value
+    }
+
+    export MODULE="pre-stop-hook"
+
+    if [[ "${BITNAMI_DEBUG}" == "true" ]]; then
+        info "Bash debug is on"
+    else
+        info "Bash debug is off"
+        exec 1>/dev/null
+        exec 2>/dev/null
+    fi
+
+    postgresql_enable_nss_wrapper
+
+    # Prepare env vars for managing roles
+    readarray -t primary_node < <(repmgr_get_upstream_node)
+    primary_host="${primary_node[0]}"
+
+    # Stop postgresql for graceful exit.
+    postgresql_stop
+
+    if [[ -z "$primary_host" ]] || [[ "$primary_host" == "$REPMGR_NODE_NETWORK_NAME" ]]; then
+        info "Primary node need to wait for a new primary node before leaving the cluster"
+        retry_while is_new_primary_ready 10 5
+    else
+        info "Standby node doesn't need to wait, leaving the cluster."
+    fi
+---
+# Source: thingsboard/charts/redis/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-thingsboard-redis-configuration
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: redis
+    helm.sh/chart: redis-16.4.5
+    app.kubernetes.io/instance: my-thingsboard
+    app.kubernetes.io/managed-by: Helm
+data:
+  redis.conf: |-
+    # User-supplied common configuration:
+    # Enable AOF https://redis.io/topics/persistence#append-only-file
+    appendonly yes
+    # Disable RDB persistence, AOF persistence already enabled.
+    save ""
+    # End of common configuration
+  master.conf: |-
+    dir /data
+    # User-supplied master configuration:
+    rename-command FLUSHALL ""
+    # End of master configuration
+  replica.conf: |-
+    dir /data
+    slave-read-only yes
+    # User-supplied replica configuration:
+    rename-command FLUSHDB ""
+    rename-command FLUSHALL ""
+    # End of replica configuration
+---
+# Source: thingsboard/charts/redis/templates/health-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-thingsboard-redis-health
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: redis
+    helm.sh/chart: redis-16.4.5
+    app.kubernetes.io/instance: my-thingsboard
+    app.kubernetes.io/managed-by: Helm
+data:
+  ping_readiness_local.sh: |-
+    #!/bin/bash
+
+    [[ -f $REDIS_PASSWORD_FILE ]] && export REDIS_PASSWORD="$(< "${REDIS_PASSWORD_FILE}")"
+    [[ -n "$REDIS_PASSWORD" ]] && export REDISCLI_AUTH="$REDIS_PASSWORD"
+    response=$(
+      timeout -s 3 $1 \
+      redis-cli \
+        -h localhost \
+        -p $REDIS_PORT \
+        ping
+    )
+    if [ $? == 124 ]; then
+      echo "Timed out"
+      exit 1
+    fi
+    if [ "$response" != "PONG" ]; then
+      echo "$response"
+      exit 1
+    fi
+  ping_liveness_local.sh: |-
+    #!/bin/bash
+
+    [[ -f $REDIS_PASSWORD_FILE ]] && export REDIS_PASSWORD="$(< "${REDIS_PASSWORD_FILE}")"
+    [[ -n "$REDIS_PASSWORD" ]] && export REDISCLI_AUTH="$REDIS_PASSWORD"
+    response=$(
+      timeout -s 3 $1 \
+      redis-cli \
+        -h localhost \
+        -p $REDIS_PORT \
+        ping
+    )
+    if [ $? == 124 ]; then
+      echo "Timed out"
+      exit 1
+    fi
+    responseFirstWord=$(echo $response | head -n1 | awk '{print $1;}')
+    if [ "$response" != "PONG" ] && [ "$responseFirstWord" != "LOADING" ] && [ "$responseFirstWord" != "MASTERDOWN" ]; then
+      echo "$response"
+      exit 1
+    fi
+  ping_readiness_master.sh: |-
+    #!/bin/bash
+
+    [[ -f $REDIS_MASTER_PASSWORD_FILE ]] && export REDIS_MASTER_PASSWORD="$(< "${REDIS_MASTER_PASSWORD_FILE}")"
+    [[ -n "$REDIS_MASTER_PASSWORD" ]] && export REDISCLI_AUTH="$REDIS_MASTER_PASSWORD"
+    response=$(
+      timeout -s 3 $1 \
+      redis-cli \
+        -h $REDIS_MASTER_HOST \
+        -p $REDIS_MASTER_PORT_NUMBER \
+        ping
+    )
+    if [ $? == 124 ]; then
+      echo "Timed out"
+      exit 1
+    fi
+    if [ "$response" != "PONG" ]; then
+      echo "$response"
+      exit 1
+    fi
+  ping_liveness_master.sh: |-
+    #!/bin/bash
+
+    [[ -f $REDIS_MASTER_PASSWORD_FILE ]] && export REDIS_MASTER_PASSWORD="$(< "${REDIS_MASTER_PASSWORD_FILE}")"
+    [[ -n "$REDIS_MASTER_PASSWORD" ]] && export REDISCLI_AUTH="$REDIS_MASTER_PASSWORD"
+    response=$(
+      timeout -s 3 $1 \
+      redis-cli \
+        -h $REDIS_MASTER_HOST \
+        -p $REDIS_MASTER_PORT_NUMBER \
+        ping
+    )
+    if [ $? == 124 ]; then
+      echo "Timed out"
+      exit 1
+    fi
+    responseFirstWord=$(echo $response | head -n1 | awk '{print $1;}')
+    if [ "$response" != "PONG" ] && [ "$responseFirstWord" != "LOADING" ]; then
+      echo "$response"
+      exit 1
+    fi
+  ping_readiness_local_and_master.sh: |-
+    script_dir="$(dirname "$0")"
+    exit_status=0
+    "$script_dir/ping_readiness_local.sh" $1 || exit_status=$?
+    "$script_dir/ping_readiness_master.sh" $1 || exit_status=$?
+    exit $exit_status
+  ping_liveness_local_and_master.sh: |-
+    script_dir="$(dirname "$0")"
+    exit_status=0
+    "$script_dir/ping_liveness_local.sh" $1 || exit_status=$?
+    "$script_dir/ping_liveness_master.sh" $1 || exit_status=$?
+    exit $exit_status
+---
+# Source: thingsboard/charts/redis/templates/scripts-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-thingsboard-redis-scripts
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: redis
+    helm.sh/chart: redis-16.4.5
+    app.kubernetes.io/instance: my-thingsboard
+    app.kubernetes.io/managed-by: Helm
+data:
+  start-master.sh: |
+    #!/bin/bash
+
+    [[ -f $REDIS_PASSWORD_FILE ]] && export REDIS_PASSWORD="$(< "${REDIS_PASSWORD_FILE}")"
+    if [[ ! -f /opt/bitnami/redis/etc/master.conf ]];then
+        cp /opt/bitnami/redis/mounted-etc/master.conf /opt/bitnami/redis/etc/master.conf
+    fi
+    if [[ ! -f /opt/bitnami/redis/etc/redis.conf ]];then
+        cp /opt/bitnami/redis/mounted-etc/redis.conf /opt/bitnami/redis/etc/redis.conf
+    fi
+    ARGS=("--port" "${REDIS_PORT}")
+    ARGS+=("--requirepass" "${REDIS_PASSWORD}")
+    ARGS+=("--masterauth" "${REDIS_PASSWORD}")
+    ARGS+=("--include" "/opt/bitnami/redis/etc/redis.conf")
+    ARGS+=("--include" "/opt/bitnami/redis/etc/master.conf")
+    exec redis-server "${ARGS[@]}"
+---
+# Source: thingsboard/templates/node-configmap.yaml
+#
+# Copyright © 2016-2020 The Thingsboard Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-thingsboard-node-config
+  labels:
+    name: 'my-thingsboard-node-config'
+    helm.sh/chart: thingsboard-0.1.3
+    app.kubernetes.io/name: thingsboard
+    app.kubernetes.io/instance: my-thingsboard
+    app.kubernetes.io/version: "3.4.1"
+    app.kubernetes.io/managed-by: Helm
+data:
+  conf: |
+      export JAVA_OPTS="$JAVA_OPTS -Dplatform=deb -Dinstall.data_dir=/usr/share/thingsboard/data"
+      export JAVA_OPTS="$JAVA_OPTS -Xlog:gc*,heap*,age*,safepoint=debug:file=/var/log/thingsboard/${TB_SERVICE_ID}-gc.log:time,uptime,level,tags:filecount=10,filesize=10M"
+      export JAVA_OPTS="$JAVA_OPTS -XX:+IgnoreUnrecognizedVMOptions -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/var/log/thingsboard/${TB_SERVICE_ID}-heapdump.bin"
+      export JAVA_OPTS="$JAVA_OPTS -XX:-UseBiasedLocking -XX:+UseTLAB -XX:+ResizeTLAB -XX:+PerfDisableSharedMem -XX:+UseCondCardMark"
+      export JAVA_OPTS="$JAVA_OPTS -XX:+UseG1GC -XX:MaxGCPauseMillis=500 -XX:+UseStringDeduplication -XX:+ParallelRefProcEnabled -XX:MaxTenuringThreshold=10"
+      export JAVA_OPTS="$JAVA_OPTS -XX:+ExitOnOutOfMemoryError"
+      export LOG_FILENAME=thingsboard.out
+      export LOADER_PATH=/usr/share/thingsboard/conf,/usr/share/thingsboard/extensions
+  logback: |
+      <!DOCTYPE configuration>
+      <configuration scan="true" scanPeriod="10 seconds">
+
+          <appender name="fileLogAppender"
+                    class="ch.qos.logback.core.rolling.RollingFileAppender">
+              <file>/var/log/thingsboard/${TB_SERVICE_ID}/thingsboard.log</file>
+              <rollingPolicy
+                      class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+                  <fileNamePattern>/var/log/thingsboard/${TB_SERVICE_ID}/thingsboard.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+                  <maxFileSize>100MB</maxFileSize>
+                  <maxHistory>30</maxHistory>
+                  <totalSizeCap>3GB</totalSizeCap>
+              </rollingPolicy>
+              <encoder>
+                  <pattern>%d{ISO8601} [%thread] %-5level %logger{36} - %msg%n</pattern>
+              </encoder>
+          </appender>
+
+          <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+              <encoder>
+                  <pattern>%d{ISO8601} [%thread] %-5level %logger{36} - %msg%n</pattern>
+              </encoder>
+          </appender>
+
+          <logger name="org.thingsboard.server" level="INFO" />
+          <logger name="com.google.common.util.concurrent.AggregateFuture" level="OFF" />
+
+          <root level="INFO">
+              <appender-ref ref="fileLogAppender"/>
+              <appender-ref ref="STDOUT"/>
+          </root>
+
+      </configuration>
+---
+# Source: thingsboard/templates/node-db-configmap.yaml
+#
+# Copyright © 2016-2020 The Thingsboard Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-thingsboard-node-db-config
+  labels:
+    name: 'my-thingsboard-node-db-config'
+    helm.sh/chart: thingsboard-0.1.3
+    app.kubernetes.io/name: thingsboard
+    app.kubernetes.io/instance: my-thingsboard
+    app.kubernetes.io/version: "3.4.1"
+    app.kubernetes.io/managed-by: Helm
+data:
+  DATABASE_TS_TYPE: sql
+  SPRING_JPA_DATABASE_PLATFORM: org.hibernate.dialect.PostgreSQLDialect
+  SPRING_DRIVER_CLASS_NAME: org.postgresql.Driver
+  SPRING_DATASOURCE_URL: jdbc:postgresql://my-thingsboard-pg-pgpool:5432/thingsboard
+  SPRING_DATASOURCE_USERNAME: postgres
+  SPRING_DATASOURCE_PASSWORD: setplease
+---
+# Source: thingsboard/templates/transport-configmap.yaml
+#
+# Copyright © 2016-2020 The Thingsboard Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-thingsboard-mqtt-transport-config
+  labels:
+    name: 'my-thingsboard-mqtt-transport-config'
+    helm.sh/chart: thingsboard-0.1.3
+    app.kubernetes.io/name: thingsboard
+    app.kubernetes.io/instance: my-thingsboard
+    app.kubernetes.io/version: "3.4.1"
+    app.kubernetes.io/managed-by: Helm
+data:
+  conf: |
+      export JAVA_OPTS="$JAVA_OPTS -Xlog:gc*,heap*,age*,safepoint=debug:file=/var/log/tb-mqtt-transport/${TB_SERVICE_ID}-gc.log:time,uptime,level,tags:filecount=10,filesize=10M"
+      export JAVA_OPTS="$JAVA_OPTS -XX:+IgnoreUnrecognizedVMOptions -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/var/log/tb-mqtt-transport/${TB_SERVICE_ID}-heapdump.bin"
+      export JAVA_OPTS="$JAVA_OPTS -XX:-UseBiasedLocking -XX:+UseTLAB -XX:+ResizeTLAB -XX:+PerfDisableSharedMem -XX:+UseCondCardMark"
+      export JAVA_OPTS="$JAVA_OPTS -XX:+UseG1GC -XX:MaxGCPauseMillis=500 -XX:+UseStringDeduplication -XX:+ParallelRefProcEnabled -XX:MaxTenuringThreshold=10"
+      export JAVA_OPTS="$JAVA_OPTS -XX:+ExitOnOutOfMemoryError"
+      export LOG_FILENAME=tb-mqtt-transport.out
+      export LOADER_PATH=/usr/share/tb-mqtt-transport/conf
+  logback: |
+      <!DOCTYPE configuration>
+      <configuration scan="true" scanPeriod="10 seconds">
+
+          <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+              <encoder>
+                  <pattern>%d{ISO8601} [%thread] %-5level %logger{36} - %msg%n</pattern>
+              </encoder>
+          </appender>
+
+          <logger name="org.thingsboard.server" level="INFO" />
+          <root level="INFO">
+              <appender-ref ref="STDOUT"/>
+          </root>
+      </configuration>
+---
+# Source: thingsboard/templates/transport-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-thingsboard-http-transport-config
+  labels:
+    name: 'my-thingsboard-http-transport-config'
+    helm.sh/chart: thingsboard-0.1.3
+    app.kubernetes.io/name: thingsboard
+    app.kubernetes.io/instance: my-thingsboard
+    app.kubernetes.io/version: "3.4.1"
+    app.kubernetes.io/managed-by: Helm
+data:
+  conf: |
+      export JAVA_OPTS="$JAVA_OPTS -Xlog:gc*,heap*,age*,safepoint=debug:file=/var/log/tb-http-transport/${TB_SERVICE_ID}-gc.log:time,uptime,level,tags:filecount=10,filesize=10M"
+      export JAVA_OPTS="$JAVA_OPTS -XX:+IgnoreUnrecognizedVMOptions -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/var/log/tb-http-transport/${TB_SERVICE_ID}-heapdump.bin"
+      export JAVA_OPTS="$JAVA_OPTS -XX:-UseBiasedLocking -XX:+UseTLAB -XX:+ResizeTLAB -XX:+PerfDisableSharedMem -XX:+UseCondCardMark"
+      export JAVA_OPTS="$JAVA_OPTS -XX:+UseG1GC -XX:MaxGCPauseMillis=500 -XX:+UseStringDeduplication -XX:+ParallelRefProcEnabled -XX:MaxTenuringThreshold=10"
+      export JAVA_OPTS="$JAVA_OPTS -XX:+ExitOnOutOfMemoryError"
+      export LOG_FILENAME=tb-http-transport.out
+      export LOADER_PATH=/usr/share/tb-http-transport/conf
+  logback: |
+      <!DOCTYPE configuration>
+      <configuration scan="true" scanPeriod="10 seconds">
+
+          <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+              <encoder>
+                  <pattern>%d{ISO8601} [%thread] %-5level %logger{36} - %msg%n</pattern>
+              </encoder>
+          </appender>
+
+          <logger name="org.thingsboard.server" level="INFO" />
+          <root level="INFO">
+              <appender-ref ref="STDOUT"/>
+          </root>
+      </configuration>
+---
+# Source: thingsboard/templates/transport-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-thingsboard-coap-transport-config
+  labels:
+    name: 'my-thingsboard-coap-transport-config'
+    helm.sh/chart: thingsboard-0.1.3
+    app.kubernetes.io/name: thingsboard
+    app.kubernetes.io/instance: my-thingsboard
+    app.kubernetes.io/version: "3.4.1"
+    app.kubernetes.io/managed-by: Helm
+data:
+  conf: |
+      export JAVA_OPTS="$JAVA_OPTS -Xlog:gc*,heap*,age*,safepoint=debug:file=/var/log/tb-coap-transport/${TB_SERVICE_ID}-gc.log:time,uptime,level,tags:filecount=10,filesize=10M"
+      export JAVA_OPTS="$JAVA_OPTS -XX:+IgnoreUnrecognizedVMOptions -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/var/log/tb-coap-transport/${TB_SERVICE_ID}-heapdump.bin"
+      export JAVA_OPTS="$JAVA_OPTS -XX:-UseBiasedLocking -XX:+UseTLAB -XX:+ResizeTLAB -XX:+PerfDisableSharedMem -XX:+UseCondCardMark"
+      export JAVA_OPTS="$JAVA_OPTS -XX:+UseG1GC -XX:MaxGCPauseMillis=500 -XX:+UseStringDeduplication -XX:+ParallelRefProcEnabled -XX:MaxTenuringThreshold=10"
+      export JAVA_OPTS="$JAVA_OPTS -XX:+ExitOnOutOfMemoryError"
+      export LOG_FILENAME=tb-coap-transport.out
+      export LOADER_PATH=/usr/share/tb-coap-transport/conf
+  logback: |
+      <!DOCTYPE configuration>
+      <configuration scan="true" scanPeriod="10 seconds">
+
+          <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+              <encoder>
+                  <pattern>%d{ISO8601} [%thread] %-5level %logger{36} - %msg%n</pattern>
+              </encoder>
+          </appender>
+
+          <logger name="org.thingsboard.server" level="INFO" />
+          <root level="INFO">
+              <appender-ref ref="STDOUT"/>
+          </root>
+      </configuration>
+---
+# Source: thingsboard/charts/kafka/charts/zookeeper/templates/svc-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-thingsboard-zookeeper-headless
+  namespace: default
+  labels:
+    app.kubernetes.io/name: zookeeper
+    helm.sh/chart: zookeeper-8.1.1
+    app.kubernetes.io/instance: my-thingsboard
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: zookeeper
+spec:
+  type: ClusterIP
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+    - name: tcp-client
+      port: 2181
+      targetPort: client
+    - name: tcp-follower
+      port: 2888
+      targetPort: follower
+    - name: tcp-election
+      port: 3888
+      targetPort: election
+  selector:
+    app.kubernetes.io/name: zookeeper
+    app.kubernetes.io/instance: my-thingsboard
+    app.kubernetes.io/component: zookeeper
+---
+# Source: thingsboard/charts/kafka/charts/zookeeper/templates/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-thingsboard-zookeeper
+  namespace: default
+  labels:
+    app.kubernetes.io/name: zookeeper
+    helm.sh/chart: zookeeper-8.1.1
+    app.kubernetes.io/instance: my-thingsboard
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: zookeeper
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+    - name: tcp-client
+      port: 2181
+      targetPort: client
+      nodePort: null
+    - name: tcp-follower
+      port: 2888
+      targetPort: follower
+    - name: tcp-election
+      port: 3888
+      targetPort: election
+  selector:
+    app.kubernetes.io/name: zookeeper
+    app.kubernetes.io/instance: my-thingsboard
+    app.kubernetes.io/component: zookeeper
+---
+# Source: thingsboard/charts/kafka/templates/svc-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-thingsboard-kafka-headless
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: kafka
+    helm.sh/chart: kafka-15.3.4
+    app.kubernetes.io/instance: my-thingsboard
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: kafka
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: tcp-client
+      port: 9092
+      protocol: TCP
+      targetPort: kafka-client
+    - name: tcp-internal
+      port: 9093
+      protocol: TCP
+      targetPort: kafka-internal
+  selector:
+    app.kubernetes.io/name: kafka
+    app.kubernetes.io/instance: my-thingsboard
+    app.kubernetes.io/component: kafka
+---
+# Source: thingsboard/charts/kafka/templates/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-thingsboard-kafka
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: kafka
+    helm.sh/chart: kafka-15.3.4
+    app.kubernetes.io/instance: my-thingsboard
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: kafka
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+    - name: tcp-client
+      port: 9092
+      protocol: TCP
+      targetPort: kafka-client
+      nodePort: null
+  selector:
+    app.kubernetes.io/name: kafka
+    app.kubernetes.io/instance: my-thingsboard
+    app.kubernetes.io/component: kafka
+---
+# Source: thingsboard/charts/postgresql-ha/templates/pgpool/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-thingsboard-pg-pgpool
+  labels:
+    app.kubernetes.io/name: pg
+    helm.sh/chart: postgresql-ha-8.5.2
+    app.kubernetes.io/instance: my-thingsboard
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: pgpool
+
+  annotations:
+
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+    - name: postgresql
+      port: 5432
+      targetPort: postgresql
+      protocol: TCP
+      nodePort: null
+  selector:
+    app.kubernetes.io/name: pg
+    app.kubernetes.io/instance: my-thingsboard
+    app.kubernetes.io/component: pgpool
+---
+# Source: thingsboard/charts/postgresql-ha/templates/postgresql/service-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-thingsboard-pg-postgresql-headless
+  labels:
+    app.kubernetes.io/name: pg
+    helm.sh/chart: postgresql-ha-8.5.2
+    app.kubernetes.io/instance: my-thingsboard
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: postgresql 
+      port: 5432
+      targetPort: postgresql
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: pg
+    app.kubernetes.io/instance: my-thingsboard
+    app.kubernetes.io/component: postgresql
+---
+# Source: thingsboard/charts/postgresql-ha/templates/postgresql/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-thingsboard-pg-postgresql
+  labels:
+    app.kubernetes.io/name: pg
+    helm.sh/chart: postgresql-ha-8.5.2
+    app.kubernetes.io/instance: my-thingsboard
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: postgresql
+spec:
+  type: ClusterIP
+  ports:
+    - name: postgresql
+      port: 5432
+      targetPort: postgresql
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: pg
+    app.kubernetes.io/instance: my-thingsboard
+    app.kubernetes.io/component: postgresql
+---
+# Source: thingsboard/charts/redis/templates/headless-svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-thingsboard-redis-headless
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: redis
+    helm.sh/chart: redis-16.4.5
+    app.kubernetes.io/instance: my-thingsboard
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: tcp-redis
+      port: 6379
+      targetPort: redis
+  selector:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/instance: my-thingsboard
+---
+# Source: thingsboard/charts/redis/templates/master/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-thingsboard-redis-master
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: redis
+    helm.sh/chart: redis-16.4.5
+    app.kubernetes.io/instance: my-thingsboard
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: master
+spec:
+  type: ClusterIP
+  
+  ports:
+    - name: tcp-redis
+      port: 6379
+      targetPort: redis
+      nodePort: null
+  selector:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/instance: my-thingsboard
+    app.kubernetes.io/component: master
+---
+# Source: thingsboard/templates/component-service.yaml
+#
+# Copyright © 2016-2020 The Thingsboard Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-thingsboard-mqtt
+  labels:
+    helm.sh/chart: thingsboard-0.1.3
+    app.kubernetes.io/name: thingsboard
+    app.kubernetes.io/instance: my-thingsboard
+    app.kubernetes.io/version: "3.4.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8883
+      targetPort: mqtt
+      protocol: TCP
+      name: mqtt
+  selector:
+    app.kubernetes.io/instance: my-thingsboard-mqtt
+    app.kubernetes.io/name: thingsboard-mqtt
+---
+# Source: thingsboard/templates/component-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-thingsboard-http
+  labels:
+    helm.sh/chart: thingsboard-0.1.3
+    app.kubernetes.io/name: thingsboard
+    app.kubernetes.io/instance: my-thingsboard
+    app.kubernetes.io/version: "3.4.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8082
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/instance: my-thingsboard-http
+    app.kubernetes.io/name: thingsboard-http
+---
+# Source: thingsboard/templates/component-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-thingsboard-coap
+  labels:
+    helm.sh/chart: thingsboard-0.1.3
+    app.kubernetes.io/name: thingsboard
+    app.kubernetes.io/instance: my-thingsboard
+    app.kubernetes.io/version: "3.4.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8083
+      targetPort: coap
+      protocol: UDP
+      name: coap
+  selector:
+    app.kubernetes.io/instance: my-thingsboard-coap
+    app.kubernetes.io/name: thingsboard-coap
+---
+# Source: thingsboard/templates/component-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-thingsboard-webui
+  labels:
+    helm.sh/chart: thingsboard-0.1.3
+    app.kubernetes.io/name: thingsboard
+    app.kubernetes.io/instance: my-thingsboard
+    app.kubernetes.io/version: "3.4.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8084
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/instance: my-thingsboard-webui
+    app.kubernetes.io/name: thingsboard-webui
+---
+# Source: thingsboard/templates/node-service.yaml
+#
+# Copyright © 2016-2020 The Thingsboard Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-thingsboard-node
+  labels:
+    helm.sh/chart: thingsboard-0.1.3
+    app.kubernetes.io/name: thingsboard
+    app.kubernetes.io/instance: my-thingsboard
+    app.kubernetes.io/version: "3.4.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: thingsboard-node
+    app.kubernetes.io/instance: my-thingsboard-node
+---
+# Source: thingsboard/charts/postgresql-ha/templates/pgpool/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-thingsboard-pg-pgpool
+  labels: 
+    app.kubernetes.io/name: pg
+    helm.sh/chart: postgresql-ha-8.5.2
+    app.kubernetes.io/instance: my-thingsboard
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: pgpool
+spec:
+  replicas: 1
+  selector:
+    matchLabels: 
+      app.kubernetes.io/name: pg
+      app.kubernetes.io/instance: my-thingsboard
+      app.kubernetes.io/component: pgpool
+  template:
+    metadata:
+      labels: 
+        app.kubernetes.io/name: pg
+        helm.sh/chart: postgresql-ha-8.5.2
+        app.kubernetes.io/instance: my-thingsboard
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/component: pgpool
+    spec:
+      
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: pg
+                    app.kubernetes.io/instance: my-thingsboard
+                    app.kubernetes.io/component: pgpool
+                namespaces:
+                  - "default"
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+      initContainers:
+      # Auxiliary vars to populate environment variables
+      containers:
+        - name: pgpool
+          image: docker.io/bitnami/pgpool:4.3.3
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            runAsUser: 1001
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: PGPOOL_BACKEND_NODES
+              value: 0:my-thingsboard-pg-postgresql-0.my-thingsboard-pg-postgresql-headless:5432,
+            - name: PGPOOL_SR_CHECK_USER
+              value: "repmgr"
+            - name: PGPOOL_SR_CHECK_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-thingsboard-pg-postgresql
+                  key: repmgr-password
+            - name: PGPOOL_SR_CHECK_DATABASE
+              value: "postgres"
+            - name: PGPOOL_ENABLE_LDAP
+              value: "no"
+            - name: PGPOOL_POSTGRES_USERNAME
+              value: "postgres"
+            - name: PGPOOL_POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-thingsboard-pg-postgresql
+                  key: postgresql-password
+            - name: PGPOOL_ADMIN_USERNAME
+              value: "admin"
+            - name: PGPOOL_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-thingsboard-pg-pgpool
+                  key: admin-password
+            - name: PGPOOL_ENABLE_LOAD_BALANCING
+              value: "no"
+            - name: PGPOOL_ENABLE_LOG_CONNECTIONS
+              value: "no"
+            - name: PGPOOL_ENABLE_LOG_HOSTNAME
+              value: "yes"
+            - name: PGPOOL_ENABLE_LOG_PER_NODE_STATEMENT
+              value: "no"
+            - name: PGPOOL_RESERVED_CONNECTIONS
+              value: '1'
+            - name: PGPOOL_CHILD_LIFE_TIME
+              value: ""
+            - name: PGPOOL_ENABLE_TLS
+              value: "no"
+          envFrom:
+          ports:
+            - name: postgresql
+              containerPort: 5432
+              protocol: TCP
+          livenessProbe:
+            exec:
+              command:
+                - /opt/bitnami/scripts/pgpool/healthcheck.sh
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 5
+          readinessProbe:
+            exec:
+              command:
+                - bash
+                - -ec
+                - PGPASSWORD=${PGPOOL_POSTGRES_PASSWORD} psql -U "postgres" -d "thingsboard" -h /opt/bitnami/pgpool/tmp -tA -c "SELECT 1" >/dev/null
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 5
+          resources:
+            limits: {}
+            requests: {}
+          volumeMounts:
+      volumes:
+---
+# Source: thingsboard/charts/redis/templates/master/application.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-thingsboard-redis-master
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: redis
+    helm.sh/chart: redis-16.4.5
+    app.kubernetes.io/instance: my-thingsboard
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: master
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: redis
+      app.kubernetes.io/instance: my-thingsboard
+      app.kubernetes.io/component: master
+  strategy:
+    rollingUpdate: {}
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: redis
+        helm.sh/chart: redis-16.4.5
+        app.kubernetes.io/instance: my-thingsboard
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/component: master
+      annotations:
+        checksum/configmap: 81af7e0b89ac34848359940f2066d89635699334deb22364a4dfa2753f37d146
+        checksum/health: ffaf755505cb8bd812ba03fae4a73f75c8a9bbf7bb40dbb295e7457597f6ee78
+        checksum/scripts: f290618088d7dbdb84439954e6d7e2e40ee955479aa0dfef3f81e77603a4dd1c
+        checksum/secret: ada667d70871b0a1487e83ad067978104a26e52ea2c80dda8ac09ed6d6eefd3c
+    spec:
+      
+      securityContext:
+        fsGroup: 1001
+      serviceAccountName: my-thingsboard-redis
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: redis
+                    app.kubernetes.io/instance: my-thingsboard
+                    app.kubernetes.io/component: master
+                namespaces:
+                  - "default"
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: redis
+          image: docker.io/bitnami/redis:6.2.6-debian-10-r142
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            runAsUser: 1001
+          command:
+            - /bin/bash
+          args:
+            - -c
+            - /opt/bitnami/scripts/start-scripts/start-master.sh
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: REDIS_REPLICATION_MODE
+              value: master
+            - name: ALLOW_EMPTY_PASSWORD
+              value: "no"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-thingsboard-redis
+                  key: redis-password
+            - name: REDIS_TLS_ENABLED
+              value: "no"
+            - name: REDIS_PORT
+              value: "6379"
+          ports:
+            - name: redis
+              containerPort: 6379
+          livenessProbe:
+            initialDelaySeconds: 20
+            periodSeconds: 5
+            # One second longer than command timeout should prevent generation of zombie processes.
+            timeoutSeconds: 6
+            successThreshold: 1
+            failureThreshold: 5
+            exec:
+              command:
+                - sh
+                - -c
+                - /health/ping_liveness_local.sh 5
+          readinessProbe:
+            initialDelaySeconds: 20
+            periodSeconds: 5
+            timeoutSeconds: 2
+            successThreshold: 1
+            failureThreshold: 5
+            exec:
+              command:
+                - sh
+                - -c
+                - /health/ping_readiness_local.sh 1
+          resources:
+            limits: {}
+            requests: {}
+          volumeMounts:
+            - name: start-scripts
+              mountPath: /opt/bitnami/scripts/start-scripts
+            - name: health
+              mountPath: /health
+            - name: redis-data
+              mountPath: /data
+              subPath: 
+            - name: config
+              mountPath: /opt/bitnami/redis/mounted-etc
+            - name: redis-tmp-conf
+              mountPath: /opt/bitnami/redis/etc/
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: start-scripts
+          configMap:
+            name: my-thingsboard-redis-scripts
+            defaultMode: 0755
+        - name: health
+          configMap:
+            name: my-thingsboard-redis-health
+            defaultMode: 0755
+        - name: config
+          configMap:
+            name: my-thingsboard-redis-configuration
+        - name: redis-tmp-conf
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+        - name: redis-data
+          emptyDir: {}
+---
+# Source: thingsboard/templates/js-executor.yaml
+#
+# Copyright © 2016-2020 The Thingsboard Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-thingsboard-jsexecutor
+  labels:
+    helm.sh/chart: thingsboard-0.1.3
+    app.kubernetes.io/name: thingsboard
+    app.kubernetes.io/instance: my-thingsboard
+    app.kubernetes.io/version: "3.4.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 5
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: thingsboard-jsexecutor
+      app.kubernetes.io/instance: my-thingsboard-jsexecutor
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: thingsboard-jsexecutor
+        app.kubernetes.io/instance: my-thingsboard-jsexecutor
+    spec:
+      serviceAccountName: my-thingsboard
+      securityContext:
+        {}
+      containers:
+        - name: thingsboard
+          securityContext:
+            {}
+          image: "docker.io/thingsboard/tb-js-executor:3.4.1"
+          imagePullPolicy: Always
+          env:
+          - name: REMOTE_JS_EVAL_REQUEST_TOPIC
+            value: "js_eval.requests"
+          - name: TB_KAFKA_SERVERS
+            value: "my-thingsboard-kafka:9092"
+          - name: TB_QUEUE_KAFKA_REPLICATION_FACTOR
+            value: "1"
+          - name: LOGGER_LEVEL
+            value: "info"
+          - name: LOG_FOLDER
+            value: "logs"
+          - name: LOGGER_FILENAME
+            value: "tb-js-executor-%DATE%.log"
+          - name: DOCKER_MODE
+            value: "true"
+          - name: SCRIPT_BODY_TRACE_FREQUENCY
+            value: "1000"
+          resources:
+            {}
+---
+# Source: thingsboard/templates/web-ui.yaml
+#
+# Copyright © 2016-2020 The Thingsboard Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-thingsboard-web-ui
+  labels:
+    helm.sh/chart: thingsboard-0.1.3
+    app.kubernetes.io/name: thingsboard
+    app.kubernetes.io/instance: my-thingsboard
+    app.kubernetes.io/version: "3.4.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: thingsboard-webui
+      app.kubernetes.io/instance: my-thingsboard-webui
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: thingsboard-webui
+        app.kubernetes.io/instance: my-thingsboard-webui
+    spec:
+      serviceAccountName: my-thingsboard
+      securityContext:
+        {}
+      containers:
+        - name: thingsboard
+          securityContext:
+            {}
+          image: "docker.io/thingsboard/tb-web-ui:3.4.1"
+          imagePullPolicy: Always
+          ports:
+          - containerPort: 8084
+            name: http
+          env:
+          - name: HTTP_BIND_ADDRESS
+            value: "0.0.0.0"
+          - name: HTTP_BIND_PORT
+            value: "8084"
+          - name: TB_ENABLE_PROXY
+            value: "false"
+          - name: LOGGER_LEVEL
+            value: "info"
+          - name: LOG_FOLDER
+            value: "logs"
+          - name: LOGGER_FILENAME
+            value: "tb-web-ui-%DATE%.log"
+          - name: DOCKER_MODE
+            value: "true"
+          livenessProbe:
+            httpGet:
+              path: /index.html
+              port: http
+            initialDelaySeconds: 120
+            timeoutSeconds: 10
+          resources:
+            {}
+---
+# Source: thingsboard/charts/kafka/charts/zookeeper/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-thingsboard-zookeeper
+  namespace: default
+  labels:
+    app.kubernetes.io/name: zookeeper
+    helm.sh/chart: zookeeper-8.1.1
+    app.kubernetes.io/instance: my-thingsboard
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: zookeeper
+    role: zookeeper
+spec:
+  replicas: 1
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: zookeeper
+      app.kubernetes.io/instance: my-thingsboard
+      app.kubernetes.io/component: zookeeper
+  serviceName: my-thingsboard-zookeeper-headless
+  updateStrategy:
+    rollingUpdate: {}
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations:
+      labels:
+        app.kubernetes.io/name: zookeeper
+        helm.sh/chart: zookeeper-8.1.1
+        app.kubernetes.io/instance: my-thingsboard
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/component: zookeeper
+    spec:
+      serviceAccountName: default
+      
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: zookeeper
+                    app.kubernetes.io/instance: my-thingsboard
+                    app.kubernetes.io/component: zookeeper
+                namespaces:
+                  - "default"
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+      initContainers:
+      containers:
+        - name: zookeeper
+          image: docker.io/bitnami/zookeeper:3.7.0-debian-10-r303
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+          command:
+            - /scripts/setup.sh
+          resources:
+            limits: {}
+            requests:
+              cpu: 250m
+              memory: 256Mi
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: ZOO_DATA_LOG_DIR
+              value: ""
+            - name: ZOO_PORT_NUMBER
+              value: "2181"
+            - name: ZOO_TICK_TIME
+              value: "2000"
+            - name: ZOO_INIT_LIMIT
+              value: "10"
+            - name: ZOO_SYNC_LIMIT
+              value: "5"
+            - name: ZOO_PRE_ALLOC_SIZE
+              value: "65536"
+            - name: ZOO_SNAPCOUNT
+              value: "100000"
+            - name: ZOO_MAX_CLIENT_CNXNS
+              value: "60"
+            - name: ZOO_4LW_COMMANDS_WHITELIST
+              value: "srvr, mntr, ruok"
+            - name: ZOO_LISTEN_ALLIPS_ENABLED
+              value: "no"
+            - name: ZOO_AUTOPURGE_INTERVAL
+              value: "0"
+            - name: ZOO_AUTOPURGE_RETAIN_COUNT
+              value: "3"
+            - name: ZOO_MAX_SESSION_TIMEOUT
+              value: "40000"
+            - name: ZOO_SERVERS
+              value: my-thingsboard-zookeeper-0.my-thingsboard-zookeeper-headless.default.svc.cluster.local:2888:3888::1 
+            - name: ZOO_ENABLE_AUTH
+              value: "no"
+            - name: ZOO_HEAP_SIZE
+              value: "1024"
+            - name: ZOO_LOG_LEVEL
+              value: "ERROR"
+            - name: ALLOW_ANONYMOUS_LOGIN
+              value: "yes"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.name
+          ports:
+            - name: client
+              containerPort: 2181
+            - name: follower
+              containerPort: 2888
+            - name: election
+              containerPort: 3888
+          livenessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+            exec:
+              command: ['/bin/bash', '-c', 'echo "ruok" | timeout 2 nc -w 2 localhost 2181 | grep imok']
+          readinessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+            exec:
+              command: ['/bin/bash', '-c', 'echo "ruok" | timeout 2 nc -w 2 localhost 2181 | grep imok']
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts/setup.sh
+              subPath: setup.sh
+            - name: data
+              mountPath: /bitnami/zookeeper
+      volumes:
+        - name: scripts
+          configMap:
+            name: my-thingsboard-zookeeper-scripts
+            defaultMode: 0755
+        - name: data
+          emptyDir: {}
+---
+# Source: thingsboard/charts/kafka/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-thingsboard-kafka
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: kafka
+    helm.sh/chart: kafka-15.3.4
+    app.kubernetes.io/instance: my-thingsboard
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: kafka
+spec:
+  podManagementPolicy: Parallel
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kafka
+      app.kubernetes.io/instance: my-thingsboard
+      app.kubernetes.io/component: kafka
+  serviceName: my-thingsboard-kafka-headless
+  updateStrategy:
+    rollingUpdate: {}
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kafka
+        helm.sh/chart: kafka-15.3.4
+        app.kubernetes.io/instance: my-thingsboard
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/component: kafka
+      annotations:
+    spec:
+      
+      hostNetwork: false
+      hostIPC: false
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: kafka
+                    app.kubernetes.io/instance: my-thingsboard
+                    app.kubernetes.io/component: kafka
+                namespaces:
+                  - "default"
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+      serviceAccountName: my-thingsboard-kafka
+      containers:
+        - name: kafka
+          image: docker.io/bitnami/kafka:3.1.0-debian-10-r31
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+          command:
+            - /scripts/setup.sh
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: MY_POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: MY_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: KAFKA_CFG_ZOOKEEPER_CONNECT
+              value: "my-thingsboard-zookeeper"
+            - name: KAFKA_INTER_BROKER_LISTENER_NAME
+              value: "INTERNAL"
+            - name: KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP
+              value: "INTERNAL:PLAINTEXT,CLIENT:PLAINTEXT"
+            - name: KAFKA_CFG_LISTENERS
+              value: "INTERNAL://:9093,CLIENT://:9092"
+            - name: KAFKA_CFG_ADVERTISED_LISTENERS
+              value: "INTERNAL://$(MY_POD_NAME).my-thingsboard-kafka-headless.default.svc.cluster.local:9093,CLIENT://$(MY_POD_NAME).my-thingsboard-kafka-headless.default.svc.cluster.local:9092"
+            - name: ALLOW_PLAINTEXT_LISTENER
+              value: "yes"
+            - name: KAFKA_VOLUME_DIR
+              value: "/bitnami/kafka"
+            - name: KAFKA_LOG_DIR
+              value: "/opt/bitnami/kafka/logs"
+            - name: KAFKA_CFG_DELETE_TOPIC_ENABLE
+              value: "false"
+            - name: KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE
+              value: "true"
+            - name: KAFKA_HEAP_OPTS
+              value: "-Xmx1024m -Xms1024m"
+            - name: KAFKA_CFG_LOG_FLUSH_INTERVAL_MESSAGES
+              value: "10000"
+            - name: KAFKA_CFG_LOG_FLUSH_INTERVAL_MS
+              value: "1000"
+            - name: KAFKA_CFG_LOG_RETENTION_BYTES
+              value: "1073741824"
+            - name: KAFKA_CFG_LOG_RETENTION_CHECK_INTERVALS_MS
+              value: "300000"
+            - name: KAFKA_CFG_LOG_RETENTION_HOURS
+              value: "168"
+            - name: KAFKA_CFG_MESSAGE_MAX_BYTES
+              value: "1000012"
+            - name: KAFKA_CFG_LOG_SEGMENT_BYTES
+              value: "1073741824"
+            - name: KAFKA_CFG_LOG_DIRS
+              value: "/bitnami/kafka/data"
+            - name: KAFKA_CFG_DEFAULT_REPLICATION_FACTOR
+              value: "1"
+            - name: KAFKA_CFG_OFFSETS_TOPIC_REPLICATION_FACTOR
+              value: "1"
+            - name: KAFKA_CFG_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
+              value: "1"
+            - name: KAFKA_CFG_TRANSACTION_STATE_LOG_MIN_ISR
+              value: "1"
+            - name: KAFKA_CFG_NUM_IO_THREADS
+              value: "8"
+            - name: KAFKA_CFG_NUM_NETWORK_THREADS
+              value: "3"
+            - name: KAFKA_CFG_NUM_PARTITIONS
+              value: "1"
+            - name: KAFKA_CFG_NUM_RECOVERY_THREADS_PER_DATA_DIR
+              value: "1"
+            - name: KAFKA_CFG_SOCKET_RECEIVE_BUFFER_BYTES
+              value: "102400"
+            - name: KAFKA_CFG_SOCKET_REQUEST_MAX_BYTES
+              value: "104857600"
+            - name: KAFKA_CFG_SOCKET_SEND_BUFFER_BYTES
+              value: "102400"
+            - name: KAFKA_CFG_ZOOKEEPER_CONNECTION_TIMEOUT_MS
+              value: "6000"
+            - name: KAFKA_CFG_AUTHORIZER_CLASS_NAME
+              value: ""
+            - name: KAFKA_CFG_ALLOW_EVERYONE_IF_NO_ACL_FOUND
+              value: "true"
+            - name: KAFKA_CFG_SUPER_USERS
+              value: "User:admin"
+          ports:
+            - name: kafka-client
+              containerPort: 9092
+            - name: kafka-internal
+              containerPort: 9093
+          livenessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+            tcpSocket:
+              port: kafka-client
+          readinessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+            tcpSocket:
+              port: kafka-client
+          resources:
+            limits: {}
+            requests: {}
+          volumeMounts:
+            - name: data
+              mountPath: /bitnami/kafka
+            - name: logs
+              mountPath: /opt/bitnami/kafka/logs
+            - name: scripts
+              mountPath: /scripts/setup.sh
+              subPath: setup.sh
+      volumes:
+        - name: scripts
+          configMap:
+            name: my-thingsboard-kafka-scripts
+            defaultMode: 0755
+        - name: data
+          emptyDir: {}
+        - name: logs
+          emptyDir: {}
+---
+# Source: thingsboard/charts/postgresql-ha/templates/postgresql/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-thingsboard-pg-postgresql
+  labels:
+    app.kubernetes.io/name: pg
+    helm.sh/chart: postgresql-ha-8.5.2
+    app.kubernetes.io/instance: my-thingsboard
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: postgresql
+spec:
+  serviceName: my-thingsboard-pg-postgresql-headless
+  replicas: 1
+  updateStrategy:
+    type: RollingUpdate
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pg
+      app.kubernetes.io/instance: my-thingsboard
+      app.kubernetes.io/component: postgresql
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pg
+        helm.sh/chart: postgresql-ha-8.5.2
+        app.kubernetes.io/instance: my-thingsboard
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/component: postgresql
+    spec:
+      
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: pg
+                    app.kubernetes.io/instance: my-thingsboard
+                    app.kubernetes.io/component: postgresql
+                namespaces:
+                  - "default"
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+      hostNetwork: false
+      hostIPC: false
+      initContainers:
+      containers:
+        - name: postgresql
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - /pre-stop.sh
+          image: docker.io/bitnami/postgresql-repmgr:12
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            runAsUser: 1001
+          # Auxiliary vars to populate environment variables
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            # PostgreSQL configuration
+            - name: POSTGRESQL_VOLUME_DIR
+              value: "/bitnami/postgresql"
+            - name: PGDATA
+              value: "/bitnami/postgresql/data"
+            - name: POSTGRES_USER
+              value: "postgres"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-thingsboard-pg-postgresql
+                  key: postgresql-password
+            - name: POSTGRES_DB
+              value: "thingsboard"
+            - name: POSTGRESQL_LOG_HOSTNAME
+              value: "true"
+            - name: POSTGRESQL_LOG_CONNECTIONS
+              value: "false"
+            - name: POSTGRESQL_LOG_DISCONNECTIONS
+              value: "false"
+            - name: POSTGRESQL_PGAUDIT_LOG_CATALOG
+              value: "off"
+            - name: POSTGRESQL_CLIENT_MIN_MESSAGES
+              value: "error"
+            - name: POSTGRESQL_SHARED_PRELOAD_LIBRARIES
+              value: "pgaudit, repmgr"
+            - name: POSTGRESQL_ENABLE_TLS
+              value: "no"
+            # Repmgr configuration
+            - name: MY_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: REPMGR_UPGRADE_EXTENSION
+              value: "no"
+            - name: REPMGR_PGHBA_TRUST_ALL
+              value: "no"
+            - name: REPMGR_MOUNTED_CONF_DIR
+              value: "/bitnami/repmgr/conf"
+            - name: REPMGR_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: REPMGR_PARTNER_NODES
+              value: my-thingsboard-pg-postgresql-0.my-thingsboard-pg-postgresql-headless.$(REPMGR_NAMESPACE).svc.cluster.local,
+            - name: REPMGR_PRIMARY_HOST
+              value: "my-thingsboard-pg-postgresql-0.my-thingsboard-pg-postgresql-headless.$(REPMGR_NAMESPACE).svc.cluster.local"
+            - name: REPMGR_NODE_NAME
+              value: "$(MY_POD_NAME)"
+            - name: REPMGR_NODE_NETWORK_NAME
+              value: "$(MY_POD_NAME).my-thingsboard-pg-postgresql-headless.$(REPMGR_NAMESPACE).svc.cluster.local"
+            - name: REPMGR_LOG_LEVEL
+              value: "NOTICE"
+            - name: REPMGR_CONNECT_TIMEOUT
+              value: "5"
+            - name: REPMGR_RECONNECT_ATTEMPTS
+              value: "2"
+            - name: REPMGR_RECONNECT_INTERVAL
+              value: "3"
+            - name: REPMGR_USERNAME
+              value: "repmgr"
+            - name: REPMGR_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-thingsboard-pg-postgresql
+                  key: repmgr-password
+            - name: REPMGR_DATABASE
+              value: "repmgr"
+          envFrom:
+          ports:
+            - name: postgresql
+              containerPort: 5432
+              protocol: TCP
+          livenessProbe:
+            exec:
+              command:
+                - bash
+                - -ec
+                - 'PGPASSWORD=$POSTGRES_PASSWORD psql -w -U "postgres" -d "thingsboard"  -h 127.0.0.1 -c "SELECT 1"'
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          readinessProbe:
+            exec:
+              command:
+                - bash
+                - -ec
+                - 'PGPASSWORD=$POSTGRES_PASSWORD psql -w -U "postgres" -d "thingsboard"  -h 127.0.0.1 -c "SELECT 1"'
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          resources:
+            limits: {}
+            requests: {}
+          volumeMounts:
+            - name: data
+              mountPath: /bitnami/postgresql
+            - name: hooks-scripts
+              mountPath: /pre-stop.sh
+              subPath: pre-stop.sh
+      volumes:
+        - name: hooks-scripts
+          configMap:
+            name: my-thingsboard-pg-postgresql-hooks-scripts
+            defaultMode: 0755
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "8Gi"
+---
+# Source: thingsboard/templates/coap-transport.yaml
+#
+# Copyright © 2016-2020 The Thingsboard Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-thingsboard-coap-transport
+  labels:
+    helm.sh/chart: thingsboard-0.1.3
+    app.kubernetes.io/name: thingsboard
+    app.kubernetes.io/instance: my-thingsboard
+    app.kubernetes.io/version: "3.4.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  podManagementPolicy: "Parallel"
+  serviceName: tb-coap-transport
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: thingsboard-coap
+      app.kubernetes.io/instance: my-thingsboard-coap
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: thingsboard-coap
+        app.kubernetes.io/instance: my-thingsboard-coap
+    spec:
+      serviceAccountName: my-thingsboard
+      securityContext:
+        {}
+      containers:
+        - name: thingsboard
+          securityContext:
+            {}
+          image: "docker.io/thingsboard/tb-coap-transport:3.4.1"
+          imagePullPolicy: Always
+          ports:
+          - containerPort: 8083
+            name: coap
+            protocol: UDP
+          env:
+          - name: TB_SERVICE_ID
+            value: "tb-coap-transport"
+          - name: TB_QUEUE_TYPE
+            value: "kafka"
+          - name: COAP_BIND_ADDRESS
+            value: "0.0.0.0"
+          - name: COAP_BIND_PORT
+            value: "8083"
+          - name: COAP_TIMEOUT
+            value: "10000"
+          - name: TB_KAFKA_SERVERS
+            value: "my-thingsboard-kafka:9092"
+          - name: TB_QUEUE_KAFKA_REPLICATION_FACTOR
+            value: "1"
+          volumeMounts:
+            - mountPath: /config
+              name: my-thingsboard-coap-transport-config
+          resources:
+            {}
+      volumes:
+        - name: my-thingsboard-coap-transport-config
+          configMap:
+            name: my-thingsboard-coap-transport-config
+            items:
+            - key: conf
+              path:  tb-coap-transport.conf
+            - key: logback
+              path:  logback.xml
+        - name: my-thingsboard-node-logs
+          emptyDir: {}
+---
+# Source: thingsboard/templates/http-transport.yaml
+#
+# Copyright © 2016-2020 The Thingsboard Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-thingsboard-http-transport
+  labels:
+    helm.sh/chart: thingsboard-0.1.3
+    app.kubernetes.io/name: thingsboard
+    app.kubernetes.io/instance: my-thingsboard
+    app.kubernetes.io/version: "3.4.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  podManagementPolicy: "Parallel"
+  serviceName: tb-http-transport
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: thingsboard-http
+      app.kubernetes.io/instance: my-thingsboard-http
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: thingsboard-http
+        app.kubernetes.io/instance: my-thingsboard-http
+    spec:
+      serviceAccountName: my-thingsboard
+      securityContext:
+        {}
+      containers:
+        - name: thingsboard
+          securityContext:
+            {}
+          image: "docker.io/thingsboard/tb-http-transport:3.4.1"
+          imagePullPolicy: Always
+          ports:
+          - containerPort: 8082
+            name: http
+          env:
+          - name: TB_SERVICE_ID
+            value: "tb-http-transport"
+          - name: TB_QUEUE_TYPE
+            value: "kafka"
+          - name: HTTP_BIND_ADDRESS
+            value: "0.0.0.0"
+          - name: HTTP_BIND_PORT
+            value: "8082"
+          - name: HTTP_REQUEST_TIMEOUT
+            value: "10000"
+          - name: TB_KAFKA_SERVERS
+            value: "my-thingsboard-kafka:9092"
+          - name: TB_QUEUE_KAFKA_REPLICATION_FACTOR
+            value: "1"
+          volumeMounts:
+            - mountPath: /config
+              name: my-thingsboard-http-transport-config
+          readinessProbe:
+            periodSeconds: 20
+            tcpSocket:
+              port: 8082
+          livenessProbe:
+            initialDelaySeconds: 120
+            periodSeconds: 20
+            tcpSocket:
+              port: 8082
+          resources:
+            {}
+      volumes:
+        - name: my-thingsboard-http-transport-config
+          configMap:
+            name: my-thingsboard-http-transport-config
+            items:
+            - key: conf
+              path:  tb-http-transport.conf
+            - key: logback
+              path:  logback.xml
+        - name: my-thingsboard-node-logs
+          emptyDir: {}
+---
+# Source: thingsboard/templates/mqtt-transport.yaml
+#
+# Copyright © 2016-2020 The Thingsboard Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-thingsboard-mqtt-transport
+  labels:
+    helm.sh/chart: thingsboard-0.1.3
+    app.kubernetes.io/name: thingsboard
+    app.kubernetes.io/instance: my-thingsboard
+    app.kubernetes.io/version: "3.4.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  podManagementPolicy: "Parallel"
+  serviceName: tb-mqtt-transport
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: thingsboard-mqtt
+      app.kubernetes.io/instance: my-thingsboard-mqtt
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: thingsboard-mqtt
+        app.kubernetes.io/instance: my-thingsboard-mqtt
+    spec:
+      serviceAccountName: my-thingsboard
+      securityContext:
+        {}
+      containers:
+        - name: thingsboard
+          securityContext:
+            {}
+          image: "docker.io/thingsboard/tb-mqtt-transport:3.4.1"
+          imagePullPolicy: Always
+          ports:
+          - containerPort: 8081
+            name: mqtt
+          env:
+          - name: TB_SERVICE_ID
+            value: "tb-mqtt-transport"
+          - name: TB_QUEUE_TYPE
+            value: "kafka"
+          - name: MQTT_TIMEOUT
+            value: "10000"
+          - name: TB_KAFKA_SERVERS
+            value: "my-thingsboard-kafka:9092"
+          - name: TB_QUEUE_KAFKA_REPLICATION_FACTOR
+            value: "1"
+          - name: MQTT_BIND_ADDRESS
+            value: "0.0.0.0"
+          - name: MQTT_BIND_PORT
+            value: "8081"
+          volumeMounts:
+            - mountPath: /config
+              name: my-thingsboard-mqtt-transport-config
+          readinessProbe:
+            periodSeconds: 20
+            tcpSocket:
+              port: 8081
+          livenessProbe:
+            initialDelaySeconds: 120
+            periodSeconds: 20
+            tcpSocket:
+              port: 8081
+          resources:
+            {}
+      volumes:
+        - name: my-thingsboard-mqtt-transport-config
+          configMap:
+            name: my-thingsboard-mqtt-transport-config
+            items:
+            - key: conf
+              path:  tb-mqtt-transport.conf
+            - key: logback
+              path:  logback.xml
+        - name: my-thingsboard-node-logs
+          emptyDir: {}
+---
+# Source: thingsboard/templates/node.yaml
+#
+# Copyright © 2016-2020 The Thingsboard Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-thingsboard-node
+  labels:
+    helm.sh/chart: thingsboard-0.1.3
+    app.kubernetes.io/name: thingsboard
+    app.kubernetes.io/instance: my-thingsboard
+    app.kubernetes.io/version: "3.4.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  serviceName: tb-node
+  podManagementPolicy: "Parallel"
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: thingsboard-node
+      app.kubernetes.io/instance: my-thingsboard-node
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: thingsboard-node
+        app.kubernetes.io/instance: my-thingsboard-node
+    spec:
+      serviceAccountName: my-thingsboard
+      securityContext:
+        {}
+      containers:
+        - name: thingsboard
+          securityContext:
+            {}
+          image: "docker.io/thingsboard/tb-node:3.4.1"
+          imagePullPolicy: Always
+          ports:
+          - containerPort: 8080
+            name: http
+          - containerPort: 9090
+            name: rpc
+          env:
+          - name: TB_SERVICE_ID
+            value: "tb-node"
+          - name: TB_SERVICE_TYPE
+            value: "monolith"
+          - name: TB_QUEUE_TYPE
+            value: "kafka"
+          - name: ZOOKEEPER_ENABLED
+            value: "true"
+          - name: ZOOKEEPER_URL
+            value: "my-thingsboard-zookeeper:2181"
+          - name: TB_KAFKA_SERVERS
+            value: "my-thingsboard-kafka:9092"
+          - name: TB_QUEUE_KAFKA_REPLICATION_FACTOR
+            value: "1"
+          - name: JS_EVALUATOR
+            value: "remote"
+          - name: TRANSPORT_TYPE
+            value: "remote"
+          - name: HTTP_LOG_CONTROLLER_ERROR_STACK_TRACE
+            value: "false"
+          - name: CACHE_TYPE
+            value: "redis"
+          - name: REDIS_HOST
+            value: "my-thingsboard-redis-master"
+          - name: REDIS_PASSWORD
+            value: "setplease"
+          envFrom:
+          - configMapRef:
+              name: my-thingsboard-node-db-config
+          volumeMounts:
+            - mountPath: /config
+              name: my-thingsboard-node-config
+            - mountPath: /var/log/thingsboard
+              name: my-thingsboard-node-logs
+          readinessProbe:
+            httpGet:
+              path: /login
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /login
+              port: http
+            initialDelaySeconds: 360
+            timeoutSeconds: 10
+          resources:
+            {}
+      volumes:
+        - name: my-thingsboard-node-config
+          configMap:
+            name: my-thingsboard-node-config
+            items:
+            - key: conf
+              path:  thingsboard.conf
+            - key: logback
+              path:  logback.xml
+        - name: my-thingsboard-node-logs
+          emptyDir: {}
+---
+# Source: thingsboard/templates/initializedb-job.yaml
+#
+# Copyright © 2016-2020 The Thingsboard Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: 'my-thingsboard-init-tb-db'
+  labels:
+    helm.sh/chart: thingsboard-0.1.3
+    app.kubernetes.io/name: thingsboard
+    app.kubernetes.io/instance: my-thingsboard
+    app.kubernetes.io/version: "3.4.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  ttlSecondsAfterFinished: 0
+  template:
+    spec:
+      imagePullSecrets:
+        - name: 'my-thingsboard-container-registry'
+      initContainers:
+        - name: check-db-ready
+          image: postgres:12
+          command: ['sh', '-c',
+            'until pg_isready -h my-thingsboard-pg-pgpool -p 5432 -t 3;
+            do echo waiting for database; sleep 2; done;']
+      containers:
+      - name: init-db
+        envFrom:
+        - configMapRef:
+            name: 'my-thingsboard-node-db-config'
+        volumeMounts:
+          - mountPath: /config
+            name: 'my-thingsboard-node-config'
+        image: "docker.io/thingsboard/tb-node:3.4.1"
+        command:
+          - "/bin/bash"
+        args:
+          - "-c"
+          - "start-tb-node.sh"
+        env:
+        - name: INSTALL_TB
+          value: "true"
+        - name: LOAD_DEMO
+          value: "false"
+      restartPolicy: Never
+      volumes:
+        - name: 'my-thingsboard-node-config'
+          configMap:
+            name: 'my-thingsboard-node-config'
+            items:
+            - key: conf
+              path: thingsboard.conf
+            - key: logback
+              path: logback.xml
+---
+# Source: thingsboard/templates/cassandra-init-db-configmap.yaml
+#
+# Copyright © 2016-2020 The Thingsboard Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+---
+# Source: thingsboard/templates/hpa.yaml
+#
+# Copyright © 2016-2020 The Thingsboard Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+---
+# Source: thingsboard/templates/hpa.yaml
+---
+---
+# Source: thingsboard/templates/hpa.yaml
+---
+---
+# Source: thingsboard/templates/ingress.yaml
+#
+# Copyright © 2016-2020 The Thingsboard Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+---
+# Source: thingsboard/templates/tests/test-connection.yaml
+#
+# Copyright © 2016-2020 The Thingsboard Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-thingsboard-test-connection"
+  labels:
+    helm.sh/chart: thingsboard-0.1.3
+    app.kubernetes.io/name: thingsboard
+    app.kubernetes.io/instance: my-thingsboard
+    app.kubernetes.io/version: "3.4.1"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-thingsboard:8080']
+  restartPolicy: Never

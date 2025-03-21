@@ -1,0 +1,192 @@
+---
+# Source: epinio-ui/templates/server.yaml
+apiVersion: v1
+kind: Secret
+type: Opaque
+metadata:
+  name: epinio-ui
+  namespace: default
+stringData:
+  encryptionKey: 3477474e3321395236376b594b524e4c445251543772255e3430203a6c4a3939
+  sessionSecret: ACeqtElQ29nlgMrf
+---
+# Source: epinio-ui/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: epinio-ui
+  namespace: default
+  labels:
+    helm.sh/chart: epinio-ui-1.7.2
+    app.kubernetes.io/name: epinio-ui
+    app.kubernetes.io/instance: my-epinio-ui
+    app.kubernetes.io/version: "v1.7.1-0.0.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: epinio-ui
+    app.kubernetes.io/instance: my-epinio-ui
+  ports:
+  - name: ui
+    port: 80
+    targetPort: 8000
+---
+# Source: epinio-ui/templates/server.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: epinio-ui
+  namespace: default
+  labels:
+    helm.sh/chart: epinio-ui-1.7.2
+    app.kubernetes.io/name: epinio-ui
+    app.kubernetes.io/instance: my-epinio-ui
+    app.kubernetes.io/version: "v1.7.1-0.0.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: epinio-ui
+      app.kubernetes.io/instance: my-epinio-ui
+  template:
+    metadata:
+      labels:
+        helm.sh/chart: epinio-ui-1.7.2
+        app.kubernetes.io/name: epinio-ui
+        app.kubernetes.io/instance: my-epinio-ui
+        app.kubernetes.io/version: "v1.7.1-0.0.1"
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      containers:
+      - name: epinio-ui
+        image: ghcr.io/epinio/epinio-ui:v1.7.1-0.0.1
+        imagePullPolicy: IfNotPresent
+        workingDir: /db
+
+        env:
+        - name: ALLOWED_ORIGINS
+          value: https://epinio.ui.epinio.dev
+        - name: EPINIO_API_URL
+          value: http://epinio-server.default.svc.cluster.local
+        - name: EPINIO_WSS_URL
+          value: ws://epinio-server.default.svc.cluster.local
+        - name: EPINIO_UI_URL
+          value: https://epinio.ui.epinio.dev
+        - name: EPINIO_API_SKIP_SSL
+          value: "true"
+        - name: EPINIO_THEME
+          value: "light"
+        - name: EPINIO_DEX_AUTH_URL
+          value: http://dex.default.svc.cluster.local:5556
+        - name: EPINIO_DEX_ISSUER
+          value: https://auth.ui.epinio.dev
+        - name: EPINIO_DEX_ENABLED
+          value: "true"
+        - name: EPINIO_DEX_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: dex-config
+              key: uiClientSecret
+        - name: HTTP_CLIENT_TIMEOUT_IN_SECS
+          value: "120"
+        - name: SESSION_STORE_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: epinio-ui
+              key: sessionSecret
+        - name: SESSION_STORE_EXPIRY
+          value: "1440"
+        - name: UI_PATH
+          value: "/ui"
+        - name: AUTH_ENDPOINT_TYPE
+          value: epinio
+        - name: ENCRYPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: epinio-ui
+              key: encryptionKey
+
+        - name: DATABASE_PROVIDER
+          value: sqlite
+        - name: HTTPS
+          value: "false"
+        - name: CONSOLE_PROXY_TLS_ADDRESS
+          value: 0.0.0.0:8000
+        - name: LOG_LEVEL
+          value: "info"
+        volumeMounts:
+        - mountPath: /tmp
+          name: tmp
+          readOnly: false
+        - mountPath: /db
+          name: db
+          readOnly: false
+
+        securityContext:
+          runAsUser: 1000
+          runAsNonRoot: true
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+        livenessProbe:
+          tcpSocket:
+            port: 8000
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        readinessProbe:
+          tcpSocket:
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - emptyDir: {}
+        name: tmp
+      - emptyDir: {}
+        name: db
+---
+# Source: epinio-ui/templates/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+  labels:
+    helm.sh/chart: epinio-ui-1.7.2
+    app.kubernetes.io/name: epinio-ui
+    app.kubernetes.io/instance: my-epinio-ui
+    app.kubernetes.io/version: "v1.7.1-0.0.1"
+    app.kubernetes.io/managed-by: Helm
+  name: epinio-ui
+  namespace: default
+spec:
+  rules:
+  - host: ui.epinio.dev
+    http:
+      paths:
+      - backend:
+          service:
+            name: epinio-ui
+            port:
+              number: 80
+        path: /
+        pathType: ImplementationSpecific
+  tls:
+  - hosts:
+    - ui.epinio.dev
+    secretName: epinio-ui-tls
+---
+# Source: epinio-ui/templates/certificate.yaml
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: epinio-ui
+  namespace: default
+spec:
+  dnsNames:
+  - ui.epinio.dev
+  issuerRef:
+    kind: ClusterIssuer
+    name: selfsigned-issuer
+  secretName: epinio-ui-tls

@@ -1,0 +1,237 @@
+---
+# Source: frontier-squid/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: 
+  name: my-frontier-squid-config
+  labels:
+    helm.sh/chart: frontier-squid-0.1.5
+    app.kubernetes.io/name: frontier-squid
+    app.kubernetes.io/instance: my-frontier-squid
+    app.kubernetes.io/version: "4.17-2.1"
+    app.kubernetes.io/managed-by: Helm
+data:
+  squid.conf: |
+    # General squid configuration
+    # Cache management
+    minimum_object_size 0 KB
+    cache_dir ufs /var/cache/squid 10000 16 256
+    maximum_object_size 1 GB
+    cache_mem 256 MB
+    maximum_object_size_in_memory 32 KB
+    cache_mgr squid
+    cache_effective_user squid
+    cache_effective_group squid
+    memory_cache_shared off
+
+    # Logs
+    access_log stdio:/dev/stdout rotate=0
+    cache_log /var/log/squid/cache.log
+    strip_query_terms off
+
+    # Miscellaneous
+    mime_table /etc/squid/mime.conf
+    icon_directory /usr/share/squid/icons/
+    pid_filename /var/run/squid/squid.pid
+    max_filedescriptors 16384
+    http_port 3128
+    umask 022
+    # As per https://bugs.squid-cache.org/show_bug.cgi?id=4554
+    quick_abort_min 0 KB
+    quick_abort_max 0 KB
+    # As per https://bugs.squid-cache.org/show_bug.cgi?id=4531
+    minimum_expiry_time 0
+    dns_v4_first on
+    negative_ttl 1 minute
+    collapsed_forwarding on
+    cache_miss_revalidate off
+    # Prevent squid PTR lookups (as per https://bugs.squid-cache.org/show_bug.cgi?id=4575)
+    url_rewrite_extras XXX
+    store_id_extras XXX
+
+    # ACL fragments
+    # ACL fragment for safe_ports: Will deny not safe_ports
+    acl safe_ports port 80		# http
+    acl safe_ports port 21		# ftp
+    acl safe_ports port 443		# https
+    acl safe_ports port 70		# gopher
+    acl safe_ports port 210		# wais
+    acl safe_ports port 1025-65535	# unregistered ports: including 3128 for local squidclient mgmt, 8000 for CVMFS/Frontier
+    acl safe_ports port 280		# http-mgmt
+    acl safe_ports port 488		# gss-http
+    acl safe_ports port 591		# filemaker
+    acl safe_ports port 777		# multiling http
+    
+    # ACL fragment for ssl_ports: Will deny connect method for not ssl_ports
+    acl CONNECT method connect
+    acl ssl_ports port 443
+    
+    # ACL fragment for stratum_ones (for reference see MAJOR_CVMFS from frontier-squid package)
+    #   - Release notes: http://frontier.cern.ch/dist/rpms/frontier-squidRELEASE_NOTES
+    #   - Tarball (check `squid/files/postinstall/squid.conf.proto`): http://frontier.cern.ch/dist/frontier-squid-<version>.tar.gz
+    acl stratum_ones url_regex ^http://cvmfs-stratum-one.cern.ch
+    acl stratum_ones url_regex ^http://cernvmfs.gridpp.rl.ac.uk
+    acl stratum_ones url_regex ^http://cvmfs-egi.gridpp.rl.ac.uk
+    acl stratum_ones url_regex ^http://grid-cvmfs-one.desy.de
+    acl stratum_ones url_regex ^http://cvmfs-stratum-one.zeuthen.desy.de
+    acl stratum_ones url_regex ^http://klei.nikhef.nl
+    acl stratum_ones url_regex ^http://cvmfs01.nikhef.nl
+    acl stratum_ones url_regex ^http://cvmfs.fnal.gov
+    acl stratum_ones url_regex ^http://cvmfs.racf.bnl.gov
+    acl stratum_ones url_regex ^http://hcc-cvmfs.unl.edu
+    acl stratum_ones url_regex ^http://cvmfs-s1.*.opensciencegrid.org
+    acl stratum_ones url_regex ^http://oasis.opensciencegrid.org
+    acl stratum_ones url_regex ^http://cvmfsrepo.lcg.triumf.ca
+    acl stratum_ones url_regex ^http://cvmfsrep.grid.sinica.edu.tw
+    acl stratum_ones url_regex ^http://cvmfs02.grid.sinica.edu.tw
+    acl stratum_ones url_regex ^http://cvmfs-stratum-one.ihep.ac.cn
+    acl stratum_ones url_regex ^http://cvmfs-s1.*\.computecanada\.(ca|net)
+    acl stratum_ones url_regex ^http://sampacs.*\.if\.usp\.br
+    acl stratum_ones url_regex ^http://cvmfs-.*\.hpc\.swin\.edu\.au
+
+    # ACL for ATLAS Frontier (for reference see ATLAS_FRONTIER from frontier-squid package)
+    acl atlas_frontier dstdom_regex ^(frontier.*\.racf\.bnl\.gov|atlas.*frontier.*\.cern\.ch|cc.*\.in2p3\.fr|lcg.*\.gridpp\.rl\.ac\.uk|(.*frontier.*|tier1nfs)\.triumf\.ca|atlas.*frontier\.openhtc\.io)$
+
+    # ACL for CMS Frontier (for reference see CMS_FRONTIER from frontier-squid package)
+    acl cms_frontier dstdom_regex ^(cmsfrontier.*\.cern\.ch|cms.*frontier\.openhtc\.io)$
+
+    # ACL fragment for osgstorage
+    acl osgstorage url_regex ^http://osgxroot.usatlas.bnl.gov
+    acl osgstorage url_regex ^http://xrd-cache-1.t2.ucsd.edu
+    acl osgstorage url_regex ^http://mwt2-stashcache.campuscluster.illinois.edu
+    acl osgstorage url_regex ^http://its-condor-xrootd1.syr.edu
+    acl osgstorage url_regex ^http://osg-kansas-city-stashcache.nrp.internet2.edu
+    acl osgstorage url_regex ^http://fiona.uvalight.net
+    acl osgstorage url_regex ^http://osg-chicago-stashcache.nrp.internet2.edu
+    acl osgstorage url_regex ^http://osg-new-york-stashcache.nrp.internet2.edu
+    acl osgstorage url_regex ^http://sc-cache.chtc.wisc.edu
+    acl osgstorage url_regex ^http://osg-gftp.pace.gatech.edu
+    
+    # ACL fragment for misc
+    acl misc url_regex ^http://cernvm-webfs.cern.ch
+    acl misc url_regex ^http://hepvm.cern.ch
+    acl misc url_regex ^http://sdtcvmfs.cern.ch
+    
+    # ACL fragment for grid_ca
+    acl grid_ca urlpath_regex \.crl$
+    acl grid_ca urlpath_regex \.r0$
+    acl grid_ca urlpath_regex \.pem$
+    acl grid_ca urlpath_regex \.der$
+    acl grid_ca urlpath_regex \.crl_url$
+    acl grid_ca urlpath_regex \/crls\/
+    
+    
+    # Refresh patterns
+    refresh_pattern ^ftp:                1440    20%    10080
+    refresh_pattern ^gopher:             1440     0%     1440
+    refresh_pattern -i (/cgi-bin/|\?)       0     0%        0
+    refresh_pattern .                       0    20%     4320
+    
+    
+    # Allow/Deny Directives
+    http_access deny !safe_ports
+    http_access deny CONNECT !ssl_ports
+    http_access allow localhost manager
+    http_access deny manager
+    http_access allow stratum_ones
+    http_access allow osgstorage
+    http_access allow misc
+    http_access allow grid_ca
+    http_access allow localhost
+    http_access deny all
+---
+# Source: frontier-squid/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-frontier-squid
+  labels:
+    helm.sh/chart: frontier-squid-0.1.5
+    app.kubernetes.io/name: frontier-squid
+    app.kubernetes.io/instance: my-frontier-squid
+    app.kubernetes.io/version: "4.17-2.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  clusterIP: None
+  ports:
+  - name: squid
+    port: 3128
+    protocol: TCP
+    targetPort: 3128
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: frontier-squid
+    app.kubernetes.io/instance: my-frontier-squid
+---
+# Source: frontier-squid/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-frontier-squid
+  labels:
+    helm.sh/chart: frontier-squid-0.1.5
+    app.kubernetes.io/name: frontier-squid
+    app.kubernetes.io/instance: my-frontier-squid
+    app.kubernetes.io/version: "4.17-2.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+   matchLabels:
+      app.kubernetes.io/name: frontier-squid
+      app.kubernetes.io/instance: my-frontier-squid
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: frontier-squid
+        app.kubernetes.io/instance: my-frontier-squid
+        component: frontier-squid
+        service: cvmfs
+    spec:
+      initContainers:
+        - name: frontier-squid-init0-makedirs
+          image: "gitlab-registry.cern.ch/sciencebox/docker-images/frontier-squid:4.17-2.1"
+          imagePullPolicy: IfNotPresent
+          command: ["/usr/sbin/squid", "-f", "/etc/squid/squid.conf", "-N", "-z"]
+          volumeMounts:
+            - name: frontier-squid-config
+              mountPath: /etc/squid/squid.conf
+              subPath: squid.conf
+            - name: frontier-squid-disk-cache
+              mountPath: /var/cache/squid
+      containers:
+      - name: frontier-squid
+        image: "gitlab-registry.cern.ch/sciencebox/docker-images/frontier-squid:4.17-2.1"
+        imagePullPolicy: IfNotPresent
+        command: ["/usr/sbin/squid", "-f", "/etc/squid/squid.conf", "-N", "-d1"]
+        resources:
+          {}
+        livenessProbe:
+          tcpSocket:
+            port: 3128
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          successThreshold: 1
+          failureThreshold: 3
+        readinessProbe:
+          exec:
+            command:
+            - "/bin/sh"
+            - "-c"
+            - "/usr/bin/curl --silent --fail --output /dev/null --proxy http://127.0.0.1:3128 http://cvmfs-stratum-one.cern.ch/cvmfs/info/v1/meta.json || /usr/bin/curl --silent --fail --output /dev/null --proxy http://127.0.0.1:3128 http://cvmfs.fnal.gov/cvmfs/info/v1/meta.json"
+          initialDelaySeconds: 5
+          periodSeconds: 30
+          timeoutSeconds: 5
+        volumeMounts:
+          - name: frontier-squid-config
+            mountPath: /etc/squid/squid.conf
+            subPath: squid.conf
+          - name: frontier-squid-disk-cache
+            mountPath: /var/cache/squid
+      volumes:
+        - name: frontier-squid-config
+          configMap:
+            name: my-frontier-squid-config
+        - name: frontier-squid-disk-cache
+          emptyDir: {}

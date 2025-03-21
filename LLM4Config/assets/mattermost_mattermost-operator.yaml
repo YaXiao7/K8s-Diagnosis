@@ -1,0 +1,246 @@
+---
+# Source: mattermost-operator/templates/mattermost-operator/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: mattermost-operator
+  labels:
+    helm.sh/chart: mattermost-operator-1.0.2
+    app.kubernetes.io/name: mattermost-operator
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/instance: my-mattermost-operator
+---
+# Source: mattermost-operator/templates/mattermost-operator/clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: mattermost-operator
+  labels:
+    helm.sh/chart: mattermost-operator-1.0.2
+    app.kubernetes.io/name: mattermost-operator
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/instance: my-mattermost-operator
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  - services
+  - endpoints
+  - persistentvolumeclaims
+  - events
+  - configmaps
+  - secrets
+  - serviceaccounts
+  verbs:
+  - '*'
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - '*'
+- apiGroups:
+  - ""
+  resources:
+  - namespaces
+  verbs:
+  - get
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  - daemonsets
+  - replicasets
+  - statefulsets
+  verbs:
+  - '*'
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingresses
+  - ingressclasses
+  verbs:
+  - '*'
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - rolebindings
+  - roles
+  verbs:
+  - get
+  - create
+  - list
+  - delete
+  - watch
+  - update
+- apiGroups:
+  - monitoring.coreos.com
+  resources:
+  - servicemonitors
+  verbs:
+  - get
+  - create
+- apiGroups:
+  - apps
+  resourceNames:
+  - mattermost-operator
+  resources:
+  - deployments/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - mattermost.com
+  resources:
+  - '*'
+  - clusterinstallations
+  - mattermostrestoredbs
+  verbs:
+  - '*'
+- apiGroups:
+  - installation.mattermost.com
+  resources:
+  - '*'
+  verbs:
+  - '*'
+- apiGroups:
+  - mysql.presslabs.org
+  resources:
+  - mysqlbackups
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - mysql.presslabs.org
+  resources:
+  - mysqlclusters
+  - mysqlclusters/status
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - miniocontroller.min.io
+  resources:
+  - '*'
+  verbs:
+  - '*'
+- apiGroups:
+  - minio.io
+  resources:
+  - '*'
+  verbs:
+  - '*'
+- apiGroups:
+  - batch
+  resources:
+  - jobs
+  verbs:
+  - get
+  - create
+  - list
+  - delete
+  - watch
+  - update
+- apiGroups:
+  - certificates.k8s.io
+  resources:
+  - certificatesigningrequests
+  - certificatesigningrequests/approval
+  - certificatesigningrequests/status
+  verbs:
+  - update
+  - create
+  - get
+---
+# Source: mattermost-operator/templates/mattermost-operator/clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: mattermost-operator
+  labels:
+    helm.sh/chart: mattermost-operator-1.0.2
+    app.kubernetes.io/name: mattermost-operator
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/instance: my-mattermost-operator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: mattermost-operator
+subjects:
+- kind: ServiceAccount
+  name: mattermost-operator
+  namespace: default
+---
+# Source: mattermost-operator/templates/mattermost-operator/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mattermost-operator
+  namespace: default
+  labels:
+    helm.sh/chart: mattermost-operator-1.0.2
+    app.kubernetes.io/name: mattermost-operator
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/instance: my-mattermost-operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: mattermost-operator
+      app.kubernetes.io/name: mattermost-operator
+      app.kubernetes.io/managed-by: Helm
+      app.kubernetes.io/instance: my-mattermost-operator
+  template:
+    metadata:
+      labels:
+        name: mattermost-operator
+        helm.sh/chart: mattermost-operator-1.0.2
+        app.kubernetes.io/name: mattermost-operator
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/instance: my-mattermost-operator
+    spec:
+      securityContext:
+        null
+      containers:
+      - args:
+          - --enable-leader-election
+          - --metrics-addr=0.0.0.0:8383
+        command:
+        - /mattermost-operator
+        env:
+        - name: MAX_RECONCILING_INSTALLATIONS
+          value: "20"
+        - name: MAX_RECONCILE_CONCURRENCY
+          value: "10"
+        - name: REQUEUE_ON_LIMIT_DELAY
+          value: "20s"
+        image: "mattermost/mattermost-operator:v1.22.0"
+        imagePullPolicy: "IfNotPresent"
+        name: mattermost-operator
+        securityContext:
+            null
+        ports:
+        - containerPort: 8383
+          name: metrics
+      serviceAccountName: mattermost-operator

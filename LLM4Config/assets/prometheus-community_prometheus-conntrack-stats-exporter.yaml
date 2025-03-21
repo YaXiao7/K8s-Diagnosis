@@ -1,0 +1,61 @@
+---
+# Source: prometheus-conntrack-stats-exporter/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-prometheus-conntrack-stats-exporter
+  labels:
+    helm.sh/chart: prometheus-conntrack-stats-exporter-0.5.10
+    app.kubernetes.io/name: prometheus-conntrack-stats-exporter
+    app.kubernetes.io/instance: my-prometheus-conntrack-stats-exporter
+    app.kubernetes.io/version: "v0.4.18"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: prometheus-conntrack-stats-exporter/templates/daemonset.yaml
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: my-prometheus-conntrack-stats-exporter
+  labels:
+    helm.sh/chart: prometheus-conntrack-stats-exporter-0.5.10
+    app.kubernetes.io/name: prometheus-conntrack-stats-exporter
+    app.kubernetes.io/instance: my-prometheus-conntrack-stats-exporter
+    app.kubernetes.io/version: "v0.4.18"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus-conntrack-stats-exporter
+      app.kubernetes.io/instance: my-prometheus-conntrack-stats-exporter
+  template:
+    metadata:
+      annotations:
+        prometheus.io/port: "9371"
+        prometheus.io/scrape: "true"
+      labels:
+        app.kubernetes.io/name: prometheus-conntrack-stats-exporter
+        app.kubernetes.io/instance: my-prometheus-conntrack-stats-exporter
+    spec:
+      hostNetwork: true
+      serviceAccountName: my-prometheus-conntrack-stats-exporter
+      securityContext:
+        {}
+      containers:
+        - name: prometheus-conntrack-stats-exporter
+          securityContext:
+            privileged: true
+          image: "jwkohnen/conntrack-stats-exporter:v0.4.18"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: metrics
+              containerPort: 9371
+              protocol: TCP
+          livenessProbe:
+            tcpSocket:
+              port: metrics
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: metrics
+          resources:
+            {}

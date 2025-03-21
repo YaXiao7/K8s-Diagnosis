@@ -1,0 +1,51 @@
+---
+# Source: postfixadmin-fetchmail/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-postfixadmin-fetchmail
+  labels:
+    helm.sh/chart: postfixadmin-fetchmail-0.4.0
+    app.kubernetes.io/name: postfixadmin-fetchmail
+    app.kubernetes.io/instance: my-postfixadmin-fetchmail
+    app.kubernetes.io/version: "0.3.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: postfixadmin-fetchmail/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-postfixadmin-fetchmail
+type: Opaque
+stringData:
+---
+# Source: postfixadmin-fetchmail/templates/cronjob.yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: my-postfixadmin-fetchmail
+spec:
+  schedule: "*/10 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: postfixadmin-fetchmail
+            app.kubernetes.io/instance: my-postfixadmin-fetchmail
+        spec:
+          containers:
+            - name: postfixadmin-fetchmail
+              envFrom:
+              - secretRef:
+                  name: my-postfixadmin-fetchmail
+              image: "docker.io/volkerraschek/postfixadmin-fetchmail:0.3.0"
+              imagePullPolicy: IfNotPresent
+              resources:
+                {}
+              securityContext:
+                {}
+          restartPolicy: OnFailure
+          securityContext:
+            {}
+          serviceAccountName: my-postfixadmin-fetchmail

@@ -1,0 +1,223 @@
+---
+# Source: multus/templates/common.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-multus
+  labels:
+    helm.sh/chart: multus-3.5.2
+    app.kubernetes.io/name: multus
+    app.kubernetes.io/instance: my-multus
+    app.kubernetes.io/version: "v3.7.1"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: multus/templates/ClusterRole.yaml
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-multus
+  labels:
+    helm.sh/chart: multus-3.5.2
+    app.kubernetes.io/name: multus
+    app.kubernetes.io/instance: my-multus
+    app.kubernetes.io/version: "v3.7.1"
+    app.kubernetes.io/managed-by: Helm
+rules:
+  - apiGroups: ["k8s.cni.cncf.io"]
+    resources:
+      - '*'
+    verbs:
+      - '*'
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+      - pods/status
+    verbs:
+      - get
+      - update
+  - apiGroups:
+      - ""
+      - events.k8s.io
+    resources:
+      - events
+    verbs:
+      - create
+      - patch
+      - update
+---
+# Source: multus/templates/ClusterRoleBinding.yaml
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-multus
+  labels:
+    helm.sh/chart: multus-3.5.2
+    app.kubernetes.io/name: multus
+    app.kubernetes.io/instance: my-multus
+    app.kubernetes.io/version: "v3.7.1"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-multus
+subjects:
+- kind: ServiceAccount
+  name: my-multus
+  namespace: default
+---
+# Source: multus/templates/common.yaml
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: my-multus
+  labels:
+    app.kubernetes.io/instance: my-multus
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: multus
+    app.kubernetes.io/version: v3.7.1
+    helm.sh/chart: multus-3.5.2
+spec:
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: multus
+      app.kubernetes.io/instance: my-multus
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: multus
+        app.kubernetes.io/instance: my-multus
+    spec:
+      
+      serviceAccountName: my-multus
+      automountServiceAccountToken: true
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      enableServiceLinks: true
+      initContainers:
+        - image: ghcr.io/k8s-at-home/cni-plugins:v0.9.1
+          imagePullPolicy: IfNotPresent
+          name: cni-installer
+          volumeMounts:
+          - mountPath: /host/opt/cni/bin
+            name: cnibin
+      containers:
+        - name: my-multus
+          image: "ghcr.io/k8snetworkplumbingwg/multus-cni:v3.7.1"
+          imagePullPolicy: IfNotPresent
+          command:
+              
+            - /entrypoint.sh
+          args:
+            
+            - --multus-conf-file=auto
+            - --cleanup-config-on-exit=true
+            - --cni-version=0.3.1
+            - --multus-kubeconfig-file-host=/var/lib/rancher/k3s/agent/etc/cni/net.d/multus.d/multus.kubeconfig
+          securityContext:
+            privileged: true
+          ports:
+            
+          volumeMounts:
+            - name: cni
+              mountPath: /host/etc/cni/net.d
+            - name: cnibin
+              mountPath: /host/opt/cni/bin
+          
+      volumes:
+        - name: cni
+          hostPath:
+            path: /var/lib/rancher/k3s/agent/etc/cni/net.d
+            type: Directory
+        - name: cnibin
+          hostPath:
+            path: /var/lib/rancher/k3s/data/current/bin
+            type: Directory
+---
+# Source: multus/templates/tests/pod-test.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-multus-pod-test
+  labels:
+    helm.sh/chart: multus-3.5.2
+    app.kubernetes.io/name: multus
+    app.kubernetes.io/instance: my-multus
+    app.kubernetes.io/version: "v3.7.1"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test-success
+    k8s.v1.cni.cncf.io/networks: |
+      [{
+        "name": "my-multus-test"
+      }]
+spec:
+  containers:
+  - name: podt-test
+    image: "alpine"
+    command: ["/bin/true"]
+  restartPolicy: Never
+---
+# Source: multus/templates/uninstallJob.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: my-multus-uninstall
+  labels:
+    helm.sh/chart: multus-3.5.2
+    app.kubernetes.io/name: multus
+    app.kubernetes.io/instance: my-multus
+    app.kubernetes.io/version: "v3.7.1"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    # This is what defines this resource as a hook. Without this line, the
+    # job is considered part of the release.
+    "helm.sh/hook": pre-delete
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  template:
+    metadata:
+      name: my-multus-uninstall
+      labels:
+        helm.sh/chart: multus-3.5.2
+        app.kubernetes.io/name: multus
+        app.kubernetes.io/instance: my-multus
+        app.kubernetes.io/version: "v3.7.1"
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: remove-config
+        image: "alpine"
+        command: ["/bin/sh","-c", "rm -rf  /host/etc/cni/net.d/*multus*"]
+        volumeMounts:
+        - name: cni
+          mountPath: /host/etc/cni/net.d
+      volumes:
+      - name: cni
+        hostPath:
+          path: /var/lib/rancher/k3s/agent/etc/cni/net.d
+          type: Directory
+---
+# Source: multus/templates/tests/network.yaml
+apiVersion: "k8s.cni.cncf.io/v1"
+kind: NetworkAttachmentDefinition
+metadata:
+  name: my-multus-test
+  labels:
+    helm.sh/chart: multus-3.5.2
+    app.kubernetes.io/name: multus
+    app.kubernetes.io/instance: my-multus
+    app.kubernetes.io/version: "v3.7.1"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  config: '{
+      "cniVersion": "0.3.1",
+      "name": "my-multus-test",
+      "type": "macvlan",
+      "capabilities": { "ips": true }
+    }'

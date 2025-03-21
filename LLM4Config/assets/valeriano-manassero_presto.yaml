@@ -1,0 +1,246 @@
+---
+# Source: presto/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: presto-connectors
+  labels:
+    helm.sh/chart: presto-1.2.9
+    app.kubernetes.io/name: presto
+    app.kubernetes.io/instance: my-presto
+    app.kubernetes.io/version: "348"
+    app.kubernetes.io/managed-by: Helm
+data:
+---
+# Source: presto/templates/configmap-coordinator.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-presto-coordinator
+  labels:
+    helm.sh/chart: presto-1.2.9
+    app.kubernetes.io/name: presto
+    app.kubernetes.io/instance: my-presto
+    app.kubernetes.io/version: "348"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: coordinator
+data:
+  node.properties: |
+    node.environment=production
+    node.data-dir=/data/presto
+    plugin.dir=/usr/lib/presto/plugin
+
+  jvm.config: |
+    -server
+    -Xmx7G
+    -XX:+UseG1GC
+    -XX:G1HeapRegionSize=32M
+    -XX:+UseGCOverheadLimit
+    -XX:+ExplicitGCInvokesConcurrent
+    -XX:+HeapDumpOnOutOfMemoryError
+    -XX:+ExitOnOutOfMemoryError
+    -Djdk.attach.allowAttachSelf=true
+
+  config.properties: |
+    coordinator=true
+    node-scheduler.include-coordinator=false
+    http-server.http.port=8080
+    query.max-memory=3GB
+    query.max-memory-per-node=1GB
+    query.max-memory=6GB
+    query.max-total-memory-per-node=2GB
+    discovery-server.enabled=true
+    discovery.uri=http://localhost:8080
+
+  log.properties: |
+    io.prestosql=INFO
+---
+# Source: presto/templates/configmap-worker.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-presto-worker
+  labels:
+    helm.sh/chart: presto-1.2.9
+    app.kubernetes.io/name: presto
+    app.kubernetes.io/instance: my-presto
+    app.kubernetes.io/version: "348"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: worker
+data:
+  node.properties: |
+    node.environment=production
+    node.data-dir=/data/presto
+    plugin.dir=/usr/lib/presto/plugin
+
+  jvm.config: |
+    -server
+    -Xmx7G
+    -XX:+UseG1GC
+    -XX:G1HeapRegionSize=32M
+    -XX:+UseGCOverheadLimit
+    -XX:+ExplicitGCInvokesConcurrent
+    -XX:+HeapDumpOnOutOfMemoryError
+    -XX:+ExitOnOutOfMemoryError
+    -Djdk.attach.allowAttachSelf=true
+
+  config.properties: |
+    coordinator=false
+    http-server.http.port=8080
+    query.max-memory=3GB
+    query.max-memory-per-node=1GB
+    query.max-memory=6GB
+    query.max-total-memory-per-node=2GB
+    discovery.uri=http://my-presto:8080
+
+  log.properties: |
+    io.prestosql=INFO
+
+  health_check.sh: |
+    #!/bin/bash
+    curl -H 'X-Presto-User: healthCheck' --silent my-presto:8080/v1/node | tr "," "\n" | grep --silent $(hostname -i)
+---
+# Source: presto/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-presto
+  labels:
+    helm.sh/chart: presto-1.2.9
+    app.kubernetes.io/name: presto
+    app.kubernetes.io/instance: my-presto
+    app.kubernetes.io/version: "348"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: http-coord
+      protocol: TCP
+      name: http-coord
+  selector:
+    app.kubernetes.io/name: presto
+    app.kubernetes.io/instance: my-presto
+    app.kubernetes.io/component: coordinator
+---
+# Source: presto/templates/deployment-coordinator.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-presto-coordinator
+  labels:
+    helm.sh/chart: presto-1.2.9
+    app.kubernetes.io/name: presto
+    app.kubernetes.io/instance: my-presto
+    app.kubernetes.io/version: "348"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: coordinator
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: presto
+      app.kubernetes.io/instance: my-presto
+      app.kubernetes.io/component: coordinator
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: presto
+        app.kubernetes.io/instance: my-presto
+        app.kubernetes.io/component: coordinator
+      annotations:
+        checksum/config: 87620a7953e98b044ee59e75b56aa2a962f878e4ed1828f7e3fc5c3fea02ac14
+    spec:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+      volumes:
+        - name: config-volume
+          configMap:
+            name: my-presto-coordinator
+        - name: catalog-volume
+          secret:
+            secretName: presto-connectors
+      containers:
+        - name: presto-coordinator
+          image: "prestosql/presto:348"
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - mountPath: /usr/lib/presto/etc
+              name: config-volume
+            - mountPath: /usr/lib/presto/etc/catalog
+              name: catalog-volume
+          ports:
+            - name: http-coord
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /v1/status
+              port: http-coord
+          readinessProbe:
+            httpGet:
+              path: /v1/status
+              port: http-coord
+          resources:
+            {}
+---
+# Source: presto/templates/deployment-worker.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-presto-worker
+  labels:
+    helm.sh/chart: presto-1.2.9
+    app.kubernetes.io/name: presto
+    app.kubernetes.io/instance: my-presto
+    app.kubernetes.io/version: "348"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: worker
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: presto
+      app.kubernetes.io/instance: my-presto
+      app.kubernetes.io/component: worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: presto
+        app.kubernetes.io/instance: my-presto
+        app.kubernetes.io/component: worker
+      annotations:
+        checksum/config: 87620a7953e98b044ee59e75b56aa2a962f878e4ed1828f7e3fc5c3fea02ac14
+    spec:
+      volumes:
+        - name: config-volume
+          configMap:
+            name: my-presto-worker
+        - name: catalog-volume
+          secret:
+            secretName: presto-connectors
+      containers:
+        - name: presto-worker
+          image: "prestosql/presto:348"
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - mountPath: /usr/lib/presto/etc
+              name: config-volume
+            - mountPath: /usr/lib/presto/etc/catalog
+              name: catalog-volume
+          livenessProbe:
+            exec:
+              command:
+                - /bin/bash
+                - /usr/lib/presto/etc/health_check.sh
+            initialDelaySeconds: 10
+            periodSeconds: 25
+          readinessProbe:
+            exec:
+              command:
+                - /bin/bash
+                - /usr/lib/presto/etc/health_check.sh
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            {}

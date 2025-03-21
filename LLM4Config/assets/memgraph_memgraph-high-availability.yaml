@@ -1,0 +1,858 @@
+---
+# Source: memgraph-high-availability/templates/services-coordinators.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: memgraph-coordinator-1
+spec:
+  type: ClusterIP
+  selector:
+    app: memgraph-coordinator-1
+  ports:
+    - protocol: TCP
+      name: bolt
+      port: 7687
+      targetPort: 7687
+    - protocol: TCP
+      name: coordinator
+      port: 12000
+      targetPort: 12000
+    - protocol: TCP
+      name: management
+      port: 10000
+      targetPort: 10000
+---
+# Source: memgraph-high-availability/templates/services-coordinators.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: memgraph-coordinator-2
+spec:
+  type: ClusterIP
+  selector:
+    app: memgraph-coordinator-2
+  ports:
+    - protocol: TCP
+      name: bolt
+      port: 7687
+      targetPort: 7687
+    - protocol: TCP
+      name: coordinator
+      port: 12000
+      targetPort: 12000
+    - protocol: TCP
+      name: management
+      port: 10000
+      targetPort: 10000
+---
+# Source: memgraph-high-availability/templates/services-coordinators.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: memgraph-coordinator-3
+spec:
+  type: ClusterIP
+  selector:
+    app: memgraph-coordinator-3
+  ports:
+    - protocol: TCP
+      name: bolt
+      port: 7687
+      targetPort: 7687
+    - protocol: TCP
+      name: coordinator
+      port: 12000
+      targetPort: 12000
+    - protocol: TCP
+      name: management
+      port: 10000
+      targetPort: 10000
+
+# Service for coordinators instances external
+---
+# Source: memgraph-high-availability/templates/services-coordinators.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: memgraph-coordinator-1-external
+spec:
+  type: NodePort
+  selector:
+    app: memgraph-coordinator-1
+  ports:
+    - protocol: TCP
+      name: bolt
+      port: 7687
+      targetPort: 7687
+---
+# Source: memgraph-high-availability/templates/services-coordinators.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: memgraph-coordinator-2-external
+spec:
+  type: NodePort
+  selector:
+    app: memgraph-coordinator-2
+  ports:
+    - protocol: TCP
+      name: bolt
+      port: 7687
+      targetPort: 7687
+---
+# Source: memgraph-high-availability/templates/services-coordinators.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: memgraph-coordinator-3-external
+spec:
+  type: NodePort
+  selector:
+    app: memgraph-coordinator-3
+  ports:
+    - protocol: TCP
+      name: bolt
+      port: 7687
+      targetPort: 7687
+---
+# Source: memgraph-high-availability/templates/services-data.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: memgraph-data-0
+spec:
+  type: ClusterIP
+  selector:
+    app: memgraph-data-0
+  ports:
+    - protocol: TCP
+      name: bolt
+      port: 7687
+      targetPort: 7687
+    - protocol: TCP
+      name: management
+      port: 10000
+      targetPort: 10000
+    - protocol: TCP
+      name: replication
+      port: 20000
+      targetPort: 20000
+---
+# Source: memgraph-high-availability/templates/services-data.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: memgraph-data-1
+spec:
+  type: ClusterIP
+  selector:
+    app: memgraph-data-1
+  ports:
+    - protocol: TCP
+      name: bolt
+      port: 7687
+      targetPort: 7687
+    - protocol: TCP
+      name: management
+      port: 10000
+      targetPort: 10000
+    - protocol: TCP
+      name: replication
+      port: 20000
+      targetPort: 20000
+
+# Service for data instances external
+---
+# Source: memgraph-high-availability/templates/services-data.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: memgraph-data-0-external
+spec:
+  type: NodePort
+  selector:
+    app: memgraph-data-0
+  ports:
+    - protocol: TCP
+      name: bolt
+      port: 7687
+      targetPort: 7687
+---
+# Source: memgraph-high-availability/templates/services-data.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: memgraph-data-1-external
+spec:
+  type: NodePort
+  selector:
+    app: memgraph-data-1
+  ports:
+    - protocol: TCP
+      name: bolt
+      port: 7687
+      targetPort: 7687
+---
+# Source: memgraph-high-availability/templates/coordinators.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: memgraph-coordinator-1
+spec:
+  serviceName: "memgraph-coordinator-1"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: memgraph-coordinator-1
+  template:
+    metadata:
+      labels:
+        app: memgraph-coordinator-1
+    spec:
+    
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - memgraph-coordinator-1
+                - memgraph-coordinator-2
+                - memgraph-coordinator-3
+                - memgraph-data-0
+                - memgraph-data-1
+            topologyKey: "kubernetes.io/hostname"
+    
+      initContainers:
+      - name: init
+        image: "memgraph/memgraph:2.18.1"
+        volumeMounts:
+        - name: memgraph-coordinator-1-lib-storage
+          mountPath: /var/lib/memgraph
+        - name: memgraph-coordinator-1-log-storage
+          mountPath: /var/log/memgraph
+        command: [ "/bin/sh","-c" ]
+        args: [ "chown -R memgraph:memgraph /var/log; chown -R memgraph:memgraph /var/lib" ]
+        securityContext:
+          privileged: true
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop: [ "all" ]
+            add: [ "CHOWN" ]
+          runAsUser: 0
+          runAsNonRoot: false
+      containers:
+      - name: memgraph-coordinator
+        image: "memgraph/memgraph:2.18.1"
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 7687
+        - containerPort: 10000
+        - containerPort: 12000
+        args:
+        - "--experimental-enabled=high-availability"
+        - "--coordinator-id=1"
+        - "--coordinator-port=12000"
+        - "--management-port=10000"
+        - "--bolt-port=7687"
+        - "--also-log-to-stderr"
+        - "--log-level=TRACE"
+        - "--coordinator-hostname=memgraph-coordinator-1.default.svc.cluster.local"
+        - "--log-file=/var/log/memgraph/memgraph.log"
+        - "--nuraft-log-file=/var/log/memgraph/memgraph.log"
+        env:
+        - name: MEMGRAPH_ENTERPRISE_LICENSE
+          value: "<your-license>"
+        - name: MEMGRAPH_ORGANIZATION_NAME
+          value: "<your-organization-name>"
+        volumeMounts:
+          - name: memgraph-coordinator-1-lib-storage
+            mountPath: /var/lib/memgraph
+          - name: memgraph-coordinator-1-log-storage
+            mountPath: /var/log/memgraph
+  volumeClaimTemplates:
+    - metadata:
+        name: memgraph-coordinator-1-lib-storage
+      spec:
+        accessModes:
+        - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: 1Gi
+    - metadata:
+        name: memgraph-coordinator-1-log-storage
+      spec:
+        accessModes:
+        - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: 256Mi
+---
+# Source: memgraph-high-availability/templates/coordinators.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: memgraph-coordinator-2
+spec:
+  serviceName: "memgraph-coordinator-2"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: memgraph-coordinator-2
+  template:
+    metadata:
+      labels:
+        app: memgraph-coordinator-2
+    spec:
+    
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - memgraph-coordinator-1
+                - memgraph-coordinator-2
+                - memgraph-coordinator-3
+                - memgraph-data-0
+                - memgraph-data-1
+            topologyKey: "kubernetes.io/hostname"
+    
+      initContainers:
+      - name: init
+        image: "memgraph/memgraph:2.18.1"
+        volumeMounts:
+        - name: memgraph-coordinator-2-lib-storage
+          mountPath: /var/lib/memgraph
+        - name: memgraph-coordinator-2-log-storage
+          mountPath: /var/log/memgraph
+        command: [ "/bin/sh","-c" ]
+        args: [ "chown -R memgraph:memgraph /var/log; chown -R memgraph:memgraph /var/lib" ]
+        securityContext:
+          privileged: true
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop: [ "all" ]
+            add: [ "CHOWN" ]
+          runAsUser: 0
+          runAsNonRoot: false
+      containers:
+      - name: memgraph-coordinator
+        image: "memgraph/memgraph:2.18.1"
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 7687
+        - containerPort: 10000
+        - containerPort: 12000
+        args:
+        - "--experimental-enabled=high-availability"
+        - "--coordinator-id=2"
+        - "--coordinator-port=12000"
+        - "--management-port=10000"
+        - "--bolt-port=7687"
+        - "--also-log-to-stderr"
+        - "--log-level=TRACE"
+        - "--coordinator-hostname=memgraph-coordinator-2.default.svc.cluster.local"
+        - "--log-file=/var/log/memgraph/memgraph.log"
+        - "--nuraft-log-file=/var/log/memgraph/memgraph.log"
+        env:
+        - name: MEMGRAPH_ENTERPRISE_LICENSE
+          value: "<your-license>"
+        - name: MEMGRAPH_ORGANIZATION_NAME
+          value: "<your-organization-name>"
+        volumeMounts:
+          - name: memgraph-coordinator-2-lib-storage
+            mountPath: /var/lib/memgraph
+          - name: memgraph-coordinator-2-log-storage
+            mountPath: /var/log/memgraph
+  volumeClaimTemplates:
+    - metadata:
+        name: memgraph-coordinator-2-lib-storage
+      spec:
+        accessModes:
+        - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: 1Gi
+    - metadata:
+        name: memgraph-coordinator-2-log-storage
+      spec:
+        accessModes:
+        - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: 256Mi
+---
+# Source: memgraph-high-availability/templates/coordinators.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: memgraph-coordinator-3
+spec:
+  serviceName: "memgraph-coordinator-3"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: memgraph-coordinator-3
+  template:
+    metadata:
+      labels:
+        app: memgraph-coordinator-3
+    spec:
+    
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - memgraph-coordinator-1
+                - memgraph-coordinator-2
+                - memgraph-coordinator-3
+                - memgraph-data-0
+                - memgraph-data-1
+            topologyKey: "kubernetes.io/hostname"
+    
+      initContainers:
+      - name: init
+        image: "memgraph/memgraph:2.18.1"
+        volumeMounts:
+        - name: memgraph-coordinator-3-lib-storage
+          mountPath: /var/lib/memgraph
+        - name: memgraph-coordinator-3-log-storage
+          mountPath: /var/log/memgraph
+        command: [ "/bin/sh","-c" ]
+        args: [ "chown -R memgraph:memgraph /var/log; chown -R memgraph:memgraph /var/lib" ]
+        securityContext:
+          privileged: true
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop: [ "all" ]
+            add: [ "CHOWN" ]
+          runAsUser: 0
+          runAsNonRoot: false
+      containers:
+      - name: memgraph-coordinator
+        image: "memgraph/memgraph:2.18.1"
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 7687
+        - containerPort: 10000
+        - containerPort: 12000
+        args:
+        - "--experimental-enabled=high-availability"
+        - "--coordinator-id=3"
+        - "--coordinator-port=12000"
+        - "--management-port=10000"
+        - "--bolt-port=7687"
+        - "--also-log-to-stderr"
+        - "--log-level=TRACE"
+        - "--coordinator-hostname=memgraph-coordinator-3.default.svc.cluster.local"
+        - "--log-file=/var/log/memgraph/memgraph.log"
+        - "--nuraft-log-file=/var/log/memgraph/memgraph.log"
+        env:
+        - name: MEMGRAPH_ENTERPRISE_LICENSE
+          value: "<your-license>"
+        - name: MEMGRAPH_ORGANIZATION_NAME
+          value: "<your-organization-name>"
+        volumeMounts:
+          - name: memgraph-coordinator-3-lib-storage
+            mountPath: /var/lib/memgraph
+          - name: memgraph-coordinator-3-log-storage
+            mountPath: /var/log/memgraph
+  volumeClaimTemplates:
+    - metadata:
+        name: memgraph-coordinator-3-lib-storage
+      spec:
+        accessModes:
+        - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: 1Gi
+    - metadata:
+        name: memgraph-coordinator-3-log-storage
+      spec:
+        accessModes:
+        - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: 256Mi
+---
+# Source: memgraph-high-availability/templates/data.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: memgraph-data-0
+spec:
+  serviceName: "memgraph-data-0"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: memgraph-data-0
+  template:
+    metadata:
+      labels:
+        app: memgraph-data-0
+    spec:
+    
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - memgraph-coordinator-1
+                - memgraph-coordinator-2
+                - memgraph-coordinator-3
+                - memgraph-data-0
+                - memgraph-data-1
+            topologyKey: "kubernetes.io/hostname"
+    
+      initContainers:
+      - name: init
+        image: "memgraph/memgraph:2.18.1"
+        volumeMounts:
+        - name: memgraph-data-0-lib-storage
+          mountPath: /var/lib/memgraph
+        - name: memgraph-data-0-log-storage
+          mountPath: /var/log/memgraph
+        command: [ "/bin/sh","-c" ]
+        args: [ "chown -R memgraph:memgraph /var/log; chown -R memgraph:memgraph /var/lib" ]
+        securityContext:
+          privileged: true
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop: [ "all" ]
+            add: [ "CHOWN" ]
+          runAsUser: 0
+          runAsNonRoot: false
+      containers:
+      - name: memgraph-data
+        image: "memgraph/memgraph:2.18.1"
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 7687
+        - containerPort: 10000
+        - containerPort: 20000
+        args:
+        - "--experimental-enabled=high-availability"
+        - "--management-port=10000"
+        - "--bolt-port=7687"
+        - "--also-log-to-stderr"
+        - "--log-level=TRACE"
+        - "--log-file=/var/log/memgraph/memgraph.log"
+        env:
+        - name: MEMGRAPH_ENTERPRISE_LICENSE
+          value: "<your-license>"
+        - name: MEMGRAPH_ORGANIZATION_NAME
+          value: "<your-organization-name>"
+        volumeMounts:
+          - name: memgraph-data-0-lib-storage
+            mountPath: /var/lib/memgraph
+          - name: memgraph-data-0-log-storage
+            mountPath: /var/log/memgraph
+  volumeClaimTemplates:
+    - metadata:
+        name: memgraph-data-0-lib-storage
+      spec:
+        accessModes:
+        - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: 1Gi
+    - metadata:
+        name: memgraph-data-0-log-storage
+      spec:
+        accessModes:
+        - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: 256Mi
+---
+# Source: memgraph-high-availability/templates/data.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: memgraph-data-1
+spec:
+  serviceName: "memgraph-data-1"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: memgraph-data-1
+  template:
+    metadata:
+      labels:
+        app: memgraph-data-1
+    spec:
+    
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - memgraph-coordinator-1
+                - memgraph-coordinator-2
+                - memgraph-coordinator-3
+                - memgraph-data-0
+                - memgraph-data-1
+            topologyKey: "kubernetes.io/hostname"
+    
+      initContainers:
+      - name: init
+        image: "memgraph/memgraph:2.18.1"
+        volumeMounts:
+        - name: memgraph-data-1-lib-storage
+          mountPath: /var/lib/memgraph
+        - name: memgraph-data-1-log-storage
+          mountPath: /var/log/memgraph
+        command: [ "/bin/sh","-c" ]
+        args: [ "chown -R memgraph:memgraph /var/log; chown -R memgraph:memgraph /var/lib" ]
+        securityContext:
+          privileged: true
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop: [ "all" ]
+            add: [ "CHOWN" ]
+          runAsUser: 0
+          runAsNonRoot: false
+      containers:
+      - name: memgraph-data
+        image: "memgraph/memgraph:2.18.1"
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 7687
+        - containerPort: 10000
+        - containerPort: 20000
+        args:
+        - "--experimental-enabled=high-availability"
+        - "--management-port=10000"
+        - "--bolt-port=7687"
+        - "--also-log-to-stderr"
+        - "--log-level=TRACE"
+        - "--log-file=/var/log/memgraph/memgraph.log"
+        env:
+        - name: MEMGRAPH_ENTERPRISE_LICENSE
+          value: "<your-license>"
+        - name: MEMGRAPH_ORGANIZATION_NAME
+          value: "<your-organization-name>"
+        volumeMounts:
+          - name: memgraph-data-1-lib-storage
+            mountPath: /var/lib/memgraph
+          - name: memgraph-data-1-log-storage
+            mountPath: /var/log/memgraph
+  volumeClaimTemplates:
+    - metadata:
+        name: memgraph-data-1-lib-storage
+      spec:
+        accessModes:
+        - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: 1Gi
+    - metadata:
+        name: memgraph-data-1-log-storage
+      spec:
+        accessModes:
+        - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: 256Mi
+---
+# Source: memgraph-high-availability/templates/cluster-setup.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: memgraph-setup
+spec:
+  template:
+    spec:
+      containers:
+      - name: memgraph-setup
+        image: "memgraph/memgraph:2.18.1"
+        command: ["/bin/bash", "-c"]
+        args:
+        - |
+          # Install netcat
+          echo "Installing netcat..."
+          apt-get update && apt-get install -y netcat-openbsd
+
+          # Wait until the pods are available
+          echo "Waiting for pods to become available for Bolt connection..."
+          until nc -z memgraph-coordinator-1.default.svc.cluster.local 7687; do sleep 1; done
+          until nc -z memgraph-coordinator-2.default.svc.cluster.local 7687; do sleep 1; done
+          until nc -z memgraph-coordinator-3.default.svc.cluster.local 7687; do sleep 1; done
+          until nc -z memgraph-data-0.default.svc.cluster.local 7687; do sleep 1; done
+          until nc -z memgraph-data-1.default.svc.cluster.local 7687; do sleep 1; done
+          echo "Pods are available for Bolt connection!"
+
+          sleep 5
+
+          # Run the mgconsole commands
+          echo "Running mgconsole commands..."
+          echo 'ADD COORDINATOR 2 WITH CONFIG {"bolt_server": "memgraph-coordinator-2.default.svc.cluster.local:7687", "management_server":  "memgraph-coordinator-2.default.svc.cluster.local:10000", "coordinator_server":  "memgraph-coordinator-2.default.svc.cluster.local:12000"};' | mgconsole --host memgraph-coordinator-1.default.svc.cluster.local --port 7687
+          echo 'ADD COORDINATOR 3 WITH CONFIG {"bolt_server": "memgraph-coordinator-3.default.svc.cluster.local:7687", "management_server":  "memgraph-coordinator-3.default.svc.cluster.local:10000", "coordinator_server":  "memgraph-coordinator-3.default.svc.cluster.local:12000"};' | mgconsole --host memgraph-coordinator-1.default.svc.cluster.local --port 7687
+          echo 'REGISTER INSTANCE instance_1 WITH CONFIG {"bolt_server": "memgraph-data-0.default.svc.cluster.local:7687", "management_server": "memgraph-data-0.default.svc.cluster.local:10000", "replication_server": "memgraph-data-0.default.svc.cluster.local:20000"};' | mgconsole --host memgraph-coordinator-1.default.svc.cluster.local --port 7687
+          echo 'REGISTER INSTANCE instance_2 WITH CONFIG {"bolt_server": "memgraph-data-1.default.svc.cluster.local:7687", "management_server": "memgraph-data-1.default.svc.cluster.local:10000", "replication_server": "memgraph-data-1.default.svc.cluster.local:20000"};' | mgconsole --host memgraph-coordinator-1.default.svc.cluster.local --port 7687
+          echo 'SET INSTANCE instance_1 TO MAIN;' | mgconsole --host memgraph-coordinator-1.default.svc.cluster.local --port 7687
+          sleep 3
+          echo "SHOW INSTANCES on coord1"
+          echo 'SHOW INSTANCES;' | mgconsole --host memgraph-coordinator-1.default.svc.cluster.local --port 7687
+          echo "SHOW INSTANCES on coord2"
+          echo 'SHOW INSTANCES;' | mgconsole --host memgraph-coordinator-2.default.svc.cluster.local --port 7687
+          echo "SHOW INSTANCES on coord3"
+          echo 'SHOW INSTANCES;' | mgconsole --host memgraph-coordinator-3.default.svc.cluster.local --port 7687
+          echo "RETURN 0 on 1st data instance"
+          echo 'RETURN 0;' | mgconsole --host memgraph-data-0.default.svc.cluster.local --port 7687
+          echo "RETURN 0 on 2nd data instance"
+          echo 'RETURN 0;' | mgconsole --host memgraph-data-1.default.svc.cluster.local --port 7687
+        securityContext:
+          runAsUser: 0
+
+      restartPolicy: Never
+  backoffLimit: 4
+---
+# Source: memgraph-high-availability/templates/services-coordinators.yaml
+# Service for coordinator instances internal
+---
+# Source: memgraph-high-availability/templates/services-data.yaml
+# Service for data instances internal
+---
+# Source: memgraph-high-availability/templates/tests/test-cluster-setup.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "my-memgraph-high-availability-memgraph-test-cluster-setup"
+  labels:
+    app.kubernetes.io/name: memgraph-high-availability
+    helm.sh/chart: memgraph-high-availability-0.1.3
+    app.kubernetes.io/instance: my-memgraph-high-availability
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  template:
+    metadata:
+      labels:
+        app: memgraph-ha-test-cluster-setup
+    spec:
+      containers:
+      - name: memgraph-test-cluster-setup
+        image: "memgraph/memgraph:2.18.1"
+        command: ["/bin/bash", "-c"]
+        args:
+        - |
+          is_valid_view_of_cluster() {
+            local instances=$1 # Function accepts one argument = the result of `SHOW INSTANCES`
+            num_leaders=$(echo "$instances" | grep -c "leader")
+            if [ $num_leaders -ne 1 ]; then
+              echo "Expected 1 leader after registration, got $num_leaders."
+              return 1
+            fi
+
+            num_followers=$(echo "$instances" | grep -c "follower")
+            if [ $num_followers -ne 2 ]; then
+              echo "Expected 2 followers after registration, got $num_followers."
+              return 1
+            fi
+
+            num_mains=$(echo "$instances" | grep -c "main")
+            if [ $num_mains -ne 1 ]; then
+              echo "Expected 1 main after registration, got $num_mains."
+              return 1
+            fi
+
+            num_replicas=$(echo "$instances" | grep -c "replica")
+            if [ $num_replicas -ne 1 ]; then
+              echo "Expected 1 replica after registration, got $num_replicas."
+              return 1
+            fi
+
+            num_instances_down=$(echo "instances" | grep -c "down")
+            if [ $num_instances_down -ne 0 ]; then
+              echo "Expected 0 instances down after registration, got $num_instances_down."
+              return 1
+            fi
+
+            return 0
+          }
+          # Check if coordinator 1 sees the cluster correctly
+          coord1_instances=$(echo 'SHOW INSTANCES;' | mgconsole --host memgraph-coordinator-1.default.svc.cluster.local --port 7687)
+          is_valid_view_of_cluster "$coord1_instances"
+          if [ $? -ne 0 ]; then
+            exit 1
+          fi
+
+          # Check if coordinator 2 sees the cluster correctly
+          coord2_instances=$(echo 'SHOW INSTANCES;' | mgconsole --host memgraph-coordinator-2.default.svc.cluster.local --port 7687)
+          is_valid_view_of_cluster "$coord2_instances"
+          if [ $? -ne 0 ]; then
+            exit 1
+          fi
+
+          # Check if coordinator 3 sees the cluster correctly
+          coord3_instances=$(echo 'SHOW INSTANCES;' | mgconsole --host memgraph-coordinator-3.default.svc.cluster.local --port 7687)
+          is_valid_view_of_cluster "$coord3_instances"
+          if [ $? -ne 0 ]; then
+            exit 1
+          fi
+
+          exit 0
+
+      restartPolicy: Never
+  backoffLimit: 3
+---
+# Source: memgraph-high-availability/templates/tests/test-connection.yaml
+# Inspect logs of this test with kubectl logs -l app=memgraph-ha-test-connection
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "my-memgraph-high-availability-memgraph-test-connection"
+  labels:
+    app.kubernetes.io/name: memgraph-high-availability
+    helm.sh/chart: memgraph-high-availability-0.1.3
+    app.kubernetes.io/instance: my-memgraph-high-availability
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  template:
+    metadata:
+      labels:
+        app: memgraph-ha-test-connection
+    spec:
+      containers:
+      - name: memgraph-test
+        image: "memgraph/memgraph:2.18.1"
+        command: ["/bin/bash", "-c"]
+        args:
+          - |
+            commands=(
+              "echo 'SHOW INSTANCES;' | mgconsole --host memgraph-coordinator-1.default.svc.cluster.local --port 7687"
+              "echo 'SHOW INSTANCES;' | mgconsole --host memgraph-coordinator-2.default.svc.cluster.local --port 7687"
+              "echo 'SHOW INSTANCES;' | mgconsole --host memgraph-coordinator-3.default.svc.cluster.local --port 7687"
+              "echo 'RETURN 0;' | mgconsole --host memgraph-data-0.default.svc.cluster.local --port 7687"
+              "echo 'RETURN 0;' | mgconsole --host memgraph-data-1.default.svc.cluster.local --port 7687"
+            )
+            for command in "${commands[@]}"; do
+              echo "Running command: $command"
+              eval $command
+              if [ $? -ne 0 ]; then
+                echo "Command failed: $command"
+                exit 1
+              fi
+            done
+            exit 0
+
+      restartPolicy: Never

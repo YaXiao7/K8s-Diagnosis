@@ -1,0 +1,205 @@
+---
+# Source: memgraph/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-memgraph
+  labels:
+    helm.sh/chart: memgraph-0.1.5
+    app.kubernetes.io/name: memgraph
+    app.kubernetes.io/instance: my-memgraph
+    app.kubernetes.io/version: "2.19.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: memgraph/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-memgraph
+  labels:
+    helm.sh/chart: memgraph-0.1.5
+    app.kubernetes.io/name: memgraph
+    app.kubernetes.io/instance: my-memgraph
+    app.kubernetes.io/version: "2.19.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 7687
+      targetPort: 7687
+      protocol: TCP
+      name: bolt-port
+  selector:
+    app.kubernetes.io/name: memgraph
+    app.kubernetes.io/instance: my-memgraph
+---
+# Source: memgraph/templates/statefulset.yaml
+# templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-memgraph
+  labels:
+    helm.sh/chart: memgraph-0.1.5
+    app.kubernetes.io/name: memgraph
+    app.kubernetes.io/instance: my-memgraph
+    app.kubernetes.io/version: "2.19.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  serviceName: my-memgraph
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: memgraph
+      app.kubernetes.io/instance: my-memgraph
+  podManagementPolicy: OrderedReady
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        helm.sh/chart: memgraph-0.1.5
+        app.kubernetes.io/name: memgraph
+        app.kubernetes.io/instance: my-memgraph
+        app.kubernetes.io/version: "2.19.0"
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      initContainers:
+        - name: init-volume-mounts
+          image: "memgraph/memgraph:2.19.0"
+          volumeMounts:
+            - name: my-memgraph-lib-storage
+              mountPath: /var/lib/memgraph
+            - name: my-memgraph-log-storage
+              mountPath: /var/log/memgraph
+
+          command: ["/bin/sh", "-c"]
+          args:
+            - >
+              chown -R memgraph:memgraph /var/lib/memgraph;
+              chown -R memgraph:memgraph /var/log/memgraph;
+          securityContext:
+            privileged: true
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop: ["all"]
+              add: ["CHOWN"]
+            runAsUser: 0
+            runAsNonRoot: false
+
+      terminationGracePeriodSeconds: 1800
+      securityContext:
+      volumes:
+        - name: my-memgraph-lib-storage
+          persistentVolumeClaim:
+            claimName: my-memgraph-lib-storage
+        - name: my-memgraph-log-storage
+          persistentVolumeClaim:
+            claimName: my-memgraph-log-storage
+
+      containers:
+        - name: memgraph
+          image: "memgraph/memgraph:2.19.0"
+          args:
+          - "--also-log-to-stderr=true"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: bolt
+              containerPort: 7687
+            - name: websocket
+              containerPort: 7444
+            - name: http
+              containerPort: 9091
+          livenessProbe:
+            exec:
+              command:
+              - sh
+              - -c
+              - |
+                if [ -z "$MEMGRAPH_USER" ] || [ -z "$MEMGRAPH_PASSWORD" ]; then
+                  echo 'RETURN 0;' | mgconsole --host localhost --port 7687
+                else
+                  echo 'RETURN 0;' | mgconsole --host localhost --port 7687 --username "$MEMGRAPH_USER" --password "$MEMGRAPH_PASSWORD";
+                fi
+            initialDelaySeconds: 10
+            periodSeconds: 60
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+              - sh
+              - -c
+              - |
+                if [ -z "$MEMGRAPH_USER" ] || [ -z "$MEMGRAPH_PASSWORD" ]; then
+                  echo 'RETURN 0;' | mgconsole --host localhost --port 7687
+                else
+                  echo 'RETURN 0;' | mgconsole --host localhost --port 7687 --username "$MEMGRAPH_USER" --password "$MEMGRAPH_PASSWORD";
+                fi
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            failureThreshold: 3
+          startupProbe:
+            exec:
+              command:
+              - sh
+              - -c
+              - |
+                if [ -z "$MEMGRAPH_USER" ] || [ -z "$MEMGRAPH_PASSWORD" ]; then
+                  echo 'RETURN 0;' | mgconsole --host localhost --port 7687
+                else
+                  echo 'RETURN 0;' | mgconsole --host localhost --port 7687 --username "$MEMGRAPH_USER" --password "$MEMGRAPH_PASSWORD";
+                fi
+            failureThreshold: 30
+            periodSeconds: 10
+            initialDelaySeconds: 10
+          env:
+           
+          volumeMounts:
+            - name: my-memgraph-lib-storage
+              mountPath: /var/lib/memgraph
+            - name: my-memgraph-lib-storage
+              mountPath: /var/log/memgraph
+  volumeClaimTemplates:
+    - metadata:
+        name: my-memgraph-lib-storage
+      spec:
+        accessModes:
+        - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: 10Gi
+    - metadata:
+        name: my-memgraph-log-storage
+      spec:
+        accessModes:
+        - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: 1Gi
+---
+# Source: memgraph/templates/tests/test-connection.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "my-memgraph-test"
+  labels:
+    helm.sh/chart: memgraph-0.1.5
+    app.kubernetes.io/name: memgraph
+    app.kubernetes.io/instance: my-memgraph
+    app.kubernetes.io/version: "2.19.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  template:
+    spec:
+      containers:
+      - name: memgraph-test
+        image: memgraph/memgraph:2.18.1
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            echo "Running test connection to Memgraph";
+            echo "RETURN 0;" | mgconsole --username memgraph --password memgraph --host my-memgraph --port 7687;
+      restartPolicy: Never
+  backoffLimit: 4

@@ -1,0 +1,574 @@
+---
+# Source: gbox/charts/redis/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+automountServiceAccountToken: true
+metadata:
+  name: my-gbox-redis
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: redis
+    helm.sh/chart: redis-16.8.9
+    app.kubernetes.io/instance: my-gbox
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: gbox/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-gbox
+  labels:
+    helm.sh/chart: gbox-1.0.5
+    app.kubernetes.io/name: gbox
+    app.kubernetes.io/instance: my-gbox
+    app.kubernetes.io/version: "v1.0.6"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: gbox/charts/redis/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-gbox-redis
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: redis
+    helm.sh/chart: redis-16.8.9
+    app.kubernetes.io/instance: my-gbox
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  redis-password: "IUNoYW5nZU1lIQ=="
+---
+# Source: gbox/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+type: Opaque
+metadata:
+  name: "my-gbox"
+  labels:
+    helm.sh/chart: gbox-1.0.5
+    app.kubernetes.io/name: gbox
+    app.kubernetes.io/instance: my-gbox
+    app.kubernetes.io/version: "v1.0.6"
+    app.kubernetes.io/managed-by: Helm
+data:
+  GBOX_STORE_DSN: "cmVkaXM6Ly8hQ2hhbmdlTWUhQG15LWdib3gtcmVkaXMtbWFzdGVyLmRlZmF1bHQuc3ZjLmNsdXN0ZXIubG9jYWw6NjM3OQ=="
+  GBOX_ADMIN_USERNAME: "Z2JveA=="
+---
+# Source: gbox/charts/redis/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-gbox-redis-configuration
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: redis
+    helm.sh/chart: redis-16.8.9
+    app.kubernetes.io/instance: my-gbox
+    app.kubernetes.io/managed-by: Helm
+data:
+  redis.conf: |-
+    # User-supplied common configuration:
+    # Enable AOF https://redis.io/topics/persistence#append-only-file
+    appendonly yes
+    # Disable RDB persistence, AOF persistence already enabled.
+    save ""
+    # End of common configuration
+  master.conf: |-
+    dir /data
+    # User-supplied master configuration:
+    rename-command FLUSHDB ""
+    rename-command FLUSHALL ""
+    # End of master configuration
+  replica.conf: |-
+    dir /data
+    slave-read-only yes
+    # User-supplied replica configuration:
+    rename-command FLUSHDB ""
+    rename-command FLUSHALL ""
+    # End of replica configuration
+---
+# Source: gbox/charts/redis/templates/health-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-gbox-redis-health
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: redis
+    helm.sh/chart: redis-16.8.9
+    app.kubernetes.io/instance: my-gbox
+    app.kubernetes.io/managed-by: Helm
+data:
+  ping_readiness_local.sh: |-
+    #!/bin/bash
+
+    [[ -f $REDIS_PASSWORD_FILE ]] && export REDIS_PASSWORD="$(< "${REDIS_PASSWORD_FILE}")"
+    [[ -n "$REDIS_PASSWORD" ]] && export REDISCLI_AUTH="$REDIS_PASSWORD"
+    response=$(
+      timeout -s 3 $1 \
+      redis-cli \
+        -h localhost \
+        -p $REDIS_PORT \
+        ping
+    )
+    if [ "$?" -eq "124" ]; then
+      echo "Timed out"
+      exit 1
+    fi
+    if [ "$response" != "PONG" ]; then
+      echo "$response"
+      exit 1
+    fi
+  ping_liveness_local.sh: |-
+    #!/bin/bash
+
+    [[ -f $REDIS_PASSWORD_FILE ]] && export REDIS_PASSWORD="$(< "${REDIS_PASSWORD_FILE}")"
+    [[ -n "$REDIS_PASSWORD" ]] && export REDISCLI_AUTH="$REDIS_PASSWORD"
+    response=$(
+      timeout -s 3 $1 \
+      redis-cli \
+        -h localhost \
+        -p $REDIS_PORT \
+        ping
+    )
+    if [ "$?" -eq "124" ]; then
+      echo "Timed out"
+      exit 1
+    fi
+    responseFirstWord=$(echo $response | head -n1 | awk '{print $1;}')
+    if [ "$response" != "PONG" ] && [ "$responseFirstWord" != "LOADING" ] && [ "$responseFirstWord" != "MASTERDOWN" ]; then
+      echo "$response"
+      exit 1
+    fi
+  ping_readiness_master.sh: |-
+    #!/bin/bash
+
+    [[ -f $REDIS_MASTER_PASSWORD_FILE ]] && export REDIS_MASTER_PASSWORD="$(< "${REDIS_MASTER_PASSWORD_FILE}")"
+    [[ -n "$REDIS_MASTER_PASSWORD" ]] && export REDISCLI_AUTH="$REDIS_MASTER_PASSWORD"
+    response=$(
+      timeout -s 3 $1 \
+      redis-cli \
+        -h $REDIS_MASTER_HOST \
+        -p $REDIS_MASTER_PORT_NUMBER \
+        ping
+    )
+    if [ "$?" -eq "124" ]; then
+      echo "Timed out"
+      exit 1
+    fi
+    if [ "$response" != "PONG" ]; then
+      echo "$response"
+      exit 1
+    fi
+  ping_liveness_master.sh: |-
+    #!/bin/bash
+
+    [[ -f $REDIS_MASTER_PASSWORD_FILE ]] && export REDIS_MASTER_PASSWORD="$(< "${REDIS_MASTER_PASSWORD_FILE}")"
+    [[ -n "$REDIS_MASTER_PASSWORD" ]] && export REDISCLI_AUTH="$REDIS_MASTER_PASSWORD"
+    response=$(
+      timeout -s 3 $1 \
+      redis-cli \
+        -h $REDIS_MASTER_HOST \
+        -p $REDIS_MASTER_PORT_NUMBER \
+        ping
+    )
+    if [ "$?" -eq "124" ]; then
+      echo "Timed out"
+      exit 1
+    fi
+    responseFirstWord=$(echo $response | head -n1 | awk '{print $1;}')
+    if [ "$response" != "PONG" ] && [ "$responseFirstWord" != "LOADING" ]; then
+      echo "$response"
+      exit 1
+    fi
+  ping_readiness_local_and_master.sh: |-
+    script_dir="$(dirname "$0")"
+    exit_status=0
+    "$script_dir/ping_readiness_local.sh" $1 || exit_status=$?
+    "$script_dir/ping_readiness_master.sh" $1 || exit_status=$?
+    exit $exit_status
+  ping_liveness_local_and_master.sh: |-
+    script_dir="$(dirname "$0")"
+    exit_status=0
+    "$script_dir/ping_liveness_local.sh" $1 || exit_status=$?
+    "$script_dir/ping_liveness_master.sh" $1 || exit_status=$?
+    exit $exit_status
+---
+# Source: gbox/charts/redis/templates/scripts-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-gbox-redis-scripts
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: redis
+    helm.sh/chart: redis-16.8.9
+    app.kubernetes.io/instance: my-gbox
+    app.kubernetes.io/managed-by: Helm
+data:
+  start-master.sh: |
+    #!/bin/bash
+
+    [[ -f $REDIS_PASSWORD_FILE ]] && export REDIS_PASSWORD="$(< "${REDIS_PASSWORD_FILE}")"
+    if [[ ! -f /opt/bitnami/redis/etc/master.conf ]];then
+        cp /opt/bitnami/redis/mounted-etc/master.conf /opt/bitnami/redis/etc/master.conf
+    fi
+    if [[ ! -f /opt/bitnami/redis/etc/redis.conf ]];then
+        cp /opt/bitnami/redis/mounted-etc/redis.conf /opt/bitnami/redis/etc/redis.conf
+    fi
+    ARGS=("--port" "${REDIS_PORT}")
+    ARGS+=("--requirepass" "${REDIS_PASSWORD}")
+    ARGS+=("--masterauth" "${REDIS_PASSWORD}")
+    ARGS+=("--include" "/opt/bitnami/redis/etc/redis.conf")
+    ARGS+=("--include" "/opt/bitnami/redis/etc/master.conf")
+    exec redis-server "${ARGS[@]}"
+---
+# Source: gbox/charts/redis/templates/headless-svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-gbox-redis-headless
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: redis
+    helm.sh/chart: redis-16.8.9
+    app.kubernetes.io/instance: my-gbox
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: tcp-redis
+      port: 6379
+      targetPort: redis
+  selector:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/instance: my-gbox
+---
+# Source: gbox/charts/redis/templates/master/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-gbox-redis-master
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: redis
+    helm.sh/chart: redis-16.8.9
+    app.kubernetes.io/instance: my-gbox
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: master
+spec:
+  type: ClusterIP
+  
+  internalTrafficPolicy: Cluster
+  ports:
+    - name: tcp-redis
+      port: 6379
+      targetPort: redis
+      nodePort: null
+  selector:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/instance: my-gbox
+    app.kubernetes.io/component: master
+---
+# Source: gbox/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-gbox
+  labels:
+    helm.sh/chart: gbox-1.0.5
+    app.kubernetes.io/name: gbox
+    app.kubernetes.io/instance: my-gbox
+    app.kubernetes.io/version: "v1.0.6"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: gbox
+    app.kubernetes.io/instance: my-gbox
+---
+# Source: gbox/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-gbox
+  labels:
+    helm.sh/chart: gbox-1.0.5
+    app.kubernetes.io/name: gbox
+    app.kubernetes.io/instance: my-gbox
+    app.kubernetes.io/version: "v1.0.6"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: gbox
+      app.kubernetes.io/instance: my-gbox
+  template:
+    metadata:
+      annotations:
+        prometheus.io/path: '/metrics'
+        prometheus.io/port: "80"
+        prometheus.io/scrape: "true"
+      labels:
+        app.kubernetes.io/name: gbox
+        app.kubernetes.io/instance: my-gbox
+    spec:
+      serviceAccountName: my-gbox
+      securityContext:
+        {}
+      containers:
+        - name: gbox
+          securityContext:
+            {}
+          image: "gboxproxy/gbox:v1.0.6"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: GBOX_GLOBAL_DIRECTIVES
+              value: ""
+            - name: GBOX_EXTRA_DIRECTIVES
+              value: ""
+            - name: GBOX_SERVER_NAME
+              value: ':80'
+            - name: GBOX_UPSTREAM
+              value: ""
+            - name: GBOX_UPSTREAM_REVERSE_PROXY_DIRECTIVES
+              value: ""
+            - name: GBOX_FETCH_SCHEMA_INTERVAL
+              value: "10m"
+            - name: GBOX_DISABLED_PLAYGROUNDS
+              value: "false"
+            - name: GBOX_DISABLED_INTROSPECTION
+              value: "false"
+            - name: GBOX_ENABLED_ADMIN_AUTH
+              value: "true"
+            - name: GBOX_ENABLED_CACHING
+              value: "true"
+            - name: GBOX_CACHING_RULES
+              value: "default {\n  max_age 30m\n  swr 30m\n}\n"
+            - name: GBOX_CACHING_VARIES
+              value: ""
+            - name: GBOX_CACHING_TYPE_KEYS
+              value: ""
+            - name: GBOX_AUTO_INVALIDATE_CACHE
+              value: "true"
+            - name: GBOX_CACHING_DEBUG_HEADERS
+              value: "false"
+            - name: GBOX_ENABLED_COMPLEXITY
+              value: "true"
+            - name: GBOX_NODE_COUNT_LIMIT
+              value: "60"
+            - name: GBOX_MAX_COMPLEXITY
+              value: "60"
+            - name: GBOX_MAX_DEPTH
+              value: "15"
+            - name: GBOX_ENABLED_METRICS
+              value: "true"
+            - name: GBOX_METRICS_PATH
+              value: "/metrics"
+          envFrom:
+            - secretRef:
+                name: my-gbox
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          resources:
+            {}
+---
+# Source: gbox/charts/redis/templates/master/application.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-gbox-redis-master
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: redis
+    helm.sh/chart: redis-16.8.9
+    app.kubernetes.io/instance: my-gbox
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: master
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: redis
+      app.kubernetes.io/instance: my-gbox
+      app.kubernetes.io/component: master
+  serviceName: my-gbox-redis-headless
+  updateStrategy:
+    rollingUpdate: {}
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: redis
+        helm.sh/chart: redis-16.8.9
+        app.kubernetes.io/instance: my-gbox
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/component: master
+      annotations:
+        checksum/configmap: d3360ee7e76f9eda49ee91255fc263bbc926fcbe6cef3f368001e4d82dadcc87
+        checksum/health: 53288a9ac49a1debb7f6984dab72c156dae419626baadbba64e2fb6c99d49f2c
+        checksum/scripts: 4de6c2505818bd3a3e3e9c056826aec11f7b8e94b5d7c39fbb9532269af7a368
+        checksum/secret: ff8f5263f47ebef32f2b7f967593be9aafa9db6d580d935d9e0e9c5219eaa4d8
+    spec:
+      
+      securityContext:
+        fsGroup: 1001
+      serviceAccountName: my-gbox-redis
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: redis
+                    app.kubernetes.io/instance: my-gbox
+                    app.kubernetes.io/component: master
+                namespaces:
+                  - "default"
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: redis
+          image: docker.io/bitnami/redis:6.2.7-debian-10-r0
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            runAsUser: 1001
+          command:
+            - /bin/bash
+          args:
+            - -c
+            - /opt/bitnami/scripts/start-scripts/start-master.sh
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: REDIS_REPLICATION_MODE
+              value: master
+            - name: ALLOW_EMPTY_PASSWORD
+              value: "no"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-gbox-redis
+                  key: redis-password
+            - name: REDIS_TLS_ENABLED
+              value: "no"
+            - name: REDIS_PORT
+              value: "6379"
+          ports:
+            - name: redis
+              containerPort: 6379
+          livenessProbe:
+            initialDelaySeconds: 20
+            periodSeconds: 5
+            # One second longer than command timeout should prevent generation of zombie processes.
+            timeoutSeconds: 6
+            successThreshold: 1
+            failureThreshold: 5
+            exec:
+              command:
+                - sh
+                - -c
+                - /health/ping_liveness_local.sh 5
+          readinessProbe:
+            initialDelaySeconds: 20
+            periodSeconds: 5
+            timeoutSeconds: 2
+            successThreshold: 1
+            failureThreshold: 5
+            exec:
+              command:
+                - sh
+                - -c
+                - /health/ping_readiness_local.sh 1
+          resources:
+            limits: {}
+            requests: {}
+          volumeMounts:
+            - name: start-scripts
+              mountPath: /opt/bitnami/scripts/start-scripts
+            - name: health
+              mountPath: /health
+            - name: redis-data
+              mountPath: /data
+              subPath: 
+            - name: config
+              mountPath: /opt/bitnami/redis/mounted-etc
+            - name: redis-tmp-conf
+              mountPath: /opt/bitnami/redis/etc/
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: start-scripts
+          configMap:
+            name: my-gbox-redis-scripts
+            defaultMode: 0755
+        - name: health
+          configMap:
+            name: my-gbox-redis-health
+            defaultMode: 0755
+        - name: config
+          configMap:
+            name: my-gbox-redis-configuration
+        - name: redis-tmp-conf
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: redis-data
+        labels:
+          app.kubernetes.io/name: redis
+          app.kubernetes.io/instance: my-gbox
+          app.kubernetes.io/component: master
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "8Gi"
+---
+# Source: gbox/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-gbox-test-connection"
+  labels:
+    helm.sh/chart: gbox-1.0.5
+    app.kubernetes.io/name: gbox
+    app.kubernetes.io/instance: my-gbox
+    app.kubernetes.io/version: "v1.0.6"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-gbox:80/healthz']
+  restartPolicy: Never

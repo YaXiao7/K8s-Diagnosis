@@ -1,0 +1,402 @@
+---
+# Source: tezos-node/templates/configmap-env.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-tezos-node-tezos-secret
+  namespace: default
+  labels:
+    app.kubernetes.io/name: tezos-node
+    app.kubernetes.io/instance: my-tezos-node
+    app.kubernetes.io/managed-by: Helm
+    app: tezos-node
+    release: my-tezos-node
+    heritage: Helm
+    network: nw-444-444-4
+    networkName: mainnet
+    nodeId: nd-444-444-444
+    historyMode: full
+data:
+  ACCOUNTS: |
+    e30=
+---
+# Source: tezos-node/templates/configmap-env.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-tezos-node-tezos-config
+  labels:
+    app.kubernetes.io/name: tezos-node
+    app.kubernetes.io/instance: my-tezos-node
+    app.kubernetes.io/managed-by: Helm
+    app: tezos-node
+    release: my-tezos-node
+    heritage: Helm
+    network: nw-444-444-4
+    networkName: mainnet
+    nodeId: nd-444-444-444
+    historyMode: full
+data:
+  MY_POD_NAME: "my-tezos-node-0"
+  MY_NODE_TYPE: "regular"
+  MY_POD_TYPE: "node"
+  CHAIN_NAME: "mainnet"
+  CHAIN_PARAMS: |
+    {
+      "bootstrap_peers": [],
+      "default_bootstrap_mutez": "4000000000000",
+      "expected-proof-of-work": 26,
+
+      "should_generate_unsafe_deterministic_data": false,
+      "network": {
+        "chain_name": "mainnet"
+      }
+    }
+  NODES: |
+    {
+      "my-tezos-node": {
+        "instances": [{
+          "is_bootstrap_node": false,
+          "config": {
+            "shell": {
+              "history_mode": "full"
+            }
+          }
+        }]
+      }
+    }
+  SIGNERS: "{}"
+  OPEN_ACLS: "true"
+---
+# Source: tezos-node/templates/node-pvc.yaml
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: my-tezos-node
+  annotations:
+  labels:
+    app.kubernetes.io/name: tezos-node
+    app.kubernetes.io/instance: my-tezos-node
+    app.kubernetes.io/managed-by: Helm
+    app: tezos-node
+    release: my-tezos-node
+    heritage: Helm
+    network: nw-444-444-4
+    networkName: mainnet
+    nodeId: nd-444-444-444
+    historyMode: full
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: "500Gi"
+  storageClassName: "standard"
+---
+# Source: tezos-node/templates/node-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-tezos-node
+  labels:
+    app.kubernetes.io/name: tezos-node
+    app.kubernetes.io/instance: my-tezos-node
+    app.kubernetes.io/managed-by: Helm
+    app: tezos-node
+    release: my-tezos-node
+    heritage: Helm
+    network: nw-444-444-4
+    networkName: mainnet
+    nodeId: nd-444-444-444
+    historyMode: full
+  annotations:
+    prometheus.io/probe-tcp: "true"
+spec:
+  type: ClusterIP
+  ports:
+    - name: tezos-rpc
+      port: 8732
+    - name: tezos-net-udp
+      port: 9732
+      protocol: UDP
+    - name: tezos-net-tcp
+      port: 9732
+      protocol: TCP
+  selector:
+    app: tezos-node
+    release: my-tezos-node
+---
+# Source: tezos-node/templates/node-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-tezos-node
+  labels:
+    app.kubernetes.io/name: tezos-node
+    app.kubernetes.io/instance: my-tezos-node
+    app.kubernetes.io/managed-by: Helm
+    app: tezos-node
+    release: my-tezos-node
+    heritage: Helm
+    network: nw-444-444-4
+    networkName: mainnet
+    nodeId: nd-444-444-444
+    historyMode: full
+spec:
+  strategy:
+    type: Recreate
+  replicas: 1
+  selector:
+    matchLabels:
+      release: my-tezos-node
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: 'true'
+        prometheus.io/port: '9489'
+        prometheus.io/path: '/metrics'
+      labels:
+        app.kubernetes.io/name: tezos-node
+        app.kubernetes.io/instance: my-tezos-node
+        app.kubernetes.io/managed-by: Helm
+        app: tezos-node
+        release: my-tezos-node
+        heritage: Helm
+        network: nw-444-444-4
+        networkName: mainnet
+        nodeId: nd-444-444-444
+        historyMode: full
+    spec:
+      securityContext:
+        runAsUser: 100
+        fsGroup: 65533
+      terminationGracePeriodSeconds: 900
+      initContainers:                
+        - image: "tezos/tezos:v14.0"
+          imagePullPolicy: IfNotPresent
+          name: flush-identity
+          command:
+          - /bin/sh
+          - -c
+          - |
+            (grep nd-444-444-444 /var/tezos/release.version -q && echo 'Lock file belongs to current release. Nothing to do.') || (rm -f  /var/tezos/node/data/identity.json && echo nd-444-444-444 > /var/tezos/release.version && echo 'Identity has been flushed.')
+        
+          volumeMounts:
+            - mountPath: /etc/tezos
+              name: config-volume
+            - mountPath: /var/tezos
+              name: var-volume
+          envFrom:
+            - configMapRef:
+                name: my-tezos-node-tezos-config        
+        - image: "tezos/tezos:v14.0"
+          imagePullPolicy: IfNotPresent
+          name: config-init
+          command: ["sh", "-c"]
+          args: ["mkdir /tmp/.tezos-node && tezos-node config init --config-file /etc/tezos/data/config.json --data-dir /tmp/.tezos-node --network mainnet && cat /etc/tezos/data/config.json"]
+          volumeMounts:
+            - mountPath: /etc/tezos
+              name: config-volume
+            - mountPath: /var/tezos
+              name: var-volume
+          envFrom:
+            - configMapRef:
+                name: my-tezos-node-tezos-config        
+        - image: "oxheadalpha/tezos-k8s-utils:5.3.4"
+          imagePullPolicy: IfNotPresent
+          name: config-generator
+          args:
+            - "config-generator"
+            - "--generate-config-json"
+          volumeMounts:
+            - mountPath: /etc/tezos
+              name: config-volume
+            - mountPath: /var/tezos
+              name: var-volume
+          envFrom:
+            - secretRef:
+                name: my-tezos-node-tezos-secret
+            - configMapRef:
+                name: my-tezos-node-tezos-config
+          env:
+            - name: MY_POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP        
+        - image: "tezos/tezos:v14.0"
+          imagePullPolicy: IfNotPresent
+          name: storage-upgrade
+          command:
+          - sh
+          - -c
+          - |
+            if [ -d /var/tezos/node/data ]; then
+                tezos-node upgrade storage --data-dir /var/tezos/node/data
+            else
+                echo "Skip upgrade for initial deploy"
+            fi
+          volumeMounts:
+            - mountPath: /var/tezos
+              name: var-volume
+            - mountPath: /etc/tezos
+              name: config-volume
+          envFrom:
+            - configMapRef:
+                name: my-tezos-node-tezos-config        
+      containers:
+      - name: node
+        image: "tezos/tezos:v14.0"
+        imagePullPolicy: IfNotPresent
+        command: ["/usr/local/bin/tezos-node"]
+        args: ["run", "--bootstrap-threshold", "0", "--config-file", "/etc/tezos/config.json"]
+        env:
+          - name: TEZOS_NODE_DIR
+            value: /var/tezos/node/data
+        ports:
+        - containerPort: 8732
+          name: tezos-rpc
+        - containerPort: 9732
+          name: tezos-net
+        volumeMounts:
+        - mountPath: /etc/tezos
+          name: config-volume
+        - mountPath: /var/tezos
+          name: var-volume
+        livenessProbe:
+          initialDelaySeconds: 600
+          periodSeconds: 60
+          timeoutSeconds: 40
+          httpGet:
+            path: /version
+            port: 8732
+        readinessProbe:
+          initialDelaySeconds: 120
+          periodSeconds: 60
+          timeoutSeconds: 40
+          httpGet:
+            path: /version
+            port: 8732
+        resources:
+          limits:
+            cpu: 1500m
+            memory: 14Gi
+          requests:
+            cpu: 1500m
+            memory: 9Gi
+      - name: metrics-exporter
+        image: ecadlabs/tezos_exporter
+        imagePullPolicy: IfNotPresent
+        args: ["-tezos-node-url", "http://localhost:8732"]
+        ports:
+        - name: http
+          containerPort: 9489
+          protocol: TCP
+        livenessProbe:
+          initialDelaySeconds: 600
+          periodSeconds: 60
+          timeoutSeconds: 40
+          httpGet:
+            path: /health
+            port: http
+        readinessProbe:
+          initialDelaySeconds: 120
+          periodSeconds: 60
+          timeoutSeconds: 40
+          httpGet:
+            path: /health
+            port: http
+        resources:
+          limits:
+            cpu: 200m
+            memory: 100Mi
+          requests:
+            cpu: 100m
+            memory: 50Mi
+      volumes:
+      - emptyDir: {}
+        name: config-volume
+      - name: var-volume
+        persistentVolumeClaim:
+          claimName: my-tezos-node
+---
+# Source: tezos-node/templates/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    external-dns.alpha.kubernetes.io/ttl: "60"
+    prometheus.io/probe: "true"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+  labels:
+    app.kubernetes.io/name: tezos-node
+    app.kubernetes.io/instance: my-tezos-node
+    app.kubernetes.io/managed-by: Helm
+    app: tezos-node
+    release: my-tezos-node
+    heritage: Helm
+    network: nw-444-444-4
+    networkName: mainnet
+    nodeId: nd-444-444-444
+    historyMode: full
+  name: my-tezos-node
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - nd-444-444-444.my.domain
+    secretName: any-my-domain
+  rules:
+  - host: nd-444-444-444.my.domain
+    http:
+      paths:
+      - path: /
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: my-tezos-node
+            port:
+              name: tezos-rpc
+---
+# Source: tezos-node/templates/dns-hook.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-tezos-node-wait-dns
+  annotations:
+    "helm.sh/hook": post-install, post-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded,hook-failed
+  labels:
+    app.kubernetes.io/name: tezos-node
+    app.kubernetes.io/instance: my-tezos-node
+    app.kubernetes.io/managed-by: Helm
+    app: tezos-node
+    release: my-tezos-node
+    heritage: Helm
+    network: nw-444-444-4
+    networkName: mainnet
+    nodeId: nd-444-444-444
+    historyMode: full
+spec:
+  restartPolicy: Never
+  dnsConfig:
+    options:
+      - name: ndots
+        value: "1"
+  containers:
+    - name: my-tezos-node-wait-dns
+      image: "gcr.io/kubernetes-e2e-test-images/dnsutils:1.3"
+      command:
+        - /bin/sh
+        - -c
+        - |
+          MAX_INTERVALS=120
+          SLEEP_INTERVAL=5
+          CMD='
+            echo "Attempt $i / $MAX_INTERVALS" &&
+            nslookup -type=a nd-444-444-444.my.domain &&
+            current=`expr ${current:-0} + 1` || current=0 && expr $current = 3
+          '
+          for i in $(seq 1 $MAX_INTERVALS); do sleep $SLEEP_INTERVAL; if eval $CMD; then exit 0; fi; done; exit 1

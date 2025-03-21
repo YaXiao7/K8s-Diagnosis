@@ -1,0 +1,346 @@
+---
+# Source: helmup/templates/engine/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-helmup-engine
+  labels:
+    helm.sh/chart: helmup-0.1.0
+    app.kubernetes.io/name: engine
+    app.kubernetes.io/instance: my-helmup
+    app.kubernetes.io/version: "1.1.0"
+    app.kubernetes.io/managed-by: Helm
+automountServiceAccountToken: true
+---
+# Source: helmup/templates/notifications-service/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-helmup-notifications-service
+  labels:
+    helm.sh/chart: helmup-0.1.0
+    app.kubernetes.io/name: notifications-service
+    app.kubernetes.io/instance: my-helmup
+    app.kubernetes.io/version: "1.1.0"
+    app.kubernetes.io/managed-by: Helm
+automountServiceAccountToken: true
+---
+# Source: helmup/templates/scraper/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-helmup-github-scraper
+  labels:
+    helm.sh/chart: helmup-0.1.0
+    app.kubernetes.io/name: github-scraper
+    app.kubernetes.io/instance: my-helmup
+    app.kubernetes.io/version: "1.1.0"
+    app.kubernetes.io/managed-by: Helm
+automountServiceAccountToken: true
+---
+# Source: helmup/templates/engine/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-helmup-engine
+  labels:
+    helm.sh/chart: helmup-0.1.0
+    app.kubernetes.io/name: engine
+    app.kubernetes.io/instance: my-helmup
+    app.kubernetes.io/version: "1.1.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 8090
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: engine
+    app.kubernetes.io/instance: my-helmup
+---
+# Source: helmup/templates/notifications-service/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-helmup-notifications-service
+  labels:
+    helm.sh/chart: helmup-0.1.0
+    app.kubernetes.io/name: notifications-service
+    app.kubernetes.io/instance: my-helmup
+    app.kubernetes.io/version: "1.1.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 9000
+  selector:
+    app.kubernetes.io/name: notifications-service
+    app.kubernetes.io/instance: my-helmup
+---
+# Source: helmup/templates/engine/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-helmup-engine
+  labels:
+    helm.sh/chart: helmup-0.1.0
+    app.kubernetes.io/name: engine
+    app.kubernetes.io/instance: my-helmup
+    app.kubernetes.io/version: "1.1.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: engine
+      app.kubernetes.io/instance: my-helmup
+  template:
+    metadata:
+      labels:
+        helm.sh/chart: helmup-0.1.0
+        app.kubernetes.io/name: engine
+        app.kubernetes.io/instance: my-helmup
+        app.kubernetes.io/version: "1.1.0"
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      serviceAccountName: my-helmup-engine
+      securityContext:
+        {}
+      containers:
+        - name: helmup
+          securityContext:
+            {}
+          image: "sirrend/helmup-engine:0.1.13"
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8090
+              protocol: TCP
+          env:
+            - name: "OPENAI_API_KEY"
+              valueFrom:
+                secretKeyRef:
+                  name: "helmup-secret"
+                  key: openai_token
+            - name: "GITHUB_TOKEN"
+              valueFrom:
+                secretKeyRef:
+                  name: "helmup-secret"
+                  key: github_token
+            - name: "JIRA_TOKEN"
+              valueFrom:
+                secretKeyRef:
+                  name: "helmup-secret"
+                  key: jira_token
+            - name: "DESIRED_KUBE_VERSION"
+              value: "1.30.0"
+            - name: "REFORMAT_HELM_TEMPLATES"
+              value: "true"
+            - name: "UPGRADE_MAJORS"
+              value: "disabled"
+            - name: "JIRA_ENABLED"
+              value: "true"
+            - name: "JIRA_SERVER_URL"
+              value: "https://sirrend.atlassian.net/"
+            - name: "JIRA_PROJECT_KEY"
+              value: "SI"
+            - name: "JIRA_USERNAME"
+              value: "yuvalpress@gmail.com"
+            - name: "NOTIFICATIONS_ENABLED"
+              value: "true"
+            - name: "NOTIFICATIONS_TYPE"
+              value: "slack"
+            - name: "NOTIFICATIONS_SERVICE_URL"
+              value: 'my-helmup-notifications-service:80/event'
+          livenessProbe:
+            httpGet:
+              path: /healthcheck
+              port: 8090
+            initialDelaySeconds: 15
+            periodSeconds: 300
+            timeoutSeconds: 5
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /healthcheck
+              port: 8090
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            {}
+---
+# Source: helmup/templates/notifications-service/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-helmup-notifications-service
+  labels:
+    helm.sh/chart: helmup-0.1.0
+    app.kubernetes.io/name: notifications-service
+    app.kubernetes.io/instance: my-helmup
+    app.kubernetes.io/version: "1.1.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: notifications-service
+      app.kubernetes.io/instance: my-helmup
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: notifications-service
+        app.kubernetes.io/instance: my-helmup
+    spec:
+      serviceAccountName: my-helmup-notifications-service
+      securityContext:
+        {}
+      containers:
+        - name: helmup
+          image: "sirrend/helmup-notifications-service:0.1.3"
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 9000
+          env:
+            - name: "WEBHOOK_URL"
+              valueFrom:
+                secretKeyRef:
+                  name: "helmup-secret"
+                  key: webhook_url
+          resources:
+            {}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 9000
+            initialDelaySeconds: 15
+            periodSeconds: 300
+            timeoutSeconds: 5
+            failureThreshold: 3
+---
+# Source: helmup/templates/scraper/cronJob.yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: "my-helmup-github-scraper"
+  labels:
+    helm.sh/chart: helmup-0.1.0
+    app.kubernetes.io/name: github-scraper
+    app.kubernetes.io/instance: my-helmup
+    app.kubernetes.io/version: "1.1.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  schedule: "0 0 * * *"  
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+        helm.sh/chart: helmup-0.1.0
+        app.kubernetes.io/name: github-scraper
+        app.kubernetes.io/instance: my-helmup
+        app.kubernetes.io/version: "1.1.0"
+        app.kubernetes.io/managed-by: Helm
+        spec:
+          restartPolicy: OnFailure  
+          serviceAccountName: my-helmup-github-scraper  
+          containers:
+            - name: helmup
+              image: "sirrend/helmup-github-scraper:0.1.4"
+              imagePullPolicy: "Always"  
+              env:
+                - name: CUSTOMER_NAME
+                  value: "sirrend"
+                - name: GIT_BRANCH
+                  value: "main"
+                - name: GIT_REPOSITORY_NAME
+                  value: "kuba_test"
+                - name: GIT_REPOSITORY_URL
+                  value: "https://github.com/sirrend/kuba_test.git"
+                - name: HELMUP_SVC_URL
+                  value: 'my-helmup-engine:80'
+                - name: "GITHUB_TOKEN"
+                  valueFrom:
+                    secretKeyRef:
+                      name: "helmup-secret"
+                      key: github_token  
+  successfulJobsHistoryLimit: 3  
+  failedJobsHistoryLimit: 1
+---
+# Source: helmup/templates/external-secrets.yaml
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: helmup-secret
+  labels:
+    app: my-helmup
+spec:
+  secretStoreRef:
+    name: aws-secrets-manager
+    kind: ClusterSecretStore
+  refreshInterval:  30h
+  target:
+    name: helmup-secret
+    creationPolicy: Owner
+  data:
+    - secretKey: openai_token
+      remoteRef:
+        key: chatgpt-token
+    - secretKey: github_token
+      remoteRef:
+        key: sirrend-github-token
+    - secretKey: jira_token
+      remoteRef:
+        key: sirrend-jira-token
+    - secretKey: webhook_url
+      remoteRef:
+        key: sirrend-slack-webhook-secret
+  template:
+    type: Opaque
+---
+# Source: helmup/templates/engine/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-helmup-engine-test-connection"
+  labels:
+    helm.sh/chart: helmup-0.1.0
+    app.kubernetes.io/name: engine
+    app.kubernetes.io/instance: my-helmup
+    app.kubernetes.io/version: "1.1.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-helmup-engine:80']
+  restartPolicy: Never
+---
+# Source: helmup/templates/notifications-service/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-helmup-notifications-service-test-connection"
+  labels:
+    helm.sh/chart: helmup-0.1.0
+    app.kubernetes.io/name: notifications-service
+    app.kubernetes.io/instance: my-helmup
+    app.kubernetes.io/version: "1.1.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-helmup-notifications-service:80']
+  restartPolicy: Never

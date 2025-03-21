@@ -1,0 +1,260 @@
+---
+# Source: unifi-controller/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-unifi-controller
+  namespace: default  
+  labels:
+    helm.sh/chart: unifi-controller-2.6.1
+    app.kubernetes.io/name: unifi-controller
+    app.kubernetes.io/instance: my-unifi-controller
+    app.kubernetes.io/version: "8.0.24"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: unifi-controller/templates/pvc.yaml
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: my-unifi-controller-data
+  namespace: default
+  labels:
+    helm.sh/chart: unifi-controller-2.6.1
+    app.kubernetes.io/name: unifi-controller
+    app.kubernetes.io/instance: my-unifi-controller
+    app.kubernetes.io/version: "8.0.24"
+    app.kubernetes.io/managed-by: Helm  
+spec:
+  accessModes:
+    - "ReadWriteOnce"
+  resources:
+    requests:
+      storage: "8Gi"
+  storageClassName: "local-path-retain"
+---
+# Source: unifi-controller/templates/pvc.yaml
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: my-unifi-controller-backup
+  namespace: default
+  labels:
+    helm.sh/chart: unifi-controller-2.6.1
+    app.kubernetes.io/name: unifi-controller
+    app.kubernetes.io/instance: my-unifi-controller
+    app.kubernetes.io/version: "8.0.24"
+    app.kubernetes.io/managed-by: Helm  
+spec:
+  accessModes:
+    - "ReadWriteOnce"
+  resources:
+    requests:
+      storage: "8Gi"
+  storageClassName: "local-path-retain"
+---
+# Source: unifi-controller/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-unifi-controller-tcp
+  namespace: default  
+  labels:
+    helm.sh/chart: unifi-controller-2.6.1
+    app.kubernetes.io/name: unifi-controller
+    app.kubernetes.io/instance: my-unifi-controller
+    app.kubernetes.io/version: "8.0.24"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: LoadBalancer
+  ports: 
+  - port: 8080
+    targetPort: 8080 
+    protocol: TCP
+    name: devicecom
+  - port: 8443
+    targetPort: 8443
+    protocol: TCP
+    name: webapi
+  - port: 8880
+    targetPort: 8880
+    protocol: TCP
+    name: httpredirects
+  - port: 8843
+    targetPort: 8843
+    protocol: TCP
+    name: httpsredirects
+  - port: 6789
+    targetPort: 6789
+    protocol: TCP
+    name: speedtest
+  selector:
+    app.kubernetes.io/name: unifi-controller
+    app.kubernetes.io/instance: my-unifi-controller
+---
+# Source: unifi-controller/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-unifi-controller-udp
+  labels:
+    helm.sh/chart: unifi-controller-2.6.1
+    app.kubernetes.io/name: unifi-controller
+    app.kubernetes.io/instance: my-unifi-controller
+    app.kubernetes.io/version: "8.0.24"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: LoadBalancer
+  ports: 
+  - port: 10001
+    targetPort: 10001
+    protocol: UDP
+    name: apdiscovery
+  - port: 3478
+    targetPort: 3478
+    protocol: UDP
+    name: stun
+  selector:
+    app.kubernetes.io/name: unifi-controller
+    app.kubernetes.io/instance: my-unifi-controller
+---
+# Source: unifi-controller/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-unifi-controller
+  namespace: default  
+  labels:
+    helm.sh/chart: unifi-controller-2.6.1
+    app.kubernetes.io/name: unifi-controller
+    app.kubernetes.io/instance: my-unifi-controller
+    app.kubernetes.io/version: "8.0.24"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: unifi-controller
+      app.kubernetes.io/instance: my-unifi-controller
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: unifi-controller
+        app.kubernetes.io/instance: my-unifi-controller
+    spec:
+      serviceAccountName: my-unifi-controller
+      securityContext:
+        {}
+      containers:
+        - name: unifi-controller
+          securityContext:
+            {}
+          image: "linuxserver/unifi-controller:8.0.24"
+          imagePullPolicy: IfNotPresent
+          env:
+          - name: TZ
+            value: Europe/Berlin
+          - name: PUID
+            value: "1000"
+          - name: PGID
+            value: "1000"
+          - name: MEM_LIMIT
+            value: "1920"
+          - name: MEM_STARTUP
+            value: "1024"
+          ports:
+          - containerPort: 8080
+            protocol: TCP
+            name: devicecom
+          - containerPort: 8443
+            protocol: TCP
+            name: webapi
+          - containerPort: 8880
+            protocol: TCP
+            name: httpredirects
+          - containerPort: 8843
+            protocol: TCP
+            name: httpsredirects
+          - containerPort: 6789
+            protocol: TCP
+            name: speedtest
+          - containerPort: 10001
+            protocol: UDP
+            name: apdiscovery
+          - containerPort: 3478
+            protocol: TCP
+            name: stun
+          readinessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 20                     
+          resources:
+            limits:
+              cpu: 500m
+              memory: 2Gi
+            requests:
+              cpu: 250m
+              memory: 1Gi
+          volumeMounts:
+            - mountPath: "/config"
+              name: data
+            - mountPath: "/config/data/backup"              
+              name: backup-data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: my-unifi-controller-data
+        - name: backup-data
+          persistentVolumeClaim:
+            claimName: my-unifi-controller-backup
+---
+# Source: unifi-controller/templates/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: my-unifi-controller
+  namespace: default  
+  labels:
+    helm.sh/chart: unifi-controller-2.6.1
+    app.kubernetes.io/name: unifi-controller
+    app.kubernetes.io/instance: my-unifi-controller
+    app.kubernetes.io/version: "8.0.24"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  rules:
+    - host: "unifi.speedport.ip"
+      http:
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: "my-unifi-controller-tcp"
+                port:
+                  number: 8443
+---
+# Source: unifi-controller/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-unifi-controller-test-connection"
+  labels:
+    helm.sh/chart: unifi-controller-2.6.1
+    app.kubernetes.io/name: unifi-controller
+    app.kubernetes.io/instance: my-unifi-controller
+    app.kubernetes.io/version: "8.0.24"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['https://my-unifi-controller:8843']
+  restartPolicy: Never

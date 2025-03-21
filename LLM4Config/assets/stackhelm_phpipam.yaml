@@ -1,0 +1,356 @@
+---
+# Source: phpipam/charts/mariadb/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-phpipam-mariadb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: mariadb
+    helm.sh/chart: mariadb-11.0.14
+    app.kubernetes.io/instance: my-phpipam
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+automountServiceAccountToken: false
+---
+# Source: phpipam/charts/mariadb/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-phpipam-mariadb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: mariadb
+    helm.sh/chart: mariadb-11.0.14
+    app.kubernetes.io/instance: my-phpipam
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  mariadb-root-password: "MmxKaFhScFNIMA=="
+  mariadb-password: "cGFzc3dvcmQ="
+---
+# Source: phpipam/charts/mariadb/templates/primary/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-phpipam-mariadb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: mariadb
+    helm.sh/chart: mariadb-11.0.14
+    app.kubernetes.io/instance: my-phpipam
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: primary
+data:
+  my.cnf: |-
+    [mysqld]
+    skip-name-resolve
+    explicit_defaults_for_timestamp
+    basedir=/opt/bitnami/mariadb
+    plugin_dir=/opt/bitnami/mariadb/plugin
+    port=3306
+    socket=/opt/bitnami/mariadb/tmp/mysql.sock
+    tmpdir=/opt/bitnami/mariadb/tmp
+    max_allowed_packet=16M
+    bind-address=*
+    pid-file=/opt/bitnami/mariadb/tmp/mysqld.pid
+    log-error=/opt/bitnami/mariadb/logs/mysqld.log
+    character-set-server=UTF8
+    collation-server=utf8_general_ci
+    slow_query_log=0
+    slow_query_log_file=/opt/bitnami/mariadb/logs/mysqld.log
+    long_query_time=10.0
+    
+    [client]
+    port=3306
+    socket=/opt/bitnami/mariadb/tmp/mysql.sock
+    default-character-set=UTF8
+    plugin_dir=/opt/bitnami/mariadb/plugin
+    
+    [manager]
+    port=3306
+    socket=/opt/bitnami/mariadb/tmp/mysql.sock
+    pid-file=/opt/bitnami/mariadb/tmp/mysqld.pid
+---
+# Source: phpipam/charts/mariadb/templates/primary/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-phpipam-mariadb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: mariadb
+    helm.sh/chart: mariadb-11.0.14
+    app.kubernetes.io/instance: my-phpipam
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: primary
+  annotations:
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+    - name: mysql
+      port: 3306
+      protocol: TCP
+      targetPort: mysql
+      nodePort: null
+  selector: 
+    app.kubernetes.io/name: mariadb
+    app.kubernetes.io/instance: my-phpipam
+    app.kubernetes.io/component: primary
+---
+# Source: phpipam/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-phpipam
+  namespace: phpipam
+  labels:
+    helm.sh/chart: phpipam-0.1.2
+    app.kubernetes.io/name: phpipam
+    app.kubernetes.io/instance: my-phpipam
+    app.kubernetes.io/version: "1.5.2"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  ports:
+    - port: 80
+  selector:
+    app.kubernetes.io/name: phpipam
+    app.kubernetes.io/instance: my-phpipam
+---
+# Source: phpipam/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-phpipam
+  namespace: phpipam
+  labels:
+    helm.sh/chart: phpipam-0.1.2
+    app.kubernetes.io/name: phpipam
+    app.kubernetes.io/instance: my-phpipam
+    app.kubernetes.io/version: "1.5.2"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: phpipam
+      app.kubernetes.io/instance: my-phpipam
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: phpipam
+        app.kubernetes.io/instance: my-phpipam
+    spec:
+      securityContext:
+        null
+      containers:
+        - name: phpipam
+          securityContext:
+            null
+          image: "phpipam/phpipam-www:v1.5.2"
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 80 
+              protocol: TCP
+          env:
+            - name: IPAM_DATABASE_HOST
+              value: my-phpipam-mariadb:3306
+            - name: IPAM_DATABASE_NAME
+              value: "phpipam"
+            - name: IPAM_DATABASE_PASS
+              valueFrom:
+                secretKeyRef:
+                  key: mariadb-password
+                  name: "my-phpipam-mariadb"
+            - name: IPAM_DATABASE_USER
+              value: "phpipam"
+          resources:
+            null
+      
+        - name: phpipam-cron
+          securityContext:
+            null
+          image: "phpipam/phpipam-cron:v1.5.2"
+          imagePullPolicy: Always
+          env:
+            - name: SCAN_INTERVAL
+              value: 5m
+            - name: IPAM_DATABASE_HOST
+              value: my-phpipam-mariadb:3306
+            - name: IPAM_DATABASE_NAME
+              value: "phpipam"
+            - name: IPAM_DATABASE_PASS
+              valueFrom:
+                secretKeyRef:
+                  key: mariadb-password
+                  name: "my-phpipam-mariadb"
+            - name: IPAM_DATABASE_USER
+              value: "phpipam"
+          resources:
+            null
+---
+# Source: phpipam/charts/mariadb/templates/primary/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-phpipam-mariadb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: mariadb
+    helm.sh/chart: mariadb-11.0.14
+    app.kubernetes.io/instance: my-phpipam
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: primary
+spec:
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels: 
+      app.kubernetes.io/name: mariadb
+      app.kubernetes.io/instance: my-phpipam
+      app.kubernetes.io/component: primary
+  serviceName: my-phpipam-mariadb
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations:
+        checksum/configuration: 5c79ab6de32d0518f77895b40844ed2a55c6c87e7f67898e3fa77a21695a149c
+      labels:
+        app.kubernetes.io/name: mariadb
+        helm.sh/chart: mariadb-11.0.14
+        app.kubernetes.io/instance: my-phpipam
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/component: primary
+    spec:
+      
+      serviceAccountName: my-phpipam-mariadb
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: mariadb
+                    app.kubernetes.io/instance: my-phpipam
+                    app.kubernetes.io/component: primary
+                namespaces:
+                  - "default"
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+      containers:
+        - name: mariadb
+          image: docker.io/bitnami/mariadb:10.6.8-debian-11-r9
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: MARIADB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-phpipam-mariadb
+                  key: mariadb-root-password
+            - name: MARIADB_USER
+              value: "phpipam"
+            - name: MARIADB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-phpipam-mariadb
+                  key: mariadb-password
+            - name: MARIADB_DATABASE
+              value: "phpipam"
+          ports:
+            - name: mysql
+              containerPort: 3306
+          livenessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 120
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+            exec:
+              command:
+                - /bin/bash
+                - -ec
+                - |
+                  password_aux="${MARIADB_ROOT_PASSWORD:-}"
+                  if [[ -f "${MARIADB_ROOT_PASSWORD_FILE:-}" ]]; then
+                      password_aux=$(cat "$MARIADB_ROOT_PASSWORD_FILE")
+                  fi
+                  mysqladmin status -uroot -p"${password_aux}"
+          readinessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+            exec:
+              command:
+                - /bin/bash
+                - -ec
+                - |
+                  password_aux="${MARIADB_ROOT_PASSWORD:-}"
+                  if [[ -f "${MARIADB_ROOT_PASSWORD_FILE:-}" ]]; then
+                      password_aux=$(cat "$MARIADB_ROOT_PASSWORD_FILE")
+                  fi
+                  mysqladmin status -uroot -p"${password_aux}"
+          resources: 
+            limits: {}
+            requests: {}
+          volumeMounts:
+            - name: data
+              mountPath: /bitnami/mariadb
+            - name: config
+              mountPath: /opt/bitnami/mariadb/conf/my.cnf
+              subPath: my.cnf
+      volumes:
+        - name: config
+          configMap:
+            name: my-phpipam-mariadb
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels: 
+          app.kubernetes.io/name: mariadb
+          app.kubernetes.io/instance: my-phpipam
+          app.kubernetes.io/component: primary
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "8Gi"
+---
+# Source: phpipam/templates/ingress.yaml
+apiVersion:  networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: my-phpipam
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - "ipam.example.com"
+      secretName: ipam-domain-tls
+  rules:
+    - host: "ipam.example.com"
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: my-phpipam
+                port:
+                  number: 80

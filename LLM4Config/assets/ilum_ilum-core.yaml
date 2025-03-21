@@ -1,0 +1,507 @@
+---
+# Source: ilum-core/templates/core-sa.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-ilum-core-spark
+---
+# Source: ilum-core/templates/core-cm.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ilum
+data:
+  application.yml: |
+    spring:
+      main:
+        banner-mode: off
+      servlet:
+        multipart:
+          enabled: true
+          max-file-size: 500MB
+          max-request-size: 500MB
+          file-size-threshold: 50MB
+      data:
+        mongodb:
+          uri: mongodb://mongo:27017/ilum-default?replicaSet=rs0
+      kafka:
+        admin:
+          fail-fast: true
+      codec:
+        max-in-memory-size: 20MB
+      task:
+        scheduling:
+          pool:
+            size: 2
+
+    communication:
+      mode: grpc
+    job:
+      kafka:
+        server: kafka:9092
+        topicPrefix: ilum-default
+        requestSize: 20000000
+        maxPollRecords: 500
+        maxPollInterval: 60000
+      grpc:
+        server: ilum-grpc
+        port: 9999
+      retain:
+        hours: 168
+      openLineage:
+        enabled: false
+        transport:
+          type: http
+          serverUrl: http://ilum-marquez:9555/api/v1/namespaces/ilum
+      prometheus:
+        enabled: true
+      healthcheck:
+        enabled: true
+        interval: 300
+        tolerance: 120
+      hiveMetastore:
+        enabled: false
+        address: thrift://ilum-hive-metastore:9083
+
+    ilum:
+      namespace: default
+      release: my-ilum-core
+      externalSubmit: false
+      historyServer:
+        enabled: true
+        url: http://ilum-history-server:9666
+      storageType: s3
+      s3a:
+        endpoint: s3:7000
+        sparkBucket: ilum-files
+        dataBucket: ilum-tables
+        accessKey: 
+        secretKey: 
+
+    logAggregation:
+      enabled: false
+      loki:
+        url: http://ilum-loki-gateway
+
+    license:
+      account: ilum-cloud
+      validation:
+        baseUrl: https://api.keygen.sh
+      key:
+        public: b72137e87c3fc1c6bf8ae0b758264fe4ea8110ce04253f9cba9240efd1710996
+        private: ""
+
+    security:
+      internal:
+        enabled: true
+        users:
+          - password: admin
+            roles:
+            - ADMIN
+            username: admin
+      ldap:
+        enabled: false
+        base: ""
+        username: ""
+        password: ""
+        passwordEncoder: ""
+        userSearch:
+          base: ""
+          filter: "uid={0}"
+          passwordAttr: "userPassword"
+        groupSearch:
+          base: ""
+          filter: "(member={0})"
+          roleAttr: "cn"
+      oauth2:
+        enabled: false
+        clientId: ""
+        clientSecret: ""
+        issuerUri: ""
+      jwt:
+        issuerUri: "https://ilum.cloud"
+        timeToLive: "8h"
+        publicKey: ""
+        privateKey: ""
+      authorities:
+        roles:
+          prefix: "ROLE_"
+          claimName: "groups"
+        scopes:
+          prefix: "SCOPE_"
+          claimName: "scp"
+
+    springdoc:
+      swagger-ui:
+        tags-sorter: alpha
+        operations-sorter: alpha
+      paths-to-match: /api/v1/**
+
+    management:
+      endpoints:
+        web:
+          exposure:
+            include: "info,configprops,env,metrics,mappings,beans,prometheus"
+
+    logging:
+      level:
+        # ilum
+        cloud.ilum: info
+        # kafka
+        org.apache.kafka: warn
+        org.springframework.kafka: warn
+        # mongo
+        org.mongodb.driver: warn
+        # yarn client
+        org.apache.hadoop.yarn.client: error
+        # transactions
+        # org.springframework.transaction: info
+        # web
+        # org.springframework.web: debug
+
+    mongock:
+      migration-scan-package:
+        - cloud.ilum.service.migrations
+
+    cors:
+      enabled: true
+---
+# Source: ilum-core/templates/hs-cm.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: spark-defaults
+data:
+  spark-defaults.conf: |
+    # Spark history server custom properties:
+      
+    # Spark hadoop properties:
+    spark.hadoop.fs.s3a.bucket.ilum-files.endpoint                s3:7000
+    spark.hadoop.fs.s3a.bucket.ilum-files.access.key              
+    spark.hadoop.fs.s3a.bucket.ilum-files.secret.key              
+    spark.hadoop.fs.s3a.bucket.ilum-files.connection.ssl.enabled  false
+    spark.hadoop.fs.s3a.bucket.ilum-files.path.style.access       true
+    spark.hadoop.fs.s3a.bucket.ilum-files.impl                    org.apache.hadoop.fs.s3a.S3AFileSystem
+    spark.hadoop.fs.s3a.bucket.ilum-files.fast.upload             true
+    spark.hadoop.fs.s3a.aws.credentials.provider                                               org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider
+    spark.history.fs.logDirectory                                                              s3a://ilum-files/ilum/logs
+---
+# Source: ilum-core/templates/schedule-cronjob.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ilum-schedule-cronjob
+data:
+  schedule-cronjob.yaml: |
+    apiVersion: batch/v1
+    kind: CronJob
+    metadata:
+      name: schedule-cronjob
+      namespace: default
+    spec:
+      schedule: "cron"
+      successfulJobsHistoryLimit: 0
+      failedJobsHistoryLimit: 0
+      jobTemplate:
+        spec:
+          backoffLimit: 3
+          template:
+            spec:
+              containers:
+                - name: schedule-cronjob
+                  image: curlimages/curl:8.5.0
+                  imagePullPolicy: IfNotPresent
+                  command: ["/bin/sh", "-c"]
+                  args: ["curl -X POST http://ilum-core:9888/api/dev/reactive/schedule/$SCHEDULE_ID/activate"]
+              restartPolicy: OnFailure
+---
+# Source: ilum-core/templates/spark-submit-pt.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ilum-spark-submit-pt
+data:
+  spark-submit-pt.yaml: |
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      name: spark-submit
+      namespace: default
+    spec:
+      serviceAccountName: my-ilum-core-spark
+      restartPolicy: Never
+      containers:
+        - name: spark-submit
+          image: ilum/spark-launcher:spark-3.5.1
+          imagePullPolicy: IfNotPresent
+          resources:
+            limits:
+              memory: 500Mi
+            requests:
+              memory: 300Mi
+---
+# Source: ilum-core/templates/spark-cr.yaml
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: spark-submit-cluster-role-default
+rules:
+  - apiGroups: [ "metrics.k8s.io" ]
+    resources: [ "nodes" ]
+    verbs: [ "create","delete","deletecollection","get","list","patch","update","watch" ]
+  - apiGroups: [ "" ]
+    resources: [ "nodes" ]
+    verbs: [ "create","delete","deletecollection","get","list","patch","update","watch" ]
+  - apiGroups: [ "" ]
+    resources: [ "pods" ]
+    verbs: [ "create","delete","deletecollection","get","list","patch","update","watch" ]
+  - apiGroups: [ "" ]
+    resources: [ "pods/exec" ]
+    verbs: [ "create","delete","deletecollection","get","list","patch","update","watch" ]
+  - apiGroups: [ "" ]
+    resources: [ "pods/log" ]
+    verbs: [ "create","delete","deletecollection","get","list","patch","update","watch" ]
+  - apiGroups: [ "batch" ]
+    resources: [ "cronjobs" ]
+    verbs: [ "create","delete","deletecollection","get","list","patch","update","watch" ]
+  - apiGroups: [ "batch" ]
+    resources: [ "cronjobs/exec" ]
+    verbs: [ "create","delete","deletecollection","get","list","patch","update","watch" ]
+  - apiGroups: [ "batch" ]
+    resources: [ "cronjobs/log" ]
+    verbs: [ "create","delete","deletecollection","get","list","patch","update","watch" ]
+  - apiGroups: [ "" ]
+    resources: [ "services" ]
+    verbs: [ "create","delete","deletecollection","get","list","patch","update","watch" ]
+  - apiGroups: [ "" ]
+    resources: [ "configmaps" ]
+    verbs: [ "create","delete","deletecollection","get","list","patch","update","watch" ]
+  - apiGroups: [ "" ]
+    resources: [ "persistentvolumeclaims" ]
+    verbs: [ "create","delete","deletecollection","get","list","patch","update","watch" ]
+  - apiGroups: [ "" ]
+    resources: [ "endpoints" ]
+    verbs: [ "create","delete","deletecollection","get","list","patch","update","watch" ]
+  - apiGroups: [ "monitoring.coreos.com" ]
+    resources: [ "servicemonitors" ]
+    verbs: [ "create","delete","deletecollection","get","list","patch","update","watch" ]
+---
+# Source: ilum-core/templates/spark-crb.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: spark-submit-cluster-role-binding-default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: spark-submit-cluster-role-default
+subjects:
+- kind: ServiceAccount
+  name: my-ilum-core-spark
+  namespace: default
+---
+# Source: ilum-core/templates/core-svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: ilum-core
+  labels:
+    app: ilum-core
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 9888
+      targetPort: 8080
+  selector:
+    app: ilum-core
+---
+# Source: ilum-core/templates/grpc-svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: ilum-grpc
+  labels:
+    app: ilum-grpc
+spec:
+  type: ClusterIP
+  ports:
+    - name: grpc
+      port: 9999
+      targetPort: 9999
+  selector:
+    app: ilum-core
+---
+# Source: ilum-core/templates/hs-svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: ilum-history-server
+  labels:
+    app: ilum-history-server
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 9666
+      targetPort: 18080
+  selector:
+    app: ilum-history-server
+---
+# Source: ilum-core/templates/core-deploy.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ilum-core
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ilum-core
+  template:
+    metadata:
+      annotations:
+        rollme: "9p5LS"
+      labels:
+        app: ilum-core
+        ilum.prometheus: "true"
+    spec:
+      serviceAccountName: my-ilum-core-spark
+      volumes:
+        - name: application-config
+          configMap:
+            name: ilum
+        - name: spark-submit-pod-template
+          configMap:
+            name: ilum-spark-submit-pt
+        - name: schedule-cronjob-template
+          configMap:
+            name: ilum-schedule-cronjob
+      initContainers:
+        - name: wait-for-mongo
+          image: ilum/mongodb:6.0.5
+          imagePullPolicy: IfNotPresent
+          command: ['sh', '-c', "until mongosh --host mongo:27017 --eval 'db.runCommand({ping:1})' ; do echo waiting for mongo; sleep 2; done"]
+      containers:
+        - name: ilum-core
+          image: ilum/core:6.1.6
+          imagePullPolicy: IfNotPresent
+          resources:
+            limits:
+              memory: 2Gi
+            requests:
+              memory: 1Gi
+          volumeMounts:
+            - name: application-config
+              mountPath: /config
+            - name: spark-submit-pod-template
+              mountPath: /tmp/pod-template
+            - name: schedule-cronjob-template
+              mountPath: /tmp/cronjob-template
+          env:
+            - name: ILUM_KUBERNETES_INITCLUSTERONSTARTUP
+              value: "true"
+            - name: ILUM_KUBERNETES_UPGRADECLUSTERONSTARTUP
+              value: "false"
+            - name: ILUM_SPARKNAMESPACE
+              value: "default"
+            - name: ILUM_KUBERNETES_API_URL
+              value: "https://kubernetes.default.svc"
+            - name: ILUM_KUBERNETES_CONTAINER_IMAGE
+              value: "ilum/spark:3.4.2"
+            - name: ILUM_SERVICE_ACCOUNT_NAME
+              value: my-ilum-core-spark
+          ports:
+            - containerPort: 8080
+              name: http
+              protocol: TCP
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /api/dev/reactive/health
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /api/dev/reactive/health
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
+                - arm64
+---
+# Source: ilum-core/templates/hs-deploy.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ilum-history-server
+spec:
+  selector:
+    matchLabels:
+      app: ilum-history-server
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: ilum-history-server
+      annotations:
+        checksum/config: 27dd2515a3092badb15fc2ec95880f52bde48244dbfafd66146f419f23e2cfdd
+    spec:
+      restartPolicy: Always
+      initContainers:
+        - name: wait-for-ilum-core
+          image: curlimages/curl:8.5.0
+          imagePullPolicy: IfNotPresent
+          command: [ 'sh', '-c', 'until curl -sf http://ilum-core:9888/api/dev/reactive/health ; do echo waiting for ilum-core; sleep 2; done' ]
+      containers:
+        - name: ilum-history-server
+          image: ilum/spark-launcher:spark-3.5.1
+          imagePullPolicy: IfNotPresent
+          resources:
+            limits:
+              memory: 500Mi
+            requests:
+              memory: 300Mi
+          command:
+            - ./bin/spark-class
+            - org.apache.spark.deploy.history.HistoryServer
+          ports:
+            - containerPort: 18080
+              name: history-server
+              protocol: TCP
+          volumeMounts:
+            - name: spark-config
+              mountPath: /usr/local/spark/conf
+          
+      volumes:
+        - name: spark-config
+          configMap:
+            name: spark-defaults
+        
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
+                - arm64

@@ -1,0 +1,134 @@
+---
+# Source: kube-ops-view/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-kube-ops-view
+  labels:
+    helm.sh/chart: kube-ops-view-3.6.1
+    app.kubernetes.io/name: kube-ops-view
+    app.kubernetes.io/instance: my-kube-ops-view
+    app.kubernetes.io/version: "23.5.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: kube-ops-view/templates/clusterrole.yaml
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-kube-ops-view
+rules:
+- apiGroups: [""]
+  resources: ["nodes", "pods"]
+  verbs:
+    - list
+- apiGroups: ["metrics.k8s.io"]
+  resources: ["nodes", "pods"]
+  verbs:
+    - get
+    - list
+---
+# Source: kube-ops-view/templates/clusterrolebinding.yaml
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-kube-ops-view
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-kube-ops-view
+subjects:
+- kind: ServiceAccount
+  name: my-kube-ops-view
+  namespace: default
+---
+# Source: kube-ops-view/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-kube-ops-view
+  labels:
+    helm.sh/chart: kube-ops-view-3.6.1
+    app.kubernetes.io/name: kube-ops-view
+    app.kubernetes.io/instance: my-kube-ops-view
+    app.kubernetes.io/version: "23.5.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: kube-ops-view
+    app.kubernetes.io/instance: my-kube-ops-view
+---
+# Source: kube-ops-view/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-kube-ops-view
+  labels:
+    helm.sh/chart: kube-ops-view-3.6.1
+    app.kubernetes.io/name: kube-ops-view
+    app.kubernetes.io/instance: my-kube-ops-view
+    app.kubernetes.io/version: "23.5.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kube-ops-view
+      app.kubernetes.io/instance: my-kube-ops-view
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kube-ops-view
+        app.kubernetes.io/instance: my-kube-ops-view
+    spec:
+      serviceAccountName: my-kube-ops-view
+      containers:
+        - name: kube-ops-view
+          image: "hjacobs/kube-ops-view:23.5.0"
+          imagePullPolicy: Always
+          #          env:
+          #            - name: AUTHORIZE_URL
+          #              value: https://auth.keycloak.de/auth/realms/REALM/protocol/openid-connect/auth
+          #            - name: ACCESS_TOKEN_URL
+          #              value: https://auth.keycloak.de/auth/realms/REALM/protocol/openid-connect/token
+          #            - name: CREDENTIALS_DIR
+          #              value: /oidc-credentials
+          #
+          securityContext:
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            timeoutSeconds: 1
+      #          volumeMounts:
+      #            - name: oidc-secret
+      #              mountPath: /oidc-credentials
+#      volumes:
+#        - name: oidc-secret
+#          secret:
+#            secretName: my-kube-ops-view-oidc

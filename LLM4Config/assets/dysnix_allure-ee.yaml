@@ -1,0 +1,1380 @@
+---
+# Source: allure-ee/charts/rabbitmq/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-allure-ee-rabbitmq
+  labels:
+    app: rabbitmq
+    chart: rabbitmq-6.18.2
+    release: "my-allure-ee"
+    heritage: "Helm"
+---
+# Source: allure-ee/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: allure-ee
+  labels:
+    app: allure-ee
+    chart: allure-ee-1.9.9
+    heritage: Helm
+    release: my-allure-ee
+---
+# Source: allure-ee/charts/postgresql/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-allure-ee-postgresql
+  labels:
+    app: postgresql
+    chart: postgresql-8.4.3
+    release: "my-allure-ee"
+    heritage: "Helm"
+type: Opaque
+data:
+  postgresql-password: "YWxsdXJl"
+---
+# Source: allure-ee/charts/rabbitmq/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-allure-ee-rabbitmq
+  labels:
+    app: rabbitmq
+    chart: rabbitmq-6.18.2
+    release: "my-allure-ee"
+    heritage: "Helm"
+type: Opaque
+data:
+  
+  rabbitmq-password: "YWxsdXJl"
+  
+  
+  rabbitmq-erlang-cookie: "eU9Cb3Zra0xzSE1EZWNCaVh0cngzdWhDejhhcTNnYWE="
+---
+# Source: allure-ee/charts/redis/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-allure-ee-redis
+  labels:
+    app: redis
+    chart: redis-10.5.7
+    release: "my-allure-ee"
+    heritage: "Helm"
+type: Opaque
+data:
+  redis-password: "YWxsdXJl"
+---
+# Source: allure-ee/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-allure-ee-allure-ee
+  labels:
+    app: my-allure-ee-allure-ee
+    chart: "allure-ee-1.9.9"
+    release: "my-allure-ee"
+    heritage: "Helm"
+type: Opaque
+data:
+  username: "YWRtaW4="
+  password: "YWRtaW4="
+---
+# Source: allure-ee/charts/postgresql/templates/initialization-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-allure-ee-postgresql-init-scripts
+  labels:
+    app: postgresql
+    chart: postgresql-8.4.3
+    release: "my-allure-ee"
+    heritage: "Helm"
+data:
+  init.sql: |
+    CREATE DATABASE uaa TEMPLATE template0 ENCODING 'utf8' LC_COLLATE = 'en_US.UTF-8' LC_CTYPE = 'en_US.UTF-8';
+    CREATE DATABASE report TEMPLATE template0 ENCODING 'utf8' LC_COLLATE = 'en_US.UTF-8' LC_CTYPE = 'en_US.UTF-8';
+---
+# Source: allure-ee/charts/rabbitmq/templates/configuration.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-allure-ee-rabbitmq-config
+  labels:
+    app: rabbitmq
+    chart: rabbitmq-6.18.2
+    release: "my-allure-ee"
+    heritage: "Helm"
+data:
+  enabled_plugins: |-
+    [rabbitmq_management, rabbitmq_peer_discovery_k8s, rabbitmq_auth_backend_ldap].
+  rabbitmq.conf: |-
+    ##username and password
+    default_user=allure
+    default_pass=CHANGEME
+    ## Clustering
+    cluster_formation.peer_discovery_backend  = rabbit_peer_discovery_k8s
+    cluster_formation.k8s.host = kubernetes.default.svc.cluster.local
+    cluster_formation.node_cleanup.interval = 10
+    cluster_formation.node_cleanup.only_log_warning = true
+    cluster_partition_handling = autoheal
+    # queue master locator
+    queue_master_locator=min-masters
+    # enable guest user
+    loopback_users.guest = false
+    #disk_free_limit.absolute = 50MB
+    #management.load_definitions = /app/load_definition.json
+---
+# Source: allure-ee/charts/rabbitmq/templates/healthchecks.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-allure-ee-rabbitmq-healthchecks
+  labels:
+    app: rabbitmq
+    chart: rabbitmq-6.18.2
+    release: "my-allure-ee"
+    heritage: "Helm"
+data:
+  rabbitmq-health-check: |-
+    #!/bin/sh
+    START_FLAG=/opt/bitnami/rabbitmq/var/lib/rabbitmq/.start
+    if [ -f ${START_FLAG} ]; then
+        rabbitmqctl node_health_check
+        RESULT=$?
+        if [ $RESULT -ne 0 ]; then
+          rabbitmqctl status
+          exit $?
+        fi
+        rm -f ${START_FLAG}
+        exit ${RESULT}
+    fi
+    rabbitmq-api-check $1 $2
+  rabbitmq-api-check: |-
+    #!/bin/sh
+    set -e
+    URL=$1
+    EXPECTED=$2
+    ACTUAL=$(curl --silent --show-error --fail "${URL}")
+    echo "${ACTUAL}"
+    test "${EXPECTED}" = "${ACTUAL}"
+---
+# Source: allure-ee/charts/redis/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-allure-ee-redis
+  labels:
+    app: redis
+    chart: redis-10.5.7
+    heritage: Helm
+    release: my-allure-ee
+data:
+  redis.conf: |-
+    # User-supplied configuration:
+    # Enable AOF https://redis.io/topics/persistence#append-only-file
+    appendonly yes
+    # Disable RDB persistence, AOF persistence already enabled.
+    save ""
+  master.conf: |-
+    dir /data
+    rename-command FLUSHDB ""
+    rename-command FLUSHALL ""
+  replica.conf: |-
+    dir /data
+    slave-read-only yes
+    rename-command FLUSHDB ""
+    rename-command FLUSHALL ""
+---
+# Source: allure-ee/charts/redis/templates/health-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-allure-ee-redis-health
+  labels:
+    app: redis
+    chart: redis-10.5.7
+    heritage: Helm
+    release: my-allure-ee
+data:
+  ping_readiness_local.sh: |-
+    response=$(
+      timeout -s 9 $1 \
+      redis-cli \
+        -a $REDIS_PASSWORD --no-auth-warning \
+        -h localhost \
+        -p $REDIS_PORT \
+        ping
+    )
+    if [ "$response" != "PONG" ]; then
+      echo "$response"
+      exit 1
+    fi
+  ping_liveness_local.sh: |-
+    response=$(
+      timeout -s 9 $1 \
+      redis-cli \
+        -a $REDIS_PASSWORD --no-auth-warning \
+        -h localhost \
+        -p $REDIS_PORT \
+        ping
+    )
+    if [ "$response" != "PONG" ] && [ "$response" != "LOADING Redis is loading the dataset in memory" ]; then
+      echo "$response"
+      exit 1
+    fi
+  ping_readiness_master.sh: |-
+    response=$(
+      timeout -s 9 $1 \
+      redis-cli \
+        -a $REDIS_MASTER_PASSWORD --no-auth-warning \
+        -h $REDIS_MASTER_HOST \
+        -p $REDIS_MASTER_PORT_NUMBER \
+        ping
+    )
+    if [ "$response" != "PONG" ]; then
+      echo "$response"
+      exit 1
+    fi
+  ping_liveness_master.sh: |-
+    response=$(
+      timeout -s 9 $1 \
+      redis-cli \
+        -a $REDIS_MASTER_PASSWORD --no-auth-warning \
+        -h $REDIS_MASTER_HOST \
+        -p $REDIS_MASTER_PORT_NUMBER \
+        ping
+    )
+    if [ "$response" != "PONG" ] && [ "$response" != "LOADING Redis is loading the dataset in memory" ]; then
+      echo "$response"
+      exit 1
+    fi
+  ping_readiness_local_and_master.sh: |-
+    script_dir="$(dirname "$0")"
+    exit_status=0
+    "$script_dir/ping_readiness_local.sh" $1 || exit_status=$?
+    "$script_dir/ping_readiness_master.sh" $1 || exit_status=$?
+    exit $exit_status
+  ping_liveness_local_and_master.sh: |-
+    script_dir="$(dirname "$0")"
+    exit_status=0
+    "$script_dir/ping_liveness_local.sh" $1 || exit_status=$?
+    "$script_dir/ping_liveness_master.sh" $1 || exit_status=$?
+    exit $exit_status
+---
+# Source: allure-ee/templates/report-pvc.yaml
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: my-allure-ee-report
+  labels:
+    app: my-allure-ee-report
+    chart: "allure-ee-1.9.9"
+    release: "my-allure-ee"
+    heritage: "Helm"
+  finalizers:
+    - kubernetes.io/pvc-protection
+spec:
+  accessModes:
+  - "ReadWriteOnce"
+  resources:
+    requests:
+      storage: "10Gi"
+---
+# Source: allure-ee/charts/rabbitmq/templates/role.yaml
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-allure-ee-rabbitmq-endpoint-reader
+  labels:
+    app: rabbitmq
+    chart: rabbitmq-6.18.2
+    release: "my-allure-ee"
+    heritage: "Helm"
+rules:
+- apiGroups: [""]
+  resources: ["endpoints"]
+  verbs: ["get"]
+---
+# Source: allure-ee/templates/role.yaml
+# create rbac role with permission for discovery
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: allure-ee-namespace-reader
+  labels:
+    app: allure-ee
+    chart: allure-ee-1.9.9
+    heritage: Helm
+    release: my-allure-ee
+rules:
+ - apiGroups: [""]
+   resources: ["endpoints", "services", "pods", "configmaps", "secrets"]
+   verbs: ["get", "list", "watch"]
+---
+# Source: allure-ee/charts/rabbitmq/templates/rolebinding.yaml
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-allure-ee-rabbitmq-endpoint-reader
+  labels:
+    app: rabbitmq
+    chart: rabbitmq-6.18.2
+    release: "my-allure-ee"
+    heritage: "Helm"
+subjects:
+- kind: ServiceAccount
+  name: my-allure-ee-rabbitmq
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: my-allure-ee-rabbitmq-endpoint-reader
+---
+# Source: allure-ee/templates/rolebinding.yaml
+# bind this rbac role to default ServiceAccount in your namespace
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: allure-ee-namespace-reader
+  labels:
+    app: allure-ee
+    chart: allure-ee-1.9.9
+    heritage: Helm
+    release: my-allure-ee
+subjects:
+- kind: ServiceAccount
+  name: allure-ee
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: allure-ee-namespace-reader
+---
+# Source: allure-ee/charts/postgresql/templates/svc-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-allure-ee-postgresql-headless
+  labels:
+    app: postgresql
+    chart: postgresql-8.4.3
+    release: "my-allure-ee"
+    heritage: "Helm"
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: tcp-postgresql
+      port: 5432
+      targetPort: tcp-postgresql
+  selector:
+    app: postgresql
+    release: "my-allure-ee"
+---
+# Source: allure-ee/charts/postgresql/templates/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-allure-ee-postgresql
+  labels:
+    app: postgresql
+    chart: postgresql-8.4.3
+    release: "my-allure-ee"
+    heritage: "Helm"
+spec:
+  type: ClusterIP
+  ports:
+    - name: tcp-postgresql
+      port: 5432
+      targetPort: tcp-postgresql
+  selector:
+    app: postgresql
+    release: "my-allure-ee"
+    role: master
+---
+# Source: allure-ee/charts/rabbitmq/templates/svc-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-allure-ee-rabbitmq-headless
+  labels:
+    app: rabbitmq
+    chart: rabbitmq-6.18.2
+    release: "my-allure-ee"
+    heritage: "Helm"
+spec:
+  clusterIP: None
+  ports:
+  - name: epmd
+    port: 4369
+    targetPort: epmd
+  - name: amqp
+    port: 5672
+    targetPort: amqp
+  - name: dist
+    port: 25672
+    targetPort: dist
+  - name: stats
+    port: 15672
+    targetPort: stats
+  selector:
+    app: rabbitmq
+    release: "my-allure-ee"
+---
+# Source: allure-ee/charts/rabbitmq/templates/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-allure-ee-rabbitmq
+  labels:
+    app: rabbitmq
+    chart: rabbitmq-6.18.2
+    release: "my-allure-ee"
+    heritage: "Helm"
+spec:
+  type: ClusterIP
+  ports:
+  - name: epmd
+    port: 4369
+    targetPort: epmd
+    nodePort: null
+  - name: amqp
+    port: 5672
+    targetPort: amqp
+    nodePort: null
+  - name: dist
+    port: 25672
+    targetPort: dist
+    nodePort: null
+  - name: stats
+    port: 15672
+    targetPort: stats
+    nodePort: null
+  selector:
+    app: rabbitmq
+    release: "my-allure-ee"
+---
+# Source: allure-ee/charts/redis/templates/headless-svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-allure-ee-redis-headless
+  labels:
+    app: redis
+    chart: redis-10.5.7
+    release: my-allure-ee
+    heritage: Helm
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+  - name: redis
+    port: 6379
+    targetPort: redis
+  selector:
+    app: redis
+    release: my-allure-ee
+---
+# Source: allure-ee/charts/redis/templates/redis-master-svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-allure-ee-redis-master
+  labels:
+    app: redis
+    chart: redis-10.5.7
+    release: my-allure-ee
+    heritage: Helm
+spec:
+  type: ClusterIP
+  ports:
+  - name: redis
+    port: 6379
+    targetPort: redis
+  selector:
+    app: redis
+    release: my-allure-ee
+    role: master
+---
+# Source: allure-ee/charts/redis/templates/redis-slave-svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-allure-ee-redis-slave
+  labels:
+    app: redis
+    chart: redis-10.5.7
+    release: my-allure-ee
+    heritage: Helm
+spec:
+  type: ClusterIP
+  ports:
+  - name: redis
+    port: 6379
+    targetPort: redis
+  selector:
+    app: redis
+    release: my-allure-ee
+    role: slave
+---
+# Source: allure-ee/templates/gateway-svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-allure-ee-gateway
+  labels:
+    app: my-allure-ee-gateway
+    chart: "allure-ee-1.9.9"
+    release: "my-allure-ee"
+    heritage: "Helm"
+spec:
+  selector:
+    app: my-allure-ee-gateway
+  ports:
+  - name: http
+    targetPort: 8080
+    port: 8080
+  type: NodePort
+---
+# Source: allure-ee/templates/report-svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-allure-ee-report
+  labels:
+    app: my-allure-ee-report
+    chart: "allure-ee-1.9.9"
+    release: "my-allure-ee"
+    heritage: "Helm"
+spec:
+  selector:
+    app: my-allure-ee-report
+  ports:
+  - name: http
+    targetPort: 8081
+    port: 8081
+  type: NodePort
+---
+# Source: allure-ee/templates/uaa-svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-allure-ee-uaa
+  labels:
+    app: my-allure-ee-uaa
+    chart: "allure-ee-1.9.9"
+    release: "my-allure-ee"
+    heritage: "Helm"
+spec:
+  selector:
+    app: my-allure-ee-uaa
+  ports:
+  - name: http
+    targetPort: 8082
+    port: 8082
+  type: NodePort
+---
+# Source: allure-ee/templates/gateway-dep.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-allure-ee-gateway
+  labels:
+    app: my-allure-ee-gateway
+    chart: "allure-ee-1.9.9"
+    release: "my-allure-ee"
+    heritage: "Helm"
+spec:
+  replicas: 1
+  strategy:
+    null
+  selector:
+    matchLabels:
+      app: my-allure-ee-gateway
+  template:
+    metadata:
+      labels:
+        app: my-allure-ee-gateway
+    spec:
+      serviceAccountName:  allure-ee
+      tolerations:
+        []
+      containers:
+      - name: my-allure-ee-gateway
+        image: allure/allure-gateway:3.188.3
+        imagePullPolicy: 
+        ports:
+        - name: http
+          containerPort: 8080
+        env:
+        - name: "JAVA_TOOL_OPTIONS"
+          value: "-Xss256k -Xms256m -Xmx256m -XX:+UseStringDeduplication -XX:+UseG1GC\n"
+        - name: "SPRING_PROFILES_ACTIVE"
+          value: "kubernetes"
+        - name: "SPRING_SESSION_STORE_TYPE"
+          value: "REDIS"
+        - name: SPRING_REDIS_HOST
+          value: my-allure-ee-redis-master
+        - name: SPRING_REDIS_PASSWORD
+          value: allure
+        - name: ALLURE_JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: my-allure-ee-allure-ee
+              key: "jwtSecret"
+        livenessProbe:
+          httpGet:
+            path: /management/health
+            port: http
+          failureThreshold: 10
+          initialDelaySeconds: 60
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /management/health
+            port: http
+          failureThreshold: 5
+          initialDelaySeconds: 60
+          periodSeconds: 30
+---
+# Source: allure-ee/templates/report-dep.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-allure-ee-report
+  labels:
+    app: my-allure-ee-report
+    chart: "allure-ee-1.9.9"
+    release: "my-allure-ee"
+    heritage: "Helm"
+spec:
+  replicas: 1
+  strategy:
+    null
+  selector:
+    matchLabels:
+      app: my-allure-ee-report
+  template:
+    metadata:
+      labels:
+        app: my-allure-ee-report
+    spec:
+      serviceAccountName: allure-ee
+      tolerations:
+        []
+      containers:
+      - name: my-allure-ee-report
+        image: allure/allure-report:3.188.3
+        imagePullPolicy: 
+        ports:
+        - name: http
+          containerPort: 8081
+        env:
+        - name: SPRING_RABBITMQ_HOST
+          value: my-allure-ee-rabbitmq
+        - name: SPRING_RABBITMQ_USERNAME
+          value: allure
+        - name: SPRING_RABBITMQ_PASSWORD
+          value: allure
+        - name: SPRING_DATASOURCE_URL
+          value: jdbc:postgresql://my-allure-ee-postgresql/report
+        - name: SPRING_DATASOURCE_USERNAME
+          value: allure
+        - name: SPRING_DATASOURCE_PASSWORD
+          value: allure
+        - name: SPRING_DATASOURCE_DRIVER_CLASS_NAME
+          value: org.postgresql.Driver
+        - name: SPRING_JPA_DATABASE_PLATFORM
+          value: org.hibernate.dialect.PostgreSQL9Dialect
+        - name: SPRING_JPA_PROPERTIES_HIBERNATE_GLOBALLY_QUOTED_IDENTIFIERS
+          value: 'true'
+        - name: "ALLURE_BLOBSTORAGE_FILESYSTEM_DIRECTORY"
+          value: "/opt/allure/report/storage"
+        - name: "ALLURE_BLOBSTORAGE_TYPE"
+          value: "FILE_SYSTEM"
+        - name: "JAVA_TOOL_OPTIONS"
+          value: "-Xss256k -Xms256m -Xmx1g -XX:+UseStringDeduplication -XX:+UseG1GC\n"
+        - name: "SPRING_PROFILES_ACTIVE"
+          value: "kubernetes"
+        - name: "ALLURE_CRYPTO_PASSWORD"
+          valueFrom:
+            secretKeyRef:
+              name: my-allure-ee-allure-ee
+              key: "password"
+        livenessProbe:
+          httpGet:
+            path: /rs/management/health
+            port: http
+          failureThreshold: 10
+          initialDelaySeconds: 60
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /rs/management/health
+            port: http
+          failureThreshold: 5
+          initialDelaySeconds: 60
+          periodSeconds: 30
+        volumeMounts:
+        - mountPath: "/opt/allure/report/storage"
+          name: storage-volume
+      volumes:
+      - name: storage-volume
+        persistentVolumeClaim:
+          claimName: my-allure-ee-report
+---
+# Source: allure-ee/templates/uaa-dep.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-allure-ee-uaa
+  labels:
+    app: my-allure-ee-uaa
+    chart: "allure-ee-1.9.9"
+    release: "my-allure-ee"
+    heritage: "Helm"
+spec:
+  replicas: 1
+  strategy:
+    null
+  selector:
+    matchLabels:
+      app: my-allure-ee-uaa
+  template:
+    metadata:
+      labels:
+        app: my-allure-ee-uaa
+    spec:
+      serviceAccountName:  allure-ee
+      tolerations:
+        []
+      containers:
+      - name: my-allure-ee-uaa
+        image: allure/allure-uaa:3.188.3
+        imagePullPolicy: 
+        ports:
+        - name: http
+          containerPort: 8082
+        env:
+        - name: SPRING_DATASOURCE_URL
+          value: jdbc:postgresql://my-allure-ee-postgresql/uaa
+        - name: SPRING_DATASOURCE_USERNAME
+          value: allure
+        - name: SPRING_DATASOURCE_PASSWORD
+          value: allure
+        - name: SPRING_DATASOURCE_DRIVER_CLASS_NAME
+          value: org.postgresql.Driver
+        - name: SPRING_JPA_DATABASE_PLATFORM
+          value: org.hibernate.dialect.PostgreSQL9Dialect
+        - name: SPRING_JPA_PROPERTIES_HIBERNATE_GLOBALLY_QUOTED_IDENTIFIERS
+          value: 'true'
+        - name: "JAVA_TOOL_OPTIONS"
+          value: "-Xss256k -Xms256m -Xmx256m -XX:+UseStringDeduplication -XX:+UseG1GC\n"
+        - name: "SPRING_PROFILES_ACTIVE"
+          value: "kubernetes"
+        - name: ALLURE_JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: my-allure-ee-allure-ee
+              key: "jwtSecret"
+        - name: "ALLURE_SECURITY_USER_NAME"
+          valueFrom:
+            secretKeyRef:
+              name: my-allure-ee-allure-ee
+              key: "username"
+        - name: "ALLURE_CRYPTO_PASSWORD"
+          valueFrom:
+            secretKeyRef:
+              name: my-allure-ee-allure-ee
+              key: "password"
+        - name: "ALLURE_SECURITY_USER_PASSWORD"
+          valueFrom:
+            secretKeyRef:
+              name: my-allure-ee-allure-ee
+              key: "password"
+        livenessProbe:
+          httpGet:
+            path: /uaa/management/health
+            port: http
+          failureThreshold: 10
+          initialDelaySeconds: 60
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /uaa/management/health
+            port: http
+          failureThreshold: 5
+          initialDelaySeconds: 60
+          periodSeconds: 30
+---
+# Source: allure-ee/charts/postgresql/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-allure-ee-postgresql
+  labels:
+    app: postgresql
+    chart: postgresql-8.4.3
+    release: "my-allure-ee"
+    heritage: "Helm"
+spec:
+  serviceName: my-allure-ee-postgresql-headless
+  replicas: 1
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: postgresql
+      release: "my-allure-ee"
+      role: master
+  template:
+    metadata:
+      name: my-allure-ee-postgresql
+      labels:
+        app: postgresql
+        chart: postgresql-8.4.3
+        release: "my-allure-ee"
+        heritage: "Helm"
+        role: master
+    spec:      
+      securityContext:
+        fsGroup: 1001
+      containers:
+        - name: my-allure-ee-postgresql
+          image: docker.io/bitnami/postgresql:11.7.0-debian-10-r9
+          imagePullPolicy: "IfNotPresent"
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+          securityContext:
+            runAsUser: 1001
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: POSTGRESQL_PORT_NUMBER
+              value: "5432"
+            - name: POSTGRESQL_VOLUME_DIR
+              value: "/bitnami/postgresql"
+            - name: PGDATA
+              value: "/bitnami/postgresql/data"
+            - name: POSTGRES_USER
+              value: "allure"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-allure-ee-postgresql
+                  key: postgresql-password
+            - name: POSTGRESQL_ENABLE_LDAP
+              value: "no"
+          ports:
+            - name: tcp-postgresql
+              containerPort: 5432
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - exec pg_isready -U "allure" -h 127.0.0.1 -p 5432
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - -e
+                - |
+                  exec pg_isready -U "allure" -h 127.0.0.1 -p 5432
+                  [ -f /opt/bitnami/postgresql/tmp/.initialized ] || [ -f /bitnami/postgresql/.initialized ]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          volumeMounts:
+            - name: custom-init-scripts
+              mountPath: /docker-entrypoint-initdb.d/
+            - name: dshm
+              mountPath: /dev/shm
+            - name: data
+              mountPath: /bitnami/postgresql
+              subPath: 
+      volumes:
+        - name: custom-init-scripts
+          configMap:
+            name: my-allure-ee-postgresql-init-scripts
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Gi
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "20Gi"
+---
+# Source: allure-ee/charts/rabbitmq/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-allure-ee-rabbitmq
+  labels:
+    app: rabbitmq
+    chart: rabbitmq-6.18.2
+    release: "my-allure-ee"
+    heritage: "Helm"
+spec:
+  serviceName: my-allure-ee-rabbitmq-headless
+  podManagementPolicy: OrderedReady
+  replicas: 1
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: rabbitmq
+      release: "my-allure-ee"
+  template:
+    metadata:
+      labels:
+        app: rabbitmq
+        release: "my-allure-ee"
+        chart: rabbitmq-6.18.2
+      annotations:
+        checksum/secret: d5c6e87a979a271947a766f9cced04960e8bc200e747865290323b286b9ad1b2
+    spec:      
+      serviceAccountName: my-allure-ee-rabbitmq
+      terminationGracePeriodSeconds: 10
+      containers:
+      - name: rabbitmq
+        image: docker.io/bitnami/rabbitmq:3.8.2-debian-10-r30
+        imagePullPolicy: "IfNotPresent"
+        command:
+         - bash
+         - -ec
+         - |
+            mkdir -p /opt/bitnami/rabbitmq/.rabbitmq/
+            mkdir -p /opt/bitnami/rabbitmq/etc/rabbitmq/
+            touch /opt/bitnami/rabbitmq/var/lib/rabbitmq/.start
+            #persist the erlang cookie in both places for server and cli tools
+            echo $RABBITMQ_ERL_COOKIE > /opt/bitnami/rabbitmq/var/lib/rabbitmq/.erlang.cookie
+            cp /opt/bitnami/rabbitmq/var/lib/rabbitmq/.erlang.cookie /opt/bitnami/rabbitmq/.rabbitmq/
+            #change permission so only the user has access to the cookie file
+            chmod 600 /opt/bitnami/rabbitmq/.rabbitmq/.erlang.cookie /opt/bitnami/rabbitmq/var/lib/rabbitmq/.erlang.cookie
+            #copy the mounted configuration to both places
+            cp  /opt/bitnami/rabbitmq/conf/* /opt/bitnami/rabbitmq/etc/rabbitmq
+            # Apply resources limits
+            ulimit -n "${RABBITMQ_ULIMIT_NOFILES}"
+            #replace the default password that is generated
+            sed -i "/CHANGEME/cdefault_pass=${RABBITMQ_PASSWORD//\\/\\\\}" /opt/bitnami/rabbitmq/etc/rabbitmq/rabbitmq.conf
+            exec rabbitmq-server
+        volumeMounts:
+          - name: config-volume
+            mountPath: /opt/bitnami/rabbitmq/conf
+          - name: healthchecks
+            mountPath: /usr/local/sbin/rabbitmq-api-check
+            subPath: rabbitmq-api-check
+          - name: healthchecks
+            mountPath: /usr/local/sbin/rabbitmq-health-check
+            subPath: rabbitmq-health-check
+          - name: data
+            mountPath: "/opt/bitnami/rabbitmq/var/lib/rabbitmq"
+        ports:
+        - name: epmd
+          containerPort: 4369
+        - name: amqp
+          containerPort: 5672
+        - name: dist
+          containerPort: 25672
+        - name: stats
+          containerPort: 15672
+        livenessProbe:
+          exec:
+            command:
+              - sh
+              - -c
+              - rabbitmq-api-check "http://allure:$RABBITMQ_PASSWORD@127.0.0.1:15672/api/healthchecks/node" '{"status":"ok"}'
+          initialDelaySeconds: 120
+          timeoutSeconds: 20
+          periodSeconds: 30
+          failureThreshold: 6
+          successThreshold: 1
+        readinessProbe:
+          exec:
+            command:
+              - sh
+              - -c
+              - rabbitmq-health-check "http://allure:$RABBITMQ_PASSWORD@127.0.0.1:15672/api/healthchecks/node" '{"status":"ok"}'
+          initialDelaySeconds: 10
+          timeoutSeconds: 20
+          periodSeconds: 30
+          failureThreshold: 3
+          successThreshold: 1
+        env:
+          - name: BITNAMI_DEBUG
+            value: "false"
+          - name: MY_POD_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+          - name: MY_POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: MY_POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          - name: K8S_SERVICE_NAME
+            value: "my-allure-ee-rabbitmq-headless"
+          - name: K8S_ADDRESS_TYPE
+            value: hostname
+          - name: RABBITMQ_NODENAME
+            value: "rabbit@$(MY_POD_NAME).$(K8S_SERVICE_NAME).$(MY_POD_NAMESPACE).svc.cluster.local"
+          - name: K8S_HOSTNAME_SUFFIX
+            value: ".$(K8S_SERVICE_NAME).$(MY_POD_NAMESPACE).svc.cluster.local"
+          - name: RABBITMQ_LOGS
+            value: "-"
+          - name: RABBITMQ_ULIMIT_NOFILES
+            value: "65536"
+          - name: RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS
+            value: +S 2:1
+          - name: RABBITMQ_USE_LONGNAME
+            value: "true"
+          - name: RABBITMQ_ERL_COOKIE
+            valueFrom:
+              secretKeyRef:
+                name: my-allure-ee-rabbitmq
+                key: rabbitmq-erlang-cookie
+          - name: RABBITMQ_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: my-allure-ee-rabbitmq
+                key: rabbitmq-password
+      securityContext:
+        fsGroup: 1001
+        runAsUser: 1001
+      volumes:
+        - name: config-volume
+          configMap:
+            name: my-allure-ee-rabbitmq-config
+            items:
+            - key: rabbitmq.conf
+              path: rabbitmq.conf
+            - key: enabled_plugins
+              path: enabled_plugins
+        - name: healthchecks
+          configMap:
+            name: my-allure-ee-rabbitmq-healthchecks
+            items:
+            - key: rabbitmq-health-check
+              path: rabbitmq-health-check
+              mode: 111
+            - key: rabbitmq-api-check
+              path: rabbitmq-api-check
+              mode: 111
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          app: rabbitmq
+          release: "my-allure-ee"
+          heritage: "Helm"
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+            requests:
+              storage: "8Gi"
+---
+# Source: allure-ee/charts/redis/templates/redis-master-statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-allure-ee-redis-master
+  labels:
+    app: redis
+    chart: redis-10.5.7
+    release: my-allure-ee
+    heritage: Helm
+spec:
+  selector:
+    matchLabels:
+      app: redis
+      release: my-allure-ee
+      role: master
+  serviceName: my-allure-ee-redis-headless
+  template:
+    metadata:
+      labels:
+        app: redis
+        chart: redis-10.5.7
+        release: my-allure-ee
+        role: master
+      annotations:
+        checksum/health: 9792c5861c93edd431e1211491c9be14b4a0caa7b043e22f99337ecce962b7ac
+        checksum/configmap: e60f27961ba76fb2cfa964c9a32b32f02175b74d63a28953d0156cf4ab9fe096
+        checksum/secret: 616ffeeb3bb61d760acde1994badb398fd73e2fc00cdea41f77f8e5dd861cfb3
+    spec:      
+      securityContext:
+        fsGroup: 1001
+      serviceAccountName: "default"
+      containers:
+      - name: my-allure-ee-redis
+        image: "docker.io/bitnami/redis:5.0.7-debian-10-r32"
+        imagePullPolicy: "IfNotPresent"
+        securityContext:
+          runAsUser: 1001
+        command:
+        - /bin/bash
+        - -c
+        - |
+          if [[ -n $REDIS_PASSWORD_FILE ]]; then
+            password_aux=`cat ${REDIS_PASSWORD_FILE}`
+            export REDIS_PASSWORD=$password_aux
+          fi
+          if [[ ! -f /opt/bitnami/redis/etc/master.conf ]];then
+            cp /opt/bitnami/redis/mounted-etc/master.conf /opt/bitnami/redis/etc/master.conf
+          fi
+          if [[ ! -f /opt/bitnami/redis/etc/redis.conf ]];then
+            cp /opt/bitnami/redis/mounted-etc/redis.conf /opt/bitnami/redis/etc/redis.conf
+          fi
+          ARGS=("--port" "${REDIS_PORT}")
+          ARGS+=("--requirepass" "${REDIS_PASSWORD}")
+          ARGS+=("--masterauth" "${REDIS_PASSWORD}")
+          ARGS+=("--include" "/opt/bitnami/redis/etc/redis.conf")
+          ARGS+=("--include" "/opt/bitnami/redis/etc/master.conf")
+          /run.sh ${ARGS[@]}
+        env:
+        - name: REDIS_REPLICATION_MODE
+          value: master
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: my-allure-ee-redis
+              key: redis-password
+        - name: REDIS_PORT
+          value: "6379"
+        ports:
+        - name: redis
+          containerPort: 6379
+        livenessProbe:
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 5
+          exec:
+            command:
+            - sh
+            - -c
+            - /health/ping_liveness_local.sh 5
+        readinessProbe:
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 1
+          successThreshold: 1
+          failureThreshold: 5
+          exec:
+            command:
+            - sh
+            - -c
+            - /health/ping_readiness_local.sh 5
+        resources:
+          null
+        volumeMounts:
+        - name: health
+          mountPath: /health
+        - name: redis-data
+          mountPath: /data
+          subPath: 
+        - name: config
+          mountPath: /opt/bitnami/redis/mounted-etc
+        - name: redis-tmp-conf
+          mountPath: /opt/bitnami/redis/etc/
+      volumes:
+      - name: health
+        configMap:
+          name: my-allure-ee-redis-health
+          defaultMode: 0755
+      - name: config
+        configMap:
+          name: my-allure-ee-redis
+      - name: redis-tmp-conf
+        emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: redis-data
+        labels:
+          app: redis
+          release: my-allure-ee
+          heritage: Helm
+          component: master
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "8Gi"
+        
+        selector:
+  updateStrategy:
+    type: RollingUpdate
+---
+# Source: allure-ee/charts/redis/templates/redis-slave-statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-allure-ee-redis-slave
+  labels:
+    app: redis
+    chart: redis-10.5.7
+    release: my-allure-ee
+    heritage: Helm
+spec:
+  replicas: 2
+  serviceName: my-allure-ee-redis-headless
+  selector:
+    matchLabels:
+      app: redis
+      release: my-allure-ee
+      role: slave
+  template:
+    metadata:
+      labels:
+        app: redis
+        release: my-allure-ee
+        chart: redis-10.5.7
+        role: slave
+      annotations:
+        checksum/health: 9792c5861c93edd431e1211491c9be14b4a0caa7b043e22f99337ecce962b7ac
+        checksum/configmap: e60f27961ba76fb2cfa964c9a32b32f02175b74d63a28953d0156cf4ab9fe096
+        checksum/secret: 616ffeeb3bb61d760acde1994badb398fd73e2fc00cdea41f77f8e5dd861cfb3
+    spec:      
+      securityContext:
+        fsGroup: 1001
+      serviceAccountName: "default"
+      containers:
+      - name: my-allure-ee-redis
+        image: docker.io/bitnami/redis:5.0.7-debian-10-r32
+        imagePullPolicy: "IfNotPresent"
+        securityContext:
+          runAsUser: 1001
+        command:
+        - /bin/bash
+        - -c
+        - |
+          if [[ -n $REDIS_PASSWORD_FILE ]]; then
+            password_aux=`cat ${REDIS_PASSWORD_FILE}`
+            export REDIS_PASSWORD=$password_aux
+          fi
+          if [[ -n $REDIS_MASTER_PASSWORD_FILE ]]; then
+            password_aux=`cat ${REDIS_MASTER_PASSWORD_FILE}`
+            export REDIS_MASTER_PASSWORD=$password_aux
+          fi
+          if [[ ! -f /opt/bitnami/redis/etc/replica.conf ]];then
+            cp /opt/bitnami/redis/mounted-etc/replica.conf /opt/bitnami/redis/etc/replica.conf
+          fi
+          if [[ ! -f /opt/bitnami/redis/etc/redis.conf ]];then
+            cp /opt/bitnami/redis/mounted-etc/redis.conf /opt/bitnami/redis/etc/redis.conf
+          fi
+          ARGS=("--port" "${REDIS_PORT}")
+          ARGS+=("--slaveof" "${REDIS_MASTER_HOST}" "${REDIS_MASTER_PORT_NUMBER}")
+          ARGS+=("--requirepass" "${REDIS_PASSWORD}")
+          ARGS+=("--masterauth" "${REDIS_MASTER_PASSWORD}")
+          ARGS+=("--include" "/opt/bitnami/redis/etc/redis.conf")
+          ARGS+=("--include" "/opt/bitnami/redis/etc/replica.conf")
+          /run.sh "${ARGS[@]}"
+        env:
+        - name: REDIS_REPLICATION_MODE
+          value: slave
+        - name: REDIS_MASTER_HOST
+          value: my-allure-ee-redis-master-0.my-allure-ee-redis-headless.default.svc.cluster.local
+        - name: REDIS_PORT
+          value: "6379"
+        - name: REDIS_MASTER_PORT_NUMBER
+          value: "6379"
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: my-allure-ee-redis
+              key: redis-password
+        - name: REDIS_MASTER_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: my-allure-ee-redis
+              key: redis-password
+        ports:
+        - name: redis
+          containerPort: 6379
+        livenessProbe:
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 5
+          exec:
+            command:
+            - sh
+            - -c
+            - /health/ping_liveness_local_and_master.sh 5
+        readinessProbe:
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 10
+          successThreshold: 1
+          failureThreshold: 5
+          exec:
+            command:
+            - sh
+            - -c
+            - /health/ping_readiness_local_and_master.sh 5
+        resources:
+          null
+        volumeMounts:
+        - name: health
+          mountPath: /health
+        - name: redis-data
+          mountPath: /data
+        - name: config
+          mountPath: /opt/bitnami/redis/mounted-etc
+        - name: redis-tmp-conf
+          mountPath: /opt/bitnami/redis/etc
+      volumes:
+      - name: health
+        configMap:
+          name: my-allure-ee-redis-health
+          defaultMode: 0755
+      - name: config
+        configMap:
+          name: my-allure-ee-redis
+      - name: sentinel-tmp-conf
+        emptyDir: {}
+      - name: redis-tmp-conf
+        emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: redis-data
+        labels:
+          app: redis
+          release: my-allure-ee
+          heritage: Helm
+          component: slave
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "8Gi"
+        
+        selector:
+  updateStrategy:
+    type: RollingUpdate

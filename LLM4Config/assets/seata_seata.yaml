@@ -1,0 +1,116 @@
+---
+# Source: seata/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-seata
+  labels:
+    helm.sh/chart: seata-0.1.0
+    app.kubernetes.io/name: seata
+    app.kubernetes.io/instance: my-seata
+    app.kubernetes.io/version: "1.0.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: seata/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-seata
+  labels:
+    helm.sh/chart: seata-0.1.0
+    app.kubernetes.io/name: seata
+    app.kubernetes.io/instance: my-seata
+    app.kubernetes.io/version: "1.0.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 7091
+      targetPort: http
+      protocol: TCP
+      name: http
+    - port: 8091
+      targetPort: server
+      protocol: TCP
+      name: server
+  selector:
+    app.kubernetes.io/name: seata
+    app.kubernetes.io/instance: my-seata
+---
+# Source: seata/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-seata
+  labels:
+    helm.sh/chart: seata-0.1.0
+    app.kubernetes.io/name: seata
+    app.kubernetes.io/instance: my-seata
+    app.kubernetes.io/version: "1.0.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: seata
+      app.kubernetes.io/instance: my-seata
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: seata
+        app.kubernetes.io/instance: my-seata
+    spec:
+      serviceAccountName: my-seata
+      securityContext:
+        {}
+      containers:
+        - name: seata
+          securityContext:
+            {}
+          image: "seataio/seata-server:latest"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 7091
+              protocol: TCP
+            - name: server
+              containerPort: 8091
+              protocol: TCP
+          env:
+            - name: SEATA_PORT
+              value: "8091"
+            - name: SERVER_NODE
+              value: "1"
+            - name: STORE_MODE
+              value: file    
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+            {}
+---
+# Source: seata/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-seata-test-connection"
+  labels:
+    helm.sh/chart: seata-0.1.0
+    app.kubernetes.io/name: seata
+    app.kubernetes.io/instance: my-seata
+    app.kubernetes.io/version: "1.0.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-seata:7091']
+  restartPolicy: Never

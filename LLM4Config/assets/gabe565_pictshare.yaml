@@ -1,0 +1,88 @@
+---
+# Source: pictshare/templates/common.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-pictshare
+  labels:
+    app.kubernetes.io/service: my-pictshare
+    app.kubernetes.io/instance: my-pictshare
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: pictshare
+    app.kubernetes.io/version: 19d7cb06
+    helm.sh/chart: pictshare-0.6.3
+  annotations:
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/instance: my-pictshare
+    app.kubernetes.io/name: pictshare
+---
+# Source: pictshare/templates/common.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-pictshare
+  labels:
+    app.kubernetes.io/instance: my-pictshare
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: pictshare
+    app.kubernetes.io/version: 19d7cb06
+    helm.sh/chart: pictshare-0.6.3
+spec:
+  revisionHistoryLimit: 3
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pictshare
+      app.kubernetes.io/instance: my-pictshare
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pictshare
+        app.kubernetes.io/instance: my-pictshare
+    spec:
+      
+      serviceAccountName: default
+      automountServiceAccountToken: true
+      securityContext:
+        fsGroup: 100
+      dnsPolicy: ClusterFirst
+      enableServiceLinks: true
+      terminationGracePeriodSeconds: 0
+      containers:
+        - name: my-pictshare
+          image: ghcr.io/hascheksolutions/pictshare:19d7cb06
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          livenessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 0
+            periodSeconds: 10
+            tcpSocket:
+              port: 80
+            timeoutSeconds: 1
+          readinessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 0
+            periodSeconds: 10
+            tcpSocket:
+              port: 80
+            timeoutSeconds: 1
+          startupProbe:
+            failureThreshold: 30
+            initialDelaySeconds: 0
+            periodSeconds: 5
+            tcpSocket:
+              port: 80
+            timeoutSeconds: 1

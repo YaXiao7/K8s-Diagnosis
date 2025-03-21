@@ -1,0 +1,1518 @@
+---
+# Source: artifactory-jcr/charts/artifactory/templates/nginx-pdb.yaml
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: my-artifactory-jcr-artifactory-nginx
+  labels:
+    app: artifactory
+    chart: artifactory-107.90.10
+    component: nginx
+    heritage: Helm
+    release: my-artifactory-jcr
+spec:
+  selector:
+    matchLabels:
+      component: nginx
+      app: artifactory
+      release: my-artifactory-jcr
+  minAvailable: 0
+---
+# Source: artifactory-jcr/charts/artifactory/charts/postgresql/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-artifactory-jcr-postgresql
+  labels:
+    app.kubernetes.io/name: postgresql
+    helm.sh/chart: postgresql-10.3.18
+    app.kubernetes.io/instance: my-artifactory-jcr
+    app.kubernetes.io/managed-by: Helm
+  namespace: default
+type: Opaque
+data:
+  postgresql-postgres-password: "N050RHp6d0dQSg=="
+  postgresql-password: "UGVZMjh2cTBQSQ=="
+---
+# Source: artifactory-jcr/charts/artifactory/templates/artifactory-unified-secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-artifactory-jcr-unified-secret
+  labels:
+    app: "artifactory"
+    chart: "artifactory-107.90.10"
+    component: "artifactory"
+    heritage: "Helm"
+    release: "my-artifactory-jcr"
+type: Opaque
+stringData:
+  access.config.patch.yml: |
+    security:
+      tls: false
+  binarystore.xml: |-
+    <!-- File system filestore -->
+    <config version="v1">
+        <chain> <!--template="file-system"-->
+                <provider id="file-system" type="file-system"/>
+        </chain>
+    </config>
+  system.yaml: |
+
+    access:
+      database:
+        maxOpenConnections: 80
+      extraJavaOpts: |
+        -XX:InitialRAMPercentage=20 -XX:MaxRAMPercentage=70
+      runOnArtifactoryTomcat: false
+      tomcat:
+        connector:
+          extraConfig: acceptCount="100"
+          maxThreads: 50
+          sendReasonPhrase: false
+    artifactory:
+      database:
+        maxOpenConnections: 80
+      tomcat:
+        connector:
+          extraConfig: acceptCount="400"
+          maxThreads: 200
+          sendReasonPhrase: false
+        maintenanceConnector:
+          port: 8091
+    evidence:
+      enabled: false
+    federation:
+      enabled: false
+    frontend:
+      session:
+        timeMinutes: "30"
+    jfconnect:
+      enabled: false
+    jfconnect_service:
+      enabled: false
+    metadata:
+      database:
+        maxOpenConnections: 80
+    router:
+      serviceRegistry:
+        insecure: false
+    shared:
+      database:
+        allowNonPostgresql: false
+        driver: org.postgresql.Driver
+        type: postgresql
+        url: jdbc:postgresql://my-artifactory-jcr-postgresql:5432/artifactory
+        username: artifactory
+      extraJavaOpts: |
+        -Dartifactory.graceful.shutdown.max.request.duration.millis=30000 -Dartifactory.access.client.max.connections=50
+      logging:
+        consoleLog:
+          enabled: false
+
+data:
+---
+# Source: artifactory-jcr/charts/artifactory/templates/nginx-certificate-secret.yaml
+apiVersion: v1
+kind: Secret
+type: kubernetes.io/tls
+metadata:
+  name: my-artifactory-jcr-nginx-certificate
+  labels:
+    app: artifactory
+    chart: artifactory-107.90.10
+    heritage: Helm
+    release: my-artifactory-jcr
+data:
+  tls.crt: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSURhVENDQWxHZ0F3SUJBZ0lRU2wrR2FBVzE3VktONy9jRk1hK0dCREFOQmdrcWhraUc5dzBCQVFzRkFEQVoKTVJjd0ZRWURWUVFERXc1aGNuUnBabUZqZEc5eWVTMWpZVEFlRncweU5EQTVNVFl3T0RFeE1qUmFGdzB5TlRBNQpNVFl3T0RFeE1qUmFNQjB4R3pBWkJnTlZCQU1URW0xNUxXRnlkR2xtWVdOMGIzSjVMV3BqY2pDQ0FTSXdEUVlKCktvWklodmNOQVFFQkJRQURnZ0VQQURDQ0FRb0NnZ0VCQU83dm9pMFFvN2Q1aENDQTFNR3RZVnNveDEyaEdOaGYKSnQwNnUzNFAyamhCMUhuYXRBcWJtekRXUjZ0WnhIOEtCQVVIYUt1d0MwcEYybTZoeWxGb20yRUgxT1hsZ0tVWQpoUS9nbG1tZUUrcFJoR0xWUFZHUVF5NDdLZ1BUS05YQTBWMFc3V2QwbDAvcFg4Ym9KcS9qQk5TQnEwYVRiN0RaCkNFUHBlOTZFMkhmT1dtbHBsTHRHS0hqYkd5MXZKOFNSc2psMXNZcjJPUHE3RFk3VEhhMWtSRXJEdWc2M2ZteW0KWXp0Y3BTUG9wN29Va1Rxdmx4UWRUNmQvWGNjQjAyWk1HK2F0ZVZESVl5VWRaTktYc0crVDU2ZEFTaytJUVB2TgpGa2NoUng2UnFOaVNOTERRYlJqZzk3d0xMcFFETnFHWDZ0U2FyVWJjVjNUV2J2YjBNY2dzbklFQ0F3RUFBYU9CCnFEQ0JwVEFPQmdOVkhROEJBZjhFQkFNQ0JhQXdIUVlEVlIwbEJCWXdGQVlJS3dZQkJRVUhBd0VHQ0NzR0FRVUYKQndNQ01Bd0dBMVVkRXdFQi93UUNNQUF3SHdZRFZSMGpCQmd3Rm9BVXFQME1LUEwyMElNdlRzcWhlNTJtV3hIOQpYUW93UlFZRFZSMFJCRDR3UElJYWJYa3RZWEowYVdaaFkzUnZjbmt0YW1OeUxtUmxabUYxYkhTQ0htMTVMV0Z5CmRHbG1ZV04wYjNKNUxXcGpjaTVrWldaaGRXeDBMbk4yWXpBTkJna3Foa2lHOXcwQkFRc0ZBQU9DQVFFQUVhZ3gKRTBNakI3S01XMFYyRGtObERkRloyeisrZngvZExGY0xCbEphdXAyRkpRTW9kZU4wWjk3ekpVaVYyM0dZTWFqMgpOd2FhdVZYQ0laUjdqUHRkRjhHRjhoa0dNUUhoZUhGZDIrKzBQdnJUUjdVVVVJdCsvZUkvMG0rK2hGeXFiYlhhCmhWeTVEc2xidjhIdStlMWVJcVhtbUlPWExYcUJrTnhnTG13VnJYREN3Y3NsWXFLOGtkNXN4K1NNRmtBQmFSeUMKQXByOWVtSkI4eGFxWnd4bkdUdHdTTXdJWHc4VE5MYUhlNWNialBXU3lIWFkvYUFjdE1udFUxZWZ5VzJnS2dLdQo0U2d2KzFkNEJFMHZtTjlFMHAxL1gvdkgwaEIzOGRGUlR5WjlMdHZIS0RsU2tNWGMzV1YvenQ5UFVoRmRCeW1HCjlLekZKbzFnMGFwd2pPbWdPdz09Ci0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0K
+  tls.key: LS0tLS1CRUdJTiBSU0EgUFJJVkFURSBLRVktLS0tLQpNSUlFb3dJQkFBS0NBUUVBN3UraUxSQ2p0M21FSUlEVXdhMWhXeWpIWGFFWTJGOG0zVHE3ZmcvYU9FSFVlZHEwCkNwdWJNTlpIcTFuRWZ3b0VCUWRvcTdBTFNrWGFicUhLVVdpYllRZlU1ZVdBcFJpRkQrQ1dhWjRUNmxHRVl0VTkKVVpCRExqc3FBOU1vMWNEUlhSYnRaM1NYVCtsZnh1Z21yK01FMUlHclJwTnZzTmtJUStsNzNvVFlkODVhYVdtVQp1MFlvZU5zYkxXOG54Skd5T1hXeGl2WTQrcnNOanRNZHJXUkVTc082RHJkK2JLWmpPMXlsSStpbnVoU1JPcStYCkZCMVBwMzlkeHdIVFprd2I1cTE1VU1oakpSMWswcGV3YjVQbnAwQktUNGhBKzgwV1J5RkhIcEdvMkpJMHNOQnQKR09EM3ZBc3VsQU0yb1pmcTFKcXRSdHhYZE5adTl2UXh5Q3ljZ1FJREFRQUJBb0lCQVFDNnNRU1BuNnU4SlRkbQp5aUx5L2N6UEZJcktEcURDRjM3Zlp3K3VqU1pkeEpvSGFDbzdDNkJ6eFVvVWlieHQ0dDZISzJYT21Hd0o2WkNsCjFzYWxXMDNrditES2pNczZ0SERybWZrTXAxWTZSTjFpOStqRWZTcnd5WXVubDJzVnNXWWxEVkFNQU41bHN4eUIKNTB5ckszL1BwMDJ6aEduRnpaNldxYTEraldBeUlzaHZya3kzeVdER3dxR2lwSnFlbmtINFhHRE5tOVVjbDYvdAp2UzkydWNzblFxU0t0KzNaY2dCOXhrcUVQcHRZcHYvN0tNT2tMZWNSQk5sZUZmT2FqZ3IvelBYWWh5RkpuY0QzCnFjQTBmamlqcXFFRytoTXVnZXk3cXF5RVJxMldnTnJlVlVXckg4MGgvVzdWNjUvN28yS0hHb2V4cTg4THhHT0kKdHVYVFdMN05Bb0dCQU84L3l5emRhY21YZkhiMnhkdFV5WFl4K1pyUlhiekpwdG11TldSZXRnQVovTlB4SC9DYgpJNFNRWElhV1VqZG85eGdNU2RJdGlWcXorRnVweEFaNHNmTGh0ZTZIaTJVVHVFZFBhUG5vR3E4eDZqVHM0QUZDCksrRmdGaFNiUjdkb1phVmtNWjAvbnZ2S2ovQlVQellQWnpkN1hVdHFyS0MvcjhzMFhEM290OHA3QW9HQkFQK3EKT2o0UDJuK0JWSzVMdDUyRSt0bUJMbXh1N3NQRkVkY2lDVjQ5Z0hWTy9TUjRZeUlnVWpqRmtxcjRvSjFJenoycgpLQ0RwMUcxQ25mSzhsVUZPQURMUm44cDRUZStobGNhVkRTc1NjVUEvY29HVklvTHNTdEUzMnd4SWgra0xIWndsCmg2NFlwdGdWa0V2UXdpMk8vN09TTk9vWWNNMGNsdkZkTDIzaFJmSXpBb0dBRzNQV2ZHOXJsQll0MGZpKyswdmYKVWhDcDgzblNwN2I3emo2UElkVThUUWF1WENOdTVzem1abStxTGtkUlo4cERrQjdZMmFVZi9haG85eHVqd3BwVwowT2ZWV0dsMU5VUHVBVUM3YXZHWEhrTTcvSmF4blhOYVZhSVE1b3hxemtETWFRMzJJM1VKYVJyMUtUNkJnbEtDCkpYdWlXT1VFcWUxVTNweERlVmNhdjhFQ2dZQTR5TG8rNW82RkcxaVBqY211ZHNhd1lIekxJS2h2V3VubmVtdlMKUHA2MWIySFNJOXNBeldUMXJ3d3daU0JuVHJDWTVkYjMySGVSL09YUDhBckdnbWlRNFBZNHBoZkpUWDVTcVBCUAp6THpTcEVUdWV3MDdQdmd2RjlUVEdaajJMYjNaM0l3U0l1K0x0dDVodUhBb1prWnN2K0I0emd6ZndhWFUzZm1XCjBoNFMrUUtCZ0hBbndiOVVia2MyTnlvbEJQTEtWVUtNRkUzRmpFQTl3K3d2QkxKWE9taG9Bb3UzTVVhSWpxckEKTGEzYjczRHBYN2dQam5oMWczZnpyMTBFTm95RmhPLzFRVmd3ZVRKU3dKcGxIZXNtbDJvL09BRS9IMmQrYitkSQpRTHBOL05KcitZOFEzZlJtYTJ3em1jNUFNZ2M4eGpiY3diMDk1MThyeTNBY1VEOE8vSXp1Ci0tLS0tRU5EIFJTQSBQUklWQVRFIEtFWS0tLS0tCg==
+---
+# Source: artifactory-jcr/charts/artifactory/charts/postgresql/templates/extended-config-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-artifactory-jcr-postgresql-extended-configuration
+  labels:
+    app.kubernetes.io/name: postgresql
+    helm.sh/chart: postgresql-10.3.18
+    app.kubernetes.io/instance: my-artifactory-jcr
+    app.kubernetes.io/managed-by: Helm
+  namespace: default
+data:
+
+  override.conf: |
+    listen_addresses = '*'
+    max_connections = '1500'
+---
+# Source: artifactory-jcr/charts/artifactory/templates/artifactory-configmaps.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-artifactory-jcr-configmaps
+  labels:
+    app: my-artifactory-jcr
+    chart: artifactory-107.90.10
+    heritage: Helm
+    release: my-artifactory-jcr
+data:
+  # posthook-start.sh: |-
+  #   echo "This is a post start script"
+  # posthook-end.sh: |-
+  #   echo "This is a post end script"
+---
+# Source: artifactory-jcr/charts/artifactory/templates/artifactory-installer-info.yaml
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: my-artifactory-jcr-installer-info
+  labels:
+    app: artifactory
+    chart: artifactory-107.90.10
+    heritage: Helm
+    release: my-artifactory-jcr
+data:
+  installer-info.json: |
+    {"productId":"Helm_artifactory-jcr/107.90.10","features":[{"featureId":"Platform/kubernetes-v1.31.0"},{"featureId":"Database/"},{"featureId":"PostgreSQL_Enabled/true"},{"featureId":"Nginx_Enabled/true"},{"featureId":"ArtifactoryPersistence_Type/file-system"},{"featureId":"SplitServicesToContainers_Enabled/true"},{"featureId":"UnifiedSecretInstallation_Enabled/true"},{"featureId":"Filebeat_Enabled/false"},{"featureId":"ReplicaCount/1"}]}
+---
+# Source: artifactory-jcr/charts/artifactory/templates/nginx-artifactory-conf.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-artifactory-jcr-nginx-artifactory-conf
+  labels:
+    app: artifactory
+    chart: artifactory-107.90.10
+    heritage: Helm
+    release: my-artifactory-jcr
+data:
+  artifactory.conf: |
+    
+    ssl_protocols TLSv1 TLSv1.1 TLSv1.2 TLSv1.3;
+    ssl_certificate  /var/opt/jfrog/nginx/ssl/tls.crt;
+    ssl_certificate_key  /var/opt/jfrog/nginx/ssl/tls.key;
+    ssl_session_cache shared:SSL:1m;
+    ssl_prefer_server_ciphers   on;
+    ## server configuration
+    server {listen 8443 ssl;listen 8080;
+    server_name ~(?<repo>.+)\.my-artifactory-jcr my-artifactory-jcr
+    ;
+    
+    if ($http_x_forwarded_proto = '') {
+      set $http_x_forwarded_proto  $scheme;
+    }
+    set $host_port 443;
+    if ( $scheme = "http" ) {
+      set $host_port 80;
+    }
+    ## Application specific logs
+    ## access_log /var/log/nginx/artifactory-access.log timing;
+    ## error_log /var/log/nginx/artifactory-error.log;
+    rewrite ^/artifactory/?$ / redirect;
+    if ( $repo != "" ) {
+      rewrite ^/(v1|v2)/(.*) /artifactory/api/docker/$repo/$1/$2 break;
+    }
+    chunked_transfer_encoding on;
+    client_max_body_size 0;
+    
+    location / {
+      proxy_read_timeout  900;
+      proxy_pass_header   Server;
+      proxy_cookie_path   ~*^/.* /;
+      proxy_pass          http://my-artifactory-jcr:8082/;
+      proxy_set_header    X-JFrog-Override-Base-Url $http_x_forwarded_proto://$host:$host_port;
+      proxy_set_header    X-Forwarded-Port  $server_port;
+      proxy_set_header    X-Forwarded-Proto $http_x_forwarded_proto;
+      proxy_set_header    Host              $http_host;
+      proxy_set_header    X-Forwarded-For   $proxy_add_x_forwarded_for;
+      add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+      location /artifactory/ {
+        if ( $request_uri ~ ^/artifactory/(.*)$ ) {
+          proxy_pass       http://my-artifactory-jcr:8081/artifactory/$1;
+        }
+        proxy_pass         http://my-artifactory-jcr:8081/artifactory/;
+      }
+      location /pipelines/ {
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $http_host;
+        proxy_pass  http://my-artifactory-jcr:8082;
+      }
+    }
+    }
+---
+# Source: artifactory-jcr/charts/artifactory/templates/nginx-conf.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-artifactory-jcr-nginx-conf
+  labels:
+    app: artifactory
+    chart: artifactory-107.90.10
+    heritage: Helm
+    release: my-artifactory-jcr
+data:
+  nginx.conf: |
+    # Main Nginx configuration file
+    worker_processes  4;error_log  /var/opt/jfrog/nginx/logs/error.log warn;
+    pid        /var/run/nginx.pid;
+    
+    events {
+      worker_connections  1024;
+    }
+    
+    http {
+      include       /etc/nginx/mime.types;
+      default_type  application/octet-stream;
+    
+      variables_hash_max_size 1024;
+      variables_hash_bucket_size 64;
+      server_names_hash_max_size 4096;
+      server_names_hash_bucket_size 128;
+      types_hash_max_size 2048;
+      types_hash_bucket_size 64;
+      proxy_read_timeout 2400s;
+      client_header_timeout 2400s;
+      client_body_timeout 2400s;
+      proxy_connect_timeout 75s;
+      proxy_send_timeout 2400s;
+      proxy_buffer_size 128k;
+      proxy_buffers 40 128k;
+      proxy_busy_buffers_size 128k;
+      proxy_temp_file_write_size 250m;
+      proxy_http_version 1.1;
+      client_body_buffer_size 128k;
+    
+      log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+      '$status $body_bytes_sent "$http_referer" '
+      '"$http_user_agent" "$http_x_forwarded_for"';
+    
+      log_format timing 'ip = $remote_addr '
+      'user = \"$remote_user\" '
+      'local_time = \"$time_local\" '
+      'host = $host '
+      'request = \"$request\" '
+      'status = $status '
+      'bytes = $body_bytes_sent '
+      'upstream = \"$upstream_addr\" '
+      'upstream_time = $upstream_response_time '
+      'request_time = $request_time '
+      'referer = \"$http_referer\" '
+      'UA = \"$http_user_agent\"';access_log /var/opt/jfrog/nginx/logs/access.log timing;
+    
+      sendfile        on;
+      #tcp_nopush     on;
+    
+      keepalive_timeout  65;
+    
+      #gzip  on;
+    
+      include /etc/nginx/conf.d/*.conf;
+    
+    }
+---
+# Source: artifactory-jcr/charts/artifactory/templates/nginx-scripts-conf.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-artifactory-jcr-nginx-scripts
+  labels:
+    app: artifactory
+    chart: artifactory-107.90.10
+    heritage: Helm
+    release: my-artifactory-jcr
+data:
+  configreloader.sh: |
+    #!/bin/sh
+    ####
+    # A helper script to use inotifyd to reload nginx config
+    # upon configmap/ssl secrets changes.
+    #
+    # Synopsis: setup the nginx command via the values file
+    # as follows:
+    #
+    ####
+    # nginx:
+    #   customVolumes: |
+    #     - name: scripts
+    #       configMap:
+    #         name: {{ template "artifactory.fullname" . }}-nginx-scripts
+    #         defaultMode: 0550
+    #   customVolumeMounts: |
+    #     - name: scripts
+    #       mountPath: /var/opt/jfrog/nginx/scripts/
+    #   customCommand:
+    #     - /bin/sh
+    #     - -c
+    #     - |
+    #       # watch for configmap changes
+    #       /sbin/inotifyd /var/opt/jfrog/nginx/scripts/configreloader.sh {{ .Values.nginx.persistence.mountPath -}}/conf.d:n &
+    #       {{ if .Values.nginx.https.enabled -}}
+    #       # watch for tls secret changes
+    #       /sbin/inotifyd /var/opt/jfrog/nginx/scripts/configreloader.sh {{ .Values.nginx.persistence.mountPath -}}/ssl:n &
+    #       {{ end -}}
+    #       nginx -g 'daemon off;'
+    if [[ "$3" =~ data_tmp ]] && [ "$1" = "n" ]
+    then
+      # a symlink has changed in one of the watched folders
+      # lets verify the config
+      nginx -t -q
+      if [ $? -eq 0 ]
+      then
+        # config is valid, lets reload nginx config
+        nginx -q -s reload
+      fi
+    fi
+---
+# Source: artifactory-jcr/charts/artifactory/charts/postgresql/templates/svc-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-artifactory-jcr-postgresql-headless
+  labels:
+    app.kubernetes.io/name: postgresql
+    helm.sh/chart: postgresql-10.3.18
+    app.kubernetes.io/instance: my-artifactory-jcr
+    app.kubernetes.io/managed-by: Helm
+    # Use this annotation in addition to the actual publishNotReadyAddresses
+    # field below because the annotation will stop being respected soon but the
+    # field is broken in some versions of Kubernetes:
+    # https://github.com/kubernetes/kubernetes/issues/58662
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+  namespace: default
+spec:
+  type: ClusterIP
+  clusterIP: None
+  # We want all pods in the StatefulSet to have their addresses published for
+  # the sake of the other Postgresql pods even before they're ready, since they
+  # have to be able to talk to each other in order to become ready.
+  publishNotReadyAddresses: true
+  ports:
+    - name: tcp-postgresql
+      port: 5432
+      targetPort: tcp-postgresql
+  selector:
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/instance: my-artifactory-jcr
+---
+# Source: artifactory-jcr/charts/artifactory/charts/postgresql/templates/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-artifactory-jcr-postgresql
+  labels:
+    app.kubernetes.io/name: postgresql
+    helm.sh/chart: postgresql-10.3.18
+    app.kubernetes.io/instance: my-artifactory-jcr
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+  namespace: default
+spec:
+  type: ClusterIP
+  ports:
+    - name: tcp-postgresql
+      port: 5432
+      targetPort: tcp-postgresql
+  selector:
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/instance: my-artifactory-jcr
+    role: primary
+---
+# Source: artifactory-jcr/charts/artifactory/templates/artifactory-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-artifactory-jcr
+  labels:
+    app: artifactory
+    chart: artifactory-107.90.10
+    component: artifactory
+    heritage: Helm
+    release: my-artifactory-jcr
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8082
+    targetPort: 8082
+    protocol: TCP
+    name: http-router
+  - port: 8025
+    targetPort: 8025
+    protocol: TCP
+    name: http-rtfs
+  - port: 8081
+    targetPort: 8081
+    protocol: TCP
+    name: http-artifactory
+  selector:
+    app: artifactory
+    component: "artifactory"
+    release: my-artifactory-jcr
+---
+# Source: artifactory-jcr/charts/artifactory/templates/nginx-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-artifactory-jcr-artifactory-nginx
+  labels:
+    app: artifactory
+    chart: artifactory-107.90.10
+    component: nginx
+    heritage: Helm
+    release: my-artifactory-jcr
+spec:
+  type: LoadBalancer
+  
+  externalTrafficPolicy: Cluster
+  ports:
+  # DEPRECATION NOTE: The following is to maintain support for values pre 1.3.0 and
+  # will be cleaned up in a later version
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  - port: 443
+    targetPort: 8443
+    protocol: TCP
+    name: https
+  selector:
+    app: artifactory
+    component: nginx
+    release: my-artifactory-jcr
+---
+# Source: artifactory-jcr/charts/artifactory/templates/nginx-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-artifactory-jcr-artifactory-nginx
+  labels:
+    app: artifactory
+    chart: artifactory-107.90.10
+    heritage: Helm
+    release: my-artifactory-jcr
+    component: nginx
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: artifactory
+      release: my-artifactory-jcr
+      component: nginx
+  template:
+    metadata:
+      annotations:
+        checksum/nginx-conf: ceb2617424cd5358dca75ae7194580a4af1baf181d14cda995fb6aa642ca6096
+        checksum/nginx-artifactory-conf: d3f57803f0d1160c9fa070719743f8ecf9ad62ec4e3a7ef07888c6b068ddcd67
+      labels:
+        app: artifactory
+        chart: artifactory-107.90.10
+        component: nginx
+        heritage: Helm
+        release: my-artifactory-jcr
+    spec:
+      securityContext:
+        fsGroup: 107
+        runAsGroup: 107
+        runAsUser: 104
+      serviceAccountName: default
+      terminationGracePeriodSeconds: 30
+      initContainers:
+      - name: "setup"
+        image: releases-docker.jfrog.io/ubi9/ubi-minimal:9.4.949.1716471857
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          privileged: false
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+        command:
+        - '/bin/sh'
+        - '-c'
+        - >
+          rm -rfv /var/opt/jfrog/nginx/lost+found;
+          mkdir -p /var/opt/jfrog/nginx/logs;
+        resources:
+          limits:
+            cpu: "1"
+            memory: 1Gi
+          requests:
+            cpu: 10m
+            memory: 50Mi
+        volumeMounts:
+        - mountPath: "/var/opt/jfrog/nginx"
+          name: nginx-volume
+      containers:
+      - name: nginx
+        image: releases-docker.jfrog.io/jfrog/nginx-artifactory-pro:7.90.10
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          privileged: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+        ports:
+
+        # DEPRECATION NOTE: The following is to maintain support for values pre 1.3.1 and
+        # will be cleaned up in a later version
+        - containerPort: 8080
+          name: http
+        - containerPort: 8443
+          name: https
+        volumeMounts:
+        - name: nginx-conf
+          mountPath: /etc/nginx/nginx.conf
+          subPath: nginx.conf
+        - name: nginx-artifactory-conf
+          mountPath: "/var/opt/jfrog/nginx/conf.d/"
+        - name: nginx-volume
+          mountPath: "/var/opt/jfrog/nginx"  
+        - name: ssl-certificates
+          mountPath: "/var/opt/jfrog/nginx/ssl"  
+        resources:
+          {}
+        startupProbe:
+          exec:
+            command:
+              - sh
+              - -c
+              - curl -s -k --fail --max-time 5 http://localhost:8080/router/api/v1/system/readiness
+          initialDelaySeconds: 3
+          failureThreshold: 90
+          periodSeconds: 5
+          timeoutSeconds: 5
+          
+        readinessProbe:
+          exec:
+            command:
+              - sh
+              - -c
+              - curl -s -k --fail --max-time 5 http://localhost:8080/router/api/v1/system/readiness
+          initialDelaySeconds: 0
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 5
+          successThreshold: 1
+          
+        livenessProbe:
+          exec:
+            command:
+              - sh
+              - -c
+              - curl -s -k --fail --max-time 5 http://localhost:8080/
+          initialDelaySeconds: 0
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 5
+          successThreshold: 1
+          
+      volumes:
+      - name: nginx-conf
+        configMap:
+          name: my-artifactory-jcr-nginx-conf
+      - name: nginx-artifactory-conf
+        configMap:
+          name: my-artifactory-jcr-nginx-artifactory-conf
+      - name: nginx-volume
+        emptyDir: {}
+      - name: ssl-certificates
+        secret:
+          secretName: my-artifactory-jcr-nginx-certificate
+---
+# Source: artifactory-jcr/charts/artifactory/charts/postgresql/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-artifactory-jcr-postgresql
+  labels:
+    app.kubernetes.io/name: postgresql
+    helm.sh/chart: postgresql-10.3.18
+    app.kubernetes.io/instance: my-artifactory-jcr
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: primary
+  annotations:
+  namespace: default
+spec:
+  serviceName: my-artifactory-jcr-postgresql-headless
+  replicas: 1
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgresql
+      app.kubernetes.io/instance: my-artifactory-jcr
+      role: primary
+  template:
+    metadata:
+      name: my-artifactory-jcr-postgresql
+      labels:
+        app.kubernetes.io/name: postgresql
+        helm.sh/chart: postgresql-10.3.18
+        app.kubernetes.io/instance: my-artifactory-jcr
+        app.kubernetes.io/managed-by: Helm
+        role: primary
+        app.kubernetes.io/component: primary
+    spec:      
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: postgresql
+                    app.kubernetes.io/instance: my-artifactory-jcr
+                    app.kubernetes.io/component: primary
+                namespaces:
+                  - "default"
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+      containers:
+        - name: my-artifactory-jcr-postgresql
+          image: releases-docker.jfrog.io/bitnami/postgresql:15.6.0-debian-11-r16
+          imagePullPolicy: "IfNotPresent"
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+          securityContext:
+            runAsUser: 1001
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: POSTGRESQL_PORT_NUMBER
+              value: "5432"
+            - name: POSTGRESQL_VOLUME_DIR
+              value: "/bitnami/postgresql"
+            - name: PGDATA
+              value: "/bitnami/postgresql/data"
+            - name: POSTGRES_POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-artifactory-jcr-postgresql
+                  key: postgresql-postgres-password
+            - name: POSTGRES_USER
+              value: "artifactory"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-artifactory-jcr-postgresql
+                  key: postgresql-password
+            - name: POSTGRES_DB
+              value: "artifactory"
+            - name: POSTGRESQL_ENABLE_LDAP
+              value: "no"
+            - name: POSTGRESQL_ENABLE_TLS
+              value: "no"
+            - name: POSTGRESQL_LOG_HOSTNAME
+              value: "false"
+            - name: POSTGRESQL_LOG_CONNECTIONS
+              value: "false"
+            - name: POSTGRESQL_LOG_DISCONNECTIONS
+              value: "false"
+            - name: POSTGRESQL_PGAUDIT_LOG_CATALOG
+              value: "off"
+            - name: POSTGRESQL_CLIENT_MIN_MESSAGES
+              value: "error"
+            - name: POSTGRESQL_SHARED_PRELOAD_LIBRARIES
+              value: "pgaudit"
+          ports:
+            - name: tcp-postgresql
+              containerPort: 5432
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - exec pg_isready -U "artifactory" -d "dbname=artifactory" -h 127.0.0.1 -p 5432
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - -e
+                - |
+                  exec pg_isready -U "artifactory" -d "dbname=artifactory" -h 127.0.0.1 -p 5432
+                  [ -f /opt/bitnami/postgresql/tmp/.initialized ] || [ -f /bitnami/postgresql/.initialized ]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          volumeMounts:
+            - name: postgresql-extended-config
+              mountPath: /bitnami/postgresql/conf/conf.d/
+            - name: dshm
+              mountPath: /dev/shm
+            - name: data
+              mountPath: /bitnami/postgresql
+              subPath: 
+      volumes:
+        - name: postgresql-extended-config
+          configMap:
+            name: my-artifactory-jcr-postgresql-extended-configuration
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Gi
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "200Gi"
+---
+# Source: artifactory-jcr/charts/artifactory/templates/artifactory-statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-artifactory-jcr
+  labels:
+    app: artifactory
+    chart: artifactory-107.90.10
+    component: artifactory
+    heritage: Helm
+    release: my-artifactory-jcr
+    version: 7.90.10
+spec:
+  serviceName: artifactory
+  replicas: 1
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: artifactory
+      role: artifactory
+      release: my-artifactory-jcr
+  template:
+    metadata:
+      labels:
+        app: artifactory
+        chart: artifactory-107.90.10
+        heritage: Helm
+        role: artifactory
+        component: artifactory
+        release: my-artifactory-jcr
+      annotations:
+        checksum/artifactory-unified-secret: fb5fe26480944444eea559ebb7b240be534c7d76f057ca766181c3e839a874fb
+    spec:
+      serviceAccountName: default
+      terminationGracePeriodSeconds: 40
+      securityContext:
+        fsGroup: 1030
+        runAsGroup: 1030
+        runAsNonRoot: true
+        runAsUser: 1030
+      initContainers:
+      # - name: "custom-setup"
+      #   image: releases-docker.jfrog.io/ubi9/ubi-minimal:9.4.949.1716471857
+      #   imagePullPolicy: IfNotPresent
+      #   securityContext:
+      #     runAsNonRoot: true
+      #     allowPrivilegeEscalation: false
+      #     capabilities:
+      #       drop:
+      #         - NET_RAW
+      #   command:
+      #     - 'sh'
+      #     - '-c'
+      #     - 'touch /var/opt/jfrog/artifactory/example-custom-setup'
+      #   volumeMounts:
+      #     - mountPath: "/var/opt/jfrog/artifactory"
+      #       name: artifactory-volume
+      
+      - name: "delete-db-properties"
+        image: releases-docker.jfrog.io/ubi9/ubi-minimal:9.4.949.1716471857
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          privileged: false
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+        resources:
+          limits:
+            cpu: "1"
+            memory: 1Gi
+          requests:
+            cpu: 10m
+            memory: 50Mi
+        command:
+          - 'bash'
+          - '-c'
+          - 'rm -fv /var/opt/jfrog/artifactory/etc/db.properties'
+        volumeMounts:
+          - name: artifactory-volume
+            mountPath: "/var/opt/jfrog/artifactory"
+      - name: 'copy-system-configurations'
+        image: releases-docker.jfrog.io/ubi9/ubi-minimal:9.4.949.1716471857
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          privileged: false
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+        resources:
+          limits:
+            cpu: "1"
+            memory: 1Gi
+          requests:
+            cpu: 10m
+            memory: 50Mi
+        command:
+        - '/bin/bash'
+        - '-c'
+        - >
+          if [[ -e "/var/opt/jfrog/artifactory/etc/filebeat.yaml" ]]; then chmod 644 /var/opt/jfrog/artifactory/etc/filebeat.yaml; fi;
+          echo "Copy system.yaml to /var/opt/jfrog/artifactory/etc";
+          mkdir -p /var/opt/jfrog/artifactory/etc;
+          mkdir -p /var/opt/jfrog/artifactory/etc/access/keys/trusted;
+          cp -fv /tmp/etc/system.yaml /var/opt/jfrog/artifactory/etc/system.yaml;
+          echo "Copy binarystore.xml file";
+          mkdir -p /var/opt/jfrog/artifactory/etc/artifactory;
+          cp -fv /tmp/etc/artifactory/binarystore.xml /var/opt/jfrog/artifactory/etc/artifactory/binarystore.xml;
+          echo "Copy access.config.patch.yml to /var/opt/jfrog/artifactory/etc/access";
+          mkdir -p /var/opt/jfrog/artifactory/etc/access;
+          cp -fv /tmp/etc/access.config.patch.yml /var/opt/jfrog/artifactory/etc/access/access.config.patch.yml;
+        env:
+        volumeMounts:
+        - name: artifactory-volume
+          mountPath: "/var/opt/jfrog/artifactory"
+        - name: artifactory-unified-secret-volume
+          mountPath: "/tmp/etc/system.yaml"
+          subPath: "system.yaml"
+
+        ######################## Binarystore  ##########################
+        - name: artifactory-unified-secret-volume
+          mountPath: "/tmp/etc/artifactory/binarystore.xml"
+          subPath: binarystore.xml
+
+        ######################## Access config  ##########################
+        - name: artifactory-unified-secret-volume
+          mountPath: "/tmp/etc/access.config.patch.yml"
+          subPath: "access.config.patch.yml"
+
+        ######################## Access certs external secret  ##########################
+      - name: "wait-for-db"
+        image: releases-docker.jfrog.io/ubi9/ubi-minimal:9.4.949.1716471857
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          privileged: false
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+        resources:
+          limits:
+            cpu: "1"
+            memory: 1Gi
+          requests:
+            cpu: 10m
+            memory: 50Mi
+        command:
+        - /bin/bash
+        - -c
+        - |
+          echo "Waiting for postgresql to come up"
+          ready=false;
+          while ! $ready; do echo waiting;
+            timeout 2s bash -c "</dev/tcp/my-artifactory-jcr-postgresql/5432"; exit_status=$?;
+            if [[ $exit_status -eq 0 ]]; then ready=true; echo "database ok"; fi; sleep 1;
+          done
+      # - name: "custom-systemyaml-setup"
+      #   image: releases-docker.jfrog.io/ubi9/ubi-minimal:9.4.949.1716471857
+      #   imagePullPolicy: IfNotPresent
+      #   securityContext:
+      #     runAsNonRoot: true
+      #     allowPrivilegeEscalation: false
+      #     capabilities:
+      #       drop:
+      #         - NET_RAW
+      #   command:
+      #     - 'sh'
+      #     - '-c'
+      #     - 'curl -o /var/opt/jfrog/artifactory/etc/system.yaml https://<repo-url>/systemyaml'
+      #   volumeMounts:
+      #     - mountPath: "/var/opt/jfrog/artifactory"
+      #       name: artifactory-volume
+      
+      containers:
+      - name: router
+        image: releases-docker.jfrog.io/jfrog/router:7.118.2
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          privileged: false
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+        command:
+          - '/bin/bash'
+          - '-c'
+          - >
+            exec /opt/jfrog/router/app/bin/entrypoint-router.sh
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - sh
+              - -c
+              - while [[ $(curl --fail --silent --connect-timeout 2 http://localhost:8081/artifactory/api/v1/system/liveness)
+                =~ OK ]]; do echo Artifactory is still alive; sleep 2; done
+        env:
+        - name: JF_ROUTER_TOPOLOGY_LOCAL_REQUIREDSERVICETYPES
+          value: jfrt,jfac,jfob,jfmd,jfevt,jffe
+        ports:
+          - name: http
+            containerPort: 8082
+        volumeMounts:
+        - name: artifactory-volume
+          mountPath: "/var/opt/jfrog/router"
+        # - name: custom-script
+        #   mountPath: /scripts/script.sh
+        #   subPath: script.sh
+        
+        resources:
+          {}
+        startupProbe:
+          exec:
+            command:
+              - sh
+              - -c
+              - curl -s -k --fail --max-time 5 http://localhost:8082/router/api/v1/system/readiness
+          initialDelaySeconds: 10
+          failureThreshold: 30
+          periodSeconds: 5
+          timeoutSeconds: 5
+          
+        readinessProbe:
+          exec:
+            command:
+              - sh
+              - -c
+              - curl -s -k --fail --max-time 5 http://localhost:8082/router/api/v1/system/readiness
+          initialDelaySeconds: 0
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 5
+          successThreshold: 1
+          
+        livenessProbe:
+          exec:
+            command:
+              - sh
+              - -c
+              - curl -s -k --fail --max-time 5 http://localhost:8082/router/api/v1/system/liveness
+          initialDelaySeconds: 0
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 5
+          successThreshold: 1
+          
+      - name: frontend
+        image: releases-docker.jfrog.io/jfrog/artifactory-jcr:7.90.10
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          privileged: false
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+        command:
+          - '/bin/bash'
+          - '-c'
+          - >
+            exec /opt/jfrog/artifactory/app/third-party/node/bin/node /opt/jfrog/artifactory/app/frontend/bin/server/dist/bundle.js /opt/jfrog/artifactory/app/frontend
+        env:
+        - name: JF_SHARED_NODE_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name   
+        volumeMounts:
+        - name: artifactory-volume
+          mountPath: "/var/opt/jfrog/artifactory"
+        resources:
+          {}
+        startupProbe:
+          exec:
+            command:
+              - sh
+              - -c
+              - curl --fail --max-time 5 http://localhost:8070/api/v1/system/readiness
+          initialDelaySeconds: 30
+          failureThreshold: 90
+          periodSeconds: 5
+          timeoutSeconds: 5
+          
+        livenessProbe:
+          exec:
+            command:
+              - sh
+              - -c
+              - curl --fail --max-time 5 http://localhost:8070/api/v1/system/liveness
+          initialDelaySeconds: 0
+          failureThreshold: 5
+          timeoutSeconds: 5
+          periodSeconds: 10
+          successThreshold: 1
+          
+      - name: metadata
+        image: releases-docker.jfrog.io/jfrog/artifactory-jcr:7.90.10
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          privileged: false
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+        command:
+          - '/bin/bash'
+          - '-c'
+          - >
+            exec /opt/jfrog/artifactory/app/metadata/bin/jf-metadata start
+        env:
+        - name: JF_SHARED_NODE_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+      
+        - name: JF_SHARED_DATABASE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: my-artifactory-jcr-postgresql
+              key: postgresql-password
+        volumeMounts:
+        # - name: custom-script
+        #   mountPath: "/scripts/script.sh"
+        #   subPath: script.sh
+        # - name: posthook-start
+        #   mountPath: "/scripts/posthoook-start.sh"
+        #   subPath: posthoook-start.sh
+        # - name: prehook-start
+        #   mountPath: "/scripts/prehook-start.sh"
+        #   subPath: prehook-start.sh
+        
+        - name: artifactory-volume
+          mountPath: "/var/opt/jfrog/artifactory"
+        resources:
+          {}
+        startupProbe:
+          exec:
+            command:
+              - sh
+              - -c
+              - curl --fail --max-time 5 http://localhost:8086/api/v1/system/readiness
+          initialDelaySeconds: 30
+          failureThreshold: 90
+          periodSeconds: 5
+          timeoutSeconds: 5
+          
+        livenessProbe:
+          exec:
+            command:
+              - sh
+              - -c
+              - curl --fail --max-time 5 http://localhost:8086/api/v1/system/liveness
+          initialDelaySeconds: 0
+          failureThreshold: 5
+          timeoutSeconds: 5
+          periodSeconds: 10
+          successThreshold: 1
+          
+      - name: event
+        image: releases-docker.jfrog.io/jfrog/artifactory-jcr:7.90.10
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          privileged: false
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+        command:
+          - '/bin/bash'
+          - '-c'
+          - >
+            exec /opt/jfrog/artifactory/app/event/bin/jf-event start
+        env:
+        - name: JF_SHARED_NODE_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        volumeMounts:
+        - name: artifactory-volume
+          mountPath: "/var/opt/jfrog/artifactory"
+        resources:
+          {}
+        startupProbe:
+          exec:
+            command:
+              - sh
+              - -c
+              - curl --fail --max-time 5 http://localhost:8061/api/v1/system/readiness
+          initialDelaySeconds: 30
+          failureThreshold: 90
+          periodSeconds: 5
+          timeoutSeconds: 5
+          
+        livenessProbe:
+          exec:
+            command:
+              - sh
+              - -c
+              - curl --fail --max-time 5 http://localhost:8061/api/v1/system/liveness
+          initialDelaySeconds: 0
+          failureThreshold: 5
+          timeoutSeconds: 5
+          periodSeconds: 10
+          successThreshold: 1
+          
+      - name: access
+        image: releases-docker.jfrog.io/jfrog/artifactory-jcr:7.90.10
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          privileged: false
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+        command:
+        - '/bin/bash'
+        - '-c'
+        - >
+          set -e;
+          exec /opt/jfrog/artifactory/app/access/bin/entrypoint-access.sh
+        env:
+      
+        - name: JF_SHARED_DATABASE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: my-artifactory-jcr-postgresql
+              key: postgresql-password
+        volumeMounts:
+        - name: artifactory-volume
+          mountPath: "/var/opt/jfrog/artifactory"
+
+      ######################## Artifactory persistence nfs ##########################
+
+      ######################## Artifactory persistence googleStorage ##########################
+        # - name: custom-script
+        #   mountPath: "/scripts/script.sh"
+        #   subPath: script.sh
+        # - name: posthook-start
+        #   mountPath: "/scripts/posthoook-start.sh"
+        #   subPath: posthoook-start.sh
+        # - name: prehook-start
+        #   mountPath: "/scripts/prehook-start.sh"
+        #   subPath: prehook-start.sh
+        
+        startupProbe:
+          exec:
+            command:
+              - sh
+              - -c
+              - curl --fail --max-time 5 http://localhost:8040/access/api/v1/system/readiness
+          initialDelaySeconds: 5
+          failureThreshold: 30
+          periodSeconds: 5
+          timeoutSeconds: 5
+          
+        livenessProbe:
+          exec:
+            command:
+              - sh
+              - -c
+              - curl --fail --max-time 5 http://localhost:8040/access/api/v1/system/liveness
+          initialDelaySeconds: 0
+          failureThreshold: 5
+          timeoutSeconds: 5
+          periodSeconds: 10
+          successThreshold: 1
+          
+      - name: observability
+        image: releases-docker.jfrog.io/jfrog/artifactory-jcr:7.90.10
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          privileged: false
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+        command:
+          - '/bin/bash'
+          - '-c'
+          - >
+            exec /opt/jfrog/artifactory/app/observability/bin/jf-observability start
+        env:
+        - name: JF_SHARED_NODE_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        volumeMounts:
+        - name: artifactory-volume
+          mountPath: "/var/opt/jfrog/artifactory"
+        resources:
+          {}
+        startupProbe:
+          exec:
+            command:
+              - sh
+              - -c
+              - curl --fail --max-time 5 http://localhost:8036/api/v1/system/readiness
+          initialDelaySeconds: 30
+          failureThreshold: 90
+          periodSeconds: 5
+          timeoutSeconds: 5
+          
+        livenessProbe:
+          exec:
+            command:
+              - sh
+              - -c
+              - curl --fail --max-time 5 http://localhost:8036/api/v1/system/liveness
+          initialDelaySeconds: 0
+          failureThreshold: 5
+          timeoutSeconds: 5
+          periodSeconds: 10
+          successThreshold: 1
+          
+      - name: artifactory
+        image: releases-docker.jfrog.io/jfrog/artifactory-jcr:7.90.10
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          privileged: false
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+        command:
+        - '/bin/bash'
+        - '-c'
+        - >
+          set -e;
+          if [ -d /artifactory_extra_conf ] && [ -d /artifactory_bootstrap ]; then
+            echo "Copying bootstrap config from /artifactory_extra_conf to /artifactory_bootstrap";
+            cp -Lrfv /artifactory_extra_conf/ /artifactory_bootstrap/;
+          fi;
+          exec /entrypoint-artifactory.sh
+        env:
+        - name : JF_ROUTER_ENABLED
+          value: "true"
+        - name : JF_ROUTER_SERVICE_ENABLED
+          value: "false"
+        - name : JF_EVENT_ENABLED
+          value: "false"
+        - name : JF_METADATA_ENABLED
+          value: "false"
+        - name : JF_FRONTEND_ENABLED
+          value: "false"
+        - name: JF_FEDERATION_ENABLED
+          value: "false"
+        - name : JF_OBSERVABILITY_ENABLED
+          value: "false"
+        - name : JF_JFCONNECT_SERVICE_ENABLED
+          value: "false"
+        - name : JF_EVIDENCE_ENABLED
+          value: "false"
+        - name : JF_ACCESS_ENABLED
+          value: "false"
+      
+        - name: JF_SHARED_DATABASE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: my-artifactory-jcr-postgresql
+              key: postgresql-password
+        ports:
+        - containerPort: 8082
+          name: http
+        - containerPort: 8081
+          name: http-internal
+        - containerPort: 8025
+          name: http-rtfs
+        volumeMounts:
+        - name: artifactory-volume
+          mountPath: "/var/opt/jfrog/artifactory"
+
+      ######################## Artifactory config map ##########################
+
+      ######################## Artifactory persistence nfs ##########################
+
+      ######################## Artifactory persistence binarystoreXml ##########################
+        - name: artifactory-unified-secret-volume
+          mountPath: "/tmp/etc/artifactory/binarystore.xml"
+          subPath: binarystore.xml
+
+      ######################## Artifactory persistence googleStorage ##########################
+
+      ######################## Artifactory license ##########################
+
+        - name: installer-info
+          mountPath: "/artifactory_bootstrap/info/installer-info.json"
+          subPath: installer-info.json
+        # - name: custom-script
+        #   mountPath: "/scripts/script.sh"
+        #   subPath: script.sh
+        # - name: posthook-start
+        #   mountPath: "/scripts/posthoook-start.sh"
+        #   subPath: posthoook-start.sh
+        # - name: prehook-start
+        #   mountPath: "/scripts/prehook-start.sh"
+        #   subPath: prehook-start.sh
+        
+        startupProbe:
+          exec:
+            command:
+              - sh
+              - -c
+              - curl -s -k --fail --max-time 5 http://localhost:8091/artifactory/api/v1/system/readiness
+          initialDelaySeconds: 10
+          failureThreshold: 90
+          periodSeconds: 5
+          timeoutSeconds: 5
+          
+        livenessProbe:
+          exec:
+            command:
+              - sh
+              - -c
+              - curl -s -k --fail --max-time 5 http://localhost:8091/artifactory/api/v1/system/liveness
+          initialDelaySeconds: 0
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 5
+          successThreshold: 1
+          
+      
+      # - name: "sidecar-list-etc"
+      #   image: releases-docker.jfrog.io/ubi9/ubi-minimal:9.4.949.1716471857
+      #   imagePullPolicy: IfNotPresent
+      #   securityContext:
+      #     runAsNonRoot: true
+      #     allowPrivilegeEscalation: false
+      #     capabilities:
+      #       drop:
+      #         - NET_RAW
+      #   command:
+      #     - 'sh'
+      #     - '-c'
+      #     - 'sh /scripts/script.sh'
+      #   volumeMounts:
+      #     - mountPath: "/var/opt/jfrog/artifactory"
+      #       name: artifactory-volume
+      #     - mountPath: "/scripts/script.sh"
+      #       name: custom-script
+      #       subPath: script.sh
+      #   resources:
+      #     requests:
+      #       memory: "32Mi"
+      #       cpu: "50m"
+      #     limits:
+      #       memory: "128Mi"
+      #       cpu: "100m"
+      
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    app: artifactory
+                    release: my-artifactory-jcr
+      volumes:
+      ########## External secrets ###########
+      # ca-certs secret
+
+      # aws licence
+
+      # binarystore-xml secret
+
+      # access-certs secrets
+
+      # system yaml
+
+      # artifactory license secrets
+      
+      # user Plugin Secrets
+
+      # access bootstarp
+
+      # gcpcreds secret
+
+      ############ Config map, Volumes and Custom Volumes ##############
+      # - name: custom-script
+      #   configMap:
+      #     name: custom-script
+      
+      - name: installer-info
+        configMap:
+          name: my-artifactory-jcr-installer-info
+      - name: artifactory-configmaps
+        configMap:
+          name: my-artifactory-jcr-configmaps
+
+    #########  unifiedSecretInstallation ###########
+      - name: artifactory-unified-secret-volume
+        secret:
+          secretName: "my-artifactory-jcr-unified-secret"
+    ########## volumeClaimTemplates #######
+  volumeClaimTemplates:
+  - metadata:
+      name: artifactory-volume
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 20Gi

@@ -1,0 +1,140 @@
+---
+# Source: postgres-backup/templates/persistentvolume.yaml
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  labels:
+    app: backup
+    
+    helm.sh/chart: postgres-backup-0.3.0
+    app.kubernetes.io/name: postgres-backup
+    app.kubernetes.io/instance: my-postgres-backup
+    app.kubernetes.io/version: "13"
+    app.kubernetes.io/managed-by: Helm
+  name: "postgres-backup"
+spec:
+  accessModes:
+  - ReadWriteOnce
+  capacity:
+    storage: 100Gi
+  mountOptions:
+  - hard
+  - rw
+  nfs:
+    path: "/"
+    server: "localhost"
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: nfs
+  volumeMode: Filesystem
+---
+# Source: postgres-backup/templates/persistentvolumeclaim.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: "postgres-backup"
+  namespace: "default"
+  labels:
+    
+    helm.sh/chart: postgres-backup-0.3.0
+    app.kubernetes.io/name: postgres-backup
+    app.kubernetes.io/instance: my-postgres-backup
+    app.kubernetes.io/version: "13"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Gi
+  selector:
+    matchLabels:
+      app: backup
+      
+      app.kubernetes.io/name: postgres-backup
+      app.kubernetes.io/instance: my-postgres-backup
+  storageClassName: nfs
+  volumeMode: Filesystem
+  volumeName: "postgres-backup"
+---
+# Source: postgres-backup/templates/cronjob.yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: "postgres-backup"
+  namespace: "default"
+  labels:
+    
+    helm.sh/chart: postgres-backup-0.3.0
+    app.kubernetes.io/name: postgres-backup
+    app.kubernetes.io/instance: my-postgres-backup
+    app.kubernetes.io/version: "13"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  concurrencyPolicy: Forbid
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: Never
+          initContainers:
+            - command:
+              - /bin/sh
+              - -c
+              - "pg_dumpall -U ${POSTGRES_USER} -h ${POSTGRES_HOST} | gzip > /backups/pg_backup-$(date +%d).sql.gz"
+              env:
+              - name: POSTGRES_USER
+                value: "postgres"
+              - name: PGPASSWORD
+                value: ""
+              - name: POSTGRES_HOST
+                value: "localhost"
+              image: "postgres:14.1"
+              name: pgdump
+              resources:
+                limits:
+                  memory: 512Mi
+                requests:
+                  memory: 128Mi
+              securityContext:
+                runAsUser: 999
+                runAsGroup: 999
+              volumeMounts:
+              - mountPath: /backups
+                name: postgres-backups
+          containers:
+            - command:
+              - /bin/sh
+              - -c
+              - "mc -C /tmp/.mc config host add s3backupdest ${S3_HOST} ${S3_ACCESS_KEY_ID} ${S3_SECRET_ACCESS_KEY} --api S3v4 && mc -C /tmp/.mc cp /backups/pg_backup-$(date +%d).sql.gz s3backupdest/${S3_BUCKET}/${S3_PATH_PREFIX}pg_backup-$(date +%d).sql.gz"
+              image: nerzhul/mc-arm64:2020.10.03
+              name: s3-upload
+              env:
+                - name: S3_HOST
+                  value: "localhost"
+                - name: S3_ACCESS_KEY_ID
+                  value: ""
+                - name: S3_SECRET_ACCESS_KEY
+                  value: ""
+                - name: S3_BUCKET
+                  value: 
+                - name: S3_PATH_PREFIX
+                  value: ""
+              resources:
+                limits:
+                  memory: 1Gi
+                requests:
+                  memory: 512Mi
+              securityContext:
+                runAsUser: 999
+                runAsGroup: 999
+              volumeMounts:
+              - mountPath: /backups
+                name: postgres-backups
+          volumes:
+          - name: postgres-backups
+            persistentVolumeClaim:
+              claimName: "postgres-backup"
+  schedule: '50 4 * * *'
+  successfulJobsHistoryLimit: 2

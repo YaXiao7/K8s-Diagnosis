@@ -1,0 +1,119 @@
+---
+# Source: rhasspy/templates/common.yaml
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: my-rhasspy-config
+  labels:
+    app.kubernetes.io/instance: my-rhasspy
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: rhasspy
+    app.kubernetes.io/version: 2.5.11
+    helm.sh/chart: rhasspy-1.1.2
+  annotations:
+spec:
+  accessModes:
+    - "ReadWriteOnce"
+  resources:
+    requests:
+      storage: "1Gi"
+---
+# Source: rhasspy/templates/common.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-rhasspy
+  labels:
+    app.kubernetes.io/instance: my-rhasspy
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: rhasspy
+    app.kubernetes.io/version: 2.5.11
+    helm.sh/chart: rhasspy-1.1.2
+  annotations:
+spec:
+  type: ClusterIP
+  ports:
+  - port: 12101
+    targetPort: http
+    protocol: TCP
+    name: http
+  selector:
+    app.kubernetes.io/name: rhasspy
+    app.kubernetes.io/instance: my-rhasspy
+---
+# Source: rhasspy/templates/common.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-rhasspy
+  labels:
+    app.kubernetes.io/instance: my-rhasspy
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: rhasspy
+    app.kubernetes.io/version: 2.5.11
+    helm.sh/chart: rhasspy-1.1.2
+spec:
+  revisionHistoryLimit: 3
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: rhasspy
+      app.kubernetes.io/instance: my-rhasspy
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: rhasspy
+        app.kubernetes.io/instance: my-rhasspy
+    spec:
+      
+      serviceAccountName: default
+      automountServiceAccountToken: true
+      dnsPolicy: ClusterFirst
+      enableServiceLinks: true
+      containers:
+        - name: my-rhasspy
+          image: "rhasspy/rhasspy:2.5.11"
+          imagePullPolicy: IfNotPresent
+          args:
+            
+            - --user-profiles
+            - /profiles
+            - --profile
+            - en
+          env:
+            - name: TZ
+              value: UTC
+          ports:
+            - name: http
+              containerPort: 12101
+              protocol: TCP
+          volumeMounts:
+            - name: config
+              mountPath: /profiles
+          livenessProbe:
+            tcpSocket:
+              port: 12101
+            initialDelaySeconds: 0
+            failureThreshold: 3
+            timeoutSeconds: 1
+            periodSeconds: 10
+          readinessProbe:
+            tcpSocket:
+              port: 12101
+            initialDelaySeconds: 0
+            failureThreshold: 3
+            timeoutSeconds: 1
+            periodSeconds: 10
+          startupProbe:
+            tcpSocket:
+              port: 12101
+            initialDelaySeconds: 0
+            failureThreshold: 30
+            timeoutSeconds: 1
+            periodSeconds: 5
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: my-rhasspy-config

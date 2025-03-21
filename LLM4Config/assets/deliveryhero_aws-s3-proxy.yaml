@@ -1,0 +1,91 @@
+---
+# Source: aws-s3-proxy/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-aws-s3-proxy
+  labels:
+    app.kubernetes.io/name: aws-s3-proxy
+    helm.sh/chart: aws-s3-proxy-0.1.5
+    app.kubernetes.io/instance: my-aws-s3-proxy
+    app.kubernetes.io/version: "2.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: aws-s3-proxy/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-aws-s3-proxy
+  labels:
+    app.kubernetes.io/name: aws-s3-proxy
+    helm.sh/chart: aws-s3-proxy-0.1.5
+    app.kubernetes.io/instance: my-aws-s3-proxy
+    app.kubernetes.io/version: "2.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: aws-s3-proxy
+    app.kubernetes.io/instance: my-aws-s3-proxy
+---
+# Source: aws-s3-proxy/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-aws-s3-proxy
+  labels:
+    app.kubernetes.io/name: aws-s3-proxy
+    helm.sh/chart: aws-s3-proxy-0.1.5
+    app.kubernetes.io/instance: my-aws-s3-proxy
+    app.kubernetes.io/version: "2.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: aws-s3-proxy
+      app.kubernetes.io/instance: my-aws-s3-proxy
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: aws-s3-proxy
+        helm.sh/chart: aws-s3-proxy-0.1.5
+        app.kubernetes.io/instance: my-aws-s3-proxy
+        app.kubernetes.io/version: "2.0"
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      serviceAccountName: my-aws-s3-proxy
+      securityContext:
+        {}
+      containers:
+        - name: aws-s3-proxy
+          securityContext:
+            {}
+          image: "pottava/s3-proxy:2.0"
+          imagePullPolicy: IfNotPresent
+          env:
+          - name: HEALTHCHECK_PATH
+            value: /health
+          - name: AWS_REGION
+            value: "eu-west-1"
+          - name: AWS_S3_BUCKET
+            value: "your-s3-bucket"
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+          resources:
+            {}

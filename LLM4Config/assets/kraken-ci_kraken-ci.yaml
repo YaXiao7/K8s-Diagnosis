@@ -1,0 +1,576 @@
+---
+# Source: kraken-ci/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kraken
+  namespace: default
+---
+# Source: kraken-ci/templates/clickhouse-persistentvolumeclaim.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  labels:
+    kraken.service: clickhouse
+  name: clickhouse
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 300Mi
+---
+# Source: kraken-ci/templates/db-data-persistentvolumeclaim.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  labels:
+    kraken.service: db-data
+  name: db-data
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 300Mi
+---
+# Source: kraken-ci/templates/minio-persistentvolumeclaim.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  labels:
+    kraken.service: minio
+  name: minio
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 500Mi
+---
+# Source: kraken-ci/templates/clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+
+metadata:
+  name: kraken-role
+
+rules:
+  - apiGroups: [""]
+    resources: ["nodes", "services", "pods", "endpoints", "namespaces"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["create", "delete"]
+---
+# Source: kraken-ci/templates/clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+
+metadata:
+  name: kraken-crb
+
+roleRef:
+  kind: ClusterRole
+  name: kraken-role
+  apiGroup: rbac.authorization.k8s.io
+
+subjects:
+  - kind: ServiceAccount
+    name: kraken
+    namespace: default
+---
+# Source: kraken-ci/templates/clickhouse-proxy-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    kraken.service: clickhouse-proxy
+  name: clickhouse-proxy
+spec:
+  selector:
+    kraken.service: clickhouse-proxy
+  ports:
+    - port: 9001
+      protocol: UDP
+      targetPort: ch-proxy
+      nodePort: 31901
+  type: NodePort
+---
+# Source: kraken-ci/templates/clickhouse-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    kraken.service: clickhouse
+  name: clickhouse
+spec:
+  ports:
+    - name: "8123"
+      port: 8123
+      targetPort: http
+    - name: "9000"
+      port: 9000
+      targetPort: ch
+  selector:
+    kraken.service: clickhouse
+---
+# Source: kraken-ci/templates/controller-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    kraken.service: controller
+  name: controller
+spec:
+  ports:
+    - port: 7997
+      targetPort: planner
+  selector:
+    kraken.service: controller
+---
+# Source: kraken-ci/templates/minio-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    kraken.service: minio
+  name: minio
+spec:
+  selector:
+    kraken.service: minio
+  ports:
+    - port: 9999
+      targetPort: minio
+      nodePort: 31999
+  type: NodePort
+---
+# Source: kraken-ci/templates/postgres-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    kraken.service: postgres
+  name: postgres
+spec:
+  ports:
+    - port: 5432
+      targetPort: pgsql
+  selector:
+    kraken.service: postgres
+---
+# Source: kraken-ci/templates/redis-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    kraken.service: redis
+  name: redis
+spec:
+  ports:
+    - port: 6379
+      targetPort: redis
+  selector:
+    kraken.service: redis
+---
+# Source: kraken-ci/templates/server-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    kraken.service: server
+  name: server
+spec:
+  ports:
+    - port: 6363
+      targetPort: http
+  selector:
+    kraken.service: server
+---
+# Source: kraken-ci/templates/ui-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    kraken.service: ui
+  name: ui
+spec:
+  selector:
+    kraken.service: ui
+  ports:
+    - port: 8080
+      targetPort: http
+      nodePort: 31080
+  type: NodePort
+---
+# Source: kraken-ci/templates/agent-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    kraken.service: agent
+  name: agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      kraken.service: agent
+  template:
+    metadata:
+      labels:
+        kraken.service: agent
+    spec:
+      containers:
+        - name: agent
+          env:
+            - name: KRAKEN_CLICKHOUSE_ADDR
+              value: clickhouse-proxy:9001
+            - name: KRAKEN_MINIO_ADDR
+              value: minio:9999
+            - name: KRAKEN_SERVER_ADDR
+              value: server:6363
+          image: us-docker.pkg.dev/kraken-261806/kk/kkagent:1.7.36
+      restartPolicy: Always
+      serviceAccountName: kraken
+---
+# Source: kraken-ci/templates/clickhouse-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    kraken.service: clickhouse
+  name: clickhouse
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      kraken.service: clickhouse
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        kraken.service: clickhouse
+    spec:
+      containers:
+        - name: clickhouse
+          image: us-docker.pkg.dev/kraken-261806/kk/clickhouse-server:22.10.2.11.1.7.36
+          ports:
+            - name: http
+              containerPort: 8123
+            - name: ch
+              containerPort: 9000
+          volumeMounts:
+            - mountPath: /var/lib/clickhouse
+              name: clickhouse
+      restartPolicy: Always
+      volumes:
+        - name: clickhouse
+          persistentVolumeClaim:
+            claimName: clickhouse
+---
+# Source: kraken-ci/templates/clickhouse-proxy-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    kraken.service: clickhouse-proxy
+  name: clickhouse-proxy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      kraken.service: clickhouse-proxy
+  template:
+    metadata:
+      labels:
+        kraken.service: clickhouse-proxy
+    spec:
+      containers:
+        - name: clickhouse-proxy
+          env:
+            - name: KRAKEN_CLICKHOUSE_URL
+              value: http://clickhouse:8123/
+          image: us-docker.pkg.dev/kraken-261806/kk/kkchproxy:1.7.36
+          ports:
+            - name: ch-proxy
+              containerPort: 9001
+              protocol: UDP
+      restartPolicy: Always
+---
+# Source: kraken-ci/templates/controller-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    kraken.service: controller
+  name: controller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      kraken.service: controller
+  template:
+    metadata:
+      labels:
+        kraken.service: controller
+    spec:
+      containers:
+        - name: controller
+          env:
+            - name: KRAKEN_CLICKHOUSE_ADDR
+              value: clickhouse-proxy:9001
+            - name: KRAKEN_CLICKHOUSE_PORT
+              value: "9001"
+            - name: KRAKEN_CLICKHOUSE_URL
+              value: http://clickhouse:8123/
+            - name: KRAKEN_DB_URL
+              value: postgresql://kraken:kk123@postgres:5432/kraken
+            - name: KRAKEN_PLANNER_URL
+              value: http://localhost:7997/
+            - name: KRAKEN_REDIS_ADDR
+              value: redis
+            - name: KRAKEN_SERVER_ADDR
+              value: server:6363
+            - name: KRAKEN_SERVER_PORT
+              value: "6363"
+          image: us-docker.pkg.dev/kraken-261806/kk/kkcontroller:1.7.36
+          ports:
+            - name: planner
+              containerPort: 7997
+      restartPolicy: Always
+      serviceAccountName: kraken
+---
+# Source: kraken-ci/templates/minio-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    kraken.service: minio
+  name: minio
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      kraken.service: minio
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        kraken.service: minio
+    spec:
+      containers:
+        - args:
+            - server
+            - --address
+            - :9999
+            - /data
+          env:
+            - name: MINIO_ROOT_USER
+              value: URDS4GCFU4ACSDFERFAU
+            - name: MINIO_ROOT_PASSWORD
+              value: HIsgg5DIIGSRRerIUHIUhGFEUHugJjfrJuyyaiGY
+          image: minio/minio:RELEASE.2022-10-24T18-35-07Z
+          name: minio
+          ports:
+            - name: minio
+              containerPort: 9999
+          volumeMounts:
+            - mountPath: /data
+              name: minio
+      restartPolicy: Always
+      volumes:
+        - name: minio
+          persistentVolumeClaim:
+            claimName: minio
+---
+# Source: kraken-ci/templates/postgres-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    kraken.service: postgres
+  name: postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      kraken.service: postgres
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        kraken.service: postgres
+    spec:
+      containers:
+        - name: postgres
+          env:
+            - name: POSTGRES_DB
+              value: kraken
+            - name: POSTGRES_USER
+              value:  kraken
+            - name: POSTGRES_PASSWORD
+              value:  kk123
+            - name: PGDATA  # this subdir fixes problem: is not empty, it contains a lost+found directory
+              value: /var/lib/postgresql/data/pgdata
+          image: postgres:11
+          volumeMounts:
+            - mountPath: /var/lib/postgresql/data
+              name: db-data
+          ports:
+            - name: pgsql
+              containerPort: 5432
+      restartPolicy: Always
+      volumes:
+        - name: db-data
+          persistentVolumeClaim:
+            claimName: db-data
+---
+# Source: kraken-ci/templates/redis-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    kraken.service: redis
+  name: redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      kraken.service: redis
+  template:
+    metadata:
+      labels:
+        kraken.service: redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:6
+          ports:
+            - name: redis
+              containerPort: 6379
+      restartPolicy: Always
+---
+# Source: kraken-ci/templates/rq-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    kraken.service: rq
+  name: rq
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      kraken.service: rq
+  template:
+    metadata:
+      labels:
+        kraken.service: rq
+    spec:
+      containers:
+        - name: rq
+          env:
+            - name: KRAKEN_CLICKHOUSE_ADDR
+              value: clickhouse-proxy:9001
+            - name: KRAKEN_CLICKHOUSE_PORT
+              value: "9001"
+            - name: KRAKEN_DB_URL
+              value: postgresql://kraken:kk123@postgres:5432/kraken
+            - name: KRAKEN_MINIO_ADDR
+              value: minio:9999
+            - name: KRAKEN_PLANNER_URL
+              value: http://controller:7997/
+            - name: KRAKEN_REDIS_ADDR
+              value: redis
+            - name: KRAKEN_SERVER_ADDR
+              value: server:6363
+            - name: KRAKEN_SERVER_PORT
+              value: "6363"
+            - name: MINIO_ROOT_USER
+              value: URDS4GCFU4ACSDFERFAU
+            - name: MINIO_ROOT_PASSWORD
+              value: HIsgg5DIIGSRRerIUHIUhGFEUHugJjfrJuyyaiGY
+          image: us-docker.pkg.dev/kraken-261806/kk/kkrq:1.7.36
+      restartPolicy: Always
+      serviceAccountName: kraken
+---
+# Source: kraken-ci/templates/server-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    kraken.service: server
+  name: server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      kraken.service: server
+  template:
+    metadata:
+      labels:
+        kraken.service: server
+    spec:
+      containers:
+        - name: server
+          env:
+            - name: KRAKEN_CLICKHOUSE_ADDR
+              value: clickhouse-proxy:9001
+            - name: KRAKEN_CLICKHOUSE_PORT
+              value: "9001"
+            - name: KRAKEN_CLICKHOUSE_URL
+              value: http://clickhouse:8123/
+            - name: KRAKEN_DB_URL
+              value: postgresql://kraken:kk123@postgres:5432/kraken
+            - name: KRAKEN_MINIO_ADDR
+              value: minio:9999
+            - name: KRAKEN_PLANNER_URL
+              value: http://controller:7997/
+            - name: KRAKEN_REDIS_ADDR
+              value: redis
+            - name: KRAKEN_SERVER_ADDR
+              value: server:6363
+            - name: KRAKEN_SERVER_PORT
+              value: "6363"
+            - name: MINIO_ROOT_USER
+              value: URDS4GCFU4ACSDFERFAU
+            - name: MINIO_ROOT_PASSWORD
+              value: HIsgg5DIIGSRRerIUHIUhGFEUHugJjfrJuyyaiGY
+          image: "us-docker.pkg.dev/kraken-261806/kk/kkserver:1.7.36"
+          ports:
+            - name: http
+              containerPort: 6363
+      restartPolicy: Always
+      serviceAccountName: kraken
+status: {}
+---
+# Source: kraken-ci/templates/ui-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    kraken.service: ui
+  name: ui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      kraken.service: ui
+  template:
+    metadata:
+      labels:
+        kraken.service: ui
+    spec:
+      containers:
+        - name: ui
+          env:
+            - name: KRAKEN_SERVER_ADDR
+              value: server:6363
+          image: "us-docker.pkg.dev/kraken-261806/kk/kkui:1.7.36"
+          ports:
+            - name: http
+              containerPort: 80
+      restartPolicy: Always

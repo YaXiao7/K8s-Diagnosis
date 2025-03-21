@@ -1,0 +1,87 @@
+---
+# Source: prometheus-optimizer/templates/rbac.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus-optimizer-service-account
+  namespace: default
+---
+# Source: prometheus-optimizer/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-optimizer-config
+data:
+  config.yaml: |
+    fetch_rules:
+      enabled: true
+      prometheus_discovery:
+        labels: app=prometheus, component=server
+        namespace: prometheus
+    grafana:
+      address: http://grafana.grafana.svc:3000
+      api_token: your-token-here
+      enabled: true
+    mark_as_used_metric: ^maas.*
+    prometheus_analysis:
+      address: http://thanos-query-frontend.thanos.svc:9090
+      enabled: true
+    slack:
+      channel: your-slack-channel-name
+      token: xoxb-your-slack-token-here
+---
+# Source: prometheus-optimizer/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: optimizer-role
+rules:
+  - apiGroups: [""]
+    resources: ["pods/exec","pods"]
+    verbs: ["create","list","get","watch"]
+---
+# Source: prometheus-optimizer/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: optimizer-cluster-rolebinding
+subjects:
+  - kind: ServiceAccount
+    name: prometheus-optimizer-service-account
+    namespace: default
+roleRef:
+  kind: ClusterRole
+  name: optimizer-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: prometheus-optimizer/templates/cronjob.yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: prometheus-optimizer
+  namespace: default
+  labels:
+    app: prometheus-optimizer
+spec:
+  schedule: 0 6 1 * *
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: prometheus-optimizer
+        spec:
+          containers:
+            - name: prometheus-optimizer
+              image: "ghcr.io/angelscloud/prometheus-optimizer:latest"
+              imagePullPolicy: Always
+              volumeMounts:
+                - name: config-volume
+                  mountPath: /usr/src/app/config.yaml
+                  subPath: config.yaml
+          volumes:
+            - name: config-volume
+              configMap:
+                name: prometheus-optimizer-config
+          restartPolicy: OnFailure
+          serviceAccountName: prometheus-optimizer-service-account

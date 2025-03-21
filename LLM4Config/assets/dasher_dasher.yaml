@@ -1,0 +1,55 @@
+---
+# Source: dasher/templates/server.service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-dasher
+spec:
+  type: ClusterIP
+  selector:
+    app: dasher-server
+  ports:
+    - name: web
+      port: 3000
+      protocol: TCP
+    - name: grpc
+      port: 50051
+      protocol: TCP
+---
+# Source: dasher/templates/server.statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-dasher
+spec:
+  selector:
+    matchLabels:
+      app: dasher-server
+  serviceName: my-dasher-headless
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: dasher-server
+    spec:
+      terminationGracePeriodSeconds: 10
+      containers:
+      - name: dasher-server
+        image: ghcr.io/flohansen/dasher-server:latest
+        ports:
+        - containerPort: 3000
+          name: web
+        - containerPort: 50051
+          name: grpc
+        volumeMounts:
+        - name: data
+          mountPath: /data
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: standard
+      resources:
+        requests:
+          storage: 1G

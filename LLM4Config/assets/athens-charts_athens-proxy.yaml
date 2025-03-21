@@ -1,0 +1,153 @@
+---
+# Source: athens-proxy/templates/service-account.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-athens-proxy
+  labels:
+    
+    app: my-athens-proxy
+    chart: athens-proxy-0.13.0
+    release: "my-athens-proxy"
+    heritage: "Helm"
+    app.kubernetes.io/name: my-athens-proxy
+    helm.sh/chart: athens-proxy-0.13.0
+    app.kubernetes.io/managed-by: "Helm"
+    app.kubernetes.io/instance: "my-athens-proxy"
+    app.kubernetes.io/version: "v0.15.1"
+---
+# Source: athens-proxy/templates/secret.yaml
+kind: Secret
+apiVersion: v1
+metadata:
+  name: my-athens-proxy-secret
+  labels:
+    
+    app: my-athens-proxy
+    chart: athens-proxy-0.13.0
+    release: "my-athens-proxy"
+    heritage: "Helm"
+    app.kubernetes.io/name: my-athens-proxy
+    helm.sh/chart: athens-proxy-0.13.0
+    app.kubernetes.io/managed-by: "Helm"
+    app.kubernetes.io/instance: "my-athens-proxy"
+    app.kubernetes.io/version: "v0.15.1"
+type: Opaque
+data:
+---
+# Source: athens-proxy/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-athens-proxy
+  labels:
+    
+    app: my-athens-proxy
+    chart: athens-proxy-0.13.0
+    release: "my-athens-proxy"
+    heritage: "Helm"
+    app.kubernetes.io/name: my-athens-proxy
+    helm.sh/chart: athens-proxy-0.13.0
+    app.kubernetes.io/managed-by: "Helm"
+    app.kubernetes.io/instance: "my-athens-proxy"
+    app.kubernetes.io/version: "v0.15.1"
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 80
+    targetPort: 3000
+    protocol: TCP
+  selector:
+    app: my-athens-proxy
+    release: "my-athens-proxy"
+---
+# Source: athens-proxy/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-athens-proxy
+  labels:
+    
+    app: my-athens-proxy
+    chart: athens-proxy-0.13.0
+    release: "my-athens-proxy"
+    heritage: "Helm"
+    app.kubernetes.io/name: my-athens-proxy
+    helm.sh/chart: athens-proxy-0.13.0
+    app.kubernetes.io/managed-by: "Helm"
+    app.kubernetes.io/instance: "my-athens-proxy"
+    app.kubernetes.io/version: "v0.15.1"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: my-athens-proxy
+      release: "my-athens-proxy"
+  template:
+    metadata:
+      labels:
+        
+        app: my-athens-proxy
+        chart: athens-proxy-0.13.0
+        release: "my-athens-proxy"
+        heritage: "Helm"
+        app.kubernetes.io/name: my-athens-proxy
+        helm.sh/chart: athens-proxy-0.13.0
+        app.kubernetes.io/managed-by: "Helm"
+        app.kubernetes.io/instance: "my-athens-proxy"
+        app.kubernetes.io/version: "v0.15.1"
+      annotations:
+        checksum/upstream: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+        checksum/ssh-config: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+        checksum/ssh-secret: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+    spec:
+      serviceAccountName: "my-athens-proxy"
+      containers:
+      - name: my-athens-proxy
+        image: "docker.io/gomods/athens:v0.15.1"
+        imagePullPolicy: "IfNotPresent"
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: "/healthz"
+            port: 3000
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 1
+        readinessProbe:
+          httpGet:
+            path: "/readyz"
+            port: 3000
+        env:
+        - name: ATHENS_GOGET_WORKERS
+          value: "3"
+        - name: ATHENS_STORAGE_TYPE
+          value: "disk"
+        - name: ATHENS_DISK_STORAGE_ROOT
+          value: "/var/lib/athens"
+        ports:
+        - containerPort: 3000
+        volumeMounts:
+        - name: storage-volume
+          mountPath: "/var/lib/athens"
+      volumes:
+      - name: storage-volume
+        emptyDir: {}
+---
+# Source: athens-proxy/templates/test/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-athens-proxy-test-connection"
+  labels:
+    app: my-athens-proxy
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-athens-proxy:80']
+  restartPolicy: Never

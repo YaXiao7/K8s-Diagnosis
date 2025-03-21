@@ -1,0 +1,125 @@
+---
+# Source: platform-links/templates/pvc.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: my-platform-links-data
+  namespace: default
+  labels:
+    helm.sh/chart: platform-links-v2024.8.21
+    app.kubernetes.io/name: platform-links
+    app.kubernetes.io/instance: my-platform-links
+    app.kubernetes.io/version: "v0.0.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  storageClassName: standard
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+---
+# Source: platform-links/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-platform-links
+  namespace: default
+  labels:
+    helm.sh/chart: platform-links-v2024.8.21
+    app.kubernetes.io/name: platform-links
+    app.kubernetes.io/instance: my-platform-links
+    app.kubernetes.io/version: "v0.0.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: platform-links
+    app.kubernetes.io/instance: my-platform-links
+---
+# Source: platform-links/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-platform-links
+  namespace: default
+  labels:
+    helm.sh/chart: platform-links-v2024.8.21
+    app.kubernetes.io/name: platform-links
+    app.kubernetes.io/instance: my-platform-links
+    app.kubernetes.io/version: "v0.0.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: platform-links
+      app.kubernetes.io/instance: my-platform-links
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: platform-links
+        app.kubernetes.io/instance: my-platform-links
+    spec:
+      
+      serviceAccountName: default
+      securityContext:
+        {}
+      containers:
+        - name: platform-links
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65534
+            seccompProfile:
+              type: RuntimeDefault
+          image: "ghcr.io/appscode/fileserver:v0.0.1"
+          imagePullPolicy: Always
+          args:
+            - run
+            - --listen=:3006
+            - --app-config=/data/b3/conf/app.ini
+            - --use-signed-url=false
+          ports:
+            - name: http
+              containerPort: 3006
+              protocol: TCP
+          startupProbe:
+            httpGet:
+              path: /
+              port: http
+            # wait for cert and nats to be ready
+            initialDelaySeconds: 60
+            failureThreshold: 18
+            periodSeconds: 30
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+            {}
+          env:
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: data
+          persistentVolumeClaim:
+            claimName: my-platform-links-data

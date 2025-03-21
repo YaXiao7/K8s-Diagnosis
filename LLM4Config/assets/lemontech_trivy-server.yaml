@@ -1,0 +1,98 @@
+---
+# Source: trivy-server/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-trivy-server
+  labels:
+    helm.sh/chart: trivy-server-0.1.0
+    app.kubernetes.io/name: trivy-server
+    app.kubernetes.io/instance: my-trivy-server
+    app.kubernetes.io/version: "0.32.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: trivy-server/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-trivy-server
+  labels:
+    helm.sh/chart: trivy-server-0.1.0
+    app.kubernetes.io/name: trivy-server
+    app.kubernetes.io/instance: my-trivy-server
+    app.kubernetes.io/version: "0.32.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 4954
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: trivy-server
+    app.kubernetes.io/instance: my-trivy-server
+---
+# Source: trivy-server/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-trivy-server
+  labels:
+    helm.sh/chart: trivy-server-0.1.0
+    app.kubernetes.io/name: trivy-server
+    app.kubernetes.io/instance: my-trivy-server
+    app.kubernetes.io/version: "0.32.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: trivy-server
+      app.kubernetes.io/instance: my-trivy-server
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: trivy-server
+        app.kubernetes.io/instance: my-trivy-server
+    spec:
+      serviceAccountName: my-trivy-server
+      securityContext:
+        {}
+      containers:
+        - name: trivy-server
+          args: ["server", "-d"]
+          securityContext:
+            {}
+          image: "aquasec/trivy:0.32.0"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: TRIVY_LISTEN
+              value: "0.0.0.0:4954"
+          ports:
+            - name: http
+              containerPort: 4954
+              protocol: TCP
+          resources:
+            {}
+---
+# Source: trivy-server/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-trivy-server-test-connection"
+  labels:
+    helm.sh/chart: trivy-server-0.1.0
+    app.kubernetes.io/name: trivy-server
+    app.kubernetes.io/instance: my-trivy-server
+    app.kubernetes.io/version: "0.32.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-trivy-server:4954']
+  restartPolicy: Never

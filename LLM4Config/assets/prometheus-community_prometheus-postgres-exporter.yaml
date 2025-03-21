@@ -1,0 +1,154 @@
+---
+# Source: prometheus-postgres-exporter/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+automountServiceAccountToken: false
+metadata:
+  name: my-prometheus-postgres-exporter
+  labels:
+    chart: prometheus-postgres-exporter-6.3.1
+    app: prometheus-postgres-exporter
+    release: my-prometheus-postgres-exporter
+    heritage: Helm
+---
+# Source: prometheus-postgres-exporter/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-prometheus-postgres-exporter
+  labels:
+    chart: prometheus-postgres-exporter-6.3.1
+    app: prometheus-postgres-exporter
+    release: my-prometheus-postgres-exporter
+    heritage: Helm
+type: Opaque
+data:
+  data_source_password: c29tZXBhc3d3b3Jk
+---
+# Source: prometheus-postgres-exporter/templates/role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: my-prometheus-postgres-exporter
+  labels:
+    chart: prometheus-postgres-exporter-6.3.1
+    app: prometheus-postgres-exporter
+    release: my-prometheus-postgres-exporter
+    heritage: Helm
+---
+# Source: prometheus-postgres-exporter/templates/rolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: my-prometheus-postgres-exporter
+  labels:
+    chart: prometheus-postgres-exporter-6.3.1
+    app: prometheus-postgres-exporter
+    release: my-prometheus-postgres-exporter
+    heritage: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: my-prometheus-postgres-exporter
+subjects:
+- kind: ServiceAccount
+  name: my-prometheus-postgres-exporter
+---
+# Source: prometheus-postgres-exporter/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-prometheus-postgres-exporter
+  labels:
+    chart: prometheus-postgres-exporter-6.3.1
+    app: prometheus-postgres-exporter
+    release: my-prometheus-postgres-exporter
+    heritage: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 9187
+      protocol: TCP
+      name: http
+  selector:
+    app: prometheus-postgres-exporter
+    release: my-prometheus-postgres-exporter
+---
+# Source: prometheus-postgres-exporter/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-prometheus-postgres-exporter
+  labels:
+    chart: prometheus-postgres-exporter-6.3.1
+    app: prometheus-postgres-exporter
+    release: my-prometheus-postgres-exporter
+    heritage: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus-postgres-exporter
+      release: my-prometheus-postgres-exporter
+  template:
+    metadata:
+      labels:
+        app: prometheus-postgres-exporter
+        release: my-prometheus-postgres-exporter
+      annotations:
+        checksum/config: 01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b
+        checksum/secrets: 40d50f4fa67650cad758a53d6b01f1cc22dd7bf007e3209d95f3057116ea9678
+    spec:
+      automountServiceAccountToken: false
+      serviceAccountName: my-prometheus-postgres-exporter
+      securityContext:
+        runAsGroup: 1001
+        runAsNonRoot: true
+        runAsUser: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: prometheus-postgres-exporter
+          args:
+          - "--config.file=/etc/postgres_exporter.yml"
+          - "--web.listen-address=:9187"
+          env:
+          - name: DATA_SOURCE_URI
+            value: ":5432/?sslmode=disable"
+          - name: DATA_SOURCE_USER
+            value: postgres
+          - name: DATA_SOURCE_PASS
+            valueFrom:
+              secretKeyRef:
+                name: my-prometheus-postgres-exporter
+                key: data_source_password
+          image: "quay.io/prometheuscommunity/postgres-exporter:v0.15.0"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 9187
+              protocol: TCP
+          livenessProbe:
+            initialDelaySeconds: 0
+            timeoutSeconds: 3
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            initialDelaySeconds: 0
+            timeoutSeconds: 1
+            httpGet:
+              path: /
+              port: http
+          resources:
+            {}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            readOnlyRootFilesystem: true
+          volumeMounts:
+      volumes:

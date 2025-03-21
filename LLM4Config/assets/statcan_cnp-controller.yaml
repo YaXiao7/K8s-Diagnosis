@@ -1,0 +1,138 @@
+---
+# Source: cnp-controller/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-cnp-controller
+  labels:
+    helm.sh/chart: cnp-controller-0.0.4
+    app.kubernetes.io/name: cnp-controller
+    app.kubernetes.io/instance: my-cnp-controller
+    app.kubernetes.io/version: "0.2.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: cnp-controller/templates/clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-cnp-controller
+  labels:
+    helm.sh/chart: cnp-controller-0.0.4
+    app.kubernetes.io/name: cnp-controller
+    app.kubernetes.io/instance: my-cnp-controller
+    app.kubernetes.io/version: "0.2.0"
+    app.kubernetes.io/managed-by: Helm
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - namespaces
+      - endpoints
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - serviceaccounts
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+  - apiGroups:
+      - rbac.authorization.k8s.io
+    resources:
+      - rolebindings
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+  - apiGroups:
+      - rbac.authorization.k8s.io
+    resources:
+      - clusterroles
+    verbs:
+      - bind
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+---
+# Source: cnp-controller/templates/clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-cnp-controller
+  labels:
+    helm.sh/chart: cnp-controller-0.0.4
+    app.kubernetes.io/name: cnp-controller
+    app.kubernetes.io/instance: my-cnp-controller
+    app.kubernetes.io/version: "0.2.0"
+    app.kubernetes.io/managed-by: Helm
+subjects:
+- kind: ServiceAccount
+  name: my-cnp-controller
+  namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-cnp-controller
+---
+# Source: cnp-controller/templates/deployment-image-pull-secrets.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-cnp-controller-image-pull-secrets
+  labels:
+    helm.sh/chart: cnp-controller-0.0.4
+    app.kubernetes.io/name: cnp-controller
+    app.kubernetes.io/instance: my-cnp-controller
+    app.kubernetes.io/version: "0.2.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cnp-controller
+      app.kubernetes.io/instance: my-cnp-controller
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: cnp-controller
+        app.kubernetes.io/instance: my-cnp-controller
+    spec:
+      serviceAccountName: my-cnp-controller
+      securityContext:
+        {}
+      containers:
+        - name: cnp-controller
+          securityContext:
+            {}
+          image: "statcan/cnp-controller:0.2.0"
+          imagePullPolicy: IfNotPresent
+          args:
+            - image-pull-secrets
+          env:
+            - name: CNP_SECRET_NAME
+              value: 
+            - name: CNP_SECRET_DOCKERCONFIGJSON
+              value:  
+          resources:
+            {}

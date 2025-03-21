@@ -1,0 +1,197 @@
+---
+# Source: prometheus-storage-adapter/charts/wavefront/templates/tests/test-collector-running.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: test-collector
+  namespace: default
+---
+# Source: prometheus-storage-adapter/charts/wavefront/templates/api-token-secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  labels:
+    app.kubernetes.io/name : my-prometheus-storage-adapter-wavefront
+    helm.sh/chart: wavefront-1.16.2
+    app.kubernetes.io/managed-by: "Helm"
+    app.kubernetes.io.instance: "my-prometheus-storage-adapter"
+    app.kubernetes.io/component: collector
+  name: my-prometheus-storage-adapter-wavefront
+type: Opaque
+data:
+  api-token: "WU9VUl9BUElfVE9LRU4="
+---
+# Source: prometheus-storage-adapter/charts/wavefront/templates/tests/test-collector-running.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: test-collector
+  namespace: default
+rules:
+  - apiGroups: ["apps"]
+    resources: ["daemonsets"]
+    verbs: ["get", "watch", "list"]
+---
+# Source: prometheus-storage-adapter/charts/wavefront/templates/tests/test-collector-running.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: test-collector
+  namespace: default
+subjects:
+  - kind: ServiceAccount
+    name: test-collector
+    namespace: default
+roleRef:
+  kind: Role
+  name: test-collector
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: prometheus-storage-adapter/charts/wavefront/templates/proxy-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/name : my-prometheus-storage-adapter-wavefront
+    helm.sh/chart: wavefront-1.16.2
+    app.kubernetes.io/managed-by: "Helm"
+    app.kubernetes.io.instance: "my-prometheus-storage-adapter"
+    app.kubernetes.io/component: proxy
+  name: my-prometheus-storage-adapter-wavefront-proxy
+spec:
+  ports:
+  - name: wavefront
+    port: 2878
+    protocol: TCP
+  selector:
+    app.kubernetes.io/name : my-prometheus-storage-adapter-wavefront
+    app.kubernetes.io/component: proxy
+  type: ClusterIP
+---
+# Source: prometheus-storage-adapter/templates/adapter-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-prometheus-storage-adapter
+  labels:
+    app.kubernetes.io/name : my-prometheus-storage-adapter
+    helm.sh/chart: prometheus-storage-adapter-0.1.6
+    app.kubernetes.io/managed-by: "Helm"
+    app.kubernetes.io.instance: "my-prometheus-storage-adapter"
+    app.kubernetes.io/component: prometheus-storage-adapter
+spec:
+  selector:
+    app.kubernetes.io/name : my-prometheus-storage-adapter
+    app.kubernetes.io/component: prometheus-storage-adapter
+  ports:
+    - name: adapter-port
+      protocol: TCP
+      port: 80
+      targetPort: 1234
+---
+# Source: prometheus-storage-adapter/charts/wavefront/templates/proxy-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name : my-prometheus-storage-adapter-wavefront
+    helm.sh/chart: wavefront-1.16.2
+    app.kubernetes.io/managed-by: "Helm"
+    app.kubernetes.io.instance: "my-prometheus-storage-adapter"
+    app.kubernetes.io/component: proxy
+  name: my-prometheus-storage-adapter-wavefront-proxy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name : my-prometheus-storage-adapter-wavefront
+      app.kubernetes.io/component: proxy
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name : my-prometheus-storage-adapter-wavefront
+        app.kubernetes.io/component: proxy
+    spec:
+      containers:
+      - name: wavefront-proxy
+        image: projects.registry.vmware.com/tanzu_observability/proxy:12.4.1
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: WAVEFRONT_URL
+          value: https://YOUR_CLUSTER.wavefront.com/api
+        - name: WAVEFRONT_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: my-prometheus-storage-adapter-wavefront
+              key: api-token
+        - name: WAVEFRONT_PROXY_ARGS
+          value: 
+        ports:
+        - containerPort: 2878
+          protocol: TCP
+        resources:
+          limits:
+            cpu: 1000m
+            memory: 4Gi
+          requests:
+            cpu: 100m
+            memory: 1Gi
+        securityContext:
+          privileged: false
+        volumeMounts:
+      volumes:
+---
+# Source: prometheus-storage-adapter/templates/adapter-deployment.yaml
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: my-prometheus-storage-adapter
+  labels:
+    app.kubernetes.io/name : my-prometheus-storage-adapter
+    helm.sh/chart: prometheus-storage-adapter-0.1.6
+    app.kubernetes.io/managed-by: "Helm"
+    app.kubernetes.io.instance: "my-prometheus-storage-adapter"
+    app.kubernetes.io/component: prometheus-storage-adapter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name : my-prometheus-storage-adapter
+      app.kubernetes.io/component: prometheus-storage-adapter
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name : my-prometheus-storage-adapter
+        app.kubernetes.io/component: prometheus-storage-adapter
+    spec:
+      containers:
+      - name: prometheus-storage-adapter
+        image: wavefronthq/prometheus-storage-adapter:latest
+        imagePullPolicy: IfNotPresent
+        command:
+        - /bin/adapter
+        - -listen=1234
+        - -proxy=my-prometheus-storage-adapter-wavefront-proxy.default.svc.cluster.local
+---
+# Source: prometheus-storage-adapter/charts/wavefront/templates/tests/test-collector-running.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-collector
+  namespace: default
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy" : hook-succeeded,hook-failed
+spec:
+  serviceAccountName: test-collector
+  containers:
+    - name: test-collector
+      image: bitnami/kubectl:latest
+      imagePullPolicy: IfNotPresent
+      command:
+        - /bin/bash
+        - -ec
+        - |
+          kubectl --namespace default get daemonsets --selector="app.kubernetes.io/component=collector"
+
+  restartPolicy: Never

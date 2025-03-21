@@ -1,0 +1,1632 @@
+---
+# Source: db-operator/templates/controller/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: db-operator
+  labels:
+    helm.sh/chart: db-operator-1.29.0
+    app.kubernetes.io/name: db-operator
+    app.kubernetes.io/instance: my-db-operator
+    app.kubernetes.io/version: "2.9.1"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: "controller"
+---
+# Source: db-operator/templates/webhook/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: db-operator-webhook
+  labels:
+    helm.sh/chart: db-operator-1.29.0
+    app.kubernetes.io/name: db-operator
+    app.kubernetes.io/instance: my-db-operator
+    app.kubernetes.io/version: "2.9.1"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: "webhook"
+---
+# Source: db-operator/templates/controller/config.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: db-operator-config
+  labels:
+    helm.sh/chart: db-operator-1.29.0
+    app.kubernetes.io/name: db-operator
+    app.kubernetes.io/instance: my-db-operator
+    app.kubernetes.io/version: "2.9.1"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: "controller"
+data:
+  config.yaml: |
+    instance:
+      google:
+        clientSecretName: "cloudsql-readonly-serviceaccount"
+        proxy:
+          nodeSelector:
+            {}
+          image: ghcr.io/db-operator/db-auth-gateway:v0.1.10
+          metricsPort: 9090
+      generic: {}
+      percona:
+        proxy:
+          image: severalnines/proxysql:2.0
+    backup:
+      activeDeadlineSeconds: 600
+      nodeSelector:
+        {}
+      postgres:
+        image: kloeckneri/pgdump-gcs:latest
+      mysql:
+        image: kloeckneri/mydump-gcs:latest
+      resources:
+        requests:
+          cpu: 0.2
+          memory: 64Mi
+    monitoring:
+      nodeSelector:
+        {}
+      postgres:
+        image: wrouesnel/postgres_exporter:latest
+        queries: |-
+          pg_stat_statements:
+            metrics:
+            - userid:
+                description: User ID
+                usage: LABEL
+            - dbid:
+                description: database ID
+                usage: LABEL
+            - datname:
+                description: database NAME
+                usage: LABEL
+            - queryid:
+                description: Query unique Hash Code
+                usage: LABEL
+            - query:
+                description: Query class
+                usage: LABEL
+            - calls:
+                description: Number of times executed
+                usage: COUNTER
+            - total_time:
+                description: Total time spent in the statement, in milliseconds
+                usage: COUNTER
+            - mean_time:
+                description: Mean time spent in the statement, in milliseconds
+                usage: GAUGE
+            - rows:
+                description: Total number of rows retrieved or affected by the statement
+                usage: COUNTER
+            query: SELECT userid, pgss.dbid, pgdb.datname, queryid, query, calls, total_time,
+              mean_time, rows FROM pg_stat_statements pgss LEFT JOIN (select oid as dbid, datname
+              from pg_database) as pgdb on pgdb.dbid = pgss.dbid WHERE not queryid isnull ORDER
+              BY mean_time desc limit 20
+      mysql: {}
+---
+# Source: db-operator/templates/crds/kinda.rocks_databases.yaml
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.12.1
+    cert-manager.io/inject-ca-from: default/db-operator-webhook
+    
+    helm.sh/resource-policy: keep
+  name: databases.kinda.rocks
+spec:
+  conversion:
+    strategy: Webhook
+    webhook:
+      clientConfig:
+        service:
+          namespace: default
+          name: db-operator-webhook
+          path: /convert
+      conversionReviewVersions:
+        - v1alpha1
+        - v1beta1
+  group: kinda.rocks
+  names:
+    kind: Database
+    listKind: DatabaseList
+    plural: databases
+    shortNames:
+      - db
+    singular: database
+  scope: Namespaced
+  versions:
+    - additionalPrinterColumns:
+        - description: current db phase
+          jsonPath: .status.phase
+          name: Phase
+          type: string
+        - description: current db status
+          jsonPath: .status.status
+          name: Status
+          type: boolean
+        - description: If database is protected to not get deleted.
+          jsonPath: .spec.deletionProtected
+          name: Protected
+          type: boolean
+        - description: instance reference
+          jsonPath: .spec.instance
+          name: DBInstance
+          type: string
+        - description: time since creation of resource
+          jsonPath: .metadata.creationTimestamp
+          name: Age
+          type: date
+      name: v1alpha1
+      schema:
+        openAPIV3Schema:
+          description: Database is the Schema for the databases API
+          properties:
+            apiVersion:
+              description: |-
+                APIVersion defines the versioned schema of this representation of an object.
+                Servers should convert recognized schemas to the latest internal value, and
+                may reject unrecognized values.
+                More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+              type: string
+            kind:
+              description: |-
+                Kind is a string value representing the REST resource this object represents.
+                Servers may infer this from the endpoint the client submits requests to.
+                Cannot be updated.
+                In CamelCase.
+                More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: DatabaseSpec defines the desired state of Database
+              properties:
+                backup:
+                  description: DatabaseBackup defines the desired state of backup and
+                    schedule
+                  properties:
+                    cron:
+                      type: string
+                    enable:
+                      type: boolean
+                  required:
+                    - cron
+                    - enable
+                  type: object
+                cleanup:
+                  type: boolean
+                connectionStringTemplate:
+                  description: |-
+                    ConnectionStringTemplate field can be used to pass a custom template for generating a db connection string.
+                    These keywords can be used: Protocol, DatabaseHost, DatabasePort, UserName, Password, DatabaseName.
+                    Default template looks like this:
+                    "://:@:/"
+                  type: string
+                deletionProtected:
+                  type: boolean
+                extensions:
+                  items:
+                    type: string
+                  type: array
+                instance:
+                  type: string
+                postgres:
+                  description: Postgres struct should be used to provide resource that
+                    only applicable to postgres
+                  properties:
+                    dropPublicSchema:
+                      description: If set to true, the public schema will be dropped
+                        after the database creation
+                      type: boolean
+                    schemas:
+                      description: Specify schemas to be created. The user created by
+                        db-operator will have all access on them.
+                      items:
+                        type: string
+                      type: array
+                  type: object
+                secretName:
+                  type: string
+                secretsTemplates:
+                  additionalProperties:
+                    type: string
+                  type: object
+              required:
+                - backup
+                - deletionProtected
+                - instance
+                - secretName
+              type: object
+            status:
+              description: DatabaseStatus defines the observed state of Database
+              properties:
+                database:
+                  type: string
+                instanceRef:
+                  description: DbInstance is the Schema for the dbinstances API
+                  properties:
+                    apiVersion:
+                      description: |-
+                        APIVersion defines the versioned schema of this representation of an object.
+                        Servers should convert recognized schemas to the latest internal value, and
+                        may reject unrecognized values.
+                        More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+                      type: string
+                    kind:
+                      description: |-
+                        Kind is a string value representing the REST resource this object represents.
+                        Servers may infer this from the endpoint the client submits requests to.
+                        Cannot be updated.
+                        In CamelCase.
+                        More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+                      type: string
+                    metadata:
+                      type: object
+                    spec:
+                      description: DbInstanceSpec defines the desired state of DbInstance
+                      properties:
+                        adminSecretRef:
+                          description: |-
+                            NamespacedName is a fork of the kubernetes api type of the same name.
+                            Sadly this is required because CRD structs must have all fields json tagged and the kubernetes type is not tagged.
+                          properties:
+                            Name:
+                              type: string
+                            Namespace:
+                              type: string
+                          required:
+                            - Name
+                            - Namespace
+                          type: object
+                        backup:
+                          description: DbInstanceBackup defines name of google bucket
+                            to use for storing database dumps for backup when backup
+                            is enabled
+                          properties:
+                            bucket:
+                              type: string
+                          required:
+                            - bucket
+                          type: object
+                        engine:
+                          description: 'Important: Run "make generate" to regenerate
+                          code after modifying this file'
+                          type: string
+                        generic:
+                          description: |-
+                            GenericInstance is used when instance type is generic
+                            and describes necessary informations to use instance
+                            generic instance can be any backend, it must be reachable by described address and port
+                          properties:
+                            backupHost:
+                              description: |-
+                                BackupHost address will be used for dumping database for backup
+                                Usually secondary address for primary-secondary setup or cluster lb address
+                                If it's not defined, above Host will be used as backup host address.
+                              type: string
+                            host:
+                              type: string
+                            port:
+                              type: integer
+                            publicIp:
+                              type: string
+                          required:
+                            - host
+                            - port
+                          type: object
+                        google:
+                          description: |-
+                            GoogleInstance is used when instance type is Google Cloud SQL
+                            and describes necessary informations to use google API to create sql instances
+                          properties:
+                            apiEndpoint:
+                              type: string
+                            clientSecretRef:
+                              description: |-
+                                NamespacedName is a fork of the kubernetes api type of the same name.
+                                Sadly this is required because CRD structs must have all fields json tagged and the kubernetes type is not tagged.
+                              properties:
+                                Name:
+                                  type: string
+                                Namespace:
+                                  type: string
+                              required:
+                                - Name
+                                - Namespace
+                              type: object
+                            configmapRef:
+                              description: |-
+                                NamespacedName is a fork of the kubernetes api type of the same name.
+                                Sadly this is required because CRD structs must have all fields json tagged and the kubernetes type is not tagged.
+                              properties:
+                                Name:
+                                  type: string
+                                Namespace:
+                                  type: string
+                              required:
+                                - Name
+                                - Namespace
+                              type: object
+                            instance:
+                              type: string
+                          required:
+                            - configmapRef
+                            - instance
+                          type: object
+                        monitoring:
+                          description: DbInstanceMonitoring defines if exporter
+                          properties:
+                            enabled:
+                              type: boolean
+                          required:
+                            - enabled
+                          type: object
+                        sslConnection:
+                          description: DbInstanceSSLConnection defines weather connection
+                            from db-operator to instance has to be ssl or not
+                          properties:
+                            enabled:
+                              type: boolean
+                            skip-verify:
+                              description: SkipVerity use SSL connection, but don't
+                                check against a CA
+                              type: boolean
+                          required:
+                            - enabled
+                            - skip-verify
+                          type: object
+                      required:
+                        - adminSecretRef
+                        - engine
+                      type: object
+                    status:
+                      description: DbInstanceStatus defines the observed state of DbInstance
+                      properties:
+                        checksums:
+                          additionalProperties:
+                            type: string
+                          type: object
+                        info:
+                          additionalProperties:
+                            type: string
+                          type: object
+                        phase:
+                          description: 'Important: Run "make generate" to regenerate
+                          code after modifying this file'
+                          type: string
+                        status:
+                          type: boolean
+                      required:
+                        - phase
+                        - status
+                      type: object
+                  type: object
+                monitorUserSecret:
+                  type: string
+                phase:
+                  description: |-
+                    Important: Run "make generate" to regenerate code after modifying this file
+                    Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
+                  type: string
+                proxyStatus:
+                  description: |-
+                    DatabaseProxyStatus defines whether proxy for database is enabled or not
+                    if so, provide information
+                  properties:
+                    serviceName:
+                      type: string
+                    sqlPort:
+                      format: int32
+                      type: integer
+                    status:
+                      type: boolean
+                  required:
+                    - serviceName
+                    - sqlPort
+                    - status
+                  type: object
+                status:
+                  type: boolean
+                user:
+                  type: string
+              required:
+                - database
+                - instanceRef
+                - phase
+                - status
+                - user
+              type: object
+          type: object
+      served: true
+      storage: false
+      subresources:
+        status: {}
+    - additionalPrinterColumns:
+        - description: current db status
+          jsonPath: .status.status
+          name: Status
+          type: boolean
+        - description: If database is protected to not get deleted.
+          jsonPath: .spec.deletionProtected
+          name: Protected
+          type: boolean
+        - description: instance reference
+          jsonPath: .spec.instance
+          name: DBInstance
+          type: string
+        - description: db-operator version of last full reconcile
+          jsonPath: .status.operatorVersion
+          name: OperatorVersion
+          type: string
+        - description: time since creation of resource
+          jsonPath: .metadata.creationTimestamp
+          name: Age
+          type: date
+      name: v1beta1
+      schema:
+        openAPIV3Schema:
+          description: Database is the Schema for the databases API
+          properties:
+            apiVersion:
+              description: |-
+                APIVersion defines the versioned schema of this representation of an object.
+                Servers should convert recognized schemas to the latest internal value, and
+                may reject unrecognized values.
+                More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+              type: string
+            kind:
+              description: |-
+                Kind is a string value representing the REST resource this object represents.
+                Servers may infer this from the endpoint the client submits requests to.
+                Cannot be updated.
+                In CamelCase.
+                More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: DatabaseSpec defines the desired state of Database
+              properties:
+                backup:
+                  description: DatabaseBackup defines the desired state of backup and
+                    schedule
+                  properties:
+                    cron:
+                      type: string
+                    enable:
+                      type: boolean
+                  required:
+                    - cron
+                    - enable
+                  type: object
+                cleanup:
+                  type: boolean
+                credentials:
+                  description: |-
+                    Credentials should be used to setup everything relates to k8s secrets and configmaps
+                    TODO(@allanger): Field .spec.secretName should be moved here in the v1beta2 version
+                  properties:
+                    templates:
+                      description: Templates to add custom entries to ConfigMaps and
+                        Secrets
+                      items:
+                        description: Tempaltes to add custom entries to ConfigMaps and
+                          Secrets
+                        properties:
+                          name:
+                            type: string
+                          secret:
+                            type: boolean
+                          template:
+                            type: string
+                        required:
+                          - name
+                          - secret
+                          - template
+                        type: object
+                      type: array
+                  type: object
+                deletionProtected:
+                  type: boolean
+                instance:
+                  type: string
+                postgres:
+                  description: Postgres struct should be used to provide resource that
+                    only applicable to postgres
+                  properties:
+                    dropPublicSchema:
+                      description: If set to true, the public schema will be dropped
+                        after the database creation
+                      type: boolean
+                    extensions:
+                      items:
+                        type: string
+                      type: array
+                    schemas:
+                      description: Specify schemas to be created. The user created by
+                        db-operator will have all access on them.
+                      items:
+                        type: string
+                      type: array
+                    template:
+                      description: Let user create database from template
+                      type: string
+                  type: object
+                secretName:
+                  type: string
+                secretsTemplates:
+                  additionalProperties:
+                    type: string
+                  type: object
+              required:
+                - backup
+                - deletionProtected
+                - instance
+                - secretName
+              type: object
+            status:
+              description: DatabaseStatus defines the observed state of Database
+              properties:
+                database:
+                  type: string
+                engine:
+                  type: string
+                monitorUserSecret:
+                  type: string
+                operatorVersion:
+                  type: string
+                proxyStatus:
+                  description: |-
+                    DatabaseProxyStatus defines whether proxy for database is enabled or not
+                    if so, provide information
+                  properties:
+                    serviceName:
+                      type: string
+                    sqlPort:
+                      format: int32
+                      type: integer
+                    status:
+                      type: boolean
+                  required:
+                    - serviceName
+                    - sqlPort
+                    - status
+                  type: object
+                status:
+                  description: |-
+                    Important: Run "make generate" to regenerate code after modifying this file
+                    Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
+                  type: boolean
+                user:
+                  type: string
+              required:
+                - database
+                - engine
+                - status
+                - user
+              type: object
+          type: object
+      served: true
+      storage: true
+      subresources:
+        status: {}
+---
+# Source: db-operator/templates/crds/kinda.rocks_dbinstances.yaml
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.12.1
+    cert-manager.io/inject-ca-from: default/db-operator-webhook
+    
+    helm.sh/resource-policy: keep
+  name: dbinstances.kinda.rocks
+spec:
+  conversion:
+    strategy: Webhook
+    webhook:
+      clientConfig:
+        service:
+          namespace: default
+          name: db-operator-webhook
+          path: /convert
+      conversionReviewVersions:
+        - v1alpha1
+        - v1beta1
+  group: kinda.rocks
+  names:
+    kind: DbInstance
+    listKind: DbInstanceList
+    plural: dbinstances
+    shortNames:
+      - dbin
+    singular: dbinstance
+  scope: Cluster
+  versions:
+    - additionalPrinterColumns:
+        - description: current phase
+          jsonPath: .status.phase
+          name: Phase
+          type: string
+        - description: health status
+          jsonPath: .status.status
+          name: Status
+          type: string
+      name: v1alpha1
+      schema:
+        openAPIV3Schema:
+          description: DbInstance is the Schema for the dbinstances API
+          properties:
+            apiVersion:
+              description: |-
+                APIVersion defines the versioned schema of this representation of an object.
+                Servers should convert recognized schemas to the latest internal value, and
+                may reject unrecognized values.
+                More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+              type: string
+            kind:
+              description: |-
+                Kind is a string value representing the REST resource this object represents.
+                Servers may infer this from the endpoint the client submits requests to.
+                Cannot be updated.
+                In CamelCase.
+                More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: DbInstanceSpec defines the desired state of DbInstance
+              properties:
+                adminSecretRef:
+                  description: |-
+                    NamespacedName is a fork of the kubernetes api type of the same name.
+                    Sadly this is required because CRD structs must have all fields json tagged and the kubernetes type is not tagged.
+                  properties:
+                    Name:
+                      type: string
+                    Namespace:
+                      type: string
+                  required:
+                    - Name
+                    - Namespace
+                  type: object
+                backup:
+                  description: DbInstanceBackup defines name of google bucket to use for storing database dumps for backup when backup is enabled
+                  properties:
+                    bucket:
+                      type: string
+                  required:
+                    - bucket
+                  type: object
+                engine:
+                  description: 'Important: Run "make generate" to regenerate code after modifying this file'
+                  type: string
+                generic:
+                  description: |-
+                    GenericInstance is used when instance type is generic
+                    and describes necessary informations to use instance
+                    generic instance can be any backend, it must be reachable by described address and port
+                  properties:
+                    backupHost:
+                      description: |-
+                        BackupHost address will be used for dumping database for backup
+                        Usually secondary address for primary-secondary setup or cluster lb address
+                        If it's not defined, above Host will be used as backup host address.
+                      type: string
+                    host:
+                      type: string
+                    port:
+                      type: integer
+                    publicIp:
+                      type: string
+                  required:
+                    - host
+                    - port
+                  type: object
+                google:
+                  description: |-
+                    GoogleInstance is used when instance type is Google Cloud SQL
+                    and describes necessary informations to use google API to create sql instances
+                  properties:
+                    apiEndpoint:
+                      type: string
+                    clientSecretRef:
+                      description: |-
+                        NamespacedName is a fork of the kubernetes api type of the same name.
+                        Sadly this is required because CRD structs must have all fields json tagged and the kubernetes type is not tagged.
+                      properties:
+                        Name:
+                          type: string
+                        Namespace:
+                          type: string
+                      required:
+                        - Name
+                        - Namespace
+                      type: object
+                    configmapRef:
+                      description: |-
+                        NamespacedName is a fork of the kubernetes api type of the same name.
+                        Sadly this is required because CRD structs must have all fields json tagged and the kubernetes type is not tagged.
+                      properties:
+                        Name:
+                          type: string
+                        Namespace:
+                          type: string
+                      required:
+                        - Name
+                        - Namespace
+                      type: object
+                    instance:
+                      type: string
+                  required:
+                    - configmapRef
+                    - instance
+                  type: object
+                monitoring:
+                  description: DbInstanceMonitoring defines if exporter
+                  properties:
+                    enabled:
+                      type: boolean
+                  required:
+                    - enabled
+                  type: object
+                sslConnection:
+                  description: DbInstanceSSLConnection defines weather connection from db-operator to instance has to be ssl or not
+                  properties:
+                    enabled:
+                      type: boolean
+                    skip-verify:
+                      description: SkipVerity use SSL connection, but don't check against a CA
+                      type: boolean
+                  required:
+                    - enabled
+                    - skip-verify
+                  type: object
+              required:
+                - adminSecretRef
+                - engine
+              type: object
+            status:
+              description: DbInstanceStatus defines the observed state of DbInstance
+              properties:
+                checksums:
+                  additionalProperties:
+                    type: string
+                  type: object
+                info:
+                  additionalProperties:
+                    type: string
+                  type: object
+                phase:
+                  description: 'Important: Run "make generate" to regenerate code after modifying this file'
+                  type: string
+                status:
+                  type: boolean
+              required:
+                - phase
+                - status
+              type: object
+          type: object
+      served: true
+      storage: false
+      subresources:
+        status: {}
+    - additionalPrinterColumns:
+        - description: current phase
+          jsonPath: .status.phase
+          name: Phase
+          type: string
+        - description: health status
+          jsonPath: .status.status
+          name: Status
+          type: string
+      name: v1beta1
+      schema:
+        openAPIV3Schema:
+          description: DbInstance is the Schema for the dbinstances API
+          properties:
+            apiVersion:
+              description: |-
+                APIVersion defines the versioned schema of this representation of an object.
+                Servers should convert recognized schemas to the latest internal value, and
+                may reject unrecognized values.
+                More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+              type: string
+            kind:
+              description: |-
+                Kind is a string value representing the REST resource this object represents.
+                Servers may infer this from the endpoint the client submits requests to.
+                Cannot be updated.
+                In CamelCase.
+                More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: DbInstanceSpec defines the desired state of DbInstance
+              properties:
+                adminSecretRef:
+                  description: |-
+                    NamespacedName is a fork of the kubernetes api type of the same name.
+                    Sadly this is required because CRD structs must have all fields json tagged and the kubernetes type is not tagged.
+                  properties:
+                    Name:
+                      type: string
+                    Namespace:
+                      type: string
+                  required:
+                    - Name
+                    - Namespace
+                  type: object
+                allowedPrivileges:
+                  description: A list of privileges that are allowed to be set as Dbuser's extra privileges
+                  items:
+                    type: string
+                  type: array
+                backup:
+                  description: DbInstanceBackup defines name of google bucket to use for storing database dumps for backup when backup is enabled
+                  properties:
+                    bucket:
+                      type: string
+                  required:
+                    - bucket
+                  type: object
+                engine:
+                  description: 'Important: Run "make generate" to regenerate code after modifying this file'
+                  type: string
+                generic:
+                  description: |-
+                    GenericInstance is used when instance type is generic
+                    and describes necessary informations to use instance
+                    generic instance can be any backend, it must be reachable by described address and port
+                  properties:
+                    backupHost:
+                      description: |-
+                        BackupHost address will be used for dumping database for backup
+                        Usually secondary address for primary-secondary setup or cluster lb address
+                        If it's not defined, above Host will be used as backup host address.
+                      type: string
+                    host:
+                      type: string
+                    hostFrom:
+                      properties:
+                        key:
+                          type: string
+                        kind:
+                          type: string
+                        name:
+                          type: string
+                        namespace:
+                          type: string
+                      required:
+                        - key
+                        - kind
+                        - name
+                        - namespace
+                      type: object
+                    port:
+                      type: integer
+                    portFrom:
+                      properties:
+                        key:
+                          type: string
+                        kind:
+                          type: string
+                        name:
+                          type: string
+                        namespace:
+                          type: string
+                      required:
+                        - key
+                        - kind
+                        - name
+                        - namespace
+                      type: object
+                    publicIp:
+                      type: string
+                    publicIpFrom:
+                      properties:
+                        key:
+                          type: string
+                        kind:
+                          type: string
+                        name:
+                          type: string
+                        namespace:
+                          type: string
+                      required:
+                        - key
+                        - kind
+                        - name
+                        - namespace
+                      type: object
+                  type: object
+                google:
+                  description: |-
+                    GoogleInstance is used when instance type is Google Cloud SQL
+                    and describes necessary informations to use google API to create sql instances
+                  properties:
+                    apiEndpoint:
+                      type: string
+                    clientSecretRef:
+                      description: |-
+                        NamespacedName is a fork of the kubernetes api type of the same name.
+                        Sadly this is required because CRD structs must have all fields json tagged and the kubernetes type is not tagged.
+                      properties:
+                        Name:
+                          type: string
+                        Namespace:
+                          type: string
+                      required:
+                        - Name
+                        - Namespace
+                      type: object
+                    configmapRef:
+                      description: |-
+                        NamespacedName is a fork of the kubernetes api type of the same name.
+                        Sadly this is required because CRD structs must have all fields json tagged and the kubernetes type is not tagged.
+                      properties:
+                        Name:
+                          type: string
+                        Namespace:
+                          type: string
+                      required:
+                        - Name
+                        - Namespace
+                      type: object
+                    instance:
+                      type: string
+                  required:
+                    - configmapRef
+                    - instance
+                  type: object
+                monitoring:
+                  description: DbInstanceMonitoring defines if exporter
+                  properties:
+                    enabled:
+                      type: boolean
+                  required:
+                    - enabled
+                  type: object
+                sslConnection:
+                  description: DbInstanceSSLConnection defines weather connection from db-operator to instance has to be ssl or not
+                  properties:
+                    enabled:
+                      type: boolean
+                    skip-verify:
+                      description: SkipVerity use SSL connection, but don't check against a CA
+                      type: boolean
+                  required:
+                    - enabled
+                    - skip-verify
+                  type: object
+              required:
+                - adminSecretRef
+                - engine
+              type: object
+            status:
+              description: DbInstanceStatus defines the observed state of DbInstance
+              properties:
+                checksums:
+                  additionalProperties:
+                    type: string
+                  type: object
+                info:
+                  additionalProperties:
+                    type: string
+                  type: object
+                phase:
+                  description: 'Important: Run "make generate" to regenerate code after modifying this file'
+                  type: string
+                status:
+                  type: boolean
+              required:
+                - phase
+                - status
+              type: object
+          type: object
+      served: true
+      storage: true
+      subresources:
+        status: {}
+---
+# Source: db-operator/templates/crds/kinda.rocks_dbuser.yaml
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.13.0
+    cert-manager.io/inject-ca-from: default/db-operator-webhook
+    
+    helm.sh/resource-policy: keep
+  name: dbusers.kinda.rocks
+spec:
+  group: kinda.rocks
+  names:
+    kind: DbUser
+    listKind: DbUserList
+    plural: dbusers
+    singular: dbuser
+  scope: Namespaced
+  versions:
+    - additionalPrinterColumns:
+        - description: current dbuser status
+          jsonPath: .status.status
+          name: Status
+          type: boolean
+        - description: To which database user should have access
+          jsonPath: .spec.databaseRef
+          name: DatabaseName
+          type: string
+        - description: A type of access the user has
+          jsonPath: .spec.accessType
+          name: AccessType
+          type: string
+        - description: time since creation of resos¡urce
+          jsonPath: .metadata.creationTimestamp
+          name: Age
+          type: date
+      name: v1beta1
+      schema:
+        openAPIV3Schema:
+          description: DbUser is the Schema for the dbusers API
+          properties:
+            apiVersion:
+              description: |-
+                APIVersion defines the versioned schema of this representation of an object.
+                Servers should convert recognized schemas to the latest internal value, and
+                may reject unrecognized values.
+                More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+              type: string
+            kind:
+              description: |-
+                Kind is a string value representing the REST resource this object represents.
+                Servers may infer this from the endpoint the client submits requests to.
+                Cannot be updated.
+                In CamelCase.
+                More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: DbUserSpec defines the desired state of DbUser
+              properties:
+                accessType:
+                  description: |-
+                    AccessType that should be given to a user
+                    Currently only readOnly and readWrite are supported by the operator
+                  type: string
+                cleanup:
+                  type: boolean
+                credentials:
+                  description: |-
+                    Credentials should be used to setup everything relates to k8s secrets and configmaps
+                    TODO(@allanger): Field .spec.secretName should be moved here in the v1beta2 version
+                  properties:
+                    templates:
+                      description: Templates to add custom entries to ConfigMaps and Secrets
+                      items:
+                        description: Tempaltes to add custom entries to ConfigMaps and Secrets
+                        properties:
+                          name:
+                            type: string
+                          secret:
+                            type: boolean
+                          template:
+                            type: string
+                        required:
+                          - name
+                          - secret
+                          - template
+                        type: object
+                      type: array
+                  type: object
+                databaseRef:
+                  description: |-
+                    DatabaseRef should contain a name of a Database to create a user there
+                    Database should be in the same namespace with the user
+                  type: string
+                extraPrivileges:
+                  description: A list of additional roles that should be added to the user
+                  items:
+                    type: string
+                  type: array
+                grantToAdmin:
+                  default: true
+                  description: |-
+                    Should the user be granted to the admin user
+                    For example, it should be set to true on Azure instance,
+                    because the admin given by them is not a super user,
+                    but should be set to false on AWS, when rds_iam extra
+                    privilege is added
+                    By default is set to true
+                    Only applies to Postgres, doesn't have any effect on Mysql
+                    TODO: Default should be false, but not to introduce breaking
+                          changes it's now set to true. It should be changed in
+                          in the next API version
+                  type: boolean
+                secretName:
+                  description: SecretName name that should be used to save user's credentials
+                  type: string
+              required:
+                - accessType
+                - databaseRef
+                - secretName
+              type: object
+            status:
+              description: DbUserStatus defines the observed state of DbUser
+              properties:
+                created:
+                  description: It's required to let the operator update users
+                  type: boolean
+                database:
+                  type: string
+                status:
+                  type: boolean
+              required:
+                - created
+                - database
+                - status
+              type: object
+          type: object
+      served: true
+      storage: true
+      subresources:
+        status: {}
+---
+# Source: db-operator/templates/controller/rbac.yaml
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: db-operator
+  labels:
+    helm.sh/chart: db-operator-1.29.0
+    app.kubernetes.io/name: db-operator
+    app.kubernetes.io/instance: my-db-operator
+    app.kubernetes.io/version: "2.9.1"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: "controller"
+rules:
+- apiGroups:
+  - kinda.rocks
+  resources:
+  - "*"
+  verbs:
+  - watch
+  - update
+  - get
+  - list
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  - configmaps
+  - secrets
+  - services
+  - events
+  verbs:
+  - create
+  - update
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - services
+  - events
+  verbs:
+  - patch
+- apiGroups:
+  - batch
+  resources:
+  - cronjobs
+  - jobs
+  verbs:
+  - create
+  - update
+- apiGroups:
+  - "apiextensions.k8s.io"
+  resources:
+  - customresourcedefinitions
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - monitoring.coreos.com
+  resources:
+  - servicemonitors
+  verbs:
+  - create
+  - update
+  - patch
+  - get
+  - list
+  - watch
+- apiGroups:
+  - extensions
+  resources:
+  - deployments
+  verbs:
+  - create
+  - update
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  - replicasets
+  verbs:
+  - get
+  - create
+  - update
+  - list
+  - watch
+---
+# Source: db-operator/templates/controller/rbac.yaml
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: db-operator
+  labels:
+    helm.sh/chart: db-operator-1.29.0
+    app.kubernetes.io/name: db-operator
+    app.kubernetes.io/instance: my-db-operator
+    app.kubernetes.io/version: "2.9.1"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: "controller"
+subjects:
+- kind: ServiceAccount
+  name: db-operator
+  namespace: default
+roleRef:
+  kind: ClusterRole
+  name: db-operator
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: db-operator/templates/webhook/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: db-operator-webhook
+  labels:
+    helm.sh/chart: db-operator-1.29.0
+    app.kubernetes.io/name: db-operator
+    app.kubernetes.io/instance: my-db-operator
+    app.kubernetes.io/version: "2.9.1"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: "webhook"
+spec:
+  ports:
+    - port: 443
+      protocol: TCP
+      targetPort: 9443
+  selector:
+    app.kubernetes.io/name: db-operator
+    app.kubernetes.io/instance: my-db-operator
+    app.kubernetes.io/component: "webhook"
+---
+# Source: db-operator/templates/controller/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: db-operator
+  labels:
+    helm.sh/chart: db-operator-1.29.0
+    app.kubernetes.io/name: db-operator
+    app.kubernetes.io/instance: my-db-operator
+    app.kubernetes.io/version: "2.9.1"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: "controller"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: db-operator
+      app.kubernetes.io/instance: my-db-operator
+      app.kubernetes.io/component: "controller"
+  template:
+    metadata:
+      labels:
+        helm.sh/chart: db-operator-1.29.0
+        app.kubernetes.io/name: db-operator
+        app.kubernetes.io/instance: my-db-operator
+        app.kubernetes.io/version: "2.9.1"
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/component: "controller"
+      annotations:
+        checksum/config: a885e3f7f2253a478e8c9aaf50970a08cf50b57322d32341be57de026d00ef41
+    spec:
+      serviceAccountName: db-operator
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: operator
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+          image: "ghcr.io/db-operator/db-operator:v2.9.1"
+          ports:
+          - containerPort: 60000
+            name: metrics
+          command:
+          - db-operator
+          imagePullPolicy: Always
+          env:
+            - name: LOG_LEVEL
+              value: info
+            - name: OPERATOR_NAME
+              value: "db-operator"
+            - name: WATCH_NAMESPACE
+              value: ""
+            - name: RECONCILE_INTERVAL
+              value: "60"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.name
+            - name: CONFIG_PATH
+              value: "/run/config/config.yaml"
+          volumeMounts:
+          - mountPath: /run/config/
+            name: config-volume
+            readOnly: true
+          resources:
+            
+            {}
+      nodeSelector:
+        
+        {}
+      affinity:
+        
+        {}
+      tolerations:
+        
+        []
+      volumes:
+        - name: config-volume
+          configMap: 
+            name: db-operator-config
+---
+# Source: db-operator/templates/webhook/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: db-operator-webhook
+  labels:
+    helm.sh/chart: db-operator-1.29.0
+    app.kubernetes.io/name: db-operator
+    app.kubernetes.io/instance: my-db-operator
+    app.kubernetes.io/version: "2.9.1"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: "webhook"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: db-operator
+      app.kubernetes.io/instance: my-db-operator
+      app.kubernetes.io/component: "webhook"
+  template:
+    metadata:
+      labels:
+        helm.sh/chart: db-operator-1.29.0
+        app.kubernetes.io/name: db-operator
+        app.kubernetes.io/instance: my-db-operator
+        app.kubernetes.io/version: "2.9.1"
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/component: "webhook"
+    spec:
+      serviceAccountName: db-operator-webhook
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: webhook
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+          image: "ghcr.io/db-operator/db-operator:v2.9.1"
+          ports:
+          - containerPort: 9443
+            name: webhook-server
+            protocol: TCP
+          command:
+          - db-operator
+          args: ["--webhook"]
+          imagePullPolicy: Always
+          env:
+            - name: LOG_LEVEL
+              value: info
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.name
+          volumeMounts:
+            - mountPath: /tmp/k8s-webhook-server/serving-certs
+              name: cert
+              readOnly: true
+          resources:
+            
+            {}
+      nodeSelector:
+        
+        {}
+      affinity:
+        
+        {}
+      tolerations:
+        
+        []
+      volumes:
+        - name: cert
+          secret:
+            defaultMode: 420
+            secretName: db-operator-webhook-cert
+---
+# Source: db-operator/templates/certificate/certificate.yaml
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: db-operator-webhook
+spec:
+  dnsNames:
+  - db-operator-webhook.default.svc
+  - db-operator-webhook.default.svc.cluster.local
+  issuerRef:
+    kind: Issuer
+    name: db-operator-issuer
+  secretName: db-operator-webhook-cert
+---
+# Source: db-operator/templates/certificate/issuer.yaml
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: db-operator-issuer
+  namespace: default
+spec:
+  selfSigned: {}
+---
+# Source: db-operator/templates/webhook/mutating_webhook.yaml
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  annotations:
+    cert-manager.io/inject-ca-from: default/db-operator-webhook
+    
+  labels:
+    helm.sh/chart: db-operator-1.29.0
+    app.kubernetes.io/name: db-operator
+    app.kubernetes.io/instance: my-db-operator
+    app.kubernetes.io/version: "2.9.1"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: "webhook"
+  name: db-operator-mutating-webhook-configuration
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: db-operator-webhook
+      namespace: default
+      path: /mutate-kinda-rocks-v1beta1-database
+  failurePolicy: Fail
+  name: mdatabase.kb.io
+  rules:
+  - apiGroups:
+    - kinda.rocks
+    apiVersions:
+    - v1beta1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - databases
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: db-operator-webhook
+      namespace: default
+      path: /mutate-kinda-rocks-v1beta1-dbinstance
+  failurePolicy: Fail
+  name: mdbinstance.kb.io
+  rules:
+  - apiGroups:
+    - kinda.rocks
+    apiVersions:
+    - v1beta1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - dbinstances
+  sideEffects: None
+---
+# Source: db-operator/templates/webhook/validation_webhook.yaml
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  annotations:
+    cert-manager.io/inject-ca-from: default/db-operator-webhook
+    
+  labels:
+    helm.sh/chart: db-operator-1.29.0
+    app.kubernetes.io/name: db-operator
+    app.kubernetes.io/instance: my-db-operator
+    app.kubernetes.io/version: "2.9.1"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: "webhook"
+  name: db-operator-validating-webhook-configuration
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: db-operator-webhook
+      namespace: default
+      path: /validate-kinda-rocks-v1beta1-database
+  failurePolicy: Fail
+  name: vdatabase.kb.io
+  rules:
+  - apiGroups:
+    - kinda.rocks
+    apiVersions:
+    - v1beta1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - databases
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: db-operator-webhook
+      namespace: default
+      path: /validate-kinda-rocks-v1beta1-dbinstance
+  failurePolicy: Fail
+  name: vdbinstance.kb.io
+  rules:
+  - apiGroups:
+    - kinda.rocks
+    apiVersions:
+    - v1beta1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - dbinstances
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: db-operator-webhook
+      namespace: default
+      path: /validate-kinda-rocks-v1beta1-dbuser
+  failurePolicy: Fail
+  name: vdbuser.kb.io
+  rules:
+  - apiGroups:
+    - kinda.rocks
+    apiVersions:
+    - v1beta1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - dbusers
+  sideEffects: None

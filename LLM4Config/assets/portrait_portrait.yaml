@@ -1,0 +1,539 @@
+---
+# Source: portrait/templates/volumes.yml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: portrait-logs-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+# Source: portrait/templates/volumes.yml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: portrait-config-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+# Source: portrait/templates/volumes.yml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: portrait-index-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+# Source: portrait/templates/volumes.yml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: portrait-vscode-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+# Source: portrait/templates/backend-service.yml
+apiVersion: v1
+kind: Service
+metadata:
+  name: portrait-backend
+  labels:
+    app: portrait-backend
+spec:
+  selector:
+    app: portrait-backend
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
+---
+# Source: portrait/templates/config-service.yml
+apiVersion: v1
+kind: Service
+metadata:
+  name: portrait-config
+  labels:
+    app: portrait-config
+spec:
+  selector:
+    app: portrait-config
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
+---
+# Source: portrait/templates/frontend-service.yml
+apiVersion: v1
+kind: Service
+metadata:
+  name: portrait-frontend
+  labels:
+    app: portrait-frontend
+spec:
+  selector:
+    app: portrait-frontend
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8081
+---
+# Source: portrait/templates/index-service.yml
+apiVersion: v1
+kind: Service
+metadata:
+  name: portrait-index
+  labels:
+    app: portrait-index
+spec:
+  selector:
+    app: portrait-index
+  ports:
+    - protocol: TCP
+      port: 9200
+      targetPort: 9200
+---
+# Source: portrait/templates/proxy-service.yml
+apiVersion: v1
+kind: Service
+metadata:
+  name: portrait-proxy
+  labels:
+    app: portrait-proxy
+spec:
+  selector:
+    app: portrait-proxy
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+---
+# Source: portrait/templates/scripting-service.yml
+apiVersion: v1
+kind: Service
+metadata:
+  name: portrait-scripting
+  labels:
+    app: portrait-scripting
+spec:
+  selector:
+    app: portrait-scripting
+  ports:
+    - protocol: TCP
+      port: 22
+      targetPort: 22
+---
+# Source: portrait/templates/web-setup-service.yml
+apiVersion: v1
+kind: Service
+metadata:
+  name: portrait-web-setup
+  labels:
+    app: portrait-web-setup
+spec:
+  selector:
+    app: portrait-web-setup
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+---
+# Source: portrait/templates/backend-deployment.yml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: portrait-backend
+  labels:
+    app: portrait-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: portrait-backend
+  template:
+    metadata:
+      labels:
+        app: portrait-backend
+    spec:
+      volumes:
+        - name: portrait-config-pvc
+          persistentVolumeClaim:
+            claimName: portrait-config-pvc
+        - name: portrait-logs-pvc
+          persistentVolumeClaim:
+            claimName: portrait-logs-pvc
+      initContainers:
+        - name: wait-for-websetup-complete
+          image: busybox
+          volumeMounts:
+            - name: portrait-config-pvc
+              mountPath: /etc/portrait/config
+              readOnly: true
+          command: [ '/bin/sh', '-c' ]
+          args:
+            - |
+              echo " waiting for /etc/portrait/config/.installationFinished ..."
+              until [ -e /etc/portrait/config/.installationFinished ]
+                do
+                     echo $(ls -la /etc/portrait/config)
+                     sleep 5
+                done
+              echo " /etc/portrait/config/.installationFinished found, starting backend ..."
+              exit 0
+        - name: wait-for-index
+          image: busybox
+          command: ['sh', '-c', 'until nc -z portrait-index 9200; do echo waiting for index; sleep 2; done;']
+      containers:
+        - name: portrait-backend
+          image: treskon/portrait:DEV-latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          volumeMounts:
+            - name: portrait-config-pvc
+              mountPath: /opt/portrait/app/config
+            - name: portrait-logs-pvc
+              mountPath: /opt/portrait/app/logs
+          command: [ 'sh', '-c', 'java -Xms400m -Xmx1024m -jar portrait-app.jar
+             --spring.config.location=config/application-prod.yml,optional:config/application-prepopulateUsers.yml ']
+          
+          resources:
+            limits:
+              memory: 1536Mi
+            requests:
+              memory: 500Mi
+---
+# Source: portrait/templates/config-deployment.yml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: portrait-config
+  labels:
+    app: portrait-config
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: portrait-config
+  template:
+    metadata:
+      labels:
+        app: portrait-config
+    spec:
+      volumes:
+        - name: portrait-config-pvc
+          persistentVolumeClaim:
+            claimName: portrait-config-pvc
+        - name: portrait-vscode-pvc
+          persistentVolumeClaim:
+            claimName: portrait-vscode-pvc
+        - name: portrait-logs-pvc
+          persistentVolumeClaim:
+            claimName: portrait-logs-pvc
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: portrait-config
+          image: codercom/code-server:4.11.0-debian
+          ports:
+            - containerPort: 8080
+          volumeMounts:
+            - mountPath: /home/coder/project/config
+              name: portrait-config-pvc
+            - mountPath: /home/coder/project/logs
+              name: portrait-logs-pvc
+            - mountPath: /home/coder/.local/share
+              name: portrait-vscode-pvc
+          env:
+            - name: PASSWORD
+              value: treskon
+            - name: XDG_DATA_HOME
+              value: "/home/coder/.local/share"
+            - name: CS_DISABLE_GETTING_STARTED_OVERRIDE
+              value: "true"
+          args:
+            - --disable-getting-started-override
+            - --disable-telemetry
+            - /home/coder/project
+          
+          resources:
+            limits:
+              memory: 512Mi
+            requests:
+              memory: 80Mi
+---
+# Source: portrait/templates/frontend-deployment.yml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: portrait-frontend
+  labels:
+    app: portrait-frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: portrait-frontend
+  template:
+    metadata:
+      labels:
+        app: portrait-frontend
+    spec:
+      initContainers:
+        - name: wait-for-index
+          image: busybox
+          command: ['sh', '-c', 'until nc -z portrait-backend 80; do echo waiting for index; sleep 2; done;']
+      volumes:
+        - name: portrait-config-pvc
+          persistentVolumeClaim:
+            claimName: portrait-config-pvc
+      containers:
+        - name: portrait-frontend
+          image: treskon/portrait-ui:DEV-latest
+          imagePullPolicy: Always
+          volumeMounts:
+            - name: portrait-config-pvc
+              subPath: frontend/.env
+              mountPath: /opt/portrait/app/.env.local
+            - name: portrait-config-pvc
+              subPath: frontend/.env
+              mountPath: /opt/portrait/app/.env # TODO do we need both?
+            - name: portrait-config-pvc
+              subPath: frontend/public/favicons
+              mountPath: /opt/portrait/app/public/favicons
+            - name: portrait-config-pvc
+              subPath: frontend/public/icons
+              mountPath: /opt/portrait/app/public/icons
+          ports:
+            - containerPort: 8081
+          command: ['sh', '-c', 'npm run start']
+---
+# Source: portrait/templates/index-deployment.yml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: portrait-index
+  labels:
+    app: portrait-index
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: portrait-index
+  template:
+    metadata:
+      labels:
+        app: portrait-index
+    spec:
+      volumes:
+        - name: portrait-index-pvc
+          persistentVolumeClaim:
+            claimName: portrait-index-pvc
+      containers:
+        - name: portrait-index
+          image: elasticsearch:7.17.0
+          ports:
+            - containerPort: 9200
+          volumeMounts:
+            - mountPath: /usr/share/elasticsearch/data
+              name: portrait-index-pvc
+          env:
+            - name: xpack.security.enabled
+              value: "false"
+            - name: node.name
+              value: "index"
+            - name: cluster.name
+              value: "docker-cluster"
+            - name:  ES_JAVA_OPTS
+              value: -Xms256m -Xmx512m
+            - name: discovery.type
+              value: "single-node"
+          
+          resources:
+            limits:
+              memory: 1536Mi
+            requests:
+              memory: 800Mi
+---
+# Source: portrait/templates/proxy-deployment.yml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: portrait-proxy
+  labels:
+    app: portrait-proxy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: portrait-proxy
+  template:
+    metadata:
+      labels:
+        app: portrait-proxy
+    spec:
+      volumes:
+        - name: portrait-config-pvc
+          persistentVolumeClaim:
+            claimName: portrait-config-pvc
+      initContainers:
+        - name: wait-for-websetup-nginxcfg
+          image: busybox
+          volumeMounts:
+            - name: portrait-config-pvc
+              mountPath: /etc/portrait/config
+              readOnly: true
+          command: [ '/bin/sh', '-c' ]
+          args:
+            - |
+              echo " waiting for /etc/portrait/config/proxy/nginx.conf ..."
+              until [ -e /etc/portrait/config/proxy/nginx.conf ]
+                do
+                     echo $(ls -la /etc/portrait/config/proxy/)
+                     sleep 5
+                done
+              echo " /etc/portrait/config/proxy/nginx.conf found, starting nginx ..."
+              exit
+      containers:
+        - name: portrait-proxy
+          image: nginx:alpine
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: portrait-config-pvc
+              mountPath: /etc/nginx/
+              subPath: proxy
+              readOnly: true
+            - name: portrait-config-pvc
+              mountPath: /www/icons
+              subPath: frontend/public/icons
+              readOnly: true
+            - name: portrait-config-pvc
+              mountPath: /www/favicons
+              subPath: frontend/public/favicons
+              readOnly: true
+---
+# Source: portrait/templates/scripting-deployment.yml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: portrait-scripting
+  labels:
+    app: portrait-scripting
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: portrait-scripting
+  template:
+    metadata:
+      labels:
+        app: portrait-scripting
+    spec:
+      volumes:
+        - name: portrait-config-pvc
+          persistentVolumeClaim:
+            claimName: portrait-config-pvc
+      containers:
+        - name: portrait-scripting
+          image: treskon/portrait-pythonruntime:DEV-latest
+          imagePullPolicy: Always
+          volumeMounts:
+            - mountPath: /app/scripts
+              name: portrait-config-pvc
+              subPath: scripting/pythonScripts
+            - mountPath: /app/setupScripts
+              name: portrait-config-pvc
+              subPath: scripting/pythonSetupScripts
+            - mountPath: /app/dependencies
+              name: portrait-config-pvc
+              subPath: scripting/pythonDependencies
+          ports:
+            - containerPort: 22
+          
+          resources:
+            limits:
+              memory: 1024Mi
+            requests:
+              memory: 5Mi
+---
+# Source: portrait/templates/web-setup-deployment.yml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: portrait-web-setup
+  labels:
+    app: portrait-web-setup
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: portrait-web-setup
+  template:
+    metadata:
+      labels:
+        app: portrait-web-setup
+    spec:
+      volumes:
+        - name: portrait-config-pvc
+          persistentVolumeClaim:
+            claimName: portrait-config-pvc
+      containers:
+        - name: portrait-web-setup
+          image: treskon/portrait-web-setup:DEV-latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - mountPath: /etc/portrait/config/exported
+              name: portrait-config-pvc
+          env:
+            - name: APP_TITLE
+              value: 
+            - name: APP_OWNER
+              value: 
+            - name: DEMO_DATA
+              value: ""
+            - name: BASE_URL
+              value: 
+            - name: ADMIN_LOGIN
+              value: 
+            - name: ADMIN_PASSWORD
+              value:
+---
+# Source: portrait/templates/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: portrait-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+    nginx.ingress.kubernetes.io/proxy-body-size: 16m
+spec:
+  rules:
+    - host: example.demo.portrait.app
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: portrait-proxy
+                port:
+                  number: 80

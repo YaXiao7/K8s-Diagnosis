@@ -1,0 +1,71 @@
+---
+# Source: audacity/templates/common.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-audacity
+  labels:
+    helm.sh/chart: audacity-0.1.4
+    app.kubernetes.io/name: audacity
+    app.kubernetes.io/instance: my-audacity
+    app.kubernetes.io/version: "3.0.2"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3000
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: audacity
+    app.kubernetes.io/instance: my-audacity
+---
+# Source: audacity/templates/common.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-audacity
+  labels:
+    helm.sh/chart: audacity-0.1.4
+    app.kubernetes.io/name: audacity
+    app.kubernetes.io/instance: my-audacity
+    app.kubernetes.io/version: "3.0.2"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: audacity
+      app.kubernetes.io/instance: my-audacity
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: audacity
+        app.kubernetes.io/instance: my-audacity
+    spec:
+      serviceAccountName: default
+      dnsPolicy: ClusterFirst
+      containers:
+      - name: my-audacity
+        image: "ghcr.io/linuxserver/audacity:version-3.0.2"
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 3000
+          protocol: TCP
+        volumeMounts:
+        livenessProbe:
+          tcpSocket:
+            port: http
+          initialDelaySeconds: 30
+          failureThreshold: 5
+          timeoutSeconds: 10
+        readinessProbe:
+          tcpSocket:
+            port: http
+          initialDelaySeconds: 30
+          failureThreshold: 5
+          timeoutSeconds: 10

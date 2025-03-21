@@ -1,0 +1,185 @@
+---
+# Source: stacks-blockchain/templates/service-account.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-stacks-blockchain
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: stacks-blockchain
+    helm.sh/chart: stacks-blockchain-2.1.1
+    app.kubernetes.io/instance: my-stacks-blockchain
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "2.5.0.0.5"
+    app.kubernetes.io/component: stacks-blockchain
+automountServiceAccountToken: true
+---
+# Source: stacks-blockchain/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-stacks-blockchain
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: stacks-blockchain
+    helm.sh/chart: stacks-blockchain-2.1.1
+    app.kubernetes.io/instance: my-stacks-blockchain
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "2.5.0.0.5"
+    app.kubernetes.io/component: stacks-blockchain
+data:
+  config.toml:
+    |
+      [node]
+      rpc_bind = "0.0.0.0:20443"
+      p2p_bind = "0.0.0.0:20444"
+      bootstrap_node = "02da7a464ac770ae8337a343670778b93410f2f3fef6bea98dd1c3e9224459d36b@seed-0.mainnet.stacks.co:20444,02afeae522aab5f8c99a00ddf75fbcb4a641e052dd48836408d9cf437344b63516@seed-1.mainnet.stacks.co:20444,03652212ea76be0ed4cd83a25c06e57819993029a7b9999f7d63c36340b34a4e62@seed-2.mainnet.stacks.co:20444"
+      prometheus_bind = "0.0.0.0:9153"
+      working_dir = "/hirosystems/data"
+    
+      [burnchain]
+      chain = "bitcoin"
+      mode = "mainnet"
+      peer_host = "bitcoind.stacks.co"
+      username = "blockstack"
+      password = "blockstacksystem"
+      rpc_port = 8332
+      peer_port = 8333
+---
+# Source: stacks-blockchain/templates/service-set.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-stacks-blockchain-0
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: stacks-blockchain
+    helm.sh/chart: stacks-blockchain-2.1.1
+    app.kubernetes.io/instance: my-stacks-blockchain
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "2.5.0.0.5"
+    app.kubernetes.io/component: stacks-blockchain
+    pod: my-stacks-blockchain-0
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+    - name: http-rpc
+      port: 20443
+      protocol: TCP
+      nodePort: null
+    - name: tcp-p2p
+      port: 20444
+      protocol: TCP
+      nodePort: null
+    - name: tcp-metrics
+      port: 9153
+      protocol: TCP
+      nodePort: null
+  selector:
+    app.kubernetes.io/name: stacks-blockchain
+    app.kubernetes.io/instance: my-stacks-blockchain
+    app.kubernetes.io/component: stacks-blockchain
+    statefulset.kubernetes.io/pod-name: my-stacks-blockchain-0
+---
+# Source: stacks-blockchain/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-stacks-blockchain
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: stacks-blockchain
+    helm.sh/chart: stacks-blockchain-2.1.1
+    app.kubernetes.io/instance: my-stacks-blockchain
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "2.5.0.0.5"
+    app.kubernetes.io/component: stacks-blockchain
+spec:
+  replicas: 1
+  podManagementPolicy: "OrderedReady"
+  selector:
+    matchLabels: 
+      app.kubernetes.io/name: stacks-blockchain
+      app.kubernetes.io/instance: my-stacks-blockchain
+      app.kubernetes.io/component: stacks-blockchain
+  serviceName: my-stacks-blockchain
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: stacks-blockchain
+        helm.sh/chart: stacks-blockchain-2.1.1
+        app.kubernetes.io/instance: my-stacks-blockchain
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/version: "2.5.0.0.5"
+        app.kubernetes.io/component: stacks-blockchain
+    spec:
+      serviceAccountName: my-stacks-blockchain
+      
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/instance: my-stacks-blockchain
+                    app.kubernetes.io/name: stacks-blockchain
+                    app.kubernetes.io/component: stacks-blockchain
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+      initContainers:
+      containers:
+        - name: stacks-blockchain
+          image: docker.io/blockstack/stacks-blockchain:2.5.0.0.5
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 1001
+          command: ["/bin/stacks-node"]
+          args: ["start", "--config", "/app/config.toml"]
+          env:
+            - name: RUST_BACKTRACE
+              value: "0"
+            - name: STACKS_LOG_DEBUG
+              value: "0"
+            - name: STACKS_LOG_JSON
+              value: "1"
+          envFrom:
+          resources:
+            limits: {}
+            requests: {}
+          ports:
+            - name: http-rpc
+              containerPort: 20443
+            - name: tcp-p2p
+              containerPort: 20444
+          volumeMounts:
+            - name: data
+              mountPath: /hirosystems/data
+              readOnly: false
+            - name: config
+              mountPath: /app
+      volumes:
+        - name: config
+          configMap:
+            name: my-stacks-blockchain
+        - name: data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        annotations:
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "200Gi"

@@ -1,0 +1,211 @@
+---
+# Source: kubetail/templates/service-account.yaml
+kind: ServiceAccount
+apiVersion: v1
+automountServiceAccountToken: true
+metadata:
+  name: my-kubetail
+  namespace: default
+  labels:
+    helm.sh/chart: kubetail-0.6.0
+    app.kubernetes.io/name: kubetail
+    app.kubernetes.io/instance: my-kubetail
+    app.kubernetes.io/version: "0.6.3"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+---
+# Source: kubetail/templates/secret.yaml
+kind: Secret
+apiVersion: v1
+metadata:
+  name: my-kubetail
+  namespace: default
+  labels:
+    helm.sh/chart: kubetail-0.6.0
+    app.kubernetes.io/name: kubetail
+    app.kubernetes.io/instance: my-kubetail
+    app.kubernetes.io/version: "0.6.3"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+type: Opaque
+data:
+  KUBETAIL_CSRF_SECRET: "UDVxY1FKOXlTRVpSR2trY0o4YWVxYXBHOWdkeG1YZkE="
+  KUBETAIL_SESSION_SECRET: "YXgwcm1GVmVsNXp5NVZMd3c1OEk0Nm85VFdpUEVUaUE="
+---
+# Source: kubetail/templates/config-map.yaml
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: my-kubetail
+  namespace: default
+  labels:
+    helm.sh/chart: kubetail-0.6.0
+    app.kubernetes.io/name: kubetail
+    app.kubernetes.io/instance: my-kubetail
+    app.kubernetes.io/version: "0.6.3"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+data:
+  config.yaml: |
+    addr: :4000
+    auth-mode: cluster
+    session:
+      secret: ${KUBETAIL_CSRF_SECRET}
+    csrf:
+      secret: ${KUBETAIL_SESSION_SECRET}
+---
+# Source: kubetail/templates/rbac.yaml
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-kubetail
+  labels:
+    helm.sh/chart: kubetail-0.6.0
+    app.kubernetes.io/name: kubetail
+    app.kubernetes.io/instance: my-kubetail
+    app.kubernetes.io/version: "0.6.3"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+rules:
+- apiGroups: ["", apps, batch]
+  resources: [cronjobs, daemonsets, deployments, jobs, namespaces, nodes, pods, pods/log, replicasets, statefulsets]
+  verbs: [get, list, watch]
+---
+# Source: kubetail/templates/rbac.yaml
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-kubetail
+  labels:
+    helm.sh/chart: kubetail-0.6.0
+    app.kubernetes.io/name: kubetail
+    app.kubernetes.io/instance: my-kubetail
+    app.kubernetes.io/version: "0.6.3"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-kubetail
+subjects:
+- kind: ServiceAccount
+  name: my-kubetail
+  namespace: default
+---
+# Source: kubetail/templates/service.yaml
+kind: Service
+apiVersion: v1
+metadata:
+  name: my-kubetail
+  namespace: default
+  labels:
+    helm.sh/chart: kubetail-0.6.0
+    app.kubernetes.io/name: kubetail
+    app.kubernetes.io/instance: my-kubetail
+    app.kubernetes.io/version: "0.6.3"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: kubetail
+    app.kubernetes.io/instance: my-kubetail
+  ports:
+  - name: kubetail
+    protocol: TCP
+    port: 80
+    targetPort: kubetail
+    appProtocol: http
+---
+# Source: kubetail/templates/deployment.yaml
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: my-kubetail
+  namespace: default
+  labels:
+    helm.sh/chart: kubetail-0.6.0
+    app.kubernetes.io/name: kubetail
+    app.kubernetes.io/instance: my-kubetail
+    app.kubernetes.io/version: "0.6.3"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+spec:
+  replicas: 1
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kubetail
+      app.kubernetes.io/instance: my-kubetail
+  strategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        helm.sh/chart: kubetail-0.6.0
+        app.kubernetes.io/name: kubetail
+        app.kubernetes.io/instance: my-kubetail
+        app.kubernetes.io/version: "0.6.3"
+        app.kubernetes.io/managed-by: Helm
+      annotations:
+        checksum/config: 9bc9d44d6f889094496b17b13ff50f54ca3e7f4804c7b44c6630bd01226b4095
+    spec:
+      automountServiceAccountToken: true
+      serviceAccountName: my-kubetail
+      securityContext:
+        fsGroup: 10001
+        runAsGroup: 10001
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: kubetail
+        image: docker.io/kubetail/kubetail:0.6.3
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+        imagePullPolicy: IfNotPresent
+        env:
+        envFrom:
+        - secretRef:
+            name: my-kubetail
+        ports:
+        - name: kubetail
+          protocol: TCP
+          containerPort: 4000
+        args:
+        - --config=/etc/kubetail/config.yaml
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /healthz
+            port: kubetail
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 30
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /healthz
+            port: kubetail
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 30
+        resources:
+        volumeMounts:
+        - name: config
+          mountPath: /etc/kubetail
+          readOnly: true
+      volumes:
+      - name: config
+        configMap:
+          name: my-kubetail
+      nodeSelector:
+      affinity:
+      tolerations:

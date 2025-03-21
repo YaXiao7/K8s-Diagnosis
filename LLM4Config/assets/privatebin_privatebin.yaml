@@ -1,0 +1,125 @@
+---
+# Source: privatebin/templates/config.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-privatebin-configs
+  labels:
+    app.kubernetes.io/instance: my-privatebin
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: privatebin
+    helm.sh/chart: privatebin-0.22.0
+data:
+---
+# Source: privatebin/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-privatebin
+  labels:
+    app.kubernetes.io/name: privatebin
+    helm.sh/chart: privatebin-0.22.0
+    app.kubernetes.io/instance: my-privatebin
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: privatebin
+    app.kubernetes.io/instance: my-privatebin
+---
+# Source: privatebin/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-privatebin
+  labels:
+    app.kubernetes.io/name: privatebin
+    helm.sh/chart: privatebin-0.22.0
+    app.kubernetes.io/instance: my-privatebin
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: privatebin
+      app.kubernetes.io/instance: my-privatebin
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: privatebin
+        app.kubernetes.io/instance: my-privatebin
+    spec:
+      serviceAccountName: default
+      automountServiceAccountToken: false
+      securityContext:
+        fsGroup: 82
+        runAsGroup: 82
+        runAsUser: 65534
+      containers:
+        - name: privatebin
+          image: "privatebin/nginx-fpm-alpine:1.7.3"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          securityContext:
+            allowPrivilegeEscalation: false
+            privileged: false
+            readOnlyRootFilesystem: true
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+            {}
+          volumeMounts:
+            - name: configs
+              mountPath: /srv/cfg
+            - name: run
+              mountPath: /run
+            - name: tmp
+              mountPath: /tmp
+            - name: nginx-cache
+              mountPath: /var/lib/nginx/tmp
+      volumes:
+        - name: configs
+          configMap:
+            name: my-privatebin-configs
+        - name: run
+          emptyDir:
+            medium: "Memory"
+        - name: tmp
+          emptyDir:
+            medium: "Memory"
+        - name: nginx-cache
+          emptyDir: {}
+---
+# Source: privatebin/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-privatebin-test-connection"
+  labels:
+    app.kubernetes.io/name: privatebin
+    helm.sh/chart: privatebin-0.22.0
+    app.kubernetes.io/instance: my-privatebin
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args:  ['my-privatebin:80']
+  restartPolicy: Never

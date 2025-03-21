@@ -1,0 +1,2126 @@
+---
+# Source: sentry-db/charts/rabbitmq-ha/templates/pdb.yaml
+apiVersion: policy/v1beta1
+kind: PodDisruptionBudget
+metadata:
+  name: rabbitmq-ha
+  namespace: default
+  labels:
+    app: rabbitmq-ha
+    chart: rabbitmq-ha-1.38.2
+    release: my-sentry-db
+    heritage: Helm
+spec:
+  selector:
+    matchLabels:
+      app: rabbitmq-ha
+      release: my-sentry-db
+  minAvailable: 1
+---
+# Source: sentry-db/charts/rabbitmq-ha/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    app: rabbitmq-ha
+    chart: rabbitmq-ha-1.38.2
+    release: "my-sentry-db"
+    heritage: "Helm"
+  name: rabbitmq-ha
+  namespace: default
+automountServiceAccountToken: true
+---
+# Source: sentry-db/charts/postgresql/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres
+  labels:
+    app: postgresql
+    chart: postgresql-8.2.1
+    release: "my-sentry-db"
+    heritage: "Helm"
+type: Opaque
+data:
+  postgresql-password: "aUBaQkFzRm9VNGdEel9xREpWWDJXOA=="
+  postgresql-replication-password: "cmVwbF9wYXNzd29yZA=="
+---
+# Source: sentry-db/charts/rabbitmq-ha/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: rabbitmq-ha
+  namespace: default
+  labels:
+    app: rabbitmq-ha
+    chart: rabbitmq-ha-1.38.2
+    release: "my-sentry-db"
+    heritage: "Helm"
+type: Opaque
+data:
+  rabbitmq-username: "Z3Vlc3Q="
+  rabbitmq-password: "Z3Vlc3Q="
+  rabbitmq-management-username: "bWFuYWdlbWVudA=="
+  rabbitmq-management-password: "ZlNXSHk5YldLdkY3bEFEdjhmejFWdDdI"
+  rabbitmq-erlang-cookie: "cEhncHkzUTZhZFRza3pBVDZiTEhDRnFGVEY3bE14aEE="
+  definitions.json: "ewogICJnbG9iYWxfcGFyYW1ldGVycyI6IFsKICAgIAogIF0sCiAgInVzZXJzIjogWwogICAgewogICAgICAibmFtZSI6ICJtYW5hZ2VtZW50IiwKICAgICAgInBhc3N3b3JkIjogImZTV0h5OWJXS3ZGN2xBRHY4ZnoxVnQ3SCIsCiAgICAgICJ0YWdzIjogIm1hbmFnZW1lbnQiCiAgICB9LAogICAgewogICAgICAibmFtZSI6ICJndWVzdCIsCiAgICAgICJwYXNzd29yZCI6ICJndWVzdCIsCiAgICAgICJ0YWdzIjogImFkbWluaXN0cmF0b3IiCiAgICB9CiAgXSwKICAidmhvc3RzIjogWwogICAgewogICAgICAibmFtZSI6ICIvIgogICAgfQogIF0sCiAgInBlcm1pc3Npb25zIjogWwogICAgewogICAgICAidXNlciI6ICJndWVzdCIsCiAgICAgICJ2aG9zdCI6ICIvIiwKICAgICAgImNvbmZpZ3VyZSI6ICIuKiIsCiAgICAgICJyZWFkIjogIi4qIiwKICAgICAgIndyaXRlIjogIi4qIgogICAgfQogIF0sCiAgInBhcmFtZXRlcnMiOiBbCiAgICAKICBdLAogICJwb2xpY2llcyI6IFsKICAgIHsKICAgICAgIm5hbWUiOiAiaGEtYWxsIiwKICAgICAgInBhdHRlcm4iOiAiXigoPyFjZWxlcnlldi4qKS4pKiQiLAogICAgICAidmhvc3QiOiAiLyIsCiAgICAgICJkZWZpbml0aW9uIjogewogICAgICAgICJoYS1tb2RlIjogImFsbCIsCiAgICAgICAgImhhLXN5bmMtbW9kZSI6ICJhdXRvbWF0aWMiLAogICAgICAgICJoYS1zeW5jLWJhdGNoLXNpemUiOiAxCiAgICAgIH0KICAgIH0KICBdLAogICJxdWV1ZXMiOiBbCiAgICAKICBdLAogICJleGNoYW5nZXMiOiBbCiAgICAKICBdLAogICJiaW5kaW5ncyI6IFsKICAgIAogIF0KfQ=="
+---
+# Source: sentry-db/charts/clickhouse/templates/configmap-config.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: clickhouse-config
+  labels:
+    app.kubernetes.io/name: clickhouse-config
+    app.kubernetes.io/instance: my-sentry-db-config
+    app.kubernetes.io/managed-by: Helm
+data:
+  config.xml: |-
+    <?xml version="1.0"?>
+    <yandex>
+        <path>/var/lib/clickhouse/</path>
+        <tmp_path>/var/lib/clickhouse/tmp/</tmp_path>
+        <user_files_path>/var/lib/clickhouse/user_files/</user_files_path>
+        <format_schema_path>/var/lib/clickhouse/format_schemas/</format_schema_path>
+        
+        <include_from>/etc/clickhouse-server/metrica.d/metrica.xml</include_from>
+
+        <users_config>users.xml</users_config>
+        
+        <display_name>clickhouse</display_name>
+        <listen_host>0.0.0.0</listen_host>
+        <http_port>8123</http_port>
+        <tcp_port>9000</tcp_port>
+        <interserver_http_port>9009</interserver_http_port>
+        <max_connections>4096</max_connections>
+        <keep_alive_timeout>3</keep_alive_timeout>
+        <max_concurrent_queries>100</max_concurrent_queries>
+        <uncompressed_cache_size>8589934592</uncompressed_cache_size>
+        <mark_cache_size>5368709120</mark_cache_size>
+        <timezone>Asia/Shanghai</timezone>
+        <umask>022</umask>
+        <mlock_executable>false</mlock_executable>
+        <remote_servers incl="clickhouse_remote_servers" optional="true" />
+        <zookeeper incl="zookeeper-servers" optional="true" />
+        <macros incl="macros" optional="true" />
+        <builtin_dictionaries_reload_interval>3600</builtin_dictionaries_reload_interval>
+        <max_session_timeout>3600</max_session_timeout>
+        <default_session_timeout>60</default_session_timeout>
+        <disable_internal_dns_cache>1</disable_internal_dns_cache>
+
+        <query_log>
+            <database>system</database>
+            <table>query_log</table>
+            <partition_by>toYYYYMM(event_date)</partition_by>
+            <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+        </query_log>
+
+        <query_thread_log>
+            <database>system</database>
+            <table>query_thread_log</table>
+            <partition_by>toYYYYMM(event_date)</partition_by>
+            <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+        </query_thread_log>
+
+        <distributed_ddl>
+            <path>/clickhouse/task_queue/ddl</path>
+        </distributed_ddl>
+        <logger>
+            <level>trace</level>
+            <log>/var/log/clickhouse-server/clickhouse-server.log</log>
+            <errorlog>/var/log/clickhouse-server/clickhouse-server.err.log</errorlog>
+            <size>1000M</size>
+            <count>10</count>
+        </logger>
+    </yandex>
+---
+# Source: sentry-db/charts/clickhouse/templates/configmap-metrika.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: clickhouse-metrica
+  labels:
+    app.kubernetes.io/name: clickhouse-metrica
+    app.kubernetes.io/instance: my-sentry-db-metrica
+    app.kubernetes.io/managed-by: Helm
+data:
+  metrica.xml: |-
+    <?xml version="1.0"?>
+    <yandex>
+        <clickhouse_remote_servers>
+            <clickhouse>
+                <shard>
+                    <replica>
+                        <internal_replication>false</internal_replication>
+                        <host>clickhouse-0.clickhouse-headless.default.svc.cluster.local</host>
+                        <port>9000</port>
+                        <user>default</user>
+                        <compression>true</compression>
+                    </replica>
+                    <replica>
+                        <host>clickhouse-replica-0.clickhouse-replica-headless.default.svc.cluster.local</host>
+                        <port>9000</port>
+                        <user>default</user>
+                        <compression>true</compression>
+                    </replica>
+                </shard>
+                <shard>
+                    <replica>
+                        <internal_replication>false</internal_replication>
+                        <host>clickhouse-1.clickhouse-headless.default.svc.cluster.local</host>
+                        <port>9000</port>
+                        <user>default</user>
+                        <compression>true</compression>
+                    </replica>
+                    <replica>
+                        <host>clickhouse-replica-1.clickhouse-replica-headless.default.svc.cluster.local</host>
+                        <port>9000</port>
+                        <user>default</user>
+                        <compression>true</compression>
+                    </replica>
+                </shard>
+                <shard>
+                    <replica>
+                        <internal_replication>false</internal_replication>
+                        <host>clickhouse-2.clickhouse-headless.default.svc.cluster.local</host>
+                        <port>9000</port>
+                        <user>default</user>
+                        <compression>true</compression>
+                    </replica>
+                    <replica>
+                        <host>clickhouse-replica-2.clickhouse-replica-headless.default.svc.cluster.local</host>
+                        <port>9000</port>
+                        <user>default</user>
+                        <compression>true</compression>
+                    </replica>
+                </shard>
+            </clickhouse>
+        </clickhouse_remote_servers>
+    </yandex>
+---
+# Source: sentry-db/charts/clickhouse/templates/configmap-users.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: clickhouse-users
+  labels:
+    app.kubernetes.io/name: clickhouse-users
+    app.kubernetes.io/instance: my-sentry-db-users
+    app.kubernetes.io/managed-by: Helm
+data:
+  users.xml: |-
+    <?xml version="1.0"?>
+    <yandex>
+    </yandex>
+---
+# Source: sentry-db/charts/rabbitmq-ha/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rabbitmq-ha
+  namespace: default
+  labels:
+    app: rabbitmq-ha
+    chart: rabbitmq-ha-1.38.2
+    release: my-sentry-db
+    heritage: Helm
+data:
+  enabled_plugins: |
+    [
+      rabbitmq_shovel,
+      rabbitmq_shovel_management,
+      rabbitmq_federation,
+      rabbitmq_federation_management,
+      
+
+      rabbitmq_consistent_hash_exchange,
+      rabbitmq_management,
+      rabbitmq_peer_discovery_k8s
+      
+    ].
+
+  rabbitmq.conf: |
+    ## RabbitMQ configuration
+    ## Ref: https://github.com/rabbitmq/rabbitmq-server/blob/master/docs/rabbitmq.conf.example
+
+    ## Authentification
+
+    ## Clustering
+    cluster_formation.peer_discovery_backend  = rabbit_peer_discovery_k8s
+    cluster_formation.k8s.host = kubernetes.default.svc.cluster.local
+    cluster_formation.k8s.address_type = hostname
+    cluster_formation.node_cleanup.interval = 10
+    # Set to false if automatic cleanup of absent nodes is desired.
+    # This can be dangerous, see http://www.rabbitmq.com/cluster-formation.html#node-health-checks-and-cleanup.
+    cluster_formation.node_cleanup.only_log_warning = true
+    cluster_partition_handling = autoheal
+    ## The default "guest" user is only permitted to access the server
+    ## via a loopback interface (e.g. localhost)
+    loopback_users.guest = false
+
+    management.load_definitions = /etc/definitions/definitions.json
+
+    ## Memory-based Flow Control threshold
+    vm_memory_high_watermark.absolute = 256MB
+
+    ## Auth HTTP Backend Plugin
+
+    ## LDAP Plugin
+
+    ## MQTT Plugin
+
+    ## Web MQTT Plugin
+
+    ## STOMP Plugin
+
+    ## Web STOMP Plugin
+
+    ## Prometheus Plugin
+
+    ## AMQPS support
+---
+# Source: sentry-db/charts/redis/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis
+  labels:
+    app: redis
+    chart: redis-10.3.3
+    heritage: Helm
+    release: my-sentry-db
+data:
+  redis.conf: |-
+    # User-supplied configuration:
+    # Enable AOF https://redis.io/topics/persistence#append-only-file
+    appendonly yes
+    # Disable RDB persistence, AOF persistence already enabled.
+    save ""
+  master.conf: |-
+    dir /data
+    rename-command FLUSHDB ""
+    rename-command FLUSHALL ""
+  replica.conf: |-
+    dir /data
+    slave-read-only yes
+    rename-command FLUSHDB ""
+    rename-command FLUSHALL ""
+---
+# Source: sentry-db/charts/redis/templates/health-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-health
+  labels:
+    app: redis
+    chart: redis-10.3.3
+    heritage: Helm
+    release: my-sentry-db
+data:
+  ping_readiness_local.sh: |-
+    response=$(
+      timeout -s 9 $1 \
+      redis-cli \
+        -h localhost \
+        -p $REDIS_PORT \
+        ping
+    )
+    if [ "$response" != "PONG" ]; then
+      echo "$response"
+      exit 1
+    fi
+  ping_liveness_local.sh: |-
+    response=$(
+      timeout -s 9 $1 \
+      redis-cli \
+        -h localhost \
+        -p $REDIS_PORT \
+        ping
+    )
+    if [ "$response" != "PONG" ] && [ "$response" != "LOADING Redis is loading the dataset in memory" ]; then
+      echo "$response"
+      exit 1
+    fi
+  ping_readiness_master.sh: |-
+    response=$(
+      timeout -s 9 $1 \
+      redis-cli \
+        -h $REDIS_MASTER_HOST \
+        -p $REDIS_MASTER_PORT_NUMBER \
+        ping
+    )
+    if [ "$response" != "PONG" ]; then
+      echo "$response"
+      exit 1
+    fi
+  ping_liveness_master.sh: |-
+    response=$(
+      timeout -s 9 $1 \
+      redis-cli \
+        -h $REDIS_MASTER_HOST \
+        -p $REDIS_MASTER_PORT_NUMBER \
+        ping
+    )
+    if [ "$response" != "PONG" ] && [ "$response" != "LOADING Redis is loading the dataset in memory" ]; then
+      echo "$response"
+      exit 1
+    fi
+  ping_readiness_local_and_master.sh: |-
+    script_dir="$(dirname "$0")"
+    exit_status=0
+    "$script_dir/ping_readiness_local.sh" $1 || exit_status=$?
+    "$script_dir/ping_readiness_master.sh" $1 || exit_status=$?
+    exit $exit_status
+  ping_liveness_local_and_master.sh: |-
+    script_dir="$(dirname "$0")"
+    exit_status=0
+    "$script_dir/ping_liveness_local.sh" $1 || exit_status=$?
+    "$script_dir/ping_liveness_master.sh" $1 || exit_status=$?
+    exit $exit_status
+---
+# Source: sentry-db/charts/rabbitmq-ha/templates/role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  labels:
+    app: rabbitmq-ha
+    chart: rabbitmq-ha-1.38.2
+    release: "my-sentry-db"
+    heritage: "Helm"
+  name: rabbitmq-ha
+  namespace: default
+rules:
+  - apiGroups: [""]
+    resources: ["endpoints"]
+    verbs: ["get"]
+---
+# Source: sentry-db/charts/rabbitmq-ha/templates/rolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    app: rabbitmq-ha
+    chart: rabbitmq-ha-1.38.2
+    release: "my-sentry-db"
+    heritage: "Helm"
+  name: rabbitmq-ha
+  namespace: default
+subjects:
+  - kind: ServiceAccount
+    name: rabbitmq-ha
+    namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: rabbitmq-ha
+---
+# Source: sentry-db/charts/clickhouse/templates/svc-clickhouse-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: clickhouse-headless
+  labels:
+    app.kubernetes.io/name: clickhouse-headless
+    app.kubernetes.io/instance: my-sentry-db-headless
+    app.kubernetes.io/managed-by: Helm
+spec:
+  clusterIP: "None"
+  ports:
+  - port: 9000
+    targetPort: tcp-port
+    protocol: TCP
+    name: tcp-port
+  - port: 8123
+    targetPort: http-port
+    protocol: TCP
+    name: http-port
+  - port: 9009
+    targetPort: inter-http-port
+    protocol: TCP
+    name: inter-http-port
+  selector:
+    app.kubernetes.io/name: clickhouse
+    app.kubernetes.io/instance: my-sentry-db
+---
+# Source: sentry-db/charts/clickhouse/templates/svc-clickhouse-replica-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: clickhouse-replica-headless
+  labels:
+    app.kubernetes.io/name: clickhouse-replica-headless
+    app.kubernetes.io/instance: my-sentry-db-replica-headless
+    app.kubernetes.io/managed-by: Helm
+spec:
+  clusterIP: "None"
+  ports:
+  - port: 9000
+    targetPort: tcp-port
+    protocol: TCP
+    name: tcp-port
+  - port: 8123
+    targetPort: http-port
+    protocol: TCP
+    name: http-port
+  - port: 9009
+    targetPort: inter-http-port
+    protocol: TCP
+    name: inter-http-port
+  selector:
+    app.kubernetes.io/name: clickhouse-replica
+    app.kubernetes.io/instance: my-sentry-db-replica
+---
+# Source: sentry-db/charts/clickhouse/templates/svc-clickhouse-replica.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: clickhouse-replica
+  labels:
+    app.kubernetes.io/name: clickhouse-replica
+    app.kubernetes.io/instance: my-sentry-db-replica
+    app.kubernetes.io/managed-by: Helm
+spec:
+  ports:
+  - port: 9000
+    targetPort: tcp-port
+    protocol: TCP
+    name: tcp-port
+  - port: 8123
+    targetPort: http-port
+    protocol: TCP
+    name: http-port
+  - port: 9009
+    targetPort: inter-http-port
+    protocol: TCP
+    name: inter-http-port
+  selector:
+    app.kubernetes.io/name: clickhouse-replica
+    app.kubernetes.io/instance: my-sentry-db-replica
+---
+# Source: sentry-db/charts/clickhouse/templates/svc-clickhouse.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: clickhouse
+  labels:
+    app.kubernetes.io/name: clickhouse
+    app.kubernetes.io/instance: my-sentry-db
+    app.kubernetes.io/managed-by: Helm
+spec:
+  ports:
+  - port: 9000
+    targetPort: tcp-port
+    protocol: TCP
+    name: tcp-port
+  - port: 8123
+    targetPort: http-port
+    protocol: TCP
+    name: http-port
+  - port: 9009
+    targetPort: inter-http-port
+    protocol: TCP
+    name: inter-http-port
+  selector:
+    app.kubernetes.io/name: clickhouse
+    app.kubernetes.io/instance: my-sentry-db
+---
+# Source: sentry-db/charts/clickhouse/templates/svc-tabix.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: clickhouse-tabix
+  labels:
+    app.kubernetes.io/name: clickhouse-tabix
+    app.kubernetes.io/instance: my-sentry-db-tabix
+    app.kubernetes.io/managed-by: Helm
+spec:
+  ports:
+  - port: 80
+    targetPort: http
+    protocol: TCP
+    name: http
+  selector:
+    app.kubernetes.io/name: clickhouse-tabix
+    app.kubernetes.io/instance: my-sentry-db-tabix
+---
+# Source: sentry-db/charts/kafka/charts/zookeeper/templates/svc-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: zookeeper-headless
+  labels:
+    app.kubernetes.io/name: zookeeper
+    helm.sh/chart: zookeeper-5.3.1
+    app.kubernetes.io/instance: my-sentry-db
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: zookeeper
+spec:
+  type: ClusterIP
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+    - name: client
+      port: 2181
+      targetPort: client
+    - name: follower
+      port: 2888
+      targetPort: follower
+    - name: election
+      port: 3888
+      targetPort: election
+  selector:
+    app.kubernetes.io/name: zookeeper
+    app.kubernetes.io/instance: my-sentry-db
+    app.kubernetes.io/component: zookeeper
+---
+# Source: sentry-db/charts/kafka/charts/zookeeper/templates/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: zookeeper
+  labels:
+    app.kubernetes.io/name: zookeeper
+    helm.sh/chart: zookeeper-5.3.1
+    app.kubernetes.io/instance: my-sentry-db
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: zookeeper
+spec:
+  type: ClusterIP
+  ports:
+    - name: client
+      port: 2181
+      targetPort: client
+    - name: follower
+      port: 2888
+      targetPort: follower
+    - name: election
+      port: 3888
+      targetPort: election
+  selector:
+    app.kubernetes.io/name: zookeeper
+    app.kubernetes.io/instance: my-sentry-db
+    app.kubernetes.io/component: zookeeper
+---
+# Source: sentry-db/charts/kafka/templates/svc-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-confluent-headless
+  labels:
+    app.kubernetes.io/name: kafka
+    helm.sh/chart: kafka-7.1.1
+    app.kubernetes.io/instance: my-sentry-db
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: kafka
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: kafka
+      port: 9092
+      targetPort: kafka
+  selector:
+    app.kubernetes.io/name: kafka
+    app.kubernetes.io/instance: my-sentry-db
+    app.kubernetes.io/component: kafka
+---
+# Source: sentry-db/charts/kafka/templates/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-confluent
+  labels:
+    app.kubernetes.io/name: kafka
+    helm.sh/chart: kafka-7.1.1
+    app.kubernetes.io/instance: my-sentry-db
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: kafka
+  annotations: 
+    {}
+spec:
+  type: ClusterIP
+  ports:
+    - name: kafka
+      port: 9092
+      targetPort: kafka
+  selector:
+    app.kubernetes.io/name: kafka
+    app.kubernetes.io/instance: my-sentry-db
+    app.kubernetes.io/component: kafka
+---
+# Source: sentry-db/charts/postgresql/templates/svc-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-headless
+  labels:
+    app: postgresql
+    chart: postgresql-8.2.1
+    release: "my-sentry-db"
+    heritage: "Helm"
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: tcp-postgresql
+      port: 5432
+      targetPort: tcp-postgresql
+  selector:
+    app: postgresql
+    release: "my-sentry-db"
+---
+# Source: sentry-db/charts/postgresql/templates/svc-read.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-read
+  labels:
+    app: postgresql
+    chart: postgresql-8.2.1
+    release: "my-sentry-db"
+    heritage: "Helm"
+spec:
+  type: ClusterIP
+  ports:
+    - name: tcp-postgresql
+      port:  5432
+      targetPort: tcp-postgresql
+  selector:
+    app: postgresql
+    release: "my-sentry-db"
+    role: slave
+---
+# Source: sentry-db/charts/postgresql/templates/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  labels:
+    app: postgresql
+    chart: postgresql-8.2.1
+    release: "my-sentry-db"
+    heritage: "Helm"
+spec:
+  type: ClusterIP
+  ports:
+    - name: tcp-postgresql
+      port: 5432
+      targetPort: tcp-postgresql
+  selector:
+    app: postgresql
+    release: "my-sentry-db"
+    role: master
+---
+# Source: sentry-db/charts/rabbitmq-ha/templates/service-discovery.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbitmq-ha-discovery
+  namespace: default
+  labels:
+    app: rabbitmq-ha
+    chart: rabbitmq-ha-1.38.2
+    release: my-sentry-db
+    heritage: Helm
+spec:
+  clusterIP: None
+  ports:
+    - name: http
+      protocol: TCP
+      port: 15672
+      targetPort: http
+    - name: amqp
+      protocol: TCP
+      port: 5672
+      targetPort: amqp
+    - name: epmd
+      protocol: TCP
+      port: 4369
+      targetPort: epmd
+  publishNotReadyAddresses: true
+  selector:
+    app: rabbitmq-ha
+    release: my-sentry-db
+  type: ClusterIP
+---
+# Source: sentry-db/charts/rabbitmq-ha/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbitmq-ha
+  namespace: default
+  labels:
+    app: rabbitmq-ha
+    chart: rabbitmq-ha-1.38.2
+    release: my-sentry-db
+    heritage: Helm
+spec:
+  ports:
+    - name: http
+      protocol: TCP
+      port: 15672
+      targetPort: http
+    - name: amqp
+      protocol: TCP
+      port: 5672
+      targetPort: amqp
+    - name: epmd
+      protocol: TCP
+      port: 4369
+      targetPort: epmd
+    
+  selector:
+    app: rabbitmq-ha
+    release: my-sentry-db
+  type: ClusterIP
+---
+# Source: sentry-db/charts/redis/templates/headless-svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-headless
+  labels:
+    app: redis
+    chart: redis-10.3.3
+    release: my-sentry-db
+    heritage: Helm
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+  - name: redis
+    port: 6379
+    targetPort: redis
+  selector:
+    app: redis
+    release: my-sentry-db
+---
+# Source: sentry-db/charts/redis/templates/redis-master-svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-master
+  labels:
+    app: redis
+    chart: redis-10.3.3
+    release: my-sentry-db
+    heritage: Helm
+spec:
+  type: ClusterIP
+  ports:
+  - name: redis
+    port: 6379
+    targetPort: redis
+  selector:
+    app: redis
+    release: my-sentry-db
+    role: master
+---
+# Source: sentry-db/charts/redis/templates/redis-slave-svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-slave
+  labels:
+    app: redis
+    chart: redis-10.3.3
+    release: my-sentry-db
+    heritage: Helm
+spec:
+  type: ClusterIP
+  ports:
+  - name: redis
+    port: 6379
+    targetPort: redis
+  selector:
+    app: redis
+    release: my-sentry-db
+    role: slave
+---
+# Source: sentry-db/charts/clickhouse/templates/deployment-tabix.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: clickhouse-tabix
+  labels:
+    app.kubernetes.io/name: clickhouse-tabix
+    app.kubernetes.io/instance: my-sentry-db-tabix
+    app.kubernetes.io/managed-by: Helm 
+spec: 
+  replicas: 1
+  selector:
+    matchLabels: 
+      app.kubernetes.io/name: clickhouse-tabix
+      app.kubernetes.io/instance: my-sentry-db-tabix
+  strategy: 
+    type: RollingUpdate
+    rollingUpdate: 
+      maxSurge: 3
+      maxUnavailable: 1
+  template: 
+    metadata: 
+      labels: 
+        app.kubernetes.io/name: clickhouse-tabix
+        app.kubernetes.io/instance: my-sentry-db-tabix
+    spec:
+      containers: 
+      - name: clickhouse-tabix
+        image: spoonest/clickhouse-tabix-web-client:stable
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 80
+        env:
+        - name: USER
+          value: admin
+        - name: PASSWORD
+          value: admin
+        livenessProbe:
+          tcpSocket:
+            port: 80
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+          successThreshold: 1
+        readinessProbe:
+          tcpSocket:
+            port: 80
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+          successThreshold: 1
+---
+# Source: sentry-db/charts/clickhouse/templates/statefulset-clickhouse-replica.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: clickhouse-replica
+  labels:
+    app.kubernetes.io/name: clickhouse-replica
+    app.kubernetes.io/instance: my-sentry-db-replica
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 3
+  podManagementPolicy: Parallel
+  updateStrategy:
+    type: RollingUpdate
+  serviceName: clickhouse-replica-headless
+  selector: 
+    matchLabels: 
+      app.kubernetes.io/name: clickhouse-replica
+      app.kubernetes.io/instance: my-sentry-db-replica
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: clickhouse-replica
+        app.kubernetes.io/instance: my-sentry-db-replica
+    spec:
+      initContainers:
+      - name: init
+        image: busybox:1.31.0
+        imagePullPolicy: IfNotPresent
+        args:
+        - /bin/sh
+        - -c
+        - |
+          mkdir -p /etc/clickhouse-server/metrica.d
+      containers:
+      - name: clickhouse-replica
+        image: yandex/clickhouse-server:19.16
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http-port
+          containerPort: 8123 
+        - name: tcp-port
+          containerPort: 9000
+        - name: inter-http-port
+          containerPort: 9009
+        livenessProbe: 
+          tcpSocket:
+            port: 9000
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+          successThreshold: 1
+        readinessProbe:
+          tcpSocket:
+            port: 9000
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+          successThreshold: 1
+        volumeMounts:
+        - name: clickhouse-replica-data
+          mountPath: /var/lib/clickhouse
+        - name: clickhouse-replica-logs
+          mountPath: /var/log/clickhouse-server
+        - name: clickhouse-config
+          mountPath: /etc/clickhouse-server/config.d
+        - name: clickhouse-metrica
+          mountPath: /etc/clickhouse-server/metrica.d
+        - name: clickhouse-users
+          mountPath: /etc/clickhouse-server/users.d
+        securityContext:
+          privileged: true
+          runAsUser: 0
+      volumes: 
+      - name: clickhouse-replica-data
+        emptyDir: {}
+      - name: clickhouse-replica-logs
+        emptyDir: {}
+      - name: clickhouse-config
+        configMap:
+          name: clickhouse-config
+          items:
+          - key: config.xml
+            path: config.xml
+      - name: clickhouse-metrica
+        configMap:
+          name: clickhouse-metrica
+          items:
+          - key: metrica.xml
+            path: metrica.xml
+      - name: clickhouse-users
+        configMap:
+          name: clickhouse-users
+          items:
+          - key: users.xml
+            path: users.xml
+---
+# Source: sentry-db/charts/clickhouse/templates/statefulset-clickhouse.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: clickhouse
+  labels:
+    app.kubernetes.io/name: clickhouse
+    app.kubernetes.io/instance: my-sentry-db
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 3
+  podManagementPolicy: Parallel
+  updateStrategy:
+    type: RollingUpdate
+  serviceName: clickhouse-headless
+  selector: 
+    matchLabels: 
+      app.kubernetes.io/name: clickhouse
+      app.kubernetes.io/instance: my-sentry-db
+  template:
+    metadata: 
+      labels: 
+        app.kubernetes.io/name: clickhouse
+        app.kubernetes.io/instance: my-sentry-db
+    spec:
+      initContainers:
+      - name: init
+        image: busybox:1.31.0
+        imagePullPolicy: IfNotPresent
+        args:
+        - /bin/sh
+        - -c
+        - |
+          mkdir -p /etc/clickhouse-server/metrica.d
+      containers:
+      - name: clickhouse
+        image: yandex/clickhouse-server:19.16
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http-port
+          containerPort: 8123 
+        - name: tcp-port
+          containerPort: 9000
+        - name: inter-http-port
+          containerPort: 9009
+        livenessProbe: 
+          tcpSocket:
+            port: 9000
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+          successThreshold: 1
+        readinessProbe:
+          tcpSocket:
+            port: 9000
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+          successThreshold: 1
+        volumeMounts:
+        - name: clickhouse-data
+          mountPath: /var/lib/clickhouse
+        - name: clickhouse-logs
+          mountPath: /var/log/clickhouse-server
+        - name: clickhouse-config
+          mountPath: /etc/clickhouse-server/config.d
+        - name: clickhouse-metrica
+          mountPath: /etc/clickhouse-server/metrica.d
+        - name: clickhouse-users
+          mountPath: /etc/clickhouse-server/users.d
+        securityContext:
+          privileged: true
+          runAsUser: 0
+      volumes: 
+      - name: clickhouse-data
+        emptyDir: {}
+      - name: clickhouse-logs
+        emptyDir: {}
+      - name: clickhouse-config
+        configMap:
+          name: clickhouse-config
+          items:
+          - key: config.xml
+            path: config.xml
+      - name: clickhouse-metrica
+        configMap:
+          name: clickhouse-metrica
+          items:
+          - key: metrica.xml
+            path: metrica.xml
+      - name: clickhouse-users
+        configMap:
+          name: clickhouse-users
+          items:
+          - key: users.xml
+            path: users.xml
+---
+# Source: sentry-db/charts/kafka/charts/zookeeper/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: zookeeper
+  labels:
+    app.kubernetes.io/name: zookeeper
+    helm.sh/chart: zookeeper-5.3.1
+    app.kubernetes.io/instance: my-sentry-db
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: zookeeper
+    role: zookeeper
+spec:
+  serviceName: zookeeper-headless
+  replicas: 1
+  podManagementPolicy: Parallel
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: zookeeper
+      app.kubernetes.io/instance: my-sentry-db
+      app.kubernetes.io/component: zookeeper
+  template:
+    metadata:
+      name: zookeeper
+      labels:
+        app.kubernetes.io/name: zookeeper
+        helm.sh/chart: zookeeper-5.3.1
+        app.kubernetes.io/instance: my-sentry-db
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/component: zookeeper
+    spec:
+      
+      securityContext:
+        fsGroup: 1001
+      containers:
+        - name: zookeeper
+          image: docker.io/bitnami/zookeeper:3.5.6-debian-9-r27
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            runAsUser: 1001
+          command:
+            - bash
+            - -ec
+            - |
+                # Execute entrypoint as usual after obtaining ZOO_SERVER_ID based on POD hostname
+                HOSTNAME=`hostname -s`
+                if [[ $HOSTNAME =~ (.*)-([0-9]+)$ ]]; then
+                  ORD=${BASH_REMATCH[2]}
+                  export ZOO_SERVER_ID=$((ORD+1))
+                else
+                  echo "Failed to get index from hostname $HOST"
+                  exit 1
+                fi
+                exec /entrypoint.sh /run.sh
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+          env:
+            - name: ZOO_PORT_NUMBER
+              value: "2181"
+            - name: ZOO_TICK_TIME
+              value: "2000"
+            - name: ZOO_INIT_LIMIT
+              value: "10"
+            - name: ZOO_SYNC_LIMIT
+              value: "5"
+            - name: ZOO_MAX_CLIENT_CNXNS
+              value: "60"
+            - name: ZOO_4LW_COMMANDS_WHITELIST
+              value: "srvr, mntr"
+            - name: ZOO_SERVERS
+              value: zookeeper-0.zookeeper-headless.default.svc.cluster.local:2888:3888 
+            - name: ZOO_ENABLE_AUTH
+              value: "no"
+            - name: ZOO_HEAP_SIZE
+              value: "1024"
+            - name: ZOO_LOG_LEVEL
+              value: "ERROR"
+            - name: ALLOW_ANONYMOUS_LOGIN
+              value: "yes"
+          ports:
+            - name: client
+              containerPort: 2181
+            - name: follower
+              containerPort: 2888
+            - name: election
+              containerPort: 3888
+          livenessProbe:
+            tcpSocket:
+              port: client
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          readinessProbe:
+            tcpSocket:
+              port: client
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          volumeMounts:
+            - name: data
+              mountPath: /bitnami/zookeeper
+      volumes:
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        annotations:
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "8Gi"
+---
+# Source: sentry-db/charts/kafka/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kafka-confluent
+  labels:
+    app.kubernetes.io/name: kafka
+    helm.sh/chart: kafka-7.1.1
+    app.kubernetes.io/instance: my-sentry-db
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: kafka
+    role: kafka
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kafka
+      app.kubernetes.io/instance: my-sentry-db
+      app.kubernetes.io/component: kafka
+  serviceName: kafka-confluent-headless
+  podManagementPolicy: "Parallel"
+  replicas: 1
+  updateStrategy:
+    type: "RollingUpdate"
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kafka
+        helm.sh/chart: kafka-7.1.1
+        app.kubernetes.io/instance: my-sentry-db
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/component: kafka
+    spec:      
+      securityContext:
+        fsGroup: 1001
+        runAsUser: 1001
+      nodeSelector:
+        {}
+      tolerations:
+        []
+      affinity:
+        {}
+      containers:
+        - name: kafka
+          image: docker.io/confluentinc/cp-kafka:5.4.0
+          imagePullPolicy: "IfNotPresent"
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: MY_POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: MY_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: KAFKA_CFG_ZOOKEEPER_CONNECT
+              value: zookeeper
+            - name: KAFKA_PORT_NUMBER
+              value: "9092"
+            - name: KAFKA_CFG_LISTENERS
+              value: "PLAINTEXT://:$(KAFKA_PORT_NUMBER)"
+            - name: KAFKA_CFG_ADVERTISED_LISTENERS
+              value: 'PLAINTEXT://$(MY_POD_NAME).kafka-confluent-headless.default.svc.cluster.local:$(KAFKA_PORT_NUMBER)'
+            - name: ALLOW_PLAINTEXT_LISTENER
+              value: "yes"
+            - name: KAFKA_CFG_BROKER_ID
+              value: "-1"
+            - name: KAFKA_CFG_DELETE_TOPIC_ENABLE
+              value: "false"
+            - name: KAFKA_HEAP_OPTS
+              value: "-Xmx1024m -Xms1024m"
+            - name: KAFKA_CFG_LOG_FLUSH_INTERVAL_MESSAGES
+              value: "10000"
+            - name: KAFKA_CFG_LOG_FLUSH_INTERVAL_MS
+              value: "1000"
+            - name: KAFKA_CFG_LOG_RETENTION_BYTES
+              value: "1073741824"
+            - name: KAFKA_CFG_LOG_RETENTION_CHECK_INTERVALS_MS
+              value: "300000"
+            - name: KAFKA_CFG_LOG_RETENTION_HOURS
+              value: "168"
+            - name: KAFKA_CFG_MESSAGE_MAX_BYTES
+              value: "1000012"
+            - name: KAFKA_CFG_LOG_SEGMENT_BYTES
+              value: "1073741824"
+            - name: KAFKA_CFG_LOG_DIRS
+              value: /bitnami/kafka/data
+            - name: KAFKA_CFG_DEFAULT_REPLICATION_FACTOR
+              value: "1"
+            - name: KAFKA_CFG_OFFSETS_TOPIC_REPLICATION_FACTOR
+              value: "1"
+            - name: KAFKA_CFG_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
+              value: "1"
+            - name: KAFKA_CFG_SSL_ENDPOINT_IDENTIFICATION_ALGORITHM
+              value: "https"
+            - name: KAFKA_CFG_TRANSACTION_STATE_LOG_MIN_ISR
+              value: "1"
+            - name: KAFKA_CFG_NUM_IO_THREADS
+              value: "8"
+            - name: KAFKA_CFG_NUM_NETWORK_THREADS
+              value: "3"
+            - name: KAFKA_CFG_NUM_PARTITIONS
+              value: "1"
+            - name: KAFKA_CFG_NUM_RECOVERY_THREADS_PER_DATA_DIR
+              value: "1"
+            - name: KAFKA_CFG_SOCKET_RECEIVE_BUFFER_BYTES
+              value: "102400"
+            - name: KAFKA_CFG_SOCKET_REQUEST_MAX_BYTES
+              value: "104857600"
+            - name: KAFKA_CFG_SOCKET_SEND_BUFFER_BYTES
+              value: "102400"
+            - name: KAFKA_CFG_ZOOKEEPER_CONNECTION_TIMEOUT_MS
+              value: "6000"
+            
+            - name: KAFKA_ZOOKEEPER_CONNECT
+              value: zookeeper:2181
+            - name: KAFKA_ADVERTISED_LISTENERS
+              value: PLAINTEXT://kafka-confluent:9092
+            - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+              value: "1"
+            - name: CONFLUENT_SUPPORT_METRICS_ENABLE
+              value: "false"
+            - name: KAFKA_LOG4J_LOGGERS
+              value: kafka.cluster=WARN,kafka.controller=WARN,kafka.coordinator=WARN,kafka.log=WARN,kafka.server=WARN,kafka.zookeeper=WARN,state.change.logger=WARN
+            - name: KAFKA_LOG4J_ROOT_LOGLEVEL
+              value: WARN
+            - name: KAFKA_TOOLS_LOG4J_LOGLEVEL
+              value: WARN
+          ports:
+            - name: kafka
+              containerPort: 9092
+          livenessProbe:
+            tcpSocket:
+              port: kafka
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 2
+          readinessProbe:
+            tcpSocket:
+              port: kafka
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          volumeMounts:
+            - name: data
+              mountPath: /bitnami/kafka
+        
+      volumes:
+        
+        
+        
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "8Gi"
+---
+# Source: sentry-db/charts/postgresql/templates/statefulset-slaves.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: "postgres-slave"
+  labels:
+    app: postgresql
+    chart: postgresql-8.2.1
+    release: "my-sentry-db"
+    heritage: "Helm"
+spec:
+  serviceName: postgres-headless
+  replicas: 2
+  selector:
+    matchLabels:
+      app: postgresql
+      release: "my-sentry-db"
+      role: slave
+  template:
+    metadata:
+      name: postgres
+      labels:
+        app: postgresql
+        chart: postgresql-8.2.1
+        release: "my-sentry-db"
+        heritage: "Helm"
+        role: slave
+    spec:      
+      securityContext:
+        fsGroup: 1001
+      initContainers:
+        - name: init-chmod-data
+          image: docker.io/bitnami/minideb:stretch
+          imagePullPolicy: "Always"
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+          command:
+            - /bin/sh
+            - -c
+            - |
+              mkdir -p /bitnami/postgresql/data
+              chmod 700 /bitnami/postgresql/data
+              find /bitnami/postgresql -mindepth 0 -maxdepth 1 -not -name ".snapshot" -not -name "lost+found" | \
+                xargs chown -R 1001:1001
+              chmod -R 777 /dev/shm
+          securityContext:
+            runAsUser: 0
+          volumeMounts:
+            - name: data
+              mountPath: /bitnami/postgresql
+              subPath: 
+            - name: dshm
+              mountPath: /dev/shm
+      containers:
+        - name: postgres
+          image: docker.io/bitnami/postgresql:11.6.0-debian-10-r5
+          imagePullPolicy: "IfNotPresent"
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+          securityContext:
+            runAsUser: 1001
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: POSTGRESQL_VOLUME_DIR
+              value: "/bitnami/postgresql"
+            - name: POSTGRESQL_PORT_NUMBER
+              value: "5432"
+            - name: PGDATA
+              value: "/bitnami/postgresql/data"
+            - name: POSTGRES_REPLICATION_MODE
+              value: "slave"
+            - name: POSTGRES_REPLICATION_USER
+              value: "repl_user"
+            - name: POSTGRES_REPLICATION_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres
+                  key: postgresql-replication-password
+            - name: POSTGRES_CLUSTER_APP_NAME
+              value: my_application
+            - name: POSTGRES_MASTER_HOST
+              value: postgres
+            - name: POSTGRES_MASTER_PORT_NUMBER
+              value: "5432"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres
+                  key: postgresql-password
+          ports:
+            - name: tcp-postgresql
+              containerPort: 5432
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - exec pg_isready -U "postgres" -d "sentry" -h 127.0.0.1 -p 5432
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - -e
+                - |
+                  exec pg_isready -U "postgres" -d "sentry" -h 127.0.0.1 -p 5432
+                  [ -f /opt/bitnami/postgresql/tmp/.initialized ] || [ -f /bitnami/postgresql/.initialized ]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          volumeMounts:
+            - name: dshm
+              mountPath: /dev/shm
+            - name: data
+              mountPath: /bitnami/postgresql
+              subPath: 
+            
+      volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Gi
+  updateStrategy:
+    type: RollingUpdate
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "8Gi"
+---
+# Source: sentry-db/charts/postgresql/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres-master
+  labels:
+    app: postgresql
+    chart: postgresql-8.2.1
+    release: "my-sentry-db"
+    heritage: "Helm"
+spec:
+  serviceName: postgres-headless
+  replicas: 1
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: postgresql
+      release: "my-sentry-db"
+      role: master
+  template:
+    metadata:
+      name: postgres
+      labels:
+        app: postgresql
+        chart: postgresql-8.2.1
+        release: "my-sentry-db"
+        heritage: "Helm"
+        role: master
+    spec:      
+      securityContext:
+        fsGroup: 1001
+      initContainers:
+        - name: init-chmod-data
+          image: docker.io/bitnami/minideb:stretch
+          imagePullPolicy: "Always"
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+          command:
+            - /bin/sh
+            - -c
+            - |
+              mkdir -p /bitnami/postgresql/data
+              chmod 700 /bitnami/postgresql/data
+              find /bitnami/postgresql -mindepth 0 -maxdepth 1 -not -name ".snapshot" -not -name "lost+found" | \
+                xargs chown -R 1001:1001
+              chmod -R 777 /dev/shm
+          securityContext:
+            runAsUser: 0
+          volumeMounts:
+            - name: data
+              mountPath: /bitnami/postgresql
+              subPath: 
+            - name: dshm
+              mountPath: /dev/shm
+      containers:
+        - name: postgres
+          image: docker.io/bitnami/postgresql:11.6.0-debian-10-r5
+          imagePullPolicy: "IfNotPresent"
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+          securityContext:
+            runAsUser: 1001
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: POSTGRESQL_PORT_NUMBER
+              value: "5432"
+            - name: POSTGRESQL_VOLUME_DIR
+              value: "/bitnami/postgresql"
+            - name: PGDATA
+              value: "/bitnami/postgresql/data"
+            - name: POSTGRES_REPLICATION_MODE
+              value: "master"
+            - name: POSTGRES_REPLICATION_USER
+              value: "repl_user"
+            - name: POSTGRES_REPLICATION_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres
+                  key: postgresql-replication-password
+            - name: POSTGRES_SYNCHRONOUS_COMMIT_MODE
+              value: "on"
+            - name: POSTGRES_NUM_SYNCHRONOUS_REPLICAS
+              value: "1"
+            - name: POSTGRES_CLUSTER_APP_NAME
+              value: my_application
+            - name: POSTGRES_USER
+              value: "postgres"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres
+                  key: postgresql-password
+            - name: POSTGRES_DB
+              value: "sentry"
+            - name: POSTGRESQL_ENABLE_LDAP
+              value: "no"
+          ports:
+            - name: tcp-postgresql
+              containerPort: 5432
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - exec pg_isready -U "postgres" -d "sentry" -h 127.0.0.1 -p 5432
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - -e
+                - |
+                  exec pg_isready -U "postgres" -d "sentry" -h 127.0.0.1 -p 5432
+                  [ -f /opt/bitnami/postgresql/tmp/.initialized ] || [ -f /bitnami/postgresql/.initialized ]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          volumeMounts:
+            - name: dshm
+              mountPath: /dev/shm
+            - name: data
+              mountPath: /bitnami/postgresql
+              subPath: 
+      volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Gi
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "8Gi"
+---
+# Source: sentry-db/charts/rabbitmq-ha/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: rabbitmq-ha
+  namespace: default
+  labels:
+    app: rabbitmq-ha
+    chart: rabbitmq-ha-1.38.2
+    release: my-sentry-db
+    heritage: Helm
+spec:
+  podManagementPolicy: OrderedReady
+  serviceName: rabbitmq-ha-discovery
+  replicas: 3
+  updateStrategy:
+    type: OnDelete
+  selector:
+    matchLabels:
+      app: rabbitmq-ha
+      release: my-sentry-db
+  template:
+    metadata:
+      labels:
+        app: rabbitmq-ha
+        release: my-sentry-db
+      annotations:
+        checksum/config: f85dbfb2de33a013ee816a65ee1bd39653a795a5355740ed5ed51aa0ac8e9396
+        checksum/secret: ebc284346af6ef248afa67a4d06b508f80005a8113a0910595f864380f434d18
+    spec:
+      terminationGracePeriodSeconds: 10
+      securityContext:
+          fsGroup: 101
+          runAsGroup: 101
+          runAsNonRoot: true
+          runAsUser: 100
+      serviceAccountName: rabbitmq-ha
+      initContainers:
+        - name: bootstrap
+          image: busybox:1.30.1
+          imagePullPolicy: IfNotPresent
+          command: ['sh']
+          args:
+          - "-c"
+          - |
+            set -ex
+            cp /configmap/* /etc/rabbitmq
+            echo "${RABBITMQ_ERLANG_COOKIE}" > /var/lib/rabbitmq/.erlang.cookie
+            if [ -d "${RABBITMQ_MNESIA_DIR}" ]; then
+              touch "${RABBITMQ_MNESIA_DIR}/force_load"
+            fi
+          env:
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                apiVersion: v1
+                fieldPath: metadata.name
+          - name: RABBITMQ_MNESIA_DIR
+            value: /var/lib/rabbitmq/mnesia/rabbit@$(POD_NAME).rabbitmq-ha-discovery.default.svc.cluster.local
+          - name: RABBITMQ_ERLANG_COOKIE
+            valueFrom:
+              secretKeyRef:
+                name: rabbitmq-ha
+                key: rabbitmq-erlang-cookie
+          resources:
+            {}
+          volumeMounts:
+            - name: configmap
+              mountPath: /configmap
+            - name: config
+              mountPath: /etc/rabbitmq
+            - name: data
+              mountPath: /var/lib/rabbitmq
+      containers:
+        - name: rabbitmq-ha
+          image: rabbitmq:3.8.0-alpine
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: epmd
+              protocol: TCP
+              containerPort: 4369
+            - name: amqp
+              protocol: TCP
+              containerPort: 5672
+            - name: http
+              protocol: TCP
+              containerPort: 15672
+          livenessProbe:
+            exec:
+              command:
+              - /bin/sh
+              - -c
+              - 'wget -O - -q --header "Authorization: Basic `echo -n \"$RABBIT_MANAGEMENT_USER:$RABBIT_MANAGEMENT_PASSWORD\"
+                | base64`" http://localhost:15672/api/healthchecks/node | grep -qF "{\"status\":\"ok\"}"'
+            failureThreshold: 6
+            initialDelaySeconds: 120
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            exec:
+              command:
+              - /bin/sh
+              - -c
+              - 'wget -O - -q --header "Authorization: Basic `echo -n \"$RABBIT_MANAGEMENT_USER:$RABBIT_MANAGEMENT_PASSWORD\"
+                | base64`" http://localhost:15672/api/healthchecks/node | grep -qF "{\"status\":\"ok\"}"'
+            failureThreshold: 6
+            initialDelaySeconds: 20
+            periodSeconds: 5
+            timeoutSeconds: 3
+          env:
+            - name: MY_POD_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.name
+            - name: RABBITMQ_USE_LONGNAME
+              value: "true"
+            - name: RABBITMQ_NODENAME
+              value: rabbit@$(MY_POD_NAME).rabbitmq-ha-discovery.default.svc.cluster.local
+            - name: K8S_HOSTNAME_SUFFIX
+              value: .rabbitmq-ha-discovery.default.svc.cluster.local
+            - name: K8S_SERVICE_NAME
+              value: rabbitmq-ha-discovery
+            - name: RABBITMQ_ERLANG_COOKIE
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-ha
+                  key: rabbitmq-erlang-cookie
+            - name: RABBIT_MANAGEMENT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-ha
+                  key: rabbitmq-management-username
+            - name: RABBIT_MANAGEMENT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-ha
+                  key: rabbitmq-management-password
+          resources:
+            {}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/rabbitmq
+            - name: config
+              mountPath: /etc/rabbitmq
+            - name: definitions
+              mountPath: /etc/definitions
+              readOnly: true
+        
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 1
+              podAffinityTerm:
+                topologyKey: "kubernetes.io/hostname"
+                labelSelector:
+                  matchLabels:
+                    app: rabbitmq-ha
+                    release: my-sentry-db
+      volumes:
+        - name: config
+          emptyDir: {}
+        - name: configmap
+          configMap:
+            name: rabbitmq-ha
+        - name: definitions
+          secret:
+            secretName: rabbitmq-ha
+            items:
+            - key: definitions.json
+              path: definitions.json
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        annotations:
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "8Gi"
+---
+# Source: sentry-db/charts/redis/templates/redis-master-statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis-master
+  labels:
+    app: redis
+    chart: redis-10.3.3
+    release: my-sentry-db
+    heritage: Helm
+spec:
+  selector:
+    matchLabels:
+      app: redis
+      release: my-sentry-db
+      role: master
+  serviceName: redis-headless
+  template:
+    metadata:
+      labels:
+        app: redis
+        chart: redis-10.3.3
+        release: my-sentry-db
+        role: master
+      annotations:
+        checksum/health: 09ac6ebb89ea1ca52ac3abc50bee7364dfde7e6a49469b99729754dc83d8f32b
+        checksum/configmap: 7665ad6ff1bee3f1825cba2c5413d7f2dcc154133004a2f44f90b483a61f384d
+        checksum/secret: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+    spec:      
+      securityContext:
+        fsGroup: 1001
+      serviceAccountName: "default"
+      containers:
+      - name: redis
+        image: "docker.io/bitnami/redis:5.0.7-debian-9-r50"
+        imagePullPolicy: "IfNotPresent"
+        securityContext:
+          runAsUser: 1001
+        command:
+        - /bin/bash
+        - -c
+        - |
+          if [[ -n $REDIS_PASSWORD_FILE ]]; then
+            password_aux=`cat ${REDIS_PASSWORD_FILE}`
+            export REDIS_PASSWORD=$password_aux
+          fi
+          if [[ ! -f /opt/bitnami/redis/etc/master.conf ]];then
+            cp /opt/bitnami/redis/mounted-etc/master.conf /opt/bitnami/redis/etc/master.conf
+          fi
+          if [[ ! -f /opt/bitnami/redis/etc/redis.conf ]];then
+            cp /opt/bitnami/redis/mounted-etc/redis.conf /opt/bitnami/redis/etc/redis.conf
+          fi
+          ARGS=("--port" "${REDIS_PORT}")
+          ARGS+=("--protected-mode" "no")
+          ARGS+=("--include" "/opt/bitnami/redis/etc/redis.conf")
+          ARGS+=("--include" "/opt/bitnami/redis/etc/master.conf")
+          /run.sh ${ARGS[@]}
+        env:
+        - name: REDIS_REPLICATION_MODE
+          value: master
+        - name: ALLOW_EMPTY_PASSWORD
+          value: "yes"
+        - name: REDIS_PORT
+          value: "6379"
+        ports:
+        - name: redis
+          containerPort: 6379
+        livenessProbe:
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 5
+          exec:
+            command:
+            - sh
+            - -c
+            - /health/ping_liveness_local.sh 5
+        readinessProbe:
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 1
+          successThreshold: 1
+          failureThreshold: 5
+          exec:
+            command:
+            - sh
+            - -c
+            - /health/ping_readiness_local.sh 5
+        resources:
+          {}
+        volumeMounts:
+        - name: health
+          mountPath: /health
+        - name: redis-data
+          mountPath: /data
+          subPath: 
+        - name: config
+          mountPath: /opt/bitnami/redis/mounted-etc
+        - name: redis-tmp-conf
+          mountPath: /opt/bitnami/redis/etc/
+      volumes:
+      - name: health
+        configMap:
+          name: redis-health
+          defaultMode: 0755
+      - name: config
+        configMap:
+          name: redis
+      - name: redis-tmp-conf
+        emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: redis-data
+        labels:
+          app: redis
+          release: my-sentry-db
+          heritage: Helm
+          component: master
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "8Gi"
+        
+  updateStrategy:
+    type: RollingUpdate
+---
+# Source: sentry-db/charts/redis/templates/redis-slave-statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis-slave
+  labels:
+    app: redis
+    chart: redis-10.3.3
+    release: my-sentry-db
+    heritage: Helm
+spec:
+  replicas: 2
+  serviceName: redis-headless
+  selector:
+    matchLabels:
+      app: redis
+      release: my-sentry-db
+      role: slave
+  template:
+    metadata:
+      labels:
+        app: redis
+        release: my-sentry-db
+        chart: redis-10.3.3
+        role: slave
+      annotations:
+        checksum/health: 09ac6ebb89ea1ca52ac3abc50bee7364dfde7e6a49469b99729754dc83d8f32b
+        checksum/configmap: 7665ad6ff1bee3f1825cba2c5413d7f2dcc154133004a2f44f90b483a61f384d
+        checksum/secret: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+    spec:      
+      securityContext:
+        fsGroup: 1001
+      serviceAccountName: "default"
+      containers:
+      - name: redis
+        image: docker.io/bitnami/redis:5.0.7-debian-9-r50
+        imagePullPolicy: "IfNotPresent"
+        securityContext:
+          runAsUser: 1001
+        command:
+        - /bin/bash
+        - -c
+        - |
+          if [[ -n $REDIS_PASSWORD_FILE ]]; then
+            password_aux=`cat ${REDIS_PASSWORD_FILE}`
+            export REDIS_PASSWORD=$password_aux
+          fi
+          if [[ -n $REDIS_MASTER_PASSWORD_FILE ]]; then
+            password_aux=`cat ${REDIS_MASTER_PASSWORD_FILE}`
+            export REDIS_MASTER_PASSWORD=$password_aux
+          fi
+          if [[ ! -f /opt/bitnami/redis/etc/replica.conf ]];then
+            cp /opt/bitnami/redis/mounted-etc/replica.conf /opt/bitnami/redis/etc/replica.conf
+          fi
+          if [[ ! -f /opt/bitnami/redis/etc/redis.conf ]];then
+            cp /opt/bitnami/redis/mounted-etc/redis.conf /opt/bitnami/redis/etc/redis.conf
+          fi
+          ARGS=("--port" "${REDIS_PORT}")
+          ARGS+=("--slaveof" "${REDIS_MASTER_HOST}" "${REDIS_MASTER_PORT_NUMBER}")
+          ARGS+=("--protected-mode" "no")
+          ARGS+=("--include" "/opt/bitnami/redis/etc/redis.conf")
+          ARGS+=("--include" "/opt/bitnami/redis/etc/replica.conf")
+          /run.sh "${ARGS[@]}"
+        env:
+        - name: REDIS_REPLICATION_MODE
+          value: slave
+        - name: REDIS_MASTER_HOST
+          value: redis-master-0.redis-headless.default.svc.cluster.local
+        - name: REDIS_PORT
+          value: "6379"
+        - name: REDIS_MASTER_PORT_NUMBER
+          value: "6379"
+        - name: ALLOW_EMPTY_PASSWORD
+          value: "yes"
+        ports:
+        - name: redis
+          containerPort: 6379
+        livenessProbe:
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 5
+          exec:
+            command:
+            - sh
+            - -c
+            - /health/ping_liveness_local_and_master.sh 5
+        readinessProbe:
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 10
+          successThreshold: 1
+          failureThreshold: 5
+          exec:
+            command:
+            - sh
+            - -c
+            - /health/ping_readiness_local_and_master.sh 5
+        resources:
+          {}
+        volumeMounts:
+        - name: health
+          mountPath: /health
+        - name: redis-data
+          mountPath: /data
+        - name: config
+          mountPath: /opt/bitnami/redis/mounted-etc
+        - name: redis-tmp-conf
+          mountPath: /opt/bitnami/redis/etc
+      volumes:
+      - name: health
+        configMap:
+          name: redis-health
+          defaultMode: 0755
+      - name: config
+        configMap:
+          name: redis
+      - name: sentinel-tmp-conf
+        emptyDir: {}
+      - name: redis-tmp-conf
+        emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: redis-data
+        labels:
+          app: redis
+          release: my-sentry-db
+          heritage: Helm
+          component: slave
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "8Gi"
+        
+  updateStrategy:
+    type: RollingUpdate

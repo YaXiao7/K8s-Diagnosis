@@ -1,0 +1,158 @@
+---
+# Source: nginx-playground/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-nginx-playground
+  labels:
+    helm.sh/chart: nginx-playground-0.1.0
+    app.kubernetes.io/name: nginx-playground
+    app.kubernetes.io/instance: my-nginx-playground
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+automountServiceAccountToken: true
+---
+# Source: nginx-playground/templates/configmaps.yaml
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: my-nginx-playground-data
+  annotations:
+    reloader.stakater.com/match: "true"
+data:
+  foo: |-
+    bar
+---
+# Source: nginx-playground/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-nginx-playground
+  labels:
+    helm.sh/chart: nginx-playground-0.1.0
+    app.kubernetes.io/name: nginx-playground
+    app.kubernetes.io/instance: my-nginx-playground
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: nginx-playground
+    app.kubernetes.io/instance: my-nginx-playground
+---
+# Source: nginx-playground/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-nginx-playground
+  annotations:
+    reloader.stakater.com/auto: "true"
+  labels:
+    helm.sh/chart: nginx-playground-0.1.0
+    app.kubernetes.io/name: nginx-playground
+    app.kubernetes.io/instance: my-nginx-playground
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: nginx-playground
+      app.kubernetes.io/instance: my-nginx-playground
+  template:
+    metadata:
+      labels:
+        helm.sh/chart: nginx-playground-0.1.0
+        app.kubernetes.io/name: nginx-playground
+        app.kubernetes.io/instance: my-nginx-playground
+        app.kubernetes.io/version: "1.16.0"
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      serviceAccountName: my-nginx-playground
+      securityContext:
+        {}
+      containers:
+        - name: nginx-playground
+          securityContext:
+            {}
+          image: "nginx:1.24-alpine"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+            {}
+          volumeMounts:
+            - mountPath: /data
+              name: data
+      volumes:
+        - name: data
+          configMap:
+            name: my-nginx-playground-data
+---
+# Source: nginx-playground/templates/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: my-nginx-playground
+  labels:
+    helm.sh/chart: nginx-playground-0.1.0
+    app.kubernetes.io/name: nginx-playground
+    app.kubernetes.io/instance: my-nginx-playground
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    kubernetes.io/ingress.class: traefik
+    kubernetes.io/tls-acme: "true"
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - "nginx.pyaeplay.dev"
+      secretName: nginx-playground
+  rules:
+    - host: "nginx.pyaeplay.dev"
+      http:
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: my-nginx-playground
+                port:
+                  number: 80
+---
+# Source: nginx-playground/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-nginx-playground-test-connection"
+  labels:
+    helm.sh/chart: nginx-playground-0.1.0
+    app.kubernetes.io/name: nginx-playground
+    app.kubernetes.io/instance: my-nginx-playground
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-nginx-playground:80']
+  restartPolicy: Never

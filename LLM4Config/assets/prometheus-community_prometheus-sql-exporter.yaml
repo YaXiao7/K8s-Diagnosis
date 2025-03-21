@@ -1,0 +1,157 @@
+---
+# Source: prometheus-sql-exporter/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-prometheus-sql-exporter
+  labels:
+    app: prometheus-sql-exporter
+    chart: prometheus-sql-exporter-0.1.0
+    release: "my-prometheus-sql-exporter"
+    heritage: "Helm"
+---
+# Source: prometheus-sql-exporter/templates/config.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-prometheus-sql-exporter
+  labels:
+    helm.sh/chart: prometheus-sql-exporter-0.1.0
+    app.kubernetes.io/name: prometheus-sql-exporter
+    app.kubernetes.io/instance: my-prometheus-sql-exporter
+    app.kubernetes.io/version: "v0.5.4"
+    app.kubernetes.io/managed-by: Helm
+data:
+  config.yml: |
+    {}
+---
+# Source: prometheus-sql-exporter/templates/role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: my-prometheus-sql-exporter
+  labels:
+    app: prometheus-sql-exporter
+    chart: prometheus-sql-exporter-0.1.0
+    heritage: Helm
+    release: my-prometheus-sql-exporter
+---
+# Source: prometheus-sql-exporter/templates/rolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: my-prometheus-sql-exporter
+  labels:
+    app: prometheus-sql-exporter
+    chart: prometheus-sql-exporter-0.1.0
+    heritage: Helm
+    release: my-prometheus-sql-exporter
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: my-prometheus-sql-exporter
+subjects:
+- kind: ServiceAccount
+  name: my-prometheus-sql-exporter
+---
+# Source: prometheus-sql-exporter/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-prometheus-sql-exporter
+  labels:
+    app: prometheus-sql-exporter
+    chart: prometheus-sql-exporter-0.1.0
+    release: my-prometheus-sql-exporter
+    heritage: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 9237
+      protocol: TCP
+      name: http
+  selector:
+    app: prometheus-sql-exporter
+    release: my-prometheus-sql-exporter
+---
+# Source: prometheus-sql-exporter/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-prometheus-sql-exporter
+  labels:
+    app: prometheus-sql-exporter
+    chart: prometheus-sql-exporter-0.1.0
+    release: my-prometheus-sql-exporter
+    heritage: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus-sql-exporter
+      release: my-prometheus-sql-exporter
+  template:
+    metadata:
+      labels:
+        app: prometheus-sql-exporter
+        release: my-prometheus-sql-exporter
+      annotations:
+        kubectl.kubernetes.io/default-container: prometheus-sql-exporter
+    spec:
+      serviceAccountName: my-prometheus-sql-exporter
+      securityContext:
+        runAsGroup: 1001
+        runAsNonRoot: true
+        runAsUser: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: prometheus-sql-exporter
+          command:
+          - "sql_exporter"
+          - "-web.listen-address=:9237"
+          - "-config.file=/config.yml"
+          env:
+          image: "ghcr.io/justwatchcom/sql_exporter:v0.5.4"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 9237
+              protocol: TCP
+          livenessProbe:
+            initialDelaySeconds: 3
+            timeoutSeconds: 3
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            initialDelaySeconds: 5
+            timeoutSeconds: 10
+            httpGet:
+              path: /
+              port: http
+          resources:
+            {}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+            runAsGroup: 1001
+            runAsNonRoot: true
+            runAsUser: 1001
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: config
+              mountPath: /config.yml
+              subPath: config.yml
+      volumes:
+        - name: config
+          configMap:
+            name: my-prometheus-sql-exporter
+            items:
+              - key: config.yml
+                path: config.yml

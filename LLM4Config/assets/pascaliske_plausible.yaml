@@ -1,0 +1,80 @@
+---
+# Source: plausible/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-plausible-web
+  labels:
+    helm.sh/chart: plausible-1.1.0
+    app.kubernetes.io/name: plausible
+    app.kubernetes.io/instance: my-plausible
+    app.kubernetes.io/version: "v2.0.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+      protocol: "TCP"
+  selector:
+    app.kubernetes.io/name: plausible
+    app.kubernetes.io/instance: my-plausible
+---
+# Source: plausible/templates/controller.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-plausible
+  labels:
+    helm.sh/chart: plausible-1.1.0
+    app.kubernetes.io/name: plausible
+    app.kubernetes.io/instance: my-plausible
+    app.kubernetes.io/version: "v2.0.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: plausible
+      app.kubernetes.io/instance: my-plausible
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: plausible
+        app.kubernetes.io/instance: my-plausible
+    spec:
+      serviceAccountName: default
+      initContainers:
+        - name: init-database
+          image: "plausible/analytics:v2.0.0"
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+          args:
+            - sleep 30 && /entrypoint.sh db createdb && /entrypoint.sh db migrate
+          env:
+            - name: "TZ"
+              value: "UTC"
+          resources: {}
+      containers:
+        - name: plausible
+          image: "plausible/analytics:v2.0.0"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: "TCP"
+          env:
+            - name: "TZ"
+              value: "UTC"
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+          resources: {}

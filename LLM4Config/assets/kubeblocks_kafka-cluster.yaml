@@ -1,0 +1,52 @@
+---
+# Source: kafka-cluster/templates/cluster.yaml
+apiVersion: apps.kubeblocks.io/v1alpha1
+kind: Cluster
+metadata:
+  name: my-kafka-cluster
+  labels: 
+    helm.sh/chart: kafka-cluster-0.9.0
+    app.kubernetes.io/version: "3.3.2"
+    app.kubernetes.io/instance: my-kafka-cluster
+  annotations:
+    "kubeblocks.io/extra-env": '{"KB_KAFKA_ENABLE_SASL":"false","KB_KAFKA_BROKER_HEAP":"-XshowSettings:vm -XX:MaxRAMPercentage=100 -Ddepth=64","KB_KAFKA_CONTROLLER_HEAP":"-XshowSettings:vm -XX:MaxRAMPercentage=100 -Ddepth=64","KB_KAFKA_PUBLIC_ACCESS":"false"}'
+
+spec:
+  clusterDefinitionRef: kafka # ref clusterdefinition.name
+  clusterVersionRef: kafka-3.3.2
+  terminationPolicy: Delete  
+  affinity:
+    podAntiAffinity: Preferred
+    topologyKeys:
+      - kubernetes.io/hostname
+    tenancy: SharedNode
+  topology:
+    combined_monitor
+  componentSpecs:
+    - name: kafka-combine
+      tls: false
+      replicas: 1
+      monitor: true
+      serviceAccountName: 
+      services:
+        - name: advertised-listener
+          serviceType: ClusterIP
+          podService: true      
+      resources:
+        limits:
+          cpu: "0.5"
+          memory: "0.5Gi"
+        requests:
+          cpu: "0.5"
+          memory: "0.5Gi"
+    - name: kafka-exporter
+      replicas: 1
+      monitor: true
+      
+      resources:
+        limits:
+          cpu: "0.5"
+          memory: "0.5Gi"
+        requests:
+          cpu: "0.5"
+          memory: "0.5Gi"

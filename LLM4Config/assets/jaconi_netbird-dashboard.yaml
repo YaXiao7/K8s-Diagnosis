@@ -1,0 +1,102 @@
+---
+# Source: netbird-dashboard/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-netbird-dashboard
+  labels:
+    helm.sh/chart: netbird-dashboard-1.0.0
+    app.kubernetes.io/name: netbird-dashboard
+    app.kubernetes.io/instance: my-netbird-dashboard
+    app.kubernetes.io/version: "v2.1.3"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: netbird-dashboard/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-netbird-dashboard
+  labels:
+    helm.sh/chart: netbird-dashboard-1.0.0
+    app.kubernetes.io/name: netbird-dashboard
+    app.kubernetes.io/instance: my-netbird-dashboard
+    app.kubernetes.io/version: "v2.1.3"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: netbird-dashboard
+    app.kubernetes.io/instance: my-netbird-dashboard
+---
+# Source: netbird-dashboard/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-netbird-dashboard
+  labels:
+    helm.sh/chart: netbird-dashboard-1.0.0
+    app.kubernetes.io/name: netbird-dashboard
+    app.kubernetes.io/instance: my-netbird-dashboard
+    app.kubernetes.io/version: "v2.1.3"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: netbird-dashboard
+      app.kubernetes.io/instance: my-netbird-dashboard
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: netbird-dashboard
+        app.kubernetes.io/instance: my-netbird-dashboard
+    spec:
+      serviceAccountName: my-netbird-dashboard
+      securityContext:
+        {}
+      containers:
+        - name: netbird-dashboard
+          
+          command: ["/bin/sh", "-c"]
+          args:
+          - >
+            sed -i 's/listen \[\:\:\]\:80 default_server\;//g' /etc/nginx/http.d/default.conf &&
+            /usr/bin/supervisord -c /etc/supervisord.conf
+          securityContext:
+            {}
+          image: "netbirdio/dashboard:v2.1.3"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: AUTH_AUDIENCE
+              value: netbird-dashboard
+            - name: AUTH_AUTHORITY
+              value: http://keycloak.localtest.me:9000/realms/helm-charts
+            - name: AUTH_CLIENT_ID
+              value: netbird-dashboard
+            - name: AUTH_SUPPORTED_SCOPES
+              value: openid profile email offline_access api
+            - name: USE_AUTH0
+              value: "false"
+            - name: NETBIRD_MGMT_API_ENDPOINT
+              value: http://localtest.me:8081
+            - name: NETBIRD_MGMT_GRPC_API_ENDPOINT
+              value: http://localtest.me:8081
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+            {}

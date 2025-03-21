@@ -1,0 +1,117 @@
+---
+# Source: home-assistant/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-home-assistant
+  labels:
+    helm.sh/chart: home-assistant-0.2.77
+    app.kubernetes.io/name: home-assistant
+    app.kubernetes.io/instance: my-home-assistant
+    app.kubernetes.io/version: "2024.9.1"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: home-assistant/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-home-assistant
+  labels:
+    helm.sh/chart: home-assistant-0.2.77
+    app.kubernetes.io/name: home-assistant
+    app.kubernetes.io/instance: my-home-assistant
+    app.kubernetes.io/version: "2024.9.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: home-assistant
+    app.kubernetes.io/instance: my-home-assistant
+---
+# Source: home-assistant/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-home-assistant
+  labels:
+    helm.sh/chart: home-assistant-0.2.77
+    app.kubernetes.io/name: home-assistant
+    app.kubernetes.io/instance: my-home-assistant
+    app.kubernetes.io/version: "2024.9.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  serviceName: my-home-assistant
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: home-assistant
+      app.kubernetes.io/instance: my-home-assistant
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: home-assistant
+        app.kubernetes.io/instance: my-home-assistant
+      annotations:
+    spec:
+      securityContext:
+        {}
+      containers:
+        - name: home-assistant
+          securityContext:
+            {}
+          image: "ghcr.io/home-assistant/home-assistant:2024.9.1"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8123
+              protocol: TCP
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /
+              port: http
+              scheme: HTTP
+            periodSeconds: 20
+            successThreshold: 1
+            timeoutSeconds: 2
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /
+              port: http
+              scheme: HTTP
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+          volumeMounts:
+          - mountPath: /config
+            name: my-home-assistant
+      volumes:
+      - name: my-home-assistant
+        emptyDir: {}
+---
+# Source: home-assistant/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-home-assistant-test-connection"
+  labels:
+    helm.sh/chart: home-assistant-0.2.77
+    app.kubernetes.io/name: home-assistant
+    app.kubernetes.io/instance: my-home-assistant
+    app.kubernetes.io/version: "2024.9.1"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-home-assistant:8080']
+  restartPolicy: Never

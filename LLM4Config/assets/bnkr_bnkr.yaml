@@ -1,0 +1,372 @@
+---
+# Source: bnkr/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-bnkr
+  labels:
+    helm.sh/chart: bnkr-1.0.5
+    app.kubernetes.io/name: bnkr
+    app.kubernetes.io/instance: my-bnkr
+    app.kubernetes.io/version: "2.1.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: bnkr/charts/postgresql/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-bnkr-postgresql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: postgresql
+    helm.sh/chart: postgresql-11.1.19
+    app.kubernetes.io/instance: my-bnkr
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  postgres-password: "SFIyQjlVYmFTZA=="
+  password: "MnpkVHdWenFySw=="
+  # We don't auto-generate LDAP password when it's not provided as we do for other passwords
+---
+# Source: bnkr/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-bnkr
+data:
+  USERPASSWORD: "bnJOVEU2aUF5SmR3MTdsdkxCV0dUMUJJNmg="
+  
+  USEREMAIL: "bWVAZXhhbXBsZS5jb20="
+  
+  DB_PASSWORD: "SHJaeXdkeE1aekRuYTNhY1phWlhDc0dmanE="
+  
+  
+  
+  DB_NAME: "Ym5rcg=="
+  
+  
+  DB_USER: "Ym5rcg=="
+---
+# Source: bnkr/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-bnkr
+data:
+  USERNAME: John Doe
+  PORT: "5000"
+  PRODUCTION: "true"
+  SETUP: "true"
+  DB_TIMEZONE: Europe/Istanbul
+  
+  DB_PORT: "5432"
+  
+  
+  DB_HOST: my-bnkr-postgresql.default.svc.cluster.local
+  
+  DB_SSLMODE: disable
+---
+# Source: bnkr/templates/clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-bnkr
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+- kind: ServiceAccount
+  name: my-bnkr
+  namespace: default
+---
+# Source: bnkr/charts/postgresql/templates/primary/svc-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-bnkr-postgresql-hl
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: postgresql
+    helm.sh/chart: postgresql-11.1.19
+    app.kubernetes.io/instance: my-bnkr
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: primary
+    # Use this annotation in addition to the actual publishNotReadyAddresses
+    # field below because the annotation will stop being respected soon but the
+    # field is broken in some versions of Kubernetes:
+    # https://github.com/kubernetes/kubernetes/issues/58662
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+spec:
+  type: ClusterIP
+  clusterIP: None
+  # We want all pods in the StatefulSet to have their addresses published for
+  # the sake of the other Postgresql pods even before they're ready, since they
+  # have to be able to talk to each other in order to become ready.
+  publishNotReadyAddresses: true
+  ports:
+    - name: tcp-postgresql
+      port: 5432
+      targetPort: tcp-postgresql
+  selector:
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/instance: my-bnkr
+    app.kubernetes.io/component: primary
+---
+# Source: bnkr/charts/postgresql/templates/primary/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-bnkr-postgresql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: postgresql
+    helm.sh/chart: postgresql-11.1.19
+    app.kubernetes.io/instance: my-bnkr
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: primary
+  annotations:
+spec:
+  type: ClusterIP
+  ports:
+    - name: tcp-postgresql
+      port: 5432
+      targetPort: tcp-postgresql
+      nodePort: null
+  selector:
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/instance: my-bnkr
+    app.kubernetes.io/component: primary
+---
+# Source: bnkr/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-bnkr
+  labels:
+    helm.sh/chart: bnkr-1.0.5
+    app.kubernetes.io/name: bnkr
+    app.kubernetes.io/instance: my-bnkr
+    app.kubernetes.io/version: "2.1.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: bnkr
+    app.kubernetes.io/instance: my-bnkr
+---
+# Source: bnkr/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-bnkr
+  labels:
+    helm.sh/chart: bnkr-1.0.5
+    app.kubernetes.io/name: bnkr
+    app.kubernetes.io/instance: my-bnkr
+    app.kubernetes.io/version: "2.1.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: bnkr
+      app.kubernetes.io/instance: my-bnkr
+  template:
+    metadata:
+      annotations:
+        checksum/config: 77ae519d6c3e96fb28034d8a9ee1c318966d51269b1f2c81eb588dcb5bec2ece
+        checksum/secret: 641474f189a4e187eb1675f9da059c8803bff707bbba45632d0730408b9b0519
+      labels:
+        app.kubernetes.io/name: bnkr
+        app.kubernetes.io/instance: my-bnkr
+    spec:
+      serviceAccountName: my-bnkr
+      securityContext:
+        {}
+      containers:
+        - name: bnkr
+          securityContext:
+            {}
+          image: "engrmth/bnkr:2.1.0"
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - secretRef:
+                name: my-bnkr
+            - configMapRef:
+                name: my-bnkr
+          ports:
+            - name: http
+              containerPort: 5000
+              protocol: TCP
+          resources:
+            {}
+---
+# Source: bnkr/charts/postgresql/templates/primary/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-bnkr-postgresql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: postgresql
+    helm.sh/chart: postgresql-11.1.19
+    app.kubernetes.io/instance: my-bnkr
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: primary
+  annotations:
+spec:
+  replicas: 1
+  serviceName: my-bnkr-postgresql-hl
+  updateStrategy:
+    rollingUpdate: {}
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgresql
+      app.kubernetes.io/instance: my-bnkr
+      app.kubernetes.io/component: primary
+  template:
+    metadata:
+      name: my-bnkr-postgresql
+      labels:
+        app.kubernetes.io/name: postgresql
+        helm.sh/chart: postgresql-11.1.19
+        app.kubernetes.io/instance: my-bnkr
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/component: primary
+      annotations:
+    spec:
+      serviceAccountName: default
+      
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: postgresql
+                    app.kubernetes.io/instance: my-bnkr
+                    app.kubernetes.io/component: primary
+                namespaces:
+                  - "default"
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+      hostNetwork: false
+      hostIPC: false
+      initContainers:
+      containers:
+        - name: postgresql
+          image: docker.io/bitnami/postgresql:14.2.0-debian-10-r58
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            runAsUser: 1001
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: POSTGRESQL_PORT_NUMBER
+              value: "5432"
+            - name: POSTGRESQL_VOLUME_DIR
+              value: "/bitnami/postgresql"
+            - name: PGDATA
+              value: "/bitnami/postgresql/data"
+            # Authentication
+            - name: POSTGRES_USER
+              value: "bnkr"
+            - name: POSTGRES_POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-bnkr-postgresql
+                  key: postgres-password
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-bnkr-postgresql
+                  key: password
+            - name: POSTGRES_DB
+              value: "bnkr"
+            # Replication
+            # Initdb
+            # Standby
+            # LDAP
+            - name: POSTGRESQL_ENABLE_LDAP
+              value: "no"
+            # TLS
+            - name: POSTGRESQL_ENABLE_TLS
+              value: "no"
+            # Audit
+            - name: POSTGRESQL_LOG_HOSTNAME
+              value: "false"
+            - name: POSTGRESQL_LOG_CONNECTIONS
+              value: "false"
+            - name: POSTGRESQL_LOG_DISCONNECTIONS
+              value: "false"
+            - name: POSTGRESQL_PGAUDIT_LOG_CATALOG
+              value: "off"
+            # Others
+            - name: POSTGRESQL_CLIENT_MIN_MESSAGES
+              value: "error"
+            - name: POSTGRESQL_SHARED_PRELOAD_LIBRARIES
+              value: "pgaudit"
+          ports:
+            - name: tcp-postgresql
+              containerPort: 5432
+          livenessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - exec pg_isready -U "bnkr" -d "dbname=bnkr" -h 127.0.0.1 -p 5432
+          readinessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - -e
+                
+                - |
+                  exec pg_isready -U "bnkr" -d "dbname=bnkr" -h 127.0.0.1 -p 5432
+                  [ -f /opt/bitnami/postgresql/tmp/.initialized ] || [ -f /bitnami/postgresql/.initialized ]
+          resources:
+            limits: {}
+            requests:
+              cpu: 250m
+              memory: 256Mi
+          volumeMounts:
+            - name: dshm
+              mountPath: /dev/shm
+            - name: data
+              mountPath: /bitnami/postgresql
+      volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "8Gi"

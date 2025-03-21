@@ -1,0 +1,130 @@
+---
+# Source: kminion/templates/poddisruptionbudget.yaml
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: my-kminion
+  namespace: "default"
+  labels:
+    helm.sh/chart: kminion-0.14.0
+    app.kubernetes.io/name: kminion
+    app.kubernetes.io/instance: my-kminion
+    app.kubernetes.io/version: "v2.2.8"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kminion
+      app.kubernetes.io/instance: my-kminion
+---
+# Source: kminion/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-kminion
+  namespace: "default"
+  labels:
+    helm.sh/chart: kminion-0.14.0
+    app.kubernetes.io/name: kminion
+    app.kubernetes.io/instance: my-kminion
+    app.kubernetes.io/version: "v2.2.8"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: kminion/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-kminion
+  namespace: "default"
+  labels:
+    helm.sh/chart: kminion-0.14.0
+    app.kubernetes.io/name: kminion
+    app.kubernetes.io/instance: my-kminion
+    app.kubernetes.io/version: "v2.2.8"
+    app.kubernetes.io/managed-by: Helm
+data:
+  config.yaml: |
+    {}
+---
+# Source: kminion/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-kminion
+  namespace: "default"
+  labels:
+    helm.sh/chart: kminion-0.14.0
+    app.kubernetes.io/name: kminion
+    app.kubernetes.io/instance: my-kminion
+    app.kubernetes.io/version: "v2.2.8"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: metrics
+      protocol: TCP
+      name: metrics
+  selector:
+    app.kubernetes.io/name: kminion
+    app.kubernetes.io/instance: my-kminion
+---
+# Source: kminion/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-kminion
+  namespace: "default"
+  labels:
+    helm.sh/chart: kminion-0.14.0
+    app.kubernetes.io/name: kminion
+    app.kubernetes.io/instance: my-kminion
+    app.kubernetes.io/version: "v2.2.8"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kminion
+      app.kubernetes.io/instance: my-kminion
+  template:
+    metadata:
+      annotations:
+        
+      labels:
+        app.kubernetes.io/name: kminion
+        app.kubernetes.io/instance: my-kminion
+    spec:
+      serviceAccountName: my-kminion
+      securityContext:
+        fsGroup: 99
+        runAsUser: 99
+      volumes:
+        - name: config
+          configMap:
+            name: my-kminion
+      initContainers:
+      containers:
+        - name: kminion
+          securityContext:
+            allowPrivilegeEscalation: false
+          image: "redpandadata/kminion:v2.2.8"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: metrics
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: CONFIG_FILEPATH
+              value: /etc/kminion/config.yaml
+          volumeMounts:
+            - name: config
+              mountPath: /etc/kminion
+          resources:
+            {}
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+            initialDelaySeconds: 10

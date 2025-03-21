@@ -1,0 +1,654 @@
+---
+# Source: rocketmq/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-rocketmq-server-config
+data:
+  broker-base.conf: |
+    deleteWhen = 04
+    fileReservedTime = 48
+    flushDiskType = ASYNC_FLUSH
+    waitTimeMillsInSendQueue = 1000
+    brokerClusterName = rocketmq-helm
+  controller-base.conf: |
+    controllerDLegerGroup = group1
+    enableElectUncleanMaster = false
+    notifyBrokerRoleChanged = true
+    controllerDLegerPeers = 
+    controllerStorePath = /home/rocketmq/controller-data
+  proxy.json: |
+    {
+      "rocketMQClusterName": "rocketmq-helm"
+    }
+  mq-server-start.sh: |
+    java -version
+    if [ $? -ne 0 ]; then
+      echo "[ERROR] Missing java runtime"
+      exit 50
+    fi
+    if [ -z "${ROCKETMQ_HOME}" ]; then
+      echo "[ERROR] Missing env ROCKETMQ_HOME"
+      exit 50
+    fi
+    if [ -z "${ROCKETMQ_PROCESS_ROLE}" ]; then
+      echo "[ERROR] Missing env ROCKETMQ_PROCESS_ROLE"
+      exit 50
+    fi
+
+    export JAVA_HOME=$(dirname $(dirname $(readlink -f $(which java))))
+    export CLASSPATH=".:${ROCKETMQ_HOME}/conf:${ROCKETMQ_HOME}/lib/*:${CLASSPATH}"
+
+    JAVA_OPT="${JAVA_OPT} -server"
+    if [ -n "$ROCKETMQ_JAVA_OPTIONS_OVERRIDE" ]; then
+      JAVA_OPT="${JAVA_OPT} ${ROCKETMQ_JAVA_OPTIONS_OVERRIDE}"
+    else
+      JAVA_OPT="${JAVA_OPT} -XX:+UseG1GC"
+      JAVA_OPT="${JAVA_OPT} ${ROCKETMQ_JAVA_OPTIONS_EXT}"
+      JAVA_OPT="${JAVA_OPT} ${ROCKETMQ_JAVA_OPTIONS_HEAP}"
+    fi
+    JAVA_OPT="${JAVA_OPT} -cp ${CLASSPATH}"
+
+    export BROKER_CONF_FILE="$HOME/broker.conf"
+    export CONTROLLER_CONF_FILE="$HOME/controller.conf"
+
+    update_broker_conf() {
+      local key=$1
+      local value=$2
+      sed -i "/^${key} *=/d" ${BROKER_CONF_FILE}
+      echo "${key} = ${value}" >> ${BROKER_CONF_FILE}
+    }
+
+    init_broker_role() {
+      if [ "${ROCKETMQ_CONF_brokerRole}" = "SLAVE" ]; then
+        update_broker_conf "brokerRole" "SLAVE"
+      elif [ "${ROCKETMQ_CONF_brokerRole}" = "SYNC_MASTER" ]; then
+        update_broker_conf "brokerRole" "SYNC_MASTER"
+      else
+        update_broker_conf "brokerRole" "ASYNC_MASTER"
+      fi
+      if echo "${ROCKETMQ_CONF_brokerId}" | grep -E '^[0-9]+$'; then
+        update_broker_conf "brokerId" "${ROCKETMQ_CONF_brokerId}"
+      fi
+    }
+
+    init_broker_conf() {
+      rm -f ${BROKER_CONF_FILE}
+      cp /etc/rocketmq/broker-base.conf ${BROKER_CONF_FILE}
+      echo "" >> ${BROKER_CONF_FILE}
+      echo "# generated config" >> ${BROKER_CONF_FILE}
+      broker_name_seq=${HOSTNAME##*-}
+      if [ -n "$MY_POD_NAME" ]; then
+        broker_name_seq=${MY_POD_NAME##*-}
+      fi
+      update_broker_conf "brokerName" "broker-g${broker_name_seq}"
+      if [ "$enableControllerMode" != "true" ]; then
+        init_broker_role
+      fi
+      echo "[exec] cat ${BROKER_CONF_FILE}"
+      cat ${BROKER_CONF_FILE}
+    }
+
+    init_acl_conf() {
+      if [ -f /etc/rocketmq/acl/plain_acl.yml ]; then
+        rm -f "${ROCKETMQ_HOME}/conf/plain_acl.yml"
+        ln -sf "/etc/rocketmq/acl" "${ROCKETMQ_HOME}/conf/acl"
+      fi
+    }
+
+    init_controller_conf() {
+      rm -f ${CONTROLLER_CONF_FILE}
+      cp /etc/rocketmq/base-cm/controller-base.conf ${CONTROLLER_CONF_FILE}
+      controllerDLegerSelfId="n${HOSTNAME##*-}"
+      if [ -n "$MY_POD_NAME" ]; then
+        controllerDLegerSelfId="n${MY_POD_NAME##*-}"
+      fi
+      sed -i "/^controllerDLegerSelfId *=/d" ${CONTROLLER_CONF_FILE}
+      echo "controllerDLegerSelfId = ${controllerDLegerSelfId}" >> ${CONTROLLER_CONF_FILE}
+      cat ${CONTROLLER_CONF_FILE}
+    }
+
+    if [ "$ROCKETMQ_PROCESS_ROLE" = "broker" ]; then
+      init_broker_conf
+      init_acl_conf
+      set -x
+      java ${JAVA_OPT} org.apache.rocketmq.broker.BrokerStartup -c ${BROKER_CONF_FILE}
+    elif [ "$ROCKETMQ_PROCESS_ROLE" = "controller" ]; then
+      init_controller_conf
+      set -x
+      java ${JAVA_OPT} org.apache.rocketmq.controller.ControllerStartup -c ${CONTROLLER_CONF_FILE}
+    elif [ "$ROCKETMQ_PROCESS_ROLE" = "nameserver" ] || [ "$ROCKETMQ_PROCESS_ROLE" = "mqnamesrv" ]; then
+      set -x
+      if [ "$enableControllerInNamesrv" = "true" ]; then
+        init_controller_conf
+        java ${JAVA_OPT} org.apache.rocketmq.namesrv.NamesrvStartup -c ${CONTROLLER_CONF_FILE}
+      else
+        java ${JAVA_OPT} org.apache.rocketmq.namesrv.NamesrvStartup
+      fi
+    elif  [ "$ROCKETMQ_PROCESS_ROLE" = "proxy" ]; then
+      set -x
+      if [ -f $RMQ_PROXY_CONFIG_PATH ]; then
+        java ${JAVA_OPT} org.apache.rocketmq.proxy.ProxyStartup -pc $RMQ_PROXY_CONFIG_PATH
+      else
+        java ${JAVA_OPT} org.apache.rocketmq.proxy.ProxyStartup
+      fi
+    else
+      echo "[ERROR] Missing env ROCKETMQ_PROCESS_ROLE"
+      exit 50
+    fi
+---
+# Source: rocketmq/templates/dashboard/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "my-rocketmq-dashboard-cm"
+data:
+  users.properties: |
+    admin=admin,1
+    user01=userPass
+---
+# Source: rocketmq/templates/dashboard/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-rocketmq-dashboard
+  labels:
+    helm.sh/chart: rocketmq-12.3.1
+    app.kubernetes.io/name: rocketmq
+    app.kubernetes.io/instance: my-rocketmq
+    app.kubernetes.io/version: "5.3.0"
+    app.kubernetes.io/managed-by: Helm
+    component: dashboard
+spec:
+  ports:
+  - port: 8080
+    protocol: TCP
+    targetPort: 8080
+  selector:
+    app.kubernetes.io/name: rocketmq
+    app.kubernetes.io/instance: my-rocketmq
+    component: dashboard
+  type: "ClusterIP"
+---
+# Source: rocketmq/templates/nameserver/svc-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: "my-rocketmq-nameserver-headless"
+  labels:
+    helm.sh/chart: rocketmq-12.3.1
+    app.kubernetes.io/name: rocketmq
+    app.kubernetes.io/instance: my-rocketmq
+    app.kubernetes.io/version: "5.3.0"
+    app.kubernetes.io/managed-by: Helm
+    component: nameserver
+spec:
+  clusterIP: "None"
+  publishNotReadyAddresses: true
+  ports:
+  - port: 9876
+    protocol: TCP
+    targetPort: 9876
+  selector:
+    app.kubernetes.io/name: rocketmq
+    app.kubernetes.io/instance: my-rocketmq
+    component: nameserver
+---
+# Source: rocketmq/templates/nameserver/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-rocketmq-nameserver
+  labels:
+    helm.sh/chart: rocketmq-12.3.1
+    app.kubernetes.io/name: rocketmq
+    app.kubernetes.io/instance: my-rocketmq
+    app.kubernetes.io/version: "5.3.0"
+    app.kubernetes.io/managed-by: Helm
+    component: nameserver
+spec:
+  ports:
+  - port: 9876
+    protocol: TCP
+    targetPort: 9876
+  selector:
+    app.kubernetes.io/name: rocketmq
+    app.kubernetes.io/instance: my-rocketmq
+    component: nameserver
+  type: "ClusterIP"
+---
+# Source: rocketmq/templates/proxy/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-rocketmq-proxy
+  labels:
+    helm.sh/chart: rocketmq-12.3.1
+    app.kubernetes.io/name: rocketmq
+    app.kubernetes.io/instance: my-rocketmq
+    app.kubernetes.io/version: "5.3.0"
+    app.kubernetes.io/managed-by: Helm
+    component: proxy
+spec:
+  ports:
+  - port: 8080
+    name: main
+    protocol: TCP
+    targetPort: 8080
+  - port: 8081
+    name: grpc
+    protocol: TCP
+    targetPort: 8081
+  selector:
+    app.kubernetes.io/name: rocketmq
+    app.kubernetes.io/instance: my-rocketmq
+    component: proxy
+  type: "ClusterIP"
+---
+# Source: rocketmq/templates/dashboard/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "my-rocketmq-dashboard"
+  labels:
+    helm.sh/chart: rocketmq-12.3.1
+    app.kubernetes.io/name: rocketmq
+    app.kubernetes.io/instance: my-rocketmq
+    app.kubernetes.io/version: "5.3.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: rocketmq
+      app.kubernetes.io/instance: my-rocketmq
+      component: dashboard
+  template:
+    metadata:
+      annotations:
+        checksum/config: ce92bcd13fc8e409e00227ef2f464f5cfaafc43391a9f93efb83719ed676ddfd
+      labels:
+        app.kubernetes.io/name: rocketmq
+        app.kubernetes.io/instance: my-rocketmq
+        component: dashboard
+    spec:
+      containers:
+      - name: dashboard
+        image: "apacherocketmq/rocketmq-dashboard:1.0.0"
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: JAVA_OPTS
+          value: -XX:MaxHeapSize=256M -Drocketmq.namesrv.addr=my-rocketmq-nameserver.default.svc:9876
+        - name: rocketmq.config.loginRequired
+          value: "true"
+        - name: rocketmq.config.dataPath
+          value: /tmp/rocketmq-console/data
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        resources:
+          limits:
+            cpu: 1
+            memory: 2Gi
+          requests:
+            cpu: 20m
+            memory: 512Mi
+        readinessProbe:
+            failureThreshold: 6
+            httpGet:
+              path: /
+              port: http
+        volumeMounts:
+        - mountPath: "/tmp/rocketmq-console/data/users.properties"
+          name: dashboard-cm
+          subPath: users.properties
+      terminationGracePeriodSeconds: 5
+      volumes:
+      - configMap:
+          items:
+          - key: users.properties
+            path: users.properties
+          name: my-rocketmq-dashboard-cm
+        name: dashboard-cm
+---
+# Source: rocketmq/templates/proxy/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "my-rocketmq-proxy"
+  labels:
+    helm.sh/chart: rocketmq-12.3.1
+    app.kubernetes.io/name: rocketmq
+    app.kubernetes.io/instance: my-rocketmq
+    app.kubernetes.io/version: "5.3.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  minReadySeconds: 20
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: rocketmq
+      app.kubernetes.io/instance: my-rocketmq
+      component: proxy
+  template:
+    metadata:
+      annotations:
+        checksum/config: 8b65d52f93831fe650462c9b32662636fcdeb673b8029bcc0b34d48cf24d48d7
+      labels:
+        app.kubernetes.io/name: rocketmq
+        app.kubernetes.io/instance: my-rocketmq
+        component: proxy
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 5
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: rocketmq
+                  app.kubernetes.io/instance: my-rocketmq
+                  component: proxy
+              topologyKey: kubernetes.io/hostname
+      containers:
+      - name: proxy
+        image: "apache/rocketmq:5.3.0"
+        imagePullPolicy: IfNotPresent
+        command:
+          - sh
+          - /mq-server-start.sh
+        env:
+        - name: NAMESRV_ADDR
+          value: my-rocketmq-nameserver-0.my-rocketmq-nameserver-headless.default.svc:9876
+        - name: ROCKETMQ_PROCESS_ROLE
+          value: proxy
+        - name: RMQ_PROXY_CONFIG_PATH
+          value: /etc/rocketmq/proxy.json
+        - name: ROCKETMQ_JAVA_OPTIONS_HEAP
+          value: -Xms600M -Xmx600M
+        ports:
+        - name: main
+          containerPort: 8080
+          protocol: TCP
+        - name: grpc
+          containerPort: 8081
+          protocol: TCP
+        resources:
+          limits:
+            cpu: 2
+            memory: 6Gi
+          requests:
+            cpu: 100m
+            memory: 1Gi
+        readinessProbe:
+          failureThreshold: 6
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          tcpSocket:
+            port: main
+          timeoutSeconds: 3
+        lifecycle:
+          preStop:
+            exec:
+              command: ["sh", "-c", "sleep 5; ./mqshutdown proxy"]
+        volumeMounts:
+        - mountPath: /mq-server-start.sh
+          name: mq-server-start-sh
+          subPath: mq-server-start.sh
+        - mountPath: /etc/rocketmq/proxy.json
+          name: proxy-json
+          subPath: proxy.json
+      dnsPolicy: ClusterFirst
+      terminationGracePeriodSeconds: 15
+      volumes:
+      - configMap:
+          items:
+          - key: mq-server-start.sh
+            path: mq-server-start.sh
+          name: my-rocketmq-server-config
+          defaultMode: 0755
+        name: mq-server-start-sh
+      - configMap:
+          items:
+          - key: proxy.json
+            path: proxy.json
+          name: my-rocketmq-server-config
+        name: proxy-json
+---
+# Source: rocketmq/templates/broker/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-rocketmq-broker-master
+  labels:
+    helm.sh/chart: rocketmq-12.3.1
+    app.kubernetes.io/name: rocketmq
+    app.kubernetes.io/instance: my-rocketmq
+    app.kubernetes.io/version: "5.3.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  minReadySeconds: 20
+  replicas: 1
+  podManagementPolicy: OrderedReady
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: rocketmq
+      app.kubernetes.io/instance: my-rocketmq
+      component: broker
+      broker: my-rocketmq-broker-master
+  serviceName: ""
+  template:
+    metadata:
+      annotations:
+        checksum/config: 8b65d52f93831fe650462c9b32662636fcdeb673b8029bcc0b34d48cf24d48d7
+      labels:
+        app.kubernetes.io/name: rocketmq
+        app.kubernetes.io/instance: my-rocketmq
+        component: broker
+        broker: my-rocketmq-broker-master
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 5
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: rocketmq
+                  app.kubernetes.io/instance: my-rocketmq
+                  component: broker
+              topologyKey: kubernetes.io/hostname
+      securityContext:
+        fsGroup: 3000
+        runAsUser: 3000
+      containers:
+      - name: broker
+        image: "apache/rocketmq:5.3.0"
+        imagePullPolicy: IfNotPresent
+        command:
+          - sh
+          - /mq-server-start.sh
+        env:
+        - name: MY_POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: ROCKETMQ_PROCESS_ROLE
+          value: broker
+        - name: NAMESRV_ADDR
+          value: my-rocketmq-nameserver-0.my-rocketmq-nameserver-headless.default.svc:9876
+        - name: ROCKETMQ_CONF_brokerId
+          value: "0"
+        - name: ROCKETMQ_CONF_brokerRole
+          value: "ASYNC_MASTER"
+        - name: ROCKETMQ_JAVA_OPTIONS_HEAP
+          value: -Xms1024M -Xmx1024M
+        ports:
+        - containerPort: 10909
+          name: vip
+          protocol: TCP
+        - containerPort: 10911
+          name: main
+          protocol: TCP
+        - containerPort: 10912
+          name: ha
+          protocol: TCP
+        resources:
+          limits:
+            cpu: 4
+            memory: 16Gi
+          requests:
+            cpu: 200m
+            memory: 2Gi
+        readinessProbe:
+          failureThreshold: 6
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          tcpSocket:
+            port: main
+          timeoutSeconds: 3
+        lifecycle:
+          preStop:
+            exec:
+              command: ["sh", "-c", "sleep 5; ./mqshutdown broker"]
+        volumeMounts:
+        - mountPath: /home/rocketmq/logs
+          name: broker-storage
+          subPath: rocketmq-broker/logs
+        - mountPath: /home/rocketmq/store
+          name: broker-storage
+          subPath: rocketmq-broker/store
+        - mountPath: /etc/rocketmq/broker-base.conf
+          name: broker-base-config
+          subPath: broker-base.conf
+        - mountPath: /mq-server-start.sh
+          name: mq-server-start-sh
+          subPath: mq-server-start.sh
+      dnsPolicy: ClusterFirst
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - configMap:
+          items:
+          - key: broker-base.conf
+            path: broker-base.conf
+          name: my-rocketmq-server-config
+        name: broker-base-config
+      - configMap:
+          items:
+          - key: mq-server-start.sh
+            path: mq-server-start.sh
+          name: my-rocketmq-server-config
+          defaultMode: 0755
+        name: mq-server-start-sh
+  volumeClaimTemplates:
+    - metadata:
+        name: broker-storage
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: "20Gi"
+---
+# Source: rocketmq/templates/nameserver/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: "my-rocketmq-nameserver"
+  labels:
+    helm.sh/chart: rocketmq-12.3.1
+    app.kubernetes.io/name: rocketmq
+    app.kubernetes.io/instance: my-rocketmq
+    app.kubernetes.io/version: "5.3.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  minReadySeconds: 20
+  replicas: 1
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: rocketmq
+      app.kubernetes.io/instance: my-rocketmq
+      component: nameserver
+  serviceName: "my-rocketmq-nameserver-headless"
+  template:
+    metadata:
+      annotations:
+        checksum/config: 8b65d52f93831fe650462c9b32662636fcdeb673b8029bcc0b34d48cf24d48d7
+      labels:
+        app.kubernetes.io/name: rocketmq
+        app.kubernetes.io/instance: my-rocketmq
+        component: nameserver
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 5
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: rocketmq
+                  app.kubernetes.io/instance: my-rocketmq
+                  component: nameserver
+              topologyKey: kubernetes.io/hostname
+      containers:
+      - name: nameserver
+        image: "apache/rocketmq:5.3.0"
+        imagePullPolicy: IfNotPresent
+        command:
+          - sh
+          - /mq-server-start.sh
+        env:
+        - name: ROCKETMQ_PROCESS_ROLE
+          value: nameserver
+        - name: ROCKETMQ_JAVA_OPTIONS_HEAP
+          value: -Xms600M -Xmx600M
+        ports:
+        - containerPort: 9876
+          name: main
+          protocol: TCP
+        resources:
+          limits:
+            cpu: 2
+            ephemeral-storage: 8Gi
+            memory: 6Gi
+          requests:
+            cpu: 100m
+            ephemeral-storage: 1Gi
+            memory: 1Gi
+        readinessProbe:
+          failureThreshold: 6
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          tcpSocket:
+            port: main
+          timeoutSeconds: 3
+        lifecycle:
+          preStop:
+            exec:
+              command: ["sh", "-c", "sleep 5; ./mqshutdown namesrv"]
+        volumeMounts:
+        - mountPath: /mq-server-start.sh
+          name: mq-server-start-sh
+          subPath: mq-server-start.sh
+        - mountPath: /etc/rocketmq/base-cm
+          name: base-cm
+        - mountPath: /home/rocketmq/logs
+          name: nameserver-storage
+          subPath: logs
+      dnsPolicy: ClusterFirst
+      terminationGracePeriodSeconds: 15
+      volumes:
+      - configMap:
+          items:
+          - key: mq-server-start.sh
+            path: mq-server-start.sh
+          name: my-rocketmq-server-config
+          defaultMode: 0755
+        name: mq-server-start-sh
+      - configMap:
+          name: my-rocketmq-server-config
+        name: base-cm
+      - name: nameserver-storage
+        emptyDir: {}

@@ -1,0 +1,106 @@
+---
+# Source: bazarr/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-bazarr
+  labels:
+    app.kubernetes.io/name: bazarr
+    helm.sh/chart: bazarr-0.2.0
+    app.kubernetes.io/instance: my-bazarr
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 6767
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: bazarr
+    app.kubernetes.io/instance: my-bazarr
+---
+# Source: bazarr/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-bazarr
+  labels:
+    app.kubernetes.io/name: bazarr
+    helm.sh/chart: bazarr-0.2.0
+    app.kubernetes.io/instance: my-bazarr
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: bazarr
+      app.kubernetes.io/instance: my-bazarr
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: bazarr
+        app.kubernetes.io/instance: my-bazarr
+    spec:
+      containers:
+        - name: bazarr
+          image: "linuxserver/bazarr:latest"
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 6767
+              protocol: TCP
+          env:
+            - name: PYTHONWARNINGS
+              # Get rid of all those unverified warnigns
+              value: "ignore:Unverified HTTPS request"
+            - name: PUID
+              value: "1000"
+            - name: PGID
+              value: "1000"
+            - name: TZ
+              value: America/Vancouver
+          livenessProbe:
+            httpGet:
+              path: /notifications
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /notifications
+              port: http
+          resources:
+            {}
+          volumeMounts:
+            - name: config
+              mountPath: /config
+            - mountPath: /movies
+              name: movies
+            - mountPath: /tv
+              name: tv
+      volumes:
+        - name: config
+          emptyDir: {}
+        - name: movies
+          emptyDir: {}
+        - name: tv
+          emptyDir: {}
+---
+# Source: bazarr/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-bazarr-test-connection"
+  labels:
+    app.kubernetes.io/name: bazarr
+    helm.sh/chart: bazarr-0.2.0
+    app.kubernetes.io/instance: my-bazarr
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args:  ['my-bazarr:6767']
+  restartPolicy: Never

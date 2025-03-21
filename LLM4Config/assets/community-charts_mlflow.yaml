@@ -1,0 +1,130 @@
+---
+# Source: mlflow/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-mlflow
+  labels:
+    helm.sh/chart: mlflow-0.7.19
+    app: mlflow
+    app.kubernetes.io/name: mlflow
+    app.kubernetes.io/instance: my-mlflow
+    version: "2.1.1"
+    app.kubernetes.io/version: "2.1.1"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: mlflow/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-mlflow-env-secret
+  labels:
+    app: mlflow
+    chart: mlflow-0.7.19
+    release: my-mlflow
+    heritage: Helm
+type: Opaque
+data:
+---
+# Source: mlflow/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-mlflow-env-configmap
+  labels:
+    app: mlflow
+    chart: mlflow-0.7.19
+    release: my-mlflow
+    heritage: Helm
+data:
+---
+# Source: mlflow/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-mlflow
+  labels:
+    helm.sh/chart: mlflow-0.7.19
+    app: mlflow
+    app.kubernetes.io/name: mlflow
+    app.kubernetes.io/instance: my-mlflow
+    version: "2.1.1"
+    app.kubernetes.io/version: "2.1.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5000
+      targetPort: 5000
+      protocol: TCP
+      name: http
+  selector:
+    app: mlflow
+    app.kubernetes.io/name: mlflow
+    app.kubernetes.io/instance: my-mlflow
+---
+# Source: mlflow/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-mlflow
+  labels:
+    helm.sh/chart: mlflow-0.7.19
+    app: mlflow
+    app.kubernetes.io/name: mlflow
+    app.kubernetes.io/instance: my-mlflow
+    version: "2.1.1"
+    app.kubernetes.io/version: "2.1.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mlflow
+      app.kubernetes.io/name: mlflow
+      app.kubernetes.io/instance: my-mlflow
+  template:
+    metadata:
+      labels:
+        app: mlflow
+        app.kubernetes.io/name: mlflow
+        app.kubernetes.io/instance: my-mlflow
+    spec:
+      serviceAccountName: my-mlflow
+      securityContext:
+        {}
+      containers:
+        - name: mlflow
+          securityContext:
+            {}
+          image: "burakince/mlflow:2.1.1"
+          imagePullPolicy: IfNotPresent
+          command: ["mlflow"]
+          args:
+            - server
+            - --host=0.0.0.0
+            - --port=5000
+            - --backend-store-uri=sqlite:///:memory
+            - --default-artifact-root=./mlruns
+          ports:
+            - name: http
+              containerPort: 5000
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+            {}
+          env:
+            - name: MLFLOW_VERSION
+              value: "2.1.1"
+          envFrom:
+            - configMapRef:
+                name: my-mlflow-env-configmap
+            - secretRef:
+                name: my-mlflow-env-secret

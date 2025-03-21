@@ -1,0 +1,133 @@
+---
+# Source: docker-hub-rate-limit-exporter/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-docker-hub-rate-limit-exporter-secret
+  labels:
+    helm.sh/chart: docker-hub-rate-limit-exporter-0.3.0
+    app.kubernetes.io/name: docker-hub-rate-limit-exporter
+    app.kubernetes.io/instance: my-docker-hub-rate-limit-exporter
+    app.kubernetes.io/version: "version-1.5"
+    app.kubernetes.io/managed-by: Helm
+data:
+  dockerhub-password: ""
+---
+# Source: docker-hub-rate-limit-exporter/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-docker-hub-rate-limit-exporter-configmap
+  labels:
+    helm.sh/chart: docker-hub-rate-limit-exporter-0.3.0
+    app.kubernetes.io/name: docker-hub-rate-limit-exporter
+    app.kubernetes.io/instance: my-docker-hub-rate-limit-exporter
+    app.kubernetes.io/version: "version-1.5"
+    app.kubernetes.io/managed-by: Helm
+data:
+  exporter-port: "9100"
+  exporter-verbosity: "1"
+  dockerhub-username: ""
+---
+# Source: docker-hub-rate-limit-exporter/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-docker-hub-rate-limit-exporter
+  annotations:
+    prometheus.io/scrape: "true"
+  labels:
+    helm.sh/chart: docker-hub-rate-limit-exporter-0.3.0
+    app.kubernetes.io/name: docker-hub-rate-limit-exporter
+    app.kubernetes.io/instance: my-docker-hub-rate-limit-exporter
+    app.kubernetes.io/version: "version-1.5"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9100
+      targetPort: 9100
+      protocol: TCP
+      name: metrics
+  selector:
+    app.kubernetes.io/name: docker-hub-rate-limit-exporter
+    app.kubernetes.io/instance: my-docker-hub-rate-limit-exporter
+---
+# Source: docker-hub-rate-limit-exporter/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-docker-hub-rate-limit-exporter
+  labels:
+    helm.sh/chart: docker-hub-rate-limit-exporter-0.3.0
+    app.kubernetes.io/name: docker-hub-rate-limit-exporter
+    app.kubernetes.io/instance: my-docker-hub-rate-limit-exporter
+    app.kubernetes.io/version: "version-1.5"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: docker-hub-rate-limit-exporter
+      app.kubernetes.io/instance: my-docker-hub-rate-limit-exporter
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: docker-hub-rate-limit-exporter
+        app.kubernetes.io/instance: my-docker-hub-rate-limit-exporter
+      annotations:
+        checksum/config: 980f165b9e305afccb13466fbcb7485b972df254c321aeaccfeb74b6294b3b46
+        checksum/secret: c40cca09a24c49e777972615afd4ec0219731630eb9c4e55bbadc3f5acdc8029
+    spec:
+      serviceAccountName: default
+      securityContext:
+        fsGroup: 65534
+        runAsGroup: 65534
+        runAsNonRoot: true
+        runAsUser: 65534
+      containers:
+        - name: docker-hub-rate-limit-exporter
+          image: "viadee/docker-hub-rate-limit-exporter:version-1.5"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: metrics
+              containerPort: 9100
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 9100
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 9100
+            timeoutSeconds: 5
+          resources:
+            limits:
+              cpu: 200m
+              memory: 96Mi
+            requests:
+              cpu: 50m
+              memory: 64Mi
+          env:
+            - name: DOCKERHUB_USERNAME
+              valueFrom:
+                configMapKeyRef:
+                  name: my-docker-hub-rate-limit-exporter-configmap
+                  key: dockerhub-username
+            - name: DOCKERHUB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-docker-hub-rate-limit-exporter-secret
+                  key: dockerhub-password
+            - name: DOCKERHUB_EXPORTER_VERBOSE
+              valueFrom:
+                configMapKeyRef:
+                  name: my-docker-hub-rate-limit-exporter-configmap
+                  key: exporter-verbosity
+            - name: DOCKERHUB_EXPORTER_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: my-docker-hub-rate-limit-exporter-configmap
+                  key: exporter-port

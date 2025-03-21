@@ -1,0 +1,126 @@
+---
+# Source: pomerium-verify/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-pomerium-verify
+  labels:
+    helm.sh/chart: pomerium-verify-0.1.0
+    app.kubernetes.io/name: pomerium-verify
+    app.kubernetes.io/instance: my-pomerium-verify
+    app.kubernetes.io/version: "0.0.1"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: pomerium-verify/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-pomerium-verify
+  labels:
+    helm.sh/chart: pomerium-verify-0.1.0
+    app.kubernetes.io/name: pomerium-verify
+    app.kubernetes.io/instance: my-pomerium-verify
+    app.kubernetes.io/version: "0.0.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: pomerium-verify
+    app.kubernetes.io/instance: my-pomerium-verify
+---
+# Source: pomerium-verify/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-pomerium-verify
+  labels:
+    helm.sh/chart: pomerium-verify-0.1.0
+    app.kubernetes.io/name: pomerium-verify
+    app.kubernetes.io/instance: my-pomerium-verify
+    app.kubernetes.io/version: "0.0.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pomerium-verify
+      app.kubernetes.io/instance: my-pomerium-verify
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pomerium-verify
+        app.kubernetes.io/instance: my-pomerium-verify
+    spec:
+      serviceAccountName: my-pomerium-verify
+      securityContext:
+        {}
+      containers:
+        - name: pomerium-verify
+          securityContext:
+            {}
+          image: "pomerium/verify:latest"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+            {}
+---
+# Source: pomerium-verify/templates/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: my-pomerium-verify
+  labels:
+    helm.sh/chart: pomerium-verify-0.1.0
+    app.kubernetes.io/name: pomerium-verify
+    app.kubernetes.io/instance: my-pomerium-verify
+    app.kubernetes.io/version: "0.0.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  rules:
+    - host: "host.example"
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: my-pomerium-verify
+                port:
+                  number: 80
+---
+# Source: pomerium-verify/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-pomerium-verify-test-connection"
+  labels:
+    helm.sh/chart: pomerium-verify-0.1.0
+    app.kubernetes.io/name: pomerium-verify
+    app.kubernetes.io/instance: my-pomerium-verify
+    app.kubernetes.io/version: "0.0.1"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-pomerium-verify:80']
+  restartPolicy: Never

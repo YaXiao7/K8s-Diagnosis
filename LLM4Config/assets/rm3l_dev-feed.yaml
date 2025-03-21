@@ -1,0 +1,606 @@
+---
+# Source: dev-feed/charts/mariadb/templates/networkpolicy.yaml
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: my-dev-feed-mariadb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-dev-feed
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: mariadb
+    app.kubernetes.io/version: 11.4.3
+    helm.sh/chart: mariadb-19.0.5
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: my-dev-feed
+      app.kubernetes.io/managed-by: Helm
+      app.kubernetes.io/name: mariadb
+      app.kubernetes.io/version: 11.4.3
+      helm.sh/chart: mariadb-19.0.5
+  policyTypes:
+    - Ingress
+    - Egress
+  egress:
+    - {}
+  ingress:
+    - ports:
+        - port: 3306
+        - port: 3306
+---
+# Source: dev-feed/charts/mariadb/templates/primary/pdb.yaml
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: my-dev-feed-mariadb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-dev-feed
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: mariadb
+    app.kubernetes.io/version: 11.4.3
+    helm.sh/chart: mariadb-19.0.5
+    app.kubernetes.io/component: primary
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: my-dev-feed
+      app.kubernetes.io/name: mariadb
+      app.kubernetes.io/component: primary
+---
+# Source: dev-feed/charts/mariadb/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-dev-feed-mariadb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-dev-feed
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: mariadb
+    app.kubernetes.io/version: 11.4.3
+    helm.sh/chart: mariadb-19.0.5
+automountServiceAccountToken: false
+---
+# Source: dev-feed/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-dev-feed
+  labels:
+    helm.sh/chart: dev-feed-3.1.1
+    app.kubernetes.io/name: dev-feed
+    app.kubernetes.io/instance: my-dev-feed
+    app.kubernetes.io/version: "latest"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: dev-feed/charts/mariadb/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-dev-feed-mariadb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-dev-feed
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: mariadb
+    app.kubernetes.io/version: 11.4.3
+    helm.sh/chart: mariadb-19.0.5
+type: Opaque
+data:
+  mariadb-root-password: "b3FSVjFVTEgxVQ=="
+  mariadb-password: "cGwzNHMzQ2g0bmczTTM="
+---
+# Source: dev-feed/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-dev-feed
+  labels:
+    helm.sh/chart: dev-feed-3.1.1
+    app.kubernetes.io/name: dev-feed
+    app.kubernetes.io/instance: my-dev-feed
+    app.kubernetes.io/version: "latest"
+    app.kubernetes.io/managed-by: Helm
+data:
+  datasource.user: ""
+  datasource.password: ""
+  auth.password: "cjNhbGx5UGwzNHMzQ2g0bmczTTM="
+---
+# Source: dev-feed/charts/mariadb/templates/primary/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-dev-feed-mariadb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-dev-feed
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: mariadb
+    app.kubernetes.io/version: 11.4.3
+    helm.sh/chart: mariadb-19.0.5
+    app.kubernetes.io/component: primary
+data:
+  my.cnf: |-
+    [mysqld]
+    skip-name-resolve
+    explicit_defaults_for_timestamp
+    basedir=/opt/bitnami/mariadb
+    datadir=/bitnami/mariadb/data
+    plugin_dir=/opt/bitnami/mariadb/plugin
+    port=3306
+    socket=/opt/bitnami/mariadb/tmp/mysql.sock
+    tmpdir=/opt/bitnami/mariadb/tmp
+    max_allowed_packet=16M
+    bind-address=*
+    pid-file=/opt/bitnami/mariadb/tmp/mysqld.pid
+    log-error=/opt/bitnami/mariadb/logs/mysqld.log
+    character-set-server=UTF8
+    collation-server=utf8_general_ci
+    slow_query_log=0
+    long_query_time=10.0
+    
+    [client]
+    port=3306
+    socket=/opt/bitnami/mariadb/tmp/mysql.sock
+    default-character-set=UTF8
+    plugin_dir=/opt/bitnami/mariadb/plugin
+    
+    [manager]
+    port=3306
+    socket=/opt/bitnami/mariadb/tmp/mysql.sock
+    pid-file=/opt/bitnami/mariadb/tmp/mysqld.pid
+---
+# Source: dev-feed/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-dev-feed
+  labels:
+    helm.sh/chart: dev-feed-3.1.1
+    app.kubernetes.io/name: dev-feed
+    app.kubernetes.io/instance: my-dev-feed
+    app.kubernetes.io/version: "latest"
+    app.kubernetes.io/managed-by: Helm
+data:
+  backend.properties: |
+    datasource.url=jdbc:mariadb://my-dev-feed-mariadb.default.svc.cluster.local:3306/dev-feed
+    datasource.driver=org.mariadb.jdbc.Driver
+    datasource.type=rdbms
+    crawlers.dummy.enabled=false
+    # Remote Crawlers disabled here but deployed as independent Kubernetes CronJobs (1 per crawler service)
+    crawlers.discoverdev_io.enabled=false
+    crawlers.engineeringblogs_xyz.enabled=false
+    crawlers.rm3l_org.enabled=false
+    
+    logging.level.org.rm3l.devfeed=INFO
+    datasource.poolSize=2
+    executor.thread-pool.size=20
+    #article.screenshot.service=pagespeedonline
+    #pagespeedonline.api.timeoutSeconds=300
+---
+# Source: dev-feed/charts/mariadb/templates/primary/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-dev-feed-mariadb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-dev-feed
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: mariadb
+    app.kubernetes.io/version: 11.4.3
+    helm.sh/chart: mariadb-19.0.5
+    app.kubernetes.io/component: primary
+  annotations:
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+    - name: mysql
+      port: 3306
+      protocol: TCP
+      targetPort: mysql
+      nodePort: null
+  selector:
+    app.kubernetes.io/instance: my-dev-feed
+    app.kubernetes.io/name: mariadb
+    app.kubernetes.io/component: primary
+---
+# Source: dev-feed/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-dev-feed
+  labels:
+    helm.sh/chart: dev-feed-3.1.1
+    app.kubernetes.io/name: dev-feed
+    app.kubernetes.io/instance: my-dev-feed
+    app.kubernetes.io/version: "latest"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 28080
+      targetPort: 8080
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: dev-feed
+    app.kubernetes.io/instance: my-dev-feed
+---
+# Source: dev-feed/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-dev-feed
+  labels:
+    helm.sh/chart: dev-feed-3.1.1
+    app.kubernetes.io/name: dev-feed
+    app.kubernetes.io/instance: my-dev-feed
+    app.kubernetes.io/version: "latest"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: dev-feed
+      app.kubernetes.io/instance: my-dev-feed
+  strategy:
+    {}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: dev-feed
+        app.kubernetes.io/instance: my-dev-feed
+      annotations:
+        checksum/config: 69613282f713b8063333197d0168628a8aced532838707b323df03e7fba1d9ec
+        checksum/secret: 2fc86cd6fc346de0f168d3e020ed3a3fb4c97317655a0e2e769fb4b96c27aa16
+    spec:
+      serviceAccountName: my-dev-feed
+      securityContext:
+        runAsNonRoot: true
+      volumes:
+      - name: my-dev-feed
+        configMap:
+          name: my-dev-feed
+      - name: tmpdir
+        emptyDir: {}
+      initContainers:
+        - name: wait-db-service
+          image: busybox:1.28
+          securityContext:
+            readOnlyRootFilesystem: true
+            runAsUser: 65534
+            runAsGroup: 65534
+          command: ['sh', '-c', "until nslookup my-dev-feed-mariadb.$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace).svc.cluster.local; do echo waiting for my-dev-feed-mariadb.$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace).svc.cluster.local; sleep 2; done"]
+          resources:
+            limits:
+              cpu: 100m
+              memory: 10Mi
+            requests:
+              cpu: 100m
+              memory: 1Mi
+      containers:
+        - name: dev-feed
+          securityContext:
+            readOnlyRootFilesystem: true
+            runAsGroup: 65534
+            runAsNonRoot: true
+            runAsUser: 65534
+          image: "rm3l/dev-feed-api:latest"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+            - containerPort: 8081
+          startupProbe:
+            initialDelaySeconds: 180
+            periodSeconds: 4
+            timeoutSeconds: 10
+            failureThreshold: 10
+            httpGet:
+              path: /management/info
+              port: 8081
+          livenessProbe:
+            initialDelaySeconds: 3
+            periodSeconds: 90
+            timeoutSeconds: 10
+            failureThreshold: 
+            httpGet:
+              path: /graphiql
+              port: 8080
+          readinessProbe:
+            initialDelaySeconds: 3
+            periodSeconds: 4
+            timeoutSeconds: 10
+            failureThreshold: 
+            httpGet:
+              path: /management/health
+              port: 8081
+          env:
+            - name: spring.security.user.password
+              valueFrom:
+                secretKeyRef:
+                  name: my-dev-feed
+                  key: auth.password
+            - name: datasource.user
+              valueFrom:
+                secretKeyRef:
+                  name: my-dev-feed
+                  key: datasource.user
+            - name: datasource.password
+              valueFrom:
+                secretKeyRef:
+                  name: my-dev-feed
+                  key: datasource.password
+          volumeMounts:
+            - name: tmpdir
+              mountPath: /tmp
+              readOnly: false
+            - name: my-dev-feed
+              mountPath: /etc/dev-feed
+              readOnly: true
+          resources:
+            {}
+---
+# Source: dev-feed/charts/mariadb/templates/primary/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-dev-feed-mariadb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-dev-feed
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: mariadb
+    app.kubernetes.io/version: 11.4.3
+    helm.sh/chart: mariadb-19.0.5
+    app.kubernetes.io/component: primary
+spec:
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: my-dev-feed
+      app.kubernetes.io/name: mariadb
+      app.kubernetes.io/component: primary
+  serviceName: my-dev-feed-mariadb
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations:
+        checksum/configuration: d4ed836d174e567fc7beb63ec8bfe243a7dc3987e67d27870dbe5864a1cae149
+      labels:
+        app.kubernetes.io/instance: my-dev-feed
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: mariadb
+        app.kubernetes.io/version: 11.4.3
+        helm.sh/chart: mariadb-19.0.5
+        app.kubernetes.io/component: primary
+    spec:
+      
+      automountServiceAccountToken: false
+      serviceAccountName: my-dev-feed-mariadb
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/instance: my-dev-feed
+                    app.kubernetes.io/name: mariadb
+                    app.kubernetes.io/component: primary
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+        fsGroupChangePolicy: Always
+        supplementalGroups: []
+        sysctls: []
+      initContainers:
+        - name: preserve-logs-symlinks
+          image: docker.io/bitnami/mariadb:11.4.3-debian-12-r0
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsGroup: 1001
+            runAsNonRoot: true
+            runAsUser: 1001
+            seLinuxOptions: {}
+            seccompProfile:
+              type: RuntimeDefault
+          resources:
+            limits:
+              cpu: 375m
+              ephemeral-storage: 2Gi
+              memory: 384Mi
+            requests:
+              cpu: 250m
+              ephemeral-storage: 50Mi
+              memory: 256Mi
+          command:
+            - /bin/bash
+          args:
+            - -ec
+            - |
+              #!/bin/bash
+
+              . /opt/bitnami/scripts/libfs.sh
+              # We copy the logs folder because it has symlinks to stdout and stderr
+              if ! is_dir_empty /opt/bitnami/mariadb/logs; then
+                cp -r /opt/bitnami/mariadb/logs /emptydir/app-logs-dir
+              fi
+          volumeMounts:
+            - name: empty-dir
+              mountPath: /emptydir
+      containers:
+        - name: mariadb
+          image: docker.io/bitnami/mariadb:11.4.3-debian-12-r0
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsGroup: 1001
+            runAsNonRoot: true
+            runAsUser: 1001
+            seLinuxOptions: {}
+            seccompProfile:
+              type: RuntimeDefault
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: MARIADB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-dev-feed-mariadb
+                  key: mariadb-root-password
+            - name: MARIADB_USER
+              value: "db-user"
+            - name: MARIADB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-dev-feed-mariadb
+                  key: mariadb-password
+            - name: MARIADB_DATABASE
+              value: "dev-feed"
+          ports:
+            - name: mysql
+              containerPort: 3306
+          livenessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 120
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+            exec:
+              command:
+                - /bin/bash
+                - -ec
+                - |
+                  password_aux="${MARIADB_ROOT_PASSWORD:-}"
+                  if [[ -f "${MARIADB_ROOT_PASSWORD_FILE:-}" ]]; then
+                      password_aux=$(cat "$MARIADB_ROOT_PASSWORD_FILE")
+                  fi
+                  mariadb-admin status -uroot -p"${password_aux}"
+          readinessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+            exec:
+              command:
+                - /bin/bash
+                - -ec
+                - |
+                  password_aux="${MARIADB_ROOT_PASSWORD:-}"
+                  if [[ -f "${MARIADB_ROOT_PASSWORD_FILE:-}" ]]; then
+                      password_aux=$(cat "$MARIADB_ROOT_PASSWORD_FILE")
+                  fi
+                  mariadb-admin ping -uroot -p"${password_aux}"
+          resources:
+            limits:
+              cpu: 375m
+              ephemeral-storage: 2Gi
+              memory: 384Mi
+            requests:
+              cpu: 250m
+              ephemeral-storage: 50Mi
+              memory: 256Mi
+          volumeMounts:
+            - name: data
+              mountPath: /bitnami/mariadb
+            - name: config
+              mountPath: /opt/bitnami/mariadb/conf/my.cnf
+              subPath: my.cnf
+            - name: empty-dir
+              mountPath: /tmp
+              subPath: tmp-dir
+            - name: empty-dir
+              mountPath: /opt/bitnami/mariadb/conf
+              subPath: app-conf-dir
+            - name: empty-dir
+              mountPath: /opt/bitnami/mariadb/tmp
+              subPath: app-tmp-dir
+            - name: empty-dir
+              mountPath: /opt/bitnami/mariadb/logs
+              subPath: app-logs-dir
+      volumes:
+        - name: empty-dir
+          emptyDir: {}
+        - name: config
+          configMap:
+            name: my-dev-feed-mariadb
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          app.kubernetes.io/instance: my-dev-feed
+          app.kubernetes.io/name: mariadb
+          app.kubernetes.io/component: primary
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "8Gi"
+---
+# Source: dev-feed/templates/crawlers.cronjob.yaml
+---
+---
+# Source: dev-feed/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-dev-feed-test-connection"
+  labels:
+    helm.sh/chart: dev-feed-3.1.1
+    app.kubernetes.io/name: dev-feed
+    app.kubernetes.io/instance: my-dev-feed
+    app.kubernetes.io/version: "latest"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test-success
+    email: "armel+helm_charts@rm3l.org"
+    "ignore-check.kube-linter.io/no-liveness-probe": "This is a one-shot pod for testing. It is not supposed to run forever."
+    "ignore-check.kube-linter.io/no-readiness-probe": "This is a one-shot pod for testing. It is not supposed to run forever."
+    "ignore-check.kube-linter.io/default-service-account": "This is a one-shot pod for testing."
+    "ignore-check.kube-linter.io/non-isolated-pod": "This is a one-shot pod for testing."
+spec:
+  securityContext:
+    runAsNonRoot: true
+    # nobody
+    runAsUser: 65534
+    # nobody
+    runAsGroup: 65534
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['-qO', '-', 'my-dev-feed:28080/graphiql']
+      securityContext:
+        readOnlyRootFilesystem: true
+      resources:
+        limits:
+          cpu: 100m
+          memory: 10Mi
+        requests:
+          cpu: 100m
+          memory: 1Mi
+  restartPolicy: Never

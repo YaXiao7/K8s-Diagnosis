@@ -1,0 +1,164 @@
+---
+# Source: k8scostoptimizer/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  annotations:
+    meta.helm.sh/release-namespace: "default"
+    meta.helm.sh/release-name: "my-k8scostoptimizer"
+  labels:
+    app: my-k8scostoptimizer-k8scostoptimizer
+    chart: "k8scostoptimizer-v0.0.5"
+    release: "my-k8scostoptimizer"
+    heritage: "Helm"
+    app.kubernetes.io/managed-by: "Helm"
+  name: my-k8scostoptimizer-k8scostoptimizer
+---
+# Source: k8scostoptimizer/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-k8scostoptimizer-k8scostoptimizer-config
+  namespace: default
+data:
+  config.yaml: |-
+    targetNamespaces:
+      []
+    resourcesToIgnore:
+      deployments:
+        []
+      statefuleSets:
+        []
+    specPatch:
+      {}
+---
+# Source: k8scostoptimizer/templates/clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+
+kind: ClusterRole
+metadata:
+  annotations:
+    meta.helm.sh/release-namespace: "default"
+    meta.helm.sh/release-name: "my-k8scostoptimizer"
+  labels:
+    app: my-k8scostoptimizer-k8scostoptimizer
+    chart: "k8scostoptimizer-v0.0.5"
+    release: "my-k8scostoptimizer"
+    heritage: "Helm"
+    app.kubernetes.io/managed-by: "Helm"
+  name: my-k8scostoptimizer-k8scostoptimizer-role
+  namespace: default
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - nodes
+    verbs:
+      - list
+      - get
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+    verbs:
+      - list
+      - get
+      - update
+      - delete
+  - apiGroups:
+      - "apps"
+    resources:
+      - deployments
+      - statefulsets
+    verbs:
+      - list
+      - get
+      - update
+      - patch
+---
+# Source: k8scostoptimizer/templates/clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+
+kind: ClusterRoleBinding
+metadata:
+  annotations:
+    meta.helm.sh/release-namespace: "default"
+    meta.helm.sh/release-name: "my-k8scostoptimizer"
+  labels:
+    app: my-k8scostoptimizer-k8scostoptimizer
+    chart: "k8scostoptimizer-v0.0.5"
+    release: "my-k8scostoptimizer"
+    heritage: "Helm"
+    app.kubernetes.io/managed-by: "Helm"
+  name: my-k8scostoptimizer-k8scostoptimizer-role-binding
+  namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-k8scostoptimizer-k8scostoptimizer-role
+subjects:
+  - kind: ServiceAccount
+    name: my-k8scostoptimizer-k8scostoptimizer
+    namespace: default
+---
+# Source: k8scostoptimizer/templates/cronjob.yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  labels:
+    app: my-k8scostoptimizer-k8scostoptimizer
+    chart: "k8scostoptimizer-v0.0.5"
+    release: "my-k8scostoptimizer"
+    heritage: "Helm"
+    app.kubernetes.io/managed-by: "Helm"
+    group: com.stakater.platform
+    provider: stakater
+    version: v0.0.5
+  name: my-k8scostoptimizer-k8scostoptimizer
+  namespace: default
+spec:
+  schedule: "*/2 * * * *"
+  startingDeadlineSeconds: 200
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: my-k8scostoptimizer-k8scostoptimizer
+            chart: "k8scostoptimizer-v0.0.5"
+            release: "my-k8scostoptimizer"
+            heritage: "Helm"
+            app.kubernetes.io/managed-by: "Helm"
+            group: com.stakater.platform
+            provider: stakater
+            version: v0.0.5
+        spec:
+          containers:
+            - name: my-k8scostoptimizer-k8scostoptimizer
+              image: "stakater/k8s-cost-optimizer:v0.0.5"
+              imagePullPolicy: IfNotPresent
+              env:
+              - name: POD_NAMESPACE
+                valueFrom:
+                  fieldRef:
+                    fieldPath: metadata.namespace
+              args:
+              - "--config-file-path=/app/config.yaml"
+              - "--patch=true"
+              volumeMounts:
+              - name: config
+                mountPath: /app
+          restartPolicy: Never
+          volumes:
+          - name: config
+            configMap:
+              name: my-k8scostoptimizer-k8scostoptimizer-config
+          terminationGracePeriodSeconds: 30
+          dnsPolicy: ClusterFirst
+          securityContext: 
+            runAsNonRoot: true
+            runAsUser: 65534
+          serviceAccountName: my-k8scostoptimizer-k8scostoptimizer
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2

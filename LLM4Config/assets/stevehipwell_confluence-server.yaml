@@ -1,0 +1,110 @@
+---
+# Source: confluence-server/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-confluence-server
+  namespace: default
+  labels:
+    helm.sh/chart: confluence-server-5.7.1
+    app.kubernetes.io/name: confluence-server
+    app.kubernetes.io/instance: my-confluence-server
+    app.kubernetes.io/version: "8.7.2"
+    app.kubernetes.io/managed-by: Helm
+automountServiceAccountToken: false
+---
+# Source: confluence-server/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-confluence-server
+  namespace: default
+  labels:
+    helm.sh/chart: confluence-server-5.7.1
+    app.kubernetes.io/name: confluence-server
+    app.kubernetes.io/instance: my-confluence-server
+    app.kubernetes.io/version: "8.7.2"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8090
+      targetPort: http
+      protocol: TCP
+      name: http
+    - port: 8091
+      targetPort: synchrony
+      protocol: TCP
+      name: synchrony
+  selector:
+    app.kubernetes.io/name: confluence-server
+    app.kubernetes.io/instance: my-confluence-server
+---
+# Source: confluence-server/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-confluence-server
+  namespace: default
+  labels:
+    helm.sh/chart: confluence-server-5.7.1
+    app.kubernetes.io/name: confluence-server
+    app.kubernetes.io/instance: my-confluence-server
+    app.kubernetes.io/version: "8.7.2"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  serviceName: my-confluence-server
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: confluence-server
+      app.kubernetes.io/instance: my-confluence-server
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: confluence-server
+        app.kubernetes.io/instance: my-confluence-server
+    spec:
+      serviceAccountName: my-confluence-server
+      securityContext:
+        fsGroup: 2002
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: confluence
+          image: atlassian/confluence-server:8.7.2-jdk11
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: JVM_MINIMUM_MEMORY
+              value: "512M"
+            - name: JVM_MAXIMUM_MEMORY
+              value: "512M"
+            - name: JVM_SUPPORT_RECOMMENDED_ARGS
+              value: "-XX:+UseG1GC  -Dsynchrony.memory.max=0m"
+          ports:
+            - name: http
+              containerPort: 8090
+              protocol: TCP
+            - name: synchrony
+              containerPort: 8091
+              protocol: TCP
+          livenessProbe:
+            failureThreshold: 10
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            tcpSocket:
+              port: http
+            timeoutSeconds: 1
+          readinessProbe:
+            failureThreshold: 10
+            httpGet:
+              path: /status
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 1
+          volumeMounts:
+            - mountPath: /var/atlassian/application-data/confluence
+              name: my-confluence-server-data
+      volumes:
+        - name: my-confluence-server-data
+          emptyDir: {}

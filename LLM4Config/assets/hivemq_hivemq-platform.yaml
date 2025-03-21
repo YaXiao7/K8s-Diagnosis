@@ -1,0 +1,158 @@
+---
+# Source: hivemq-platform/templates/hivemq-configuration.yml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hivemq-configuration-my-hivemq-platform
+  namespace: default
+  labels:
+    helm.sh/chart: hivemq-platform-0.2.23
+    app.kubernetes.io/name: "hivemq-platform"
+    app.kubernetes.io/instance: "my-hivemq-platform"
+    app.kubernetes.io/version: "4.32.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+  # noinspection XmlPathReference
+  config.xml: |-
+    <?xml version="1.0"?>
+    <hivemq xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="config.xsd">
+      <listeners>
+        <tcp-listener>
+          <port>1883</port>
+          <bind-address>0.0.0.0</bind-address>
+        </tcp-listener>
+      </listeners>
+      <cluster>
+        <transport>
+          <tcp>
+            <bind-address>0.0.0.0</bind-address>
+            <bind-port>7000</bind-port>
+          </tcp>
+        </transport>
+        <enabled>true</enabled>
+        <discovery>
+          <extension/>
+        </discovery>
+      </cluster>
+      <!-- required and should not be configured different -->
+      <health-api>
+        <enabled>true</enabled>
+        <listeners>
+          <http>
+            <port>8889</port>
+            <bind-address>0.0.0.0</bind-address>
+          </http>
+        </listeners>
+      </health-api>
+      <control-center>
+        <listeners>
+          <http>
+            <port>8080</port>
+            <bind-address>0.0.0.0</bind-address>
+          </http>
+        </listeners>
+      </control-center>
+    </hivemq>
+  tracing.xml: |-
+    <?xml version="1.0" encoding="UTF-8" ?>
+    <tracing xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="tracing.xsd">
+      <context-propagation>
+        <outbound-context-propagation>
+          <enabled>false</enabled>
+        </outbound-context-propagation>
+      </context-propagation>
+      <sampling>
+        <publish-sampling>
+          <enabled>true</enabled>
+        </publish-sampling>
+      </sampling>
+    </tracing>
+---
+# Source: hivemq-platform/templates/hivemq-custom-resource.yml
+apiVersion: hivemq.com/v1
+kind: HiveMQPlatform
+metadata:
+  name: "my-hivemq-platform"
+  labels:
+    helm.sh/chart: hivemq-platform-0.2.23
+    app.kubernetes.io/name: "hivemq-platform"
+    app.kubernetes.io/instance: "my-hivemq-platform"
+    app.kubernetes.io/version: "4.32.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  configMapName: hivemq-configuration-my-hivemq-platform
+  logLevel: INFO
+  operatorRestApiPort: 7979
+  healthApiPort: 8889
+  metricsPort: 9399
+  metricsPath: /
+  statefulSet:
+    spec:
+      replicas: 2
+      template:
+        spec:
+          containers:
+            - name: hivemq
+              env:
+                - name: JAVA_OPTS
+                  value: "-XX:+UnlockExperimentalVMOptions -XX:InitialRAMPercentage=50 -XX:MaxRAMPercentage=50"
+              image: "docker.io/hivemq/hivemq4:4.32.0"
+              imagePullPolicy: IfNotPresent
+              ports:
+                - name: mqtt-1883
+                  containerPort: 1883
+                - name: cc-8080
+                  containerPort: 8080
+                - name: metrics-9399
+                  containerPort: 9399
+              resources:
+                limits:
+                  cpu: 1024m
+                  memory: 2048M
+                requests:
+                  cpu: 1024m
+                  memory: 2048M
+  services:
+    - metadata:
+        name: hivemq-my-hivemq-platform-mqtt-1883
+      spec:
+        ports:
+          - name: mqtt-1883
+            targetPort: mqtt-1883
+            port: 1883
+    - metadata:
+        name: hivemq-my-hivemq-platform-cc-8080
+      spec:
+        sessionAffinity: ClientIP
+        ports:
+          - name: cc-8080
+            targetPort: cc-8080
+            port: 8080
+    - metadata:
+        name: hivemq-my-hivemq-platform-metrics-9399
+      spec:
+        ports:
+          - name: metrics-9399
+            targetPort: metrics-9399
+            port: 9399
+  extensions:
+    - id: hivemq-allow-all-extension
+      enabled: true
+      supportsHotReload: false
+      extensionUri: "preinstalled"
+---
+# Source: hivemq-platform/templates/tests/test-mqtt-cli.yml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "hivemq-test-connection-my-hivemq-platform"
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: hivemq-mqtt-cli
+      image: hivemq/mqtt-cli:4.32.0
+      args: [ "test",
+              "-h",
+              "hivemq-my-hivemq-platform-mqtt-1883" ]
+  restartPolicy: Never

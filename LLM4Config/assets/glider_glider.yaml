@@ -1,0 +1,96 @@
+---
+# Source: glider/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-glider
+  labels:
+    helm.sh/chart: glider-0.1.5
+    app.kubernetes.io/name: glider
+    app.kubernetes.io/instance: my-glider
+    app.kubernetes.io/version: "0.16"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: glider/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-glider-config
+data:
+  glider.conf: 
+    |
+      verbose=True
+      listen=http://:8443
+---
+# Source: glider/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-glider
+  labels:
+    helm.sh/chart: glider-0.1.5
+    app.kubernetes.io/name: glider
+    app.kubernetes.io/instance: my-glider
+    app.kubernetes.io/version: "0.16"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8443
+      targetPort: 8443
+      protocol: TCP
+      name: http 
+  selector:
+    app.kubernetes.io/name: glider
+    app.kubernetes.io/instance: my-glider
+---
+# Source: glider/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-glider
+  labels:
+    helm.sh/chart: glider-0.1.5
+    app.kubernetes.io/name: glider
+    app.kubernetes.io/instance: my-glider
+    app.kubernetes.io/version: "0.16"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: glider
+      app.kubernetes.io/instance: my-glider
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: glider
+        app.kubernetes.io/instance: my-glider
+    spec:
+      serviceAccountName: my-glider
+      securityContext:
+        {}
+      volumes:
+        - name: config-volume
+          configMap:
+            name: my-glider-config
+            items:
+              - key: glider.conf
+                path: glider.conf
+      containers:
+        - name: glider
+          volumeMounts:
+          - name: config-volume
+            mountPath: /etc/glider
+          securityContext:
+            {}
+          image: "nadoo/glider:0.16"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8443
+              protocol: TCP 
+          resources:
+            {}
+          command: ["/app/glider"]
+          args: ["-config", "/etc/glider/glider.conf"]

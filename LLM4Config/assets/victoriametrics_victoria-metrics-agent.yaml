@@ -1,0 +1,401 @@
+---
+# Source: victoria-metrics-agent/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-victoria-metrics-agent
+  namespace: default
+  labels:
+    helm.sh/chart: victoria-metrics-agent-0.12.2
+    app.kubernetes.io/name: victoria-metrics-agent
+    app.kubernetes.io/instance: my-victoria-metrics-agent
+    app.kubernetes.io/version: "v1.103.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: victoria-metrics-agent/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-victoria-metrics-agent-config
+  namespace: default
+  labels:
+    helm.sh/chart: victoria-metrics-agent-0.12.2
+    app.kubernetes.io/name: victoria-metrics-agent
+    app.kubernetes.io/instance: my-victoria-metrics-agent
+    app.kubernetes.io/version: "v1.103.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+  scrape.yml: |
+    
+    global:
+      scrape_interval: 10s
+    
+    scrape_configs:
+    - job_name: vmagent
+      static_configs:
+      - targets:
+        - localhost:8429
+    - bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+      job_name: kubernetes-apiservers
+      kubernetes_sd_configs:
+      - role: endpoints
+      relabel_configs:
+      - action: keep
+        regex: default;kubernetes;https
+        source_labels:
+        - __meta_kubernetes_namespace
+        - __meta_kubernetes_service_name
+        - __meta_kubernetes_endpoint_port_name
+      scheme: https
+      tls_config:
+        ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        insecure_skip_verify: true
+    - bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+      job_name: kubernetes-nodes
+      kubernetes_sd_configs:
+      - role: node
+      relabel_configs:
+      - action: labelmap
+        regex: __meta_kubernetes_node_label_(.+)
+      - replacement: kubernetes.default.svc:443
+        target_label: __address__
+      - regex: (.+)
+        replacement: /api/v1/nodes/$1/proxy/metrics
+        source_labels:
+        - __meta_kubernetes_node_name
+        target_label: __metrics_path__
+      scheme: https
+      tls_config:
+        ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        insecure_skip_verify: true
+    - bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+      honor_timestamps: false
+      job_name: kubernetes-nodes-cadvisor
+      kubernetes_sd_configs:
+      - role: node
+      relabel_configs:
+      - action: labelmap
+        regex: __meta_kubernetes_node_label_(.+)
+      - replacement: kubernetes.default.svc:443
+        target_label: __address__
+      - regex: (.+)
+        replacement: /api/v1/nodes/$1/proxy/metrics/cadvisor
+        source_labels:
+        - __meta_kubernetes_node_name
+        target_label: __metrics_path__
+      scheme: https
+      tls_config:
+        ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        insecure_skip_verify: true
+    - job_name: kubernetes-service-endpoints
+      kubernetes_sd_configs:
+      - role: endpointslices
+      relabel_configs:
+      - action: drop
+        regex: true
+        source_labels:
+        - __meta_kubernetes_pod_container_init
+      - action: keep_if_equal
+        source_labels:
+        - __meta_kubernetes_service_annotation_prometheus_io_port
+        - __meta_kubernetes_pod_container_port_number
+      - action: keep
+        regex: true
+        source_labels:
+        - __meta_kubernetes_service_annotation_prometheus_io_scrape
+      - action: replace
+        regex: (https?)
+        source_labels:
+        - __meta_kubernetes_service_annotation_prometheus_io_scheme
+        target_label: __scheme__
+      - action: replace
+        regex: (.+)
+        source_labels:
+        - __meta_kubernetes_service_annotation_prometheus_io_path
+        target_label: __metrics_path__
+      - action: replace
+        regex: ([^:]+)(?::\d+)?;(\d+)
+        replacement: $1:$2
+        source_labels:
+        - __address__
+        - __meta_kubernetes_service_annotation_prometheus_io_port
+        target_label: __address__
+      - action: labelmap
+        regex: __meta_kubernetes_service_label_(.+)
+      - source_labels:
+        - __meta_kubernetes_pod_name
+        target_label: pod
+      - source_labels:
+        - __meta_kubernetes_pod_container_name
+        target_label: container
+      - source_labels:
+        - __meta_kubernetes_namespace
+        target_label: namespace
+      - source_labels:
+        - __meta_kubernetes_service_name
+        target_label: service
+      - replacement: ${1}
+        source_labels:
+        - __meta_kubernetes_service_name
+        target_label: job
+      - action: replace
+        source_labels:
+        - __meta_kubernetes_pod_node_name
+        target_label: node
+    - job_name: kubernetes-service-endpoints-slow
+      kubernetes_sd_configs:
+      - role: endpointslices
+      relabel_configs:
+      - action: drop
+        regex: true
+        source_labels:
+        - __meta_kubernetes_pod_container_init
+      - action: keep_if_equal
+        source_labels:
+        - __meta_kubernetes_service_annotation_prometheus_io_port
+        - __meta_kubernetes_pod_container_port_number
+      - action: keep
+        regex: true
+        source_labels:
+        - __meta_kubernetes_service_annotation_prometheus_io_scrape_slow
+      - action: replace
+        regex: (https?)
+        source_labels:
+        - __meta_kubernetes_service_annotation_prometheus_io_scheme
+        target_label: __scheme__
+      - action: replace
+        regex: (.+)
+        source_labels:
+        - __meta_kubernetes_service_annotation_prometheus_io_path
+        target_label: __metrics_path__
+      - action: replace
+        regex: ([^:]+)(?::\d+)?;(\d+)
+        replacement: $1:$2
+        source_labels:
+        - __address__
+        - __meta_kubernetes_service_annotation_prometheus_io_port
+        target_label: __address__
+      - action: labelmap
+        regex: __meta_kubernetes_service_label_(.+)
+      - source_labels:
+        - __meta_kubernetes_pod_name
+        target_label: pod
+      - source_labels:
+        - __meta_kubernetes_pod_container_name
+        target_label: container
+      - source_labels:
+        - __meta_kubernetes_namespace
+        target_label: namespace
+      - source_labels:
+        - __meta_kubernetes_service_name
+        target_label: service
+      - replacement: ${1}
+        source_labels:
+        - __meta_kubernetes_service_name
+        target_label: job
+      - action: replace
+        source_labels:
+        - __meta_kubernetes_pod_node_name
+        target_label: node
+      scrape_interval: 5m
+      scrape_timeout: 30s
+    - job_name: kubernetes-services
+      kubernetes_sd_configs:
+      - role: service
+      metrics_path: /probe
+      params:
+        module:
+        - http_2xx
+      relabel_configs:
+      - action: keep
+        regex: true
+        source_labels:
+        - __meta_kubernetes_service_annotation_prometheus_io_probe
+      - source_labels:
+        - __address__
+        target_label: __param_target
+      - replacement: blackbox
+        target_label: __address__
+      - source_labels:
+        - __param_target
+        target_label: instance
+      - action: labelmap
+        regex: __meta_kubernetes_service_label_(.+)
+      - source_labels:
+        - __meta_kubernetes_namespace
+        target_label: namespace
+      - source_labels:
+        - __meta_kubernetes_service_name
+        target_label: service
+    - job_name: kubernetes-pods
+      kubernetes_sd_configs:
+      - role: pod
+      relabel_configs:
+      - action: drop
+        regex: true
+        source_labels:
+        - __meta_kubernetes_pod_container_init
+      - action: keep_if_equal
+        source_labels:
+        - __meta_kubernetes_pod_annotation_prometheus_io_port
+        - __meta_kubernetes_pod_container_port_number
+      - action: keep
+        regex: true
+        source_labels:
+        - __meta_kubernetes_pod_annotation_prometheus_io_scrape
+      - action: replace
+        regex: (.+)
+        source_labels:
+        - __meta_kubernetes_pod_annotation_prometheus_io_path
+        target_label: __metrics_path__
+      - action: replace
+        regex: ([^:]+)(?::\d+)?;(\d+)
+        replacement: $1:$2
+        source_labels:
+        - __address__
+        - __meta_kubernetes_pod_annotation_prometheus_io_port
+        target_label: __address__
+      - action: labelmap
+        regex: __meta_kubernetes_pod_label_(.+)
+      - source_labels:
+        - __meta_kubernetes_pod_name
+        target_label: pod
+      - source_labels:
+        - __meta_kubernetes_pod_container_name
+        target_label: container
+      - source_labels:
+        - __meta_kubernetes_namespace
+        target_label: namespace
+      - action: replace
+        source_labels:
+        - __meta_kubernetes_pod_node_name
+        target_label: node
+---
+# Source: victoria-metrics-agent/templates/clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-victoria-metrics-agent-clusterrole
+  labels: 
+    helm.sh/chart: victoria-metrics-agent-0.12.2
+    app.kubernetes.io/name: victoria-metrics-agent
+    app.kubernetes.io/instance: my-victoria-metrics-agent
+    app.kubernetes.io/version: "v1.103.0"
+    app.kubernetes.io/managed-by: Helm
+rules:
+- apiGroups:
+  - discovery.k8s.io
+  resources:
+  - endpointslices
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources:
+  - services
+  - endpoints
+  - pods
+  verbs: ["get", "list", "watch"]
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingresses
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources:
+  - nodes
+  - nodes/proxy
+  - nodes/metrics
+  verbs: ["get", "list", "watch"]
+- nonResourceURLs: ["/metrics"]
+  verbs: ["get"]
+---
+# Source: victoria-metrics-agent/templates/clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-victoria-metrics-agent-clusterrolebinding
+  labels: 
+    helm.sh/chart: victoria-metrics-agent-0.12.2
+    app.kubernetes.io/name: victoria-metrics-agent
+    app.kubernetes.io/instance: my-victoria-metrics-agent
+    app.kubernetes.io/version: "v1.103.0"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-victoria-metrics-agent-clusterrole
+subjects:
+  - kind: ServiceAccount
+    name: my-victoria-metrics-agent
+    namespace: default
+---
+# Source: victoria-metrics-agent/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-victoria-metrics-agent
+  namespace: default
+  labels: 
+    helm.sh/chart: victoria-metrics-agent-0.12.2
+    app.kubernetes.io/name: victoria-metrics-agent
+    app.kubernetes.io/instance: my-victoria-metrics-agent
+    app.kubernetes.io/version: "v1.103.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels: 
+      app.kubernetes.io/name: victoria-metrics-agent
+      app.kubernetes.io/instance: my-victoria-metrics-agent
+  template:
+    metadata:
+      labels: 
+        app.kubernetes.io/name: victoria-metrics-agent
+        app.kubernetes.io/instance: my-victoria-metrics-agent
+      annotations: 
+        checksum/config: ac17140b779a1591b3d9482e3232c2b98991952ef0ab1d8522a15236c5c7701c
+    spec:
+      serviceAccountName: my-victoria-metrics-agent
+      securityContext: 
+        {}
+      containers:
+        - name: vmagent
+          securityContext: 
+            {}
+          image: victoriametrics/vmagent:v1.103.0
+          imagePullPolicy: IfNotPresent
+          workingDir: /
+          args: 
+            - --envflag.enable=true
+            - --envflag.prefix=VM_
+            - --loggerFormat=json
+            - --promscrape.config=/config/scrape.yml
+            - --remoteWrite.tmpDataPath=/tmpData
+          ports:
+            - name: http
+              containerPort: 8429
+          readinessProbe: 
+            httpGet:
+              path: /health
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 5
+            periodSeconds: 15
+          livenessProbe: 
+            initialDelaySeconds: 5
+            periodSeconds: 15
+            tcpSocket:
+              port: http
+            timeoutSeconds: 5
+          volumeMounts:
+            - name: tmpdata
+              mountPath: /tmpData
+            - name: config
+              mountPath: /config
+            
+      volumes:
+        - name: tmpdata
+          emptyDir: 
+            {}
+        - name: config
+          configMap:
+            name: my-victoria-metrics-agent-config

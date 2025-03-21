@@ -1,0 +1,132 @@
+---
+# Source: echo-server/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-echo-server
+  labels:
+    app.kubernetes.io/name: echo-server
+    helm.sh/chart: echo-server-0.5.0
+    app.kubernetes.io/instance: my-echo-server
+    app.kubernetes.io/version: "0.6.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: echo-server/templates/configmap.yaml
+apiVersion:  v1
+kind: ConfigMap
+metadata: 
+  name: my-echo-server
+data: 
+    PORT: "80"
+    LOGS__IGNORE__PING: "false"
+    ENABLE__HOST: "true"
+    ENABLE__HTTP: "true"
+    ENABLE__REQUEST: "true"
+    ENABLE__COOKIES: "true"
+    ENABLE__ENVIRONMENT: "true"
+    ENABLE__FILE: "true"
+    ENABLE__HEADER: "true"
+---
+# Source: echo-server/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-echo-server
+  labels:
+    app.kubernetes.io/name: echo-server
+    helm.sh/chart: echo-server-0.5.0
+    app.kubernetes.io/instance: my-echo-server
+    app.kubernetes.io/version: "0.6.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: echo-server
+    app.kubernetes.io/instance: my-echo-server
+---
+# Source: echo-server/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-echo-server
+  labels:
+    app.kubernetes.io/name: echo-server
+    helm.sh/chart: echo-server-0.5.0
+    app.kubernetes.io/instance: my-echo-server
+    app.kubernetes.io/version: "0.6.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: echo-server
+      app.kubernetes.io/instance: my-echo-server
+  template:
+    metadata:
+      annotations:
+        checksum/config: daa0997ced429fc0c7e8b58ac174c3bbe9dd65ed26a36f8708c082ac089aa392
+      labels:
+        app.kubernetes.io/name: echo-server
+        app.kubernetes.io/instance: my-echo-server
+    spec:
+      serviceAccountName: my-echo-server
+      securityContext:
+        {}
+      containers:
+        - name: echo-server
+          securityContext:
+            {}
+          image: "ealen/echo-server:0.6.0"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: my-echo-server
+          livenessProbe:
+            httpGet:
+                path: /ping
+                httpHeaders:
+                - name: x-echo-code
+                  value: "200"
+                port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+            successThreshold: 1
+          resources:
+            limits:
+              cpu: 50m
+              memory: 128Mi
+            requests:
+              cpu: 50m
+              memory: 128Mi
+---
+# Source: echo-server/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-echo-server-test-connection"
+  labels:
+    app.kubernetes.io/name: echo-server
+    helm.sh/chart: echo-server-0.5.0
+    app.kubernetes.io/instance: my-echo-server
+    app.kubernetes.io/version: "0.6.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args:  ['my-echo-server:80']
+  restartPolicy: Never

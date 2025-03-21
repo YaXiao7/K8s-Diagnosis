@@ -1,0 +1,221 @@
+---
+# Source: pod-gateway-setter/templates/common.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-pod-gateway-setter
+  labels:
+    helm.sh/chart: pod-gateway-setter-1.0.0
+    app.kubernetes.io/name: pod-gateway-setter
+    app.kubernetes.io/instance: my-pod-gateway-setter
+    app.kubernetes.io/version: "1.0.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: pod-gateway-setter
+    app.kubernetes.io/instance: my-pod-gateway-setter
+---
+# Source: pod-gateway-setter/templates/common.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-pod-gateway-setter
+  labels:
+    helm.sh/chart: pod-gateway-setter-1.0.0
+    app.kubernetes.io/name: pod-gateway-setter
+    app.kubernetes.io/instance: my-pod-gateway-setter
+    app.kubernetes.io/version: "1.0.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pod-gateway-setter
+      app.kubernetes.io/instance: my-pod-gateway-setter
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pod-gateway-setter
+        app.kubernetes.io/instance: my-pod-gateway-setter
+    spec:
+      
+      serviceAccountName: default
+      dnsPolicy: ClusterFirst
+      enableServiceLinks: true
+      containers:
+      - name: my-pod-gateway-setter
+        image: "ghcr.io/k8s-at-home/gateway-admision-controller:v2.0.0"
+        imagePullPolicy: IfNotPresent
+        args:
+        
+        - --tls-cert-file-path=/tls/tls.crt
+        - --tls-key-file-path=/tls/tls.key
+        - --setGatewayDefault
+        - --setGatewayLabel=setGateway
+        - --setGatewayAnnotation=setGateway
+        - --webhook-listen-address=:8080
+        - --gateway=10.0.2.7
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        volumeMounts:
+        - mountPath: /tls
+          name: certs
+          readOnly: true
+        
+        livenessProbe:
+          failureThreshold: 5
+          httpGet:
+            path: /wh/health
+            port: 8080
+            scheme: HTTPS
+          initialDelaySeconds: 1
+          periodSeconds: 10
+          timeoutSeconds: 10
+        readinessProbe:
+          failureThreshold: 5
+          httpGet:
+            path: /wh/health
+            port: 8080
+            scheme: HTTPS
+          initialDelaySeconds: 1
+          periodSeconds: 10
+          timeoutSeconds: 10
+        startupProbe:
+          failureThreshold: 30
+          httpGet:
+            path: /wh/health
+            port: 8080
+            scheme: HTTPS
+          initialDelaySeconds: 0
+          periodSeconds: 1
+          timeoutSeconds: 1
+      volumes:
+      - name: certs
+        secret:
+          secretName: my-pod-gateway-setter-webhook-tls
+---
+# Source: pod-gateway-setter/templates/pki.yaml
+# Generate a CA Certificate used to sign certificates for the webhook
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: my-pod-gateway-setter-ca
+  namespace: "default"
+  labels:
+    helm.sh/chart: pod-gateway-setter-1.0.0
+    app.kubernetes.io/name: pod-gateway-setter
+    app.kubernetes.io/instance: my-pod-gateway-setter
+    app.kubernetes.io/version: "1.0.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  secretName: my-pod-gateway-setter-ca
+  duration: 43800h # 5y
+  issuerRef:
+    name: my-pod-gateway-setter-selfsign
+    kind: Issuer
+  commonName: "ca.pod-gateway-setter.cert-manager"
+  isCA: true
+---
+# Source: pod-gateway-setter/templates/pki.yaml
+# Finally, generate a serving certificate for the webhook to use
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: my-pod-gateway-setter-webhook-tls
+  namespace: "default"
+  labels:
+    helm.sh/chart: pod-gateway-setter-1.0.0
+    app.kubernetes.io/name: pod-gateway-setter
+    app.kubernetes.io/instance: my-pod-gateway-setter
+    app.kubernetes.io/version: "1.0.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  secretName: my-pod-gateway-setter-webhook-tls
+  duration: 8760h # 1y
+  issuerRef:
+    name: my-pod-gateway-setter-ca
+    kind: Issuer
+  dnsNames:
+  - my-pod-gateway-setter
+  - my-pod-gateway-setter.default
+  - my-pod-gateway-setter.default.svc
+---
+# Source: pod-gateway-setter/templates/pki.yaml
+# Create a selfsigned Issuer, in order to create a root CA certificate for
+# signing webhook serving certificates
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: my-pod-gateway-setter-selfsign
+  namespace: "default"
+  labels:
+    helm.sh/chart: pod-gateway-setter-1.0.0
+    app.kubernetes.io/name: pod-gateway-setter
+    app.kubernetes.io/instance: my-pod-gateway-setter
+    app.kubernetes.io/version: "1.0.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selfSigned: {}
+---
+# Source: pod-gateway-setter/templates/pki.yaml
+# Create an Issuer that uses the above generated CA certificate to issue certs
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: my-pod-gateway-setter-ca
+  namespace: "default"
+  labels:
+    helm.sh/chart: pod-gateway-setter-1.0.0
+    app.kubernetes.io/name: pod-gateway-setter
+    app.kubernetes.io/instance: my-pod-gateway-setter
+    app.kubernetes.io/version: "1.0.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  ca:
+    secretName: my-pod-gateway-setter-ca
+---
+# Source: pod-gateway-setter/templates/admissionregistration.yaml
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: "my-pod-gateway-setter"
+  labels:
+    helm.sh/chart: pod-gateway-setter-1.0.0
+    app.kubernetes.io/name: pod-gateway-setter
+    app.kubernetes.io/instance: my-pod-gateway-setter
+    app.kubernetes.io/version: "1.0.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    cert-manager.io/inject-ca-from: "default/my-pod-gateway-setter-webhook-tls"
+webhooks:
+- name: "my-pod-gateway-setter.svc.cluster.local"
+  namespaceSelector:
+    
+    matchLabels:
+      routed-gateway: "true"
+  rules:
+  - apiGroups:   [""]
+    apiVersions: ["v1"]
+    operations:  ["CREATE"]
+    resources:   ["pods"]
+    scope:       "Namespaced"
+  clientConfig:
+    service:
+      namespace: "default"
+      name: "my-pod-gateway-setter"
+      path: "/wh/mutating/setgateway"
+      port: 8080
+  admissionReviewVersions: ["v1", "v1beta1"]
+  sideEffects: None
+  timeoutSeconds: 5

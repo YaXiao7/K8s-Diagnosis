@@ -1,0 +1,814 @@
+---
+# Source: sorry-cypress/charts/mongodb/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-sorry-cypress-mongodb
+  namespace: default
+  labels:
+    app.kubernetes.io/name: mongodb
+    helm.sh/chart: mongodb-10.19.0
+    app.kubernetes.io/instance: my-sorry-cypress
+    app.kubernetes.io/managed-by: Helm
+secrets:
+  - name: my-sorry-cypress-mongodb
+---
+# Source: sorry-cypress/charts/mongodb/templates/replicaset/scripts-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-sorry-cypress-mongodb-scripts
+  namespace: default
+  labels:
+    app.kubernetes.io/name: mongodb
+    helm.sh/chart: mongodb-10.19.0
+    app.kubernetes.io/instance: my-sorry-cypress
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: mongodb
+data:
+  setup.sh: |-
+    #!/bin/bash
+
+    . /opt/bitnami/scripts/mongodb-env.sh
+
+    echo "Advertised Hostname: $MONGODB_ADVERTISED_HOSTNAME"
+
+    if [[ "$MY_POD_NAME" = "my-sorry-cypress-mongodb-0" ]]; then
+        echo "Pod name matches initial primary pod name, configuring node as a primary"
+        export MONGODB_REPLICA_SET_MODE="primary"
+    else
+        echo "Pod name doesn't match initial primary pod name, configuring node as a secondary"
+        export MONGODB_REPLICA_SET_MODE="secondary"
+        export MONGODB_INITIAL_PRIMARY_ROOT_PASSWORD="$MONGODB_ROOT_PASSWORD"
+        export MONGODB_INITIAL_PRIMARY_PORT_NUMBER="$MONGODB_PORT_NUMBER"
+        export MONGODB_ROOT_PASSWORD="" MONGODB_USERNAME="" MONGODB_DATABASE="" MONGODB_PASSWORD=""
+        export MONGODB_ROOT_PASSWORD_FILE="" MONGODB_USERNAME_FILE="" MONGODB_DATABASE_FILE="" MONGODB_PASSWORD_FILE=""
+    fi
+
+    exec /opt/bitnami/scripts/mongodb/entrypoint.sh /opt/bitnami/scripts/mongodb/run.sh
+  setup-hidden.sh: |-
+    #!/bin/bash
+
+    . /opt/bitnami/scripts/mongodb-env.sh
+    echo "Advertised Hostname: $MONGODB_ADVERTISED_HOSTNAME"
+    echo "Configuring node as a hidden node"
+    export MONGODB_REPLICA_SET_MODE="hidden"
+    export MONGODB_INITIAL_PRIMARY_ROOT_PASSWORD="$MONGODB_ROOT_PASSWORD"
+    export MONGODB_INITIAL_PRIMARY_PORT_NUMBER="$MONGODB_PORT_NUMBER"
+    export MONGODB_ROOT_PASSWORD="" MONGODB_USERNAME="" MONGODB_DATABASE="" MONGODB_PASSWORD=""
+    export MONGODB_ROOT_PASSWORD_FILE="" MONGODB_USERNAME_FILE="" MONGODB_DATABASE_FILE="" MONGODB_PASSWORD_FILE=""
+    exec /opt/bitnami/scripts/mongodb/entrypoint.sh /opt/bitnami/scripts/mongodb/run.sh
+---
+# Source: sorry-cypress/charts/mongodb/templates/arbiter/headless-svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-sorry-cypress-mongodb-arbiter-headless
+  namespace: default
+  labels:
+    app.kubernetes.io/name: mongodb
+    helm.sh/chart: mongodb-10.19.0
+    app.kubernetes.io/instance: my-sorry-cypress
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: arbiter
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: tcp-mongodb
+      port: 27017
+      targetPort: mongodb
+  selector:
+    app.kubernetes.io/name: mongodb
+    app.kubernetes.io/instance: my-sorry-cypress
+    app.kubernetes.io/component: arbiter
+---
+# Source: sorry-cypress/charts/mongodb/templates/replicaset/headless-svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-sorry-cypress-mongodb-headless
+  namespace: default
+  labels:
+    app.kubernetes.io/name: mongodb
+    helm.sh/chart: mongodb-10.19.0
+    app.kubernetes.io/instance: my-sorry-cypress
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: mongodb
+spec:
+  type: ClusterIP
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+    - name: mongodb
+      port: 27017
+      targetPort: mongodb
+  selector:
+    app.kubernetes.io/name: mongodb
+    app.kubernetes.io/instance: my-sorry-cypress
+    app.kubernetes.io/component: mongodb
+---
+# Source: sorry-cypress/charts/mongodb/templates/replicaset/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-sorry-cypress-mongodb-0
+  namespace: default
+  labels:
+    app.kubernetes.io/name: mongodb
+    helm.sh/chart: mongodb-10.19.0
+    app.kubernetes.io/instance: my-sorry-cypress
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: mongodb
+spec:
+  type: ClusterIP
+  ports:
+    - name: mongodb
+      port: 27017
+      targetPort: mongodb
+  selector:
+    app.kubernetes.io/name: mongodb
+    app.kubernetes.io/instance: my-sorry-cypress
+    app.kubernetes.io/component: mongodb
+    statefulset.kubernetes.io/pod-name: my-sorry-cypress-mongodb-0
+---
+# Source: sorry-cypress/charts/mongodb/templates/replicaset/svc.yaml
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-sorry-cypress-mongodb-1
+  namespace: default
+  labels:
+    app.kubernetes.io/name: mongodb
+    helm.sh/chart: mongodb-10.19.0
+    app.kubernetes.io/instance: my-sorry-cypress
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: mongodb
+spec:
+  type: ClusterIP
+  ports:
+    - name: mongodb
+      port: 27017
+      targetPort: mongodb
+  selector:
+    app.kubernetes.io/name: mongodb
+    app.kubernetes.io/instance: my-sorry-cypress
+    app.kubernetes.io/component: mongodb
+    statefulset.kubernetes.io/pod-name: my-sorry-cypress-mongodb-1
+---
+# Source: sorry-cypress/templates/service-api.yml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-sorry-cypress-api
+spec:
+  ports:
+  - name: "4000"
+    port: 4000
+    targetPort: 4000
+  selector:
+    app: my-sorry-cypress-api
+  type: ClusterIP
+---
+# Source: sorry-cypress/templates/service-dashboard.yml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-sorry-cypress-dashboard
+spec:
+  ports:
+  - name: "8080"
+    port: 8080
+    targetPort: 8080
+  selector:
+    app: my-sorry-cypress-dashboard
+  type: ClusterIP
+---
+# Source: sorry-cypress/templates/service-director.yml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-sorry-cypress-director
+spec:
+  ports:
+  - name: "1234"
+    port: 1234
+    targetPort: 1234
+  selector:
+    app: my-sorry-cypress-director
+  type: ClusterIP
+---
+# Source: sorry-cypress/templates/deployment-api.yml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-sorry-cypress-api
+  labels:
+    helm.sh/chart: sorry-cypress-1.20.0
+    app.kubernetes.io/name: sorry-cypress
+    app.kubernetes.io/instance: my-sorry-cypress
+    app.kubernetes.io/version: "2.5.11"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: my-sorry-cypress-api
+  template:
+    metadata:
+      name: my-sorry-cypress-api
+      labels:
+        app: my-sorry-cypress-api
+    spec:
+      nodeSelector:
+        
+        {}
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: my-sorry-cypress-api
+              topologyKey: kubernetes.io/hostname
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: my-sorry-cypress-api
+                topologyKey: topology.kubernetes.io/zone
+        
+      containers:
+      - env:
+        - name: APOLLO_PLAYGROUND
+          value: "false"
+        - name: PAGE_ITEMS_LIMIT
+          value: "10"
+        - name: MONGODB_DATABASE
+          value: sorry-cypress
+        - name: MONGODB_URI
+          value: "mongodb://my-sorry-cypress-mongodb-0:27017"
+        image: "agoldis/sorry-cypress-api:2.5.11"
+        imagePullPolicy: Always
+        name: my-sorry-cypress-api
+        ports:
+        - containerPort: 4000
+        resources:
+          {}
+        securityContext:
+          {}
+        readinessProbe:
+          httpGet:
+            path: /.well-known/apollo/server-health
+            port: 4000
+          periodSeconds: 5
+          timeoutSeconds: 3
+          successThreshold: 2
+          failureThreshold: 5
+      restartPolicy: Always
+      serviceAccountName: ""
+      volumes: null
+---
+# Source: sorry-cypress/templates/deployment-dashboard.yml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-sorry-cypress-dashboard
+  labels:
+    helm.sh/chart: sorry-cypress-1.20.0
+    app.kubernetes.io/name: sorry-cypress
+    app.kubernetes.io/instance: my-sorry-cypress
+    app.kubernetes.io/version: "2.5.11"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: my-sorry-cypress-dashboard
+  template:
+    metadata:
+      name: my-sorry-cypress-dashboard
+      labels:
+        app: my-sorry-cypress-dashboard
+    spec:
+      nodeSelector:
+        
+        {}
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: my-sorry-cypress-dashboard
+              topologyKey: kubernetes.io/hostname
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: my-sorry-cypress-dashboard
+                topologyKey: topology.kubernetes.io/zone
+        
+      containers:
+      - env:
+        - name: GRAPHQL_SCHEMA_URL
+          value: ""
+        - name: PORT
+          value: "8080"
+        image: "agoldis/sorry-cypress-dashboard:2.5.11"
+        imagePullPolicy: Always
+        name: my-sorry-cypress-dashboard
+        ports:
+        - containerPort: 8080
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 2
+          failureThreshold: 5
+        resources:
+          {}
+        securityContext:
+          {}
+      restartPolicy: Always
+      serviceAccountName: ""
+      volumes: null
+---
+# Source: sorry-cypress/templates/deployment-director.yml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-sorry-cypress-director
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: my-sorry-cypress-director
+  template:
+    metadata:
+      name: my-sorry-cypress-director
+      labels:
+        app: my-sorry-cypress-director
+    spec:
+      nodeSelector:
+        
+        {}
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: my-sorry-cypress-director
+              topologyKey: kubernetes.io/hostname
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: my-sorry-cypress-director
+                topologyKey: topology.kubernetes.io/zone
+        
+      containers:
+      - env:
+        - name: DASHBOARD_URL
+          value: ""
+        - name: ALLOWED_KEYS
+          value: 
+        - name: PORT
+          value: "1234"
+        - name: EXECUTION_DRIVER
+          value: ../execution/in-memory
+        - name: SCREENSHOTS_DRIVER
+          value: ../screenshots/dummy.driver
+        - name: INACTIVITY_TIMEOUT_SECONDS
+          value: ""
+        - name: GITLAB_JOB_RETRIES
+          value: "false"
+        - name: BASE_PATH
+          value: ""
+        image: "agoldis/sorry-cypress-director:2.5.11"
+        imagePullPolicy: Always
+        name: my-sorry-cypress-director
+        ports:
+        - containerPort: 1234
+        resources:
+          {}
+        securityContext:
+          {}
+        readinessProbe:
+          httpGet:
+            path: /health-check-db
+            port: 1234
+          periodSeconds: 5
+          timeoutSeconds: 3
+          successThreshold: 2
+          failureThreshold: 5
+      restartPolicy: Always
+      volumes: null
+---
+# Source: sorry-cypress/charts/mongodb/templates/arbiter/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-sorry-cypress-mongodb-arbiter
+  namespace: default
+  labels:
+    app.kubernetes.io/name: mongodb
+    helm.sh/chart: mongodb-10.19.0
+    app.kubernetes.io/instance: my-sorry-cypress
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: arbiter
+spec:
+  serviceName: my-sorry-cypress-mongodb-arbiter-headless
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mongodb
+      app.kubernetes.io/instance: my-sorry-cypress
+      app.kubernetes.io/component: arbiter
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mongodb
+        helm.sh/chart: mongodb-10.19.0
+        app.kubernetes.io/instance: my-sorry-cypress
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/component: arbiter
+    spec:
+      
+      serviceAccountName: my-sorry-cypress-mongodb
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: mongodb
+                    app.kubernetes.io/instance: my-sorry-cypress
+                    app.kubernetes.io/component: arbiter
+                namespaces:
+                  - "default"
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+        sysctls: []
+      initContainers:
+      containers:
+        - name: mongodb-arbiter
+          image: docker.io/bitnami/mongodb:4.4.6-debian-10-r8
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            runAsUser: 1001
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: MY_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: MY_POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: K8S_SERVICE_NAME
+              value: "my-sorry-cypress-mongodb-arbiter-headless"
+            - name: MONGODB_REPLICA_SET_MODE
+              value: "arbiter"
+            - name: MONGODB_INITIAL_PRIMARY_HOST
+              value: "my-sorry-cypress-mongodb-0.my-sorry-cypress-mongodb-headless.$(MY_POD_NAMESPACE).svc.cluster.local"
+            - name: MONGODB_REPLICA_SET_NAME
+              value: "rs0"
+            - name: MONGODB_ADVERTISED_HOSTNAME
+              value: "$(MY_POD_NAME).$(K8S_SERVICE_NAME).$(MY_POD_NAMESPACE).svc.cluster.local"
+            - name: ALLOW_EMPTY_PASSWORD
+              value: "yes"
+          ports:
+            - containerPort: 27017
+              name: mongodb
+          livenessProbe:
+            tcpSocket:
+              port: mongodb
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          readinessProbe:
+            tcpSocket:
+              port: mongodb
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          resources:
+            limits: {}
+            requests: {}
+---
+# Source: sorry-cypress/charts/mongodb/templates/replicaset/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-sorry-cypress-mongodb
+  namespace: default
+  labels:
+    app.kubernetes.io/name: mongodb
+    helm.sh/chart: mongodb-10.19.0
+    app.kubernetes.io/instance: my-sorry-cypress
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: mongodb
+spec:
+  serviceName: my-sorry-cypress-mongodb-headless
+  podManagementPolicy: OrderedReady
+  replicas: 2
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mongodb
+      app.kubernetes.io/instance: my-sorry-cypress
+      app.kubernetes.io/component: mongodb
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mongodb
+        helm.sh/chart: mongodb-10.19.0
+        app.kubernetes.io/instance: my-sorry-cypress
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/component: mongodb
+    spec:
+      
+      serviceAccountName: my-sorry-cypress-mongodb
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: mongodb
+                    app.kubernetes.io/instance: my-sorry-cypress
+                    app.kubernetes.io/component: mongodb
+                namespaces:
+                  - "default"
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+        sysctls: []
+      containers:
+        - name: mongodb
+          image: docker.io/bitnami/mongodb:4.4.6-debian-10-r8
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+          command:
+            - /scripts/setup.sh
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: MY_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: MY_POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: K8S_SERVICE_NAME
+              value: "my-sorry-cypress-mongodb-headless"
+            - name: MONGODB_INITIAL_PRIMARY_HOST
+              value: "my-sorry-cypress-mongodb-0.$(K8S_SERVICE_NAME).$(MY_POD_NAMESPACE).svc.cluster.local"
+            - name: MONGODB_REPLICA_SET_NAME
+              value: "rs0"
+            - name: ALLOW_EMPTY_PASSWORD
+              value: "yes"
+            - name: MONGODB_SYSTEM_LOG_VERBOSITY
+              value: "0"
+            - name: MONGODB_DISABLE_SYSTEM_LOG
+              value: "no"
+            - name: MONGODB_DISABLE_JAVASCRIPT
+              value: "no"
+            - name: MONGODB_ENABLE_JOURNAL
+              value: "yes"
+            - name: MONGODB_ENABLE_IPV6
+              value: "no"
+            - name: MONGODB_ENABLE_DIRECTORY_PER_DB
+              value: "no"
+          ports:
+            - containerPort: 27017
+              name: mongodb
+          livenessProbe:
+            exec:
+              command:
+                - mongo
+                - --disableImplicitSessions
+                - --eval
+                - "db.adminCommand('ping')"
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          readinessProbe:
+            exec:
+              command:
+                - bash
+                - -ec
+                - |
+                  # Run the proper check depending on the version
+                  [[ $(mongo --version | grep "MongoDB shell") =~ ([0-9]+\.[0-9]+\.[0-9]+) ]] && VERSION=${BASH_REMATCH[1]}
+                  . /opt/bitnami/scripts/libversion.sh
+                  VERSION_MAJOR="$(get_sematic_version "$VERSION" 1)"
+                  VERSION_MINOR="$(get_sematic_version "$VERSION" 2)"
+                  VERSION_PATCH="$(get_sematic_version "$VERSION" 3)"
+                  if [[ "$VERSION_MAJOR" -ge 4 ]] && [[ "$VERSION_MINOR" -ge 4 ]] && [[ "$VERSION_PATCH" -ge 2 ]]; then
+                      mongo --disableImplicitSessions $TLS_OPTIONS --eval 'db.hello().isWritablePrimary || db.hello().secondary' | grep -q 'true'
+                  else
+                      mongo --disableImplicitSessions $TLS_OPTIONS --eval 'db.isMaster().ismaster || db.isMaster().secondary' | grep -q 'true'
+                  fi
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          resources:
+            limits: {}
+            requests:
+              cpu: 25m
+              memory: 90Mi
+          volumeMounts:
+            - name: datadir
+              mountPath: /bitnami/mongodb
+              subPath: 
+            - name: scripts
+              mountPath: /scripts/setup.sh
+              subPath: setup.sh
+      volumes:
+        - name: scripts
+          configMap:
+            name: my-sorry-cypress-mongodb-scripts
+            defaultMode: 0755
+        - name: datadir
+          emptyDir: {}
+---
+# Source: sorry-cypress/templates/ingress-api.yml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: my-sorry-cypress-api
+  labels:
+    helm.sh/chart: sorry-cypress-1.20.0
+    app.kubernetes.io/name: sorry-cypress
+    app.kubernetes.io/instance: my-sorry-cypress
+    app.kubernetes.io/version: "2.5.11"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: "api.chart-example.local"
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: my-sorry-cypress-api
+                port:
+                  number: 4000
+---
+# Source: sorry-cypress/templates/ingress-dashboard.yml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: my-sorry-cypress-dashboard
+  labels:
+    helm.sh/chart: sorry-cypress-1.20.0
+    app.kubernetes.io/name: sorry-cypress
+    app.kubernetes.io/instance: my-sorry-cypress
+    app.kubernetes.io/version: "2.5.11"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: "dashboard.chart-example.local"
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: my-sorry-cypress-dashboard
+                port:
+                  number: 8080
+---
+# Source: sorry-cypress/templates/ingress-director.yml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: my-sorry-cypress-director
+  labels:
+    helm.sh/chart: sorry-cypress-1.20.0
+    app.kubernetes.io/name: sorry-cypress
+    app.kubernetes.io/instance: my-sorry-cypress
+    app.kubernetes.io/version: "2.5.11"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: "director.chart-example.local"
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: my-sorry-cypress-director
+                port:
+                  number: 1234
+---
+# Source: sorry-cypress/templates/test/test-connections.yaml
+# A very basic set of tests to query that the appropriate services work and connect to a pod as long as they are enabled in the Values.yaml file
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-sorry-cypress-test-dashboard-connection"
+  labels:
+    app.kubernetes.io/name: "my-sorry-cypress-test-dashboard-connection"
+  annotations:
+    "helm.sh/hook": test-success
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args:  ['my-sorry-cypress-dashboard:8080']
+  restartPolicy: Never
+---
+# Source: sorry-cypress/templates/test/test-connections.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-sorry-cypress-test-director-connection"
+  labels:
+    app.kubernetes.io/name: "my-sorry-cypress-test-director-connection"
+  annotations:
+    "helm.sh/hook": test-success
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args:  ['my-sorry-cypress-director:1234']
+  restartPolicy: Never
+---
+# Source: sorry-cypress/templates/test/test-connections.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-sorry-cypress-test-mongodb-connection"
+  labels:
+    app.kubernetes.io/name: "my-sorry-cypress-test-mongodb-connection"
+  annotations:
+    "helm.sh/hook": test-success
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args:  ['my-sorry-cypress-mongodb-headless:27017']
+  restartPolicy: Never
+---
+# Source: sorry-cypress/templates/test/test-connections.yaml
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-sorry-cypress-test-api-connection"
+  labels:
+    app.kubernetes.io/name: "my-sorry-cypress-test-api-connection"
+  annotations:
+    "helm.sh/hook": test-success
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command:
+      - wget
+      - 'my-sorry-cypress-api:4000/.well-known/apollo/server-health'
+  restartPolicy: Never

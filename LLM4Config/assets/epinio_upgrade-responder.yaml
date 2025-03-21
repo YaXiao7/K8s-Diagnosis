@@ -1,0 +1,1748 @@
+---
+# Source: upgrade-responder/charts/grafana/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    helm.sh/chart: grafana-7.0.6
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: my-upgrade-responder
+    app.kubernetes.io/version: "10.1.5"
+    app.kubernetes.io/managed-by: Helm
+  name: my-upgrade-responder-grafana
+  namespace: default
+---
+# Source: upgrade-responder/charts/influxdb/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-upgrade-responder-influxdb
+  labels:
+    helm.sh/chart: influxdb-4.12.5
+    app.kubernetes.io/name: influxdb
+    app.kubernetes.io/instance: my-upgrade-responder
+    app.kubernetes.io/version: "1.8.10"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: upgrade-responder/charts/grafana/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-upgrade-responder-grafana
+  namespace: default
+  labels:
+    helm.sh/chart: grafana-7.0.6
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: my-upgrade-responder
+    app.kubernetes.io/version: "10.1.5"
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  admin-user: "YWRtaW4="
+  admin-password: "RnV2eDQ4NkJncFZjektKTng4TDZlSE5DUWpmaE1SU1RTSENmOGtidA=="
+  ldap-toml: ""
+---
+# Source: upgrade-responder/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: upgrade-responder-secrets
+  labels:
+    app: upgrade-responder
+    chart: "upgrade-responder-0.2.0"
+    release: "my-upgrade-responder"
+    heritage: "Helm"
+type: Opaque
+data:
+  influxDBUrl: "aHR0cDovL215LXVwZ3JhZGUtcmVzcG9uZGVyLWluZmx1eGRiLmRlZmF1bHQ6ODA4Ng=="
+  influxDBUser: ""
+  influxDBPassword: ""
+---
+# Source: upgrade-responder/charts/grafana/templates/configmap-dashboard-provider.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    helm.sh/chart: grafana-7.0.6
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: my-upgrade-responder
+    app.kubernetes.io/version: "10.1.5"
+    app.kubernetes.io/managed-by: Helm
+  name: my-upgrade-responder-grafana-config-dashboards
+  namespace: default
+data:
+  provider.yaml: |-
+    apiVersion: 1
+    providers:
+      - name: 'sidecarProvider'
+        orgId: 1
+        folder: ''
+        type: file
+        disableDeletion: false
+        allowUiUpdates: false
+        updateIntervalSeconds: 30
+        options:
+          foldersFromFilesStructure: false
+          path: /tmp/dashboards
+---
+# Source: upgrade-responder/charts/grafana/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-upgrade-responder-grafana
+  namespace: default
+  labels:
+    helm.sh/chart: grafana-7.0.6
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: my-upgrade-responder
+    app.kubernetes.io/version: "10.1.5"
+    app.kubernetes.io/managed-by: Helm
+data:
+  plugins: grafana-worldmap-panel
+  grafana.ini: |
+    [analytics]
+    check_for_updates = true
+    [grafana_net]
+    url = https://grafana.net
+    [log]
+    mode = console
+    [paths]
+    data = /var/lib/grafana/
+    logs = /var/log/grafana
+    plugins = /var/lib/grafana/plugins
+    provisioning = /etc/grafana/provisioning
+    [server]
+    domain = chart-example.local
+  datasources.yaml: |
+    apiVersion: 1
+    datasources:
+    - access: proxy
+      database: epinio_upgrade_responder
+      isDefault: true
+      name: InfluxDB
+      type: influxdb
+      url: http://upgrade-responder-influxdb.epinio:8086
+  dashboardproviders.yaml: |
+    apiVersion: 1
+    providers:
+    - disableDeletion: true
+      editable: true
+      folder: default
+      name: default
+      options:
+        path: /var/lib/grafana/dashboards/standard
+      orgId: 1
+      type: file
+  download_dashboards.sh: |
+    #!/usr/bin/env sh
+    set -euf
+    mkdir -p /var/lib/grafana/dashboards/standard
+  
+    curl -skf \
+    --connect-timeout 60 \
+    --max-time 60 \
+    -H "Accept: application/json" \
+    -H "Content-Type: application/json;charset=UTF-8" \
+      "https://grafana.com/api/dashboards/14429/revisions/1/download" \
+      | sed '/-- .* --/! s/"datasource":.*,/"datasource": "InfluxDB",/g' \
+    > "/var/lib/grafana/dashboards/standard/upgrade-responder-dashboard.json"
+---
+# Source: upgrade-responder/charts/grafana/templates/dashboards-json-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-upgrade-responder-grafana-dashboards-default
+  namespace: default
+  labels:
+    helm.sh/chart: grafana-7.0.6
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: my-upgrade-responder
+    app.kubernetes.io/version: "10.1.5"
+    app.kubernetes.io/managed-by: Helm
+    dashboard-provider: default
+    grafana_dashboard: ""
+data:
+  {}
+---
+# Source: upgrade-responder/charts/influxdb/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-upgrade-responder-influxdb
+  labels:
+    helm.sh/chart: influxdb-4.12.5
+    app.kubernetes.io/name: influxdb
+    app.kubernetes.io/instance: my-upgrade-responder
+    app.kubernetes.io/version: "1.8.10"
+    app.kubernetes.io/managed-by: Helm
+data:
+  influxdb.conf: |+
+    reporting-disabled = false
+    bind-address = ":8088"
+
+    [meta]
+      dir = "/var/lib/influxdb/meta"
+
+    [data]
+      dir = "/var/lib/influxdb/data"
+      wal-dir = "/var/lib/influxdb/wal"
+
+    [coordinator]
+
+    [retention]
+
+    [shard-precreation]
+
+    [monitor]
+
+    [subscriber]
+
+    [http]
+      bind-address = ":8086"
+      enabled = true
+      flux-enabled = true
+
+    # TODO: allow multiple graphite listeners
+
+    [[graphite]]
+
+    # TODO: allow multiple collectd listeners with templates
+
+    [[collectd]]
+
+    # TODO: allow multiple opentsdb listeners with templates
+
+    [[opentsdb]]
+
+    # TODO: allow multiple udp listeners with templates
+
+    [[udp]]
+
+    [continuous_queries]
+
+    [logging]
+---
+# Source: upgrade-responder/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: epinio-upgrade-responder-grafana-dashboard
+  labels:
+     grafana_dashboard: "1"
+data:
+  my-dashboard.json: |
+    {
+        "annotations": {
+            "list": [
+                {
+                    "builtIn": 1,
+                    "datasource": {
+                        "type": "datasource",
+                        "uid": "grafana"
+                    },
+                    "enable": true,
+                    "hide": true,
+                    "iconColor": "rgba(0, 211, 255, 1)",
+                    "name": "Annotations & Alerts",
+                    "target": {
+                        "limit": 100,
+                        "matchAny": false,
+                        "tags": [],
+                        "type": "dashboard"
+                    },
+                    "type": "dashboard"
+                }
+            ]
+        },
+        "description": "",
+        "editable": true,
+        "fiscalYearStartMonth": 0,
+        "gnetId": 14429,
+        "graphTooltip": 0,
+        "links": [],
+        "liveNow": false,
+        "panels": [
+            {
+                "datasource": {
+                    "type": "influxdb",
+                    "uid": "P951FEA4DE68E13C5"
+                },
+                "description": "",
+                "gridPos": {
+                    "h": 3,
+                    "w": 24,
+                    "x": 0,
+                    "y": 0
+                },
+                "id": 16,
+                "options": {
+                    "code": {
+                        "language": "plaintext",
+                        "showLineNumbers": false,
+                        "showMiniMap": false
+                    },
+                    "content": "The metrics we're showing here are collected using ${AppName} Upgrade Responder Service, which will notify the user when a new release of ${AppName} is available.\n\nThe source code is available at https://github.com/longhorn/upgrade-responder .",
+                    "mode": "markdown"
+                },
+                "pluginVersion": "9.3.0",
+                "targets": [
+                    {
+                        "datasource": {
+                            "type": "influxdb",
+                            "uid": "P951FEA4DE68E13C5"
+                        },
+                        "groupBy": [
+                            {
+                                "params": [
+                                    "$__interval"
+                                ],
+                                "type": "time"
+                            },
+                            {
+                                "params": [
+                                    "null"
+                                ],
+                                "type": "fill"
+                            }
+                        ],
+                        "orderByTime": "ASC",
+                        "policy": "default",
+                        "refId": "A",
+                        "resultFormat": "time_series",
+                        "select": [
+                            [
+                                {
+                                    "params": [
+                                        "value"
+                                    ],
+                                    "type": "field"
+                                },
+                                {
+                                    "params": [],
+                                    "type": "mean"
+                                }
+                            ]
+                        ],
+                        "tags": []
+                    }
+                ],
+                "title": "$AppName Public Metrics Dashboard",
+                "type": "text"
+            },
+            {
+                "circleMaxSize": 30,
+                "circleMinSize": 2,
+                "colors": [
+                    "rgba(245, 54, 54, 0.9)",
+                    "rgba(237, 129, 40, 0.89)",
+                    "rgba(50, 172, 45, 0.97)"
+                ],
+                "datasource": {
+                    "type": "influxdb",
+                    "uid": "P951FEA4DE68E13C5"
+                },
+                "decimals": 0,
+                "esMetric": "Count",
+                "gridPos": {
+                    "h": 9,
+                    "w": 12,
+                    "x": 0,
+                    "y": 3
+                },
+                "hideEmpty": false,
+                "hideZero": false,
+                "id": 18,
+                "initialZoom": 1,
+                "locationData": "countries",
+                "mapCenter": "(0°, 0°)",
+                "mapCenterLatitude": 0,
+                "mapCenterLongitude": 0,
+                "maxDataPoints": 1,
+                "mouseWheelZoom": false,
+                "showLegend": true,
+                "stickyLabels": false,
+                "tableQueryOptions": {
+                    "geohashField": "geohash",
+                    "latitudeField": "latitude",
+                    "longitudeField": "longitude",
+                    "metricField": "metric",
+                    "queryType": "geohash"
+                },
+                "targets": [
+                    {
+                        "alias": "$tag_country_isocode",
+                        "datasource": {
+                            "type": "influxdb",
+                            "uid": "P951FEA4DE68E13C5"
+                        },
+                        "groupBy": [
+                            {
+                                "params": [
+                                    "country_isocode"
+                                ],
+                                "type": "tag"
+                            }
+                        ],
+                        "measurement": "by_country_code_down_sampling",
+                        "orderByTime": "ASC",
+                        "policy": "default",
+                        "query": "SELECT last(\"total\") FROM \"by_country_code_down_sampling\" WHERE $timeFilter GROUP BY \"country_isocode\"",
+                        "rawQuery": true,
+                        "refId": "A",
+                        "resultFormat": "time_series",
+                        "select": [
+                            [
+                                {
+                                    "params": [
+                                        "total"
+                                    ],
+                                    "type": "field"
+                                },
+                                {
+                                    "params": [],
+                                    "type": "last"
+                                }
+                            ]
+                        ],
+                        "tags": []
+                    }
+                ],
+                "thresholds": "0,10",
+                "title": "Active Node Map",
+                "type": "grafana-worldmap-panel",
+                "unitPlural": "",
+                "unitSingle": "",
+                "valueName": "total"
+            },
+            {
+                "aliasColors": {},
+                "bars": false,
+                "dashLength": 10,
+                "dashes": false,
+                "datasource": {
+                    "type": "influxdb",
+                    "uid": "P951FEA4DE68E13C5"
+                },
+                "fieldConfig": {
+                    "defaults": {
+                        "links": []
+                    },
+                    "overrides": []
+                },
+                "fill": 1,
+                "fillGradient": 0,
+                "gridPos": {
+                    "h": 9,
+                    "w": 12,
+                    "x": 12,
+                    "y": 3
+                },
+                "hiddenSeries": false,
+                "hideTimeOverride": false,
+                "id": 4,
+                "legend": {
+                    "avg": false,
+                    "current": false,
+                    "max": false,
+                    "min": false,
+                    "show": true,
+                    "total": false,
+                    "values": false
+                },
+                "lines": true,
+                "linewidth": 1,
+                "links": [],
+                "nullPointMode": "null",
+                "options": {
+                    "alertThreshold": true
+                },
+                "percentage": false,
+                "pluginVersion": "9.3.0",
+                "pointradius": 5,
+                "points": false,
+                "renderer": "flot",
+                "seriesOverrides": [],
+                "spaceLength": 10,
+                "stack": false,
+                "steppedLine": false,
+                "targets": [
+                    {
+                        "alias": "Total",
+                        "datasource": {
+                            "type": "influxdb",
+                            "uid": "P951FEA4DE68E13C5"
+                        },
+                        "groupBy": [
+                            {
+                                "params": [
+                                    "5m"
+                                ],
+                                "type": "time"
+                            },
+                            {
+                                "params": [
+                                    "null"
+                                ],
+                                "type": "fill"
+                            }
+                        ],
+                        "hide": false,
+                        "measurement": "upgrade_request_down_sampling",
+                        "orderByTime": "ASC",
+                        "policy": "default",
+                        "query": "SELECT last(\"total\") FROM \"upgrade_request_down_sampling\" WHERE $timeFilter GROUP BY time(1h) fill(null)",
+                        "rawQuery": false,
+                        "refId": "A",
+                        "resultFormat": "time_series",
+                        "select": [
+                            [
+                                {
+                                    "params": [
+                                        "total"
+                                    ],
+                                    "type": "field"
+                                },
+                                {
+                                    "params": [],
+                                    "type": "last"
+                                }
+                            ]
+                        ],
+                        "tags": []
+                    }
+                ],
+                "thresholds": [],
+                "timeRegions": [],
+                "title": "Active Node Count",
+                "tooltip": {
+                    "shared": true,
+                    "sort": 0,
+                    "value_type": "individual"
+                },
+                "type": "graph",
+                "xaxis": {
+                    "mode": "time",
+                    "show": true,
+                    "values": []
+                },
+                "yaxes": [
+                    {
+                        "format": "short",
+                        "logBase": 1,
+                        "show": true
+                    },
+                    {
+                        "format": "short",
+                        "logBase": 1,
+                        "show": true
+                    }
+                ],
+                "yaxis": {
+                    "align": false
+                }
+            },
+            {
+                "aliasColors": {},
+                "bars": false,
+                "dashLength": 10,
+                "dashes": false,
+                "datasource": {
+                    "type": "influxdb",
+                    "uid": "P951FEA4DE68E13C5"
+                },
+                "fieldConfig": {
+                    "defaults": {
+                        "links": []
+                    },
+                    "overrides": []
+                },
+                "fill": 1,
+                "fillGradient": 0,
+                "gridPos": {
+                    "h": 9,
+                    "w": 12,
+                    "x": 0,
+                    "y": 12
+                },
+                "hiddenSeries": false,
+                "id": 12,
+                "legend": {
+                    "avg": false,
+                    "current": false,
+                    "max": false,
+                    "min": false,
+                    "show": true,
+                    "total": false,
+                    "values": false
+                },
+                "lines": true,
+                "linewidth": 1,
+                "links": [],
+                "nullPointMode": "null",
+                "options": {
+                    "alertThreshold": true
+                },
+                "percentage": false,
+                "pluginVersion": "9.3.0",
+                "pointradius": 5,
+                "points": false,
+                "renderer": "flot",
+                "seriesOverrides": [],
+                "spaceLength": 10,
+                "stack": true,
+                "steppedLine": false,
+                "targets": [
+                    {
+                        "alias": "$tag_app_version",
+                        "datasource": {
+                            "type": "influxdb",
+                            "uid": "P951FEA4DE68E13C5"
+                        },
+                        "groupBy": [
+                            {
+                                "params": [
+                                    "5m"
+                                ],
+                                "type": "time"
+                            },
+                            {
+                                "params": [
+                                    "app_version"
+                                ],
+                                "type": "tag"
+                            },
+                            {
+                                "params": [
+                                    "null"
+                                ],
+                                "type": "fill"
+                            }
+                        ],
+                        "measurement": "by_app_version_down_sampling",
+                        "orderByTime": "ASC",
+                        "policy": "default",
+                        "query": "SELECT last(\"total\") FROM \"by_app_version_down_sampling\" WHERE $timeFilter GROUP BY time(1h), \"app_version\" fill(null)",
+                        "rawQuery": false,
+                        "refId": "A",
+                        "resultFormat": "time_series",
+                        "select": [
+                            [
+                                {
+                                    "params": [
+                                        "total"
+                                    ],
+                                    "type": "field"
+                                },
+                                {
+                                    "params": [],
+                                    "type": "last"
+                                }
+                            ]
+                        ],
+                        "tags": []
+                    }
+                ],
+                "thresholds": [],
+                "timeRegions": [],
+                "title": "Active Node By $AppName Versions",
+                "tooltip": {
+                    "shared": true,
+                    "sort": 2,
+                    "value_type": "individual"
+                },
+                "type": "graph",
+                "xaxis": {
+                    "mode": "time",
+                    "show": true,
+                    "values": []
+                },
+                "yaxes": [
+                    {
+                        "format": "short",
+                        "logBase": 1,
+                        "show": true
+                    },
+                    {
+                        "format": "short",
+                        "logBase": 1,
+                        "show": true
+                    }
+                ],
+                "yaxis": {
+                    "align": false
+                }
+            },
+            {
+                "aliasColors": {},
+                "bars": false,
+                "dashLength": 10,
+                "dashes": false,
+                "datasource": {
+                    "type": "influxdb",
+                    "uid": "P951FEA4DE68E13C5"
+                },
+                "fieldConfig": {
+                    "defaults": {
+                        "links": []
+                    },
+                    "overrides": []
+                },
+                "fill": 1,
+                "fillGradient": 0,
+                "gridPos": {
+                    "h": 9,
+                    "w": 12,
+                    "x": 12,
+                    "y": 12
+                },
+                "hiddenSeries": false,
+                "id": 20,
+                "legend": {
+                    "avg": false,
+                    "current": false,
+                    "max": false,
+                    "min": false,
+                    "show": true,
+                    "total": false,
+                    "values": false
+                },
+                "lines": true,
+                "linewidth": 1,
+                "links": [],
+                "nullPointMode": "null",
+                "options": {
+                    "alertThreshold": true
+                },
+                "percentage": false,
+                "pluginVersion": "9.3.0",
+                "pointradius": 5,
+                "points": false,
+                "renderer": "flot",
+                "seriesOverrides": [],
+                "spaceLength": 10,
+                "stack": true,
+                "steppedLine": false,
+                "targets": [
+                    {
+                        "alias": "$tag_epinio_server_version",
+                        "datasource": {
+                            "type": "influxdb",
+                            "uid": "P951FEA4DE68E13C5"
+                        },
+                        "groupBy": [
+                            {
+                                "params": [
+                                    "5m"
+                                ],
+                                "type": "time"
+                            },
+                            {
+                                "params": [
+                                    "epinio_server_version"
+                                ],
+                                "type": "tag"
+                            },
+                            {
+                                "params": [
+                                    "null"
+                                ],
+                                "type": "fill"
+                            }
+                        ],
+                        "measurement": "by_epinio_server_version_down_sampling",
+                        "orderByTime": "ASC",
+                        "policy": "default",
+                        "query": "SELECT last(\"total\") FROM \"by_epinio_server_version_down_sampling\" WHERE $timeFilter GROUP BY time(1h), \"epinio_server_version\" fill(null)",
+                        "rawQuery": false,
+                        "refId": "A",
+                        "resultFormat": "time_series",
+                        "select": [
+                            [
+                                {
+                                    "params": [
+                                        "total"
+                                    ],
+                                    "type": "field"
+                                },
+                                {
+                                    "params": [],
+                                    "type": "last"
+                                }
+                            ]
+                        ],
+                        "tags": []
+                    }
+                ],
+                "thresholds": [],
+                "timeRegions": [],
+                "title": "Active Node By $AppName Server Versions",
+                "tooltip": {
+                    "shared": true,
+                    "sort": 2,
+                    "value_type": "individual"
+                },
+                "type": "graph",
+                "xaxis": {
+                    "mode": "time",
+                    "show": true,
+                    "values": []
+                },
+                "yaxes": [
+                    {
+                        "format": "short",
+                        "logBase": 1,
+                        "show": true
+                    },
+                    {
+                        "format": "short",
+                        "logBase": 1,
+                        "show": true
+                    }
+                ],
+                "yaxis": {
+                    "align": false
+                }
+            },
+            {
+                "aliasColors": {},
+                "bars": false,
+                "dashLength": 10,
+                "dashes": false,
+                "datasource": {
+                    "type": "influxdb",
+                    "uid": "P951FEA4DE68E13C5"
+                },
+                "fieldConfig": {
+                    "defaults": {
+                        "links": []
+                    },
+                    "overrides": []
+                },
+                "fill": 1,
+                "fillGradient": 0,
+                "gridPos": {
+                    "h": 9,
+                    "w": 12,
+                    "x": 0,
+                    "y": 21
+                },
+                "hiddenSeries": false,
+                "id": 14,
+                "legend": {
+                    "avg": false,
+                    "current": false,
+                    "max": false,
+                    "min": false,
+                    "show": true,
+                    "total": false,
+                    "values": false
+                },
+                "lines": true,
+                "linewidth": 1,
+                "links": [],
+                "nullPointMode": "null",
+                "options": {
+                    "alertThreshold": true
+                },
+                "percentage": false,
+                "pluginVersion": "9.3.0",
+                "pointradius": 5,
+                "points": false,
+                "renderer": "flot",
+                "seriesOverrides": [],
+                "spaceLength": 10,
+                "stack": false,
+                "steppedLine": false,
+                "targets": [
+                    {
+                        "alias": "$tag_kubernetes_version",
+                        "datasource": {
+                            "type": "influxdb",
+                            "uid": "P951FEA4DE68E13C5"
+                        },
+                        "groupBy": [
+                            {
+                                "params": [
+                                    "5m"
+                                ],
+                                "type": "time"
+                            },
+                            {
+                                "params": [
+                                    "kubernetes_version"
+                                ],
+                                "type": "tag"
+                            },
+                            {
+                                "params": [
+                                    "null"
+                                ],
+                                "type": "fill"
+                            }
+                        ],
+                        "measurement": "by_kubernetes_version_down_sampling",
+                        "orderByTime": "ASC",
+                        "policy": "default",
+                        "query": "SELECT last(\"total\") FROM \"by_kubernetes_version_down_sampling\" WHERE $timeFilter GROUP BY time(1h), \"kubernetes_version\" fill(null)",
+                        "rawQuery": false,
+                        "refId": "A",
+                        "resultFormat": "time_series",
+                        "select": [
+                            [
+                                {
+                                    "params": [
+                                        "total"
+                                    ],
+                                    "type": "field"
+                                },
+                                {
+                                    "params": [],
+                                    "type": "last"
+                                }
+                            ]
+                        ],
+                        "tags": []
+                    }
+                ],
+                "thresholds": [],
+                "timeRegions": [],
+                "title": "Active Nodes Kubernetes Version",
+                "tooltip": {
+                    "shared": true,
+                    "sort": 2,
+                    "value_type": "individual"
+                },
+                "type": "graph",
+                "xaxis": {
+                    "mode": "time",
+                    "show": true,
+                    "values": []
+                },
+                "yaxes": [
+                    {
+                        "format": "short",
+                        "logBase": 1,
+                        "show": true
+                    },
+                    {
+                        "format": "short",
+                        "logBase": 1,
+                        "show": true
+                    }
+                ],
+                "yaxis": {
+                    "align": false
+                }
+            },
+            {
+                "aliasColors": {},
+                "bars": false,
+                "dashLength": 10,
+                "dashes": false,
+                "datasource": {
+                    "type": "influxdb",
+                    "uid": "P951FEA4DE68E13C5"
+                },
+                "fieldConfig": {
+                    "defaults": {
+                        "links": []
+                    },
+                    "overrides": []
+                },
+                "fill": 1,
+                "fillGradient": 0,
+                "gridPos": {
+                    "h": 9,
+                    "w": 12,
+                    "x": 12,
+                    "y": 21
+                },
+                "hiddenSeries": false,
+                "id": 19,
+                "legend": {
+                    "avg": false,
+                    "current": false,
+                    "max": false,
+                    "min": false,
+                    "show": true,
+                    "total": false,
+                    "values": false
+                },
+                "lines": true,
+                "linewidth": 1,
+                "links": [],
+                "nullPointMode": "null",
+                "options": {
+                    "alertThreshold": true
+                },
+                "percentage": false,
+                "pluginVersion": "9.3.0",
+                "pointradius": 5,
+                "points": false,
+                "renderer": "flot",
+                "seriesOverrides": [],
+                "spaceLength": 10,
+                "stack": false,
+                "steppedLine": false,
+                "targets": [
+                    {
+                        "alias": "$tag_kubernetes_platform",
+                        "datasource": {
+                            "type": "influxdb",
+                            "uid": "P951FEA4DE68E13C5"
+                        },
+                        "groupBy": [
+                            {
+                                "params": [
+                                    "5m"
+                                ],
+                                "type": "time"
+                            },
+                            {
+                                "params": [
+                                    "kubernetes_platform"
+                                ],
+                                "type": "tag"
+                            },
+                            {
+                                "params": [
+                                    "null"
+                                ],
+                                "type": "fill"
+                            }
+                        ],
+                        "measurement": "by_kubernetes_platform_down_sampling",
+                        "orderByTime": "ASC",
+                        "policy": "default",
+                        "query": "SELECT last(\"total\") FROM \"by_kubernetes_platform_down_sampling\" WHERE $timeFilter GROUP BY time(1h), \"kubernetes_platform\" fill(null)",
+                        "rawQuery": false,
+                        "refId": "A",
+                        "resultFormat": "time_series",
+                        "select": [
+                            [
+                                {
+                                    "params": [
+                                        "total"
+                                    ],
+                                    "type": "field"
+                                },
+                                {
+                                    "params": [],
+                                    "type": "last"
+                                }
+                            ]
+                        ],
+                        "tags": []
+                    }
+                ],
+                "thresholds": [],
+                "timeRegions": [],
+                "title": "Active Nodes Kubernetes Platform",
+                "tooltip": {
+                    "shared": true,
+                    "sort": 2,
+                    "value_type": "individual"
+                },
+                "type": "graph",
+                "xaxis": {
+                    "mode": "time",
+                    "show": true,
+                    "values": []
+                },
+                "yaxes": [
+                    {
+                        "format": "short",
+                        "logBase": 1,
+                        "show": true
+                    },
+                    {
+                        "format": "short",
+                        "logBase": 1,
+                        "show": true
+                    }
+                ],
+                "yaxis": {
+                    "align": false
+                }
+            }
+        ],
+        "refresh": false,
+        "schemaVersion": 37,
+        "style": "dark",
+        "tags": [],
+        "templating": {
+            "list": [
+                {
+                    "description": "The name of the application that is using this upgrade checker",
+                    "hide": 2,
+                    "name": "AppName",
+                    "query": "Epinio",
+                    "skipUrlSync": false,
+                    "type": "constant"
+                }
+            ]
+        },
+        "time": {
+            "from": "now-3h",
+            "to": "now"
+        },
+        "timepicker": {
+            "nowDelay": "",
+            "refresh_intervals": [
+                "10s",
+                "30s",
+                "1m",
+                "5m",
+                "15m",
+                "30m",
+                "1h",
+                "2h",
+                "1d"
+            ],
+            "time_options": [
+                "5m",
+                "15m",
+                "1h",
+                "6h",
+                "12h",
+                "24h",
+                "2d",
+                "7d",
+                "30d"
+            ]
+        },
+        "timezone": "",
+        "title": "Epinio Upgrade Checker",
+        "uid": "tsrvoC-mzzz",
+        "version": 1,
+        "weekStart": ""
+    }
+---
+# Source: upgrade-responder/templates/upgradeResponderConfigMap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: upgrade-responder-configmap-my-upgrade-responder
+  labels:
+    "app.kubernetes.io/name": 'upgrade-responder'
+    "helm.sh/chart": "upgrade-responder-0.2.0"
+    "app.kubernetes.io/managed-by": "Helm"
+    "app.kubernetes.io/instance": "my-upgrade-responder"
+data:
+  response-config.json:   |-
+    {
+      "versions": [{
+        "name": "v1.0.0",
+        "releaseDate": "2020-05-18T12:30:00Z",
+        "tags": ["latest"]
+      }]
+    }
+  request-schema.json:   |-
+    {
+      "appVersionSchema": {
+        "dataType": "string",
+        "maxLen": 200
+      }
+    }
+---
+# Source: upgrade-responder/charts/grafana/templates/clusterrole.yaml
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  labels:
+    helm.sh/chart: grafana-7.0.6
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: my-upgrade-responder
+    app.kubernetes.io/version: "10.1.5"
+    app.kubernetes.io/managed-by: Helm
+  name: my-upgrade-responder-grafana-clusterrole
+rules:
+  - apiGroups: [""] # "" indicates the core API group
+    resources: ["configmaps", "secrets"]
+    verbs: ["get", "watch", "list"]
+---
+# Source: upgrade-responder/charts/grafana/templates/clusterrolebinding.yaml
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-upgrade-responder-grafana-clusterrolebinding
+  labels:
+    helm.sh/chart: grafana-7.0.6
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: my-upgrade-responder
+    app.kubernetes.io/version: "10.1.5"
+    app.kubernetes.io/managed-by: Helm
+subjects:
+  - kind: ServiceAccount
+    name: my-upgrade-responder-grafana
+    namespace: default
+roleRef:
+  kind: ClusterRole
+  name: my-upgrade-responder-grafana-clusterrole
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: upgrade-responder/charts/grafana/templates/role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: my-upgrade-responder-grafana
+  namespace: default
+  labels:
+    helm.sh/chart: grafana-7.0.6
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: my-upgrade-responder
+    app.kubernetes.io/version: "10.1.5"
+    app.kubernetes.io/managed-by: Helm
+rules: []
+---
+# Source: upgrade-responder/charts/grafana/templates/rolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: my-upgrade-responder-grafana
+  namespace: default
+  labels:
+    helm.sh/chart: grafana-7.0.6
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: my-upgrade-responder
+    app.kubernetes.io/version: "10.1.5"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: my-upgrade-responder-grafana
+subjects:
+- kind: ServiceAccount
+  name: my-upgrade-responder-grafana
+  namespace: default
+---
+# Source: upgrade-responder/charts/grafana/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-upgrade-responder-grafana
+  namespace: default
+  labels:
+    helm.sh/chart: grafana-7.0.6
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: my-upgrade-responder
+    app.kubernetes.io/version: "10.1.5"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - name: service
+      port: 80
+      protocol: TCP
+      targetPort: 3000
+  selector:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: my-upgrade-responder
+---
+# Source: upgrade-responder/charts/influxdb/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-upgrade-responder-influxdb
+  labels:
+    helm.sh/chart: influxdb-4.12.5
+    app.kubernetes.io/name: influxdb
+    app.kubernetes.io/instance: my-upgrade-responder
+    app.kubernetes.io/version: "1.8.10"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+  - name: api
+    port: 8086
+    targetPort: api
+  - name: rpc
+    port: 8088
+    targetPort: rpc
+  selector:
+    app.kubernetes.io/name: influxdb
+    app.kubernetes.io/instance: my-upgrade-responder
+---
+# Source: upgrade-responder/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-upgrade-responder
+  labels:
+    app.kubernetes.io/name: upgrade-responder
+    helm.sh/chart: upgrade-responder-0.2.0
+    app.kubernetes.io/instance: my-upgrade-responder
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8314
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: upgrade-responder
+    app.kubernetes.io/instance: my-upgrade-responder
+---
+# Source: upgrade-responder/charts/grafana/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-upgrade-responder-grafana
+  namespace: default
+  labels:
+    helm.sh/chart: grafana-7.0.6
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: my-upgrade-responder
+    app.kubernetes.io/version: "10.1.5"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: grafana
+      app.kubernetes.io/instance: my-upgrade-responder
+  strategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: grafana
+        app.kubernetes.io/instance: my-upgrade-responder
+      annotations:
+        checksum/config: b51421fa62ff1908d5b73dcd381bbf734f5519517d493b4150454895beaa0acb
+        checksum/dashboards-json-config: 10cc8e8f6a0aad5c34ba3c299a6016ee0acb922dce991b6fef1abd2244037b52
+        checksum/sc-dashboard-provider-config: 5a5e117437d86db1d451f88f2693fde4eff1c0557e874dd6cf4e02ff1b11210e
+        checksum/secret: 5994d6e6a02ef8d786121291e9fb29bb31067d5d43d7f233c2b307ced80eddbf
+        kubectl.kubernetes.io/default-container: grafana
+    spec:
+      
+      serviceAccountName: my-upgrade-responder-grafana
+      automountServiceAccountToken: true
+      securityContext:
+        fsGroup: 472
+        runAsGroup: 472
+        runAsNonRoot: true
+        runAsUser: 472
+      initContainers:
+        - name: download-dashboards
+          image: "docker.io/curlimages/curl:7.85.0"
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh"]
+          args: [ "-c", "mkdir -p /var/lib/grafana/dashboards/default && /bin/sh -x /etc/grafana/download_dashboards.sh" ]
+          env:
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: config
+              mountPath: "/etc/grafana/download_dashboards.sh"
+              subPath: download_dashboards.sh
+            - name: storage
+              mountPath: "/var/lib/grafana"
+      enableServiceLinks: true
+      containers:
+        - name: grafana-sc-dashboard
+          image: "quay.io/kiwigrid/k8s-sidecar:1.25.2"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: METHOD
+              value: WATCH
+            - name: LABEL
+              value: "grafana_dashboard"
+            - name: FOLDER
+              value: "/tmp/dashboards"
+            - name: RESOURCE
+              value: "both"
+            - name: REQ_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: my-upgrade-responder-grafana
+                  key: admin-user
+            - name: REQ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-upgrade-responder-grafana
+                  key: admin-password
+            - name: REQ_URL
+              value: http://localhost:3000/api/admin/provisioning/dashboards/reload
+            - name: REQ_METHOD
+              value: POST
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: sc-dashboard-volume
+              mountPath: "/tmp/dashboards"
+        - name: grafana
+          image: "docker.io/grafana/grafana:10.1.5"
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: config
+              mountPath: "/etc/grafana/grafana.ini"
+              subPath: grafana.ini
+            - name: storage
+              mountPath: "/var/lib/grafana"
+            - name: config
+              mountPath: "/etc/grafana/provisioning/datasources/datasources.yaml"
+              subPath: "datasources.yaml"
+            - name: config
+              mountPath: "/etc/grafana/provisioning/dashboards/dashboardproviders.yaml"
+              subPath: "dashboardproviders.yaml"
+            - name: sc-dashboard-volume
+              mountPath: "/tmp/dashboards"
+            - name: sc-dashboard-provider
+              mountPath: "/etc/grafana/provisioning/dashboards/sc-dashboardproviders.yaml"
+              subPath: provider.yaml
+          ports:
+            - name: grafana
+              containerPort: 3000
+              protocol: TCP
+            - name: gossip-tcp
+              containerPort: 9094
+              protocol: TCP
+            - name: gossip-udp
+              containerPort: 9094
+              protocol: UDP
+          env:
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: GF_SECURITY_ADMIN_USER
+              valueFrom:
+                secretKeyRef:
+                  name: my-upgrade-responder-grafana
+                  key: admin-user
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-upgrade-responder-grafana
+                  key: admin-password
+            - name: GF_INSTALL_PLUGINS
+              valueFrom:
+                configMapKeyRef:
+                  name: my-upgrade-responder-grafana
+                  key: plugins
+            - name: GF_PATHS_DATA
+              value: /var/lib/grafana/
+            - name: GF_PATHS_LOGS
+              value: /var/log/grafana
+            - name: GF_PATHS_PLUGINS
+              value: /var/lib/grafana/plugins
+            - name: GF_PATHS_PROVISIONING
+              value: /etc/grafana/provisioning
+          livenessProbe:
+            failureThreshold: 10
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 60
+            timeoutSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+      volumes:
+        - name: config
+          configMap:
+            name: my-upgrade-responder-grafana
+        - name: dashboards-default
+          configMap:
+            name: my-upgrade-responder-grafana-dashboards-default
+        - name: storage
+          emptyDir: {}
+        - name: sc-dashboard-volume
+          emptyDir:
+            {}
+        - name: sc-dashboard-provider
+          configMap:
+            name: my-upgrade-responder-grafana-config-dashboards
+---
+# Source: upgrade-responder/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-upgrade-responder
+  labels:
+    app.kubernetes.io/name: upgrade-responder
+    helm.sh/chart: upgrade-responder-0.2.0
+    app.kubernetes.io/instance: my-upgrade-responder
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: upgrade-responder
+      app.kubernetes.io/instance: my-upgrade-responder
+  template:
+    metadata:
+      annotations:
+        checksum/upgradeResponderConfigMap: 512ef07211e4af96550ac9a155a6ed0862f8134e8a30bb96078874caae7ffc0f
+      labels:
+        app.kubernetes.io/name: upgrade-responder
+        app.kubernetes.io/instance: my-upgrade-responder
+    spec:
+      containers:
+        - name: upgrade-responder
+          image: "longhornio/upgrade-responder:v0.2.0"
+          imagePullPolicy: IfNotPresent
+          env:
+          - name: APPLICATION_NAME
+            value: epinio
+          - name: INFLUXDB_URL
+            valueFrom:
+              secretKeyRef:
+                name: upgrade-responder-secrets
+                key: influxDBUrl
+          - name: INFLUXDB_USER
+            valueFrom:
+              secretKeyRef:
+                name: upgrade-responder-secrets
+                key: influxDBUser
+          - name: INFLUXDB_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: upgrade-responder-secrets
+                key: influxDBPassword
+          - name: PORT
+            value: "8314"
+          - name: CACHE_SYNC_INTERVAL
+            value: "1"
+          - name: CACHE_SIZE
+            value: "100"
+          command:
+          - upgrade-responder
+          args:
+          - --debug
+          - start
+          - --application-name
+          - $(APPLICATION_NAME)
+          - --upgrade-response-config
+          - /run/secrets/response-config.json
+          - --request-schema
+          - /run/secrets/request-schema.json
+          - --influxdb-url
+          - $(INFLUXDB_URL)
+          - --influxdb-user
+          - $(INFLUXDB_USER)
+          - --influxdb-pass
+          - $(INFLUXDB_PASSWORD)
+          - --port
+          - $(PORT)
+          - --cache-sync-interval
+          - $(CACHE_SYNC_INTERVAL)
+          - --cache-size
+          - $(CACHE_SIZE)
+          ports:
+            - name: http
+              containerPort: 8314
+              protocol: TCP
+          # livenessProbe:
+          #   httpGet:
+          #     path: /
+          #     port: http
+          # readinessProbe:
+          #   httpGet:
+          #     path: /
+          #     port: http
+          volumeMounts:
+          - mountPath: /run/secrets/response-config.json
+            name: upgrade-responder-configmap-my-upgrade-responder
+            subPath: response-config.json
+          - mountPath: /run/secrets/request-schema.json
+            name: upgrade-responder-configmap-my-upgrade-responder
+            subPath: request-schema.json
+          resources:
+            limits:
+              cpu: 200m
+              memory: 256Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+      volumes:
+      - name: upgrade-responder-configmap-my-upgrade-responder
+        configMap:
+          name: upgrade-responder-configmap-my-upgrade-responder
+---
+# Source: upgrade-responder/charts/influxdb/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-upgrade-responder-influxdb
+  labels:
+    helm.sh/chart: influxdb-4.12.5
+    app.kubernetes.io/name: influxdb
+    app.kubernetes.io/instance: my-upgrade-responder
+    app.kubernetes.io/version: "1.8.10"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: influxdb
+      app.kubernetes.io/instance: my-upgrade-responder
+  serviceName: "my-upgrade-responder-influxdb"
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: influxdb
+        app.kubernetes.io/instance: my-upgrade-responder
+    spec:
+      serviceAccountName: my-upgrade-responder-influxdb
+      containers:
+      - name: my-upgrade-responder-influxdb
+        image: "influxdb:1.8.10-alpine"
+        imagePullPolicy: "IfNotPresent"
+        ports:
+        - name: api
+          containerPort: 8086
+        - name: rpc
+          containerPort: 8088
+        livenessProbe:
+          httpGet:
+            path: /ping
+            port: api
+            scheme: HTTP
+          initialDelaySeconds: 30
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /ping
+            port: api
+            scheme: HTTP
+          initialDelaySeconds: 5
+          timeoutSeconds: 1
+        volumeMounts:
+        - name: my-upgrade-responder-influxdb-data
+          mountPath: /var/lib/influxdb
+        - name: config
+          mountPath: /etc/influxdb
+      volumes:
+      - name: config
+        configMap:
+          name: my-upgrade-responder-influxdb
+      # Cannot use existing claim in enterprise mode
+  # Must use volume claim template in enterprise mode
+  volumeClaimTemplates:
+    - metadata:
+        name: my-upgrade-responder-influxdb-data
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "8Gi"
+---
+# Source: upgrade-responder/charts/grafana/templates/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: my-upgrade-responder-grafana
+  namespace: default
+  labels:
+    helm.sh/chart: grafana-7.0.6
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: my-upgrade-responder
+    app.kubernetes.io/version: "10.1.5"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  rules:
+    - host: chart-example.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: my-upgrade-responder-grafana
+                port:
+                  number: 80
+---
+# Source: upgrade-responder/charts/grafana/templates/tests/test-serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    helm.sh/chart: grafana-7.0.6
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: my-upgrade-responder
+    app.kubernetes.io/version: "10.1.5"
+    app.kubernetes.io/managed-by: Helm
+  name: my-upgrade-responder-grafana-test
+  namespace: default
+  annotations:
+    "helm.sh/hook": test-success
+    "helm.sh/hook-delete-policy": "before-hook-creation,hook-succeeded"
+---
+# Source: upgrade-responder/charts/grafana/templates/tests/test-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-upgrade-responder-grafana-test
+  namespace: default
+  annotations:
+    "helm.sh/hook": test-success
+    "helm.sh/hook-delete-policy": "before-hook-creation,hook-succeeded"
+  labels:
+    helm.sh/chart: grafana-7.0.6
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: my-upgrade-responder
+    app.kubernetes.io/version: "10.1.5"
+    app.kubernetes.io/managed-by: Helm
+data:
+  run.sh: |-
+    @test "Test Health" {
+      url="http://my-upgrade-responder-grafana/api/health"
+
+      code=$(wget --server-response --spider --timeout 90 --tries 10 ${url} 2>&1 | awk '/^  HTTP/{print $2}')
+      [ "$code" == "200" ]
+    }
+---
+# Source: upgrade-responder/charts/grafana/templates/tests/test.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-upgrade-responder-grafana-test
+  labels:
+    helm.sh/chart: grafana-7.0.6
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: my-upgrade-responder
+    app.kubernetes.io/version: "10.1.5"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test-success
+    "helm.sh/hook-delete-policy": "before-hook-creation,hook-succeeded"
+  namespace: default
+spec:
+  serviceAccountName: my-upgrade-responder-grafana-test
+  containers:
+    - name: my-upgrade-responder-test
+      image: "docker.io/bats/bats:v1.4.1"
+      imagePullPolicy: "IfNotPresent"
+      command: ["/opt/bats/bin/bats", "-t", "/tests/run.sh"]
+      volumeMounts:
+        - mountPath: /tests
+          name: tests
+          readOnly: true
+  volumes:
+    - name: tests
+      configMap:
+        name: my-upgrade-responder-grafana-test
+  restartPolicy: Never

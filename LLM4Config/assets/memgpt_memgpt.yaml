@@ -1,0 +1,301 @@
+---
+# Source: memgpt/templates/serverconfig.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-memgpt-server-config-cm
+  labels:
+    helm.sh/chart: memgpt-0.3.19
+    app.kubernetes.io/name: memgpt
+    app.kubernetes.io/instance: my-memgpt
+    app.kubernetes.io/version: "0.3.19"
+    app.kubernetes.io/managed-by: Helm
+data:
+  server_config.yaml: |
+    [defaults]
+    preset = memgpt_chat
+    persona = sam_pov
+    human = basic
+
+    [model]
+    model = memgpt-openai
+    model_endpoint = https://inference.memgpt.ai
+    model_endpoint_type = openai
+    model_wrapper = null
+    context_window = 8192
+
+
+    [embedding]
+    embedding_endpoint_type = hugging-face
+    embedding_endpoint = https://embeddings.memgpt.ai
+    embedding_model = BAAI/bge-large-en-v1.5
+    embedding_dim = 1024
+    embedding_chunk_size = 300
+
+    [archival_storage]
+    type = postgres
+    path = /root/.memgpt/chroma
+    uri = postgresql+pg8000://memgpt:memgpt@my-memgpt-db-svc:5432/memgpt
+
+    [recall_storage]
+    type = postgres
+    path = /root/.memgpt
+    uri = postgresql+pg8000://memgpt:memgpt@my-memgpt-db-svc:5432/memgpt
+
+    [metadata_storage]
+    type = postgres
+    path = /root/.memgpt
+    uri = postgresql+pg8000://memgpt:memgpt@my-memgpt-db-svc:5432/memgpt
+
+    [client]
+    anon_clientid = 9399e81d-9637-453d-80b4-d2dd46fb0cf8
+---
+# Source: memgpt/templates/vectordb/db-cm.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-memgpt-db-cm
+  labels:
+    helm.sh/chart: memgpt-0.3.19
+    app.kubernetes.io/name: memgpt
+    app.kubernetes.io/instance: my-memgpt
+    app.kubernetes.io/version: "0.3.19"
+    app.kubernetes.io/managed-by: Helm
+data:
+  init.sql: |
+    -- Title: Init MemGPT Database
+
+    -- Fetch the docker secrets, if they are available.
+    -- Otherwise fall back to environment variables, or hardwired 'memgpt'
+    \set db_user `([ -r /var/run/secrets/memgpt-user ] && cat /var/run/secrets/memgpt-user) || echo "${POSTGRES_USER:-memgpt}"`
+    \set db_password `([ -r /var/run/secrets/memgpt-password ] && cat /var/run/secrets/memgpt-password) || echo "${POSTGRES_PASSWORD:-memgpt}"`
+    \set db_name `([ -r /var/run/secrets/memgpt-db ] && cat /var/run/secrets/memgpt-db) || echo "${POSTGRES_DB:-memgpt}"`
+
+    -- CREATE USER :"db_user"
+    --     WITH PASSWORD :'db_password'
+    --     NOCREATEDB
+    --     NOCREATEROLE
+    --     ;
+    --
+    -- CREATE DATABASE :"db_name"
+    --     WITH
+    --     OWNER = :"db_user"
+    --     ENCODING = 'UTF8'
+    --     LC_COLLATE = 'en_US.utf8'
+    --     LC_CTYPE = 'en_US.utf8'
+    --     LOCALE_PROVIDER = 'libc'
+    --     TABLESPACE = pg_default
+    --     CONNECTION LIMIT = -1;
+
+    -- Set up our schema and extensions in our new database.
+    \c :"db_name"
+
+    CREATE SCHEMA :"db_name"
+        AUTHORIZATION :"db_user";
+
+    ALTER DATABASE :"db_name"
+        SET search_path TO :"db_name";
+
+    CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA :"db_name";
+
+    DROP SCHEMA IF EXISTS public CASCADE;
+---
+# Source: memgpt/templates/vectordb/db-pv.yaml
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: my-memgpt-db-pv
+  labels:
+    helm.sh/chart: memgpt-0.3.19
+    app.kubernetes.io/name: memgpt
+    app.kubernetes.io/instance: my-memgpt
+    app.kubernetes.io/version: "0.3.19"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  accessModes:
+    - ReadWriteOnce
+  capacity:
+    storage: 1Gi
+  hostPath:
+    path: "./.persist/pgdata"
+---
+# Source: memgpt/templates/vectordb/db-pvc.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: my-memgpt-db-pvc
+  labels:
+    helm.sh/chart: memgpt-0.3.19
+    app.kubernetes.io/name: memgpt
+    app.kubernetes.io/instance: my-memgpt
+    app.kubernetes.io/version: "0.3.19"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+# Source: memgpt/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-memgpt
+  labels:
+    helm.sh/chart: memgpt-0.3.19
+    app.kubernetes.io/name: memgpt
+    app.kubernetes.io/instance: my-memgpt
+    app.kubernetes.io/version: "0.3.19"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8083
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: memgpt
+    app.kubernetes.io/instance: my-memgpt
+---
+# Source: memgpt/templates/vectordb/db-svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-memgpt-db-svc
+  labels:
+    helm.sh/chart: memgpt-0.3.19
+    app.kubernetes.io/name: memgpt
+    app.kubernetes.io/instance: my-memgpt
+    app.kubernetes.io/version: "0.3.19"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  ports:
+    - port: 5432
+  selector:
+    app: my-memgpt-db
+---
+# Source: memgpt/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-memgpt
+  labels:
+    helm.sh/chart: memgpt-0.3.19
+    app.kubernetes.io/name: memgpt
+    app.kubernetes.io/instance: my-memgpt
+    app.kubernetes.io/version: "0.3.19"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: memgpt
+      app.kubernetes.io/instance: my-memgpt
+  template:
+    metadata:
+      labels:
+        helm.sh/chart: memgpt-0.3.19
+        app.kubernetes.io/name: memgpt
+        app.kubernetes.io/instance: my-memgpt
+        app.kubernetes.io/version: "0.3.19"
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      securityContext:
+        {}
+      containers:
+        - name: memgpt
+          securityContext:
+            {}
+          image: "memgpt/memgpt-server:0.3.19"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: MEMGPT_SERVER_PASS
+              value: password
+          ports:
+            - name: http
+              containerPort: 8083
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+            {}
+
+          volumeMounts:
+            - mountPath: /root/.memgpt/config
+              name: memgpt-server-config
+              subPath: server_config.yaml
+      volumes:
+        - name: memgpt-server-config
+          configMap:
+            name: my-memgpt-server-config-cm
+---
+# Source: memgpt/templates/vectordb/db-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-memgpt-db
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: my-memgpt-db
+  template:
+    metadata:
+      labels:
+        app: my-memgpt-db
+    spec:
+      containers:
+        - name: memgpt-db
+          image: ankane/pgvector:v0.5.1
+          env:
+            - name: POSTGRES_USER
+              value: memgpt
+            - name: POSTGRES_PASSWORD
+              value: memgpt
+            - name: POSTGRES_DB
+              value: memgpt
+          volumeMounts:
+            - mountPath: /var/lib/postgresql/data
+              name: pgdata
+            - mountPath: /docker-entrypoint-initdb.d/init.sql
+              subPath: init.sql
+              name: pginit
+      volumes:
+        - name: pgdata
+          persistentVolumeClaim:
+            claimName: my-memgpt-db-pvc
+        - name: pginit
+          configMap:
+            name: my-memgpt-db-cm
+            items:
+              - key: init.sql
+                path: init.sql
+---
+# Source: memgpt/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-memgpt-test-connection"
+  labels:
+    helm.sh/chart: memgpt-0.3.19
+    app.kubernetes.io/name: memgpt
+    app.kubernetes.io/instance: my-memgpt
+    app.kubernetes.io/version: "0.3.19"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-memgpt:8083']
+  restartPolicy: Never

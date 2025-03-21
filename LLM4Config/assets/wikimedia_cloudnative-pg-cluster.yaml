@@ -1,0 +1,202 @@
+---
+# Source: cloudnative-pg-cluster/templates/networkpolicy.yaml
+apiVersion: crd.projectcalico.org/v1
+kind: NetworkPolicy
+metadata:
+  name: my-cloudnative-pg-cluster-to-kubapi
+spec:
+  types:
+    - Egress
+  selector: "cnpg.io/jobRole in { 'initdb', 'join' } || cnpg.io/podRole in { 'instance', 'pooler' }"
+  egress:
+    - action: Allow
+      destination:
+        services:
+          name: kubernetes
+          namespace: default
+---
+# Source: cloudnative-pg-cluster/templates/networkpolicy.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: my-cloudnative-pg-cluster-ingress-pooler
+spec:
+  podSelector:
+    matchLabels:
+      cnpg.io/podRole: pooler
+  policyTypes:
+    - Ingress
+  ingress:
+    - ports:
+      - port: 5432
+        protocol: TCP
+---
+# Source: cloudnative-pg-cluster/templates/networkpolicy.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: my-cloudnative-pg-cluster-ingress-instance
+spec:
+  podSelector:
+    matchLabels:
+      cnpg.io/podRole: instance
+  policyTypes:
+    - Ingress
+  ingress:
+    - ports:
+      - port: 8000 
+        protocol: TCP
+      - port: 9187 
+        protocol: TCP
+---
+# Source: cloudnative-pg-cluster/templates/networkpolicy.yaml
+apiVersion: crd.projectcalico.org/v1
+kind: NetworkPolicy
+metadata:
+  name: my-cloudnative-pg-cluster-to-instance
+spec:
+  types:
+    - Ingress
+  selector: "cnpg.io/podRole == 'instance'"
+  ingress:
+    - action: Allow
+      protocol: TCP
+      source:
+        selector: >-
+          cnpg.io/jobRole == 'join' ||
+          cnpg.io/podRole in { 'instance', 'pooler' } ||
+          app.kubernetes.io/component == 'database-ping-test'
+      destination:
+        ports: [5432]
+---
+# Source: cloudnative-pg-cluster/templates/cluster.yaml
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: my-cloudnative-pg-cluster
+  annotations:
+    prometheus.io/path: /metrics
+    prometheus.io/port: "9187"
+    prometheus.io/scrape: "true"
+  labels:
+    helm.sh/chart: cloudnative-pg-cluster-0.1.16
+    app.kubernetes.io/name: cloudnative-pg-cluster
+    app.kubernetes.io/instance: my-cloudnative-pg-cluster
+    app.kubernetes.io/part-of: cloudnative-pg
+    app.kubernetes.io/managed-by: Helm
+spec:
+  instances: 3
+  imageCatalogRef:
+    apiGroup: postgresql.cnpg.io
+    kind: ImageCatalog
+    name: my-cloudnative-pg-cluster-catalog
+    major: 15
+  imagePullPolicy: IfNotPresent
+  postgresUID: 100
+  postgresGID: 102
+  storage:
+    size: 8Gi
+    storageClass: ceph-rbd-ssd
+  walStorage:
+    size: 1Gi
+    storageClass: ceph-rbd-ssd
+  affinity:
+    enablePodAntiAffinity: true
+    podAntiAffinityType: preferred
+    topologyKey: topology.kubernetes.io/zone
+  primaryUpdateMethod: switchover
+  primaryUpdateStrategy: unsupervised
+  logLevel: info
+  enableSuperuserAccess: true
+  postgresql:
+      shared_preload_libraries: []
+
+  managed:
+    roles: []
+
+  monitoring:
+    enablePodMonitor: false # We don't have the PodMonitor CRD installed
+  
+  
+  bootstrap:
+    initdb:
+      postInitApplicationSQL: []
+---
+# Source: cloudnative-pg-cluster/templates/image-catalog.yaml
+apiVersion: postgresql.cnpg.io/v1
+kind: ImageCatalog
+metadata:
+  name: my-cloudnative-pg-cluster-catalog
+spec:
+  images:
+    - major: 15
+      image: docker-registry.discovery.wmnet/repos/data-engineering/postgresql-kubernetes/postgresql:override_me
+---
+# Source: cloudnative-pg-cluster/templates/pooler.yaml
+apiVersion: postgresql.cnpg.io/v1
+kind: Pooler
+metadata:
+  name: my-cloudnative-pg-cluster-pooler-rw
+spec:
+  cluster:
+    name: my-cloudnative-pg-cluster
+  instances: 3
+  type: rw
+  pgbouncer:
+    poolMode: transaction
+    parameters:
+      default_pool_size: "25"
+      max_client_conn: "1000"
+  monitoring:
+    enablePodMonitor: false  # We don't have the PodMonitor CRD installed
+  template:
+    spec:
+      containers:
+      - image: docker-registry.discovery.wmnet/repos/data-engineering/pgbouncer:override_me
+        name: pgbouncer
+---
+# Source: cloudnative-pg-cluster/templates/tests/ping.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: my-cloudnative-pg-cluster-ping-test
+  labels:
+    app.kubernetes.io/component: database-ping-test
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  template:
+    metadata:
+      name: my-cloudnative-pg-cluster-ping-test
+      labels:
+        app.kubernetes.io/component: database-ping-test
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: database-ping-test          
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+               drop:
+               - ALL
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          image: docker-registry.discovery.wmnet/repos/data-engineering/postgresql-kubernetes/postgresql:15
+          command: [ 'sh' ]
+          env:
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: my-cloudnative-pg-cluster-app
+                  key: username
+            - name: PGPASS
+              valueFrom:
+                secretKeyRef:
+                  name: my-cloudnative-pg-cluster-app
+                  key: password
+          args:
+            - "-c"
+            - |
+              psql "postgresql://$PGUSER:$PGPASS@my-cloudnative-pg-cluster-rw.default.svc.cluster.local:5432" -c 'SELECT 1'

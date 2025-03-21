@@ -1,0 +1,225 @@
+---
+# Source: daml-trigger/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-daml-trigger
+  labels:
+    app.kubernetes.io/component: trigger
+    app.kubernetes.io/instance: my-daml-trigger
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: daml-trigger
+    app.kubernetes.io/part-of: daml
+    app.kubernetes.io/version: 2.8.1
+    helm.sh/chart: daml-trigger-0.6.1
+automountServiceAccountToken: false
+secrets:
+---
+# Source: daml-trigger/templates/configmap-env.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-daml-trigger-envmap
+  labels:
+    app.kubernetes.io/component: trigger
+    app.kubernetes.io/instance: my-daml-trigger
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: daml-trigger
+    app.kubernetes.io/part-of: daml
+    app.kubernetes.io/version: 2.8.1
+    helm.sh/chart: daml-trigger-0.6.1
+data:
+  JDK_JAVA_OPTIONS: "-XX:+ExitOnOutOfMemoryError -XX:InitialRAMPercentage=70 -XX:MaxRAMPercentage=70"
+---
+# Source: daml-trigger/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-daml-trigger
+  labels:
+    app.kubernetes.io/component: trigger
+    app.kubernetes.io/instance: my-daml-trigger
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: daml-trigger
+    app.kubernetes.io/part-of: daml
+    app.kubernetes.io/version: 2.8.1
+    helm.sh/chart: daml-trigger-0.6.1
+data:
+  trigger.conf: |
+    {
+      address = "0.0.0.0"
+      port = 8088
+
+      ledger-api {
+        address = "participant"
+        port = 4001
+      }
+
+      trigger-store {
+        user = "trigger"
+        password = ${?PGPASSWORD}
+        driver = "org.postgresql.Driver"
+        url = "jdbc:postgresql://postgres:5432/trigger?ssl=true&sslmode=require"
+        pool-size = 10
+        min-idle = 4
+        idle-timeout = "10s"
+        connection-timeout = "60s"
+      }
+    }
+---
+# Source: daml-trigger/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: my-daml-trigger
+  namespace: "default"
+  labels:
+    app.kubernetes.io/component: trigger
+    app.kubernetes.io/instance: my-daml-trigger
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: daml-trigger
+    app.kubernetes.io/part-of: daml
+    app.kubernetes.io/version: 2.8.1
+    helm.sh/chart: daml-trigger-0.6.1
+---
+# Source: daml-trigger/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: my-daml-trigger
+  namespace: "default"
+  labels:
+    app.kubernetes.io/component: trigger
+    app.kubernetes.io/instance: my-daml-trigger
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: daml-trigger
+    app.kubernetes.io/part-of: daml
+    app.kubernetes.io/version: 2.8.1
+    helm.sh/chart: daml-trigger-0.6.1
+roleRef:
+  kind: Role
+  name: my-daml-trigger
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+  - kind: ServiceAccount
+    name: my-daml-trigger
+    namespace: "default"
+---
+# Source: daml-trigger/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-daml-trigger
+  labels:
+    app.kubernetes.io/component: trigger
+    app.kubernetes.io/instance: my-daml-trigger
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: daml-trigger
+    app.kubernetes.io/part-of: daml
+    app.kubernetes.io/version: 2.8.1
+    helm.sh/chart: daml-trigger-0.6.1
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      protocol: TCP
+      port: 8088
+      targetPort: http
+  sessionAffinity: "ClientIP"
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 3600
+  selector:
+    app.kubernetes.io/instance: my-daml-trigger
+    app.kubernetes.io/name: daml-trigger
+---
+# Source: daml-trigger/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-daml-trigger
+  labels:
+    app.kubernetes.io/component: trigger
+    app.kubernetes.io/instance: my-daml-trigger
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: daml-trigger
+    app.kubernetes.io/part-of: daml
+    app.kubernetes.io/version: 2.8.1
+    helm.sh/chart: daml-trigger-0.6.1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: my-daml-trigger
+      app.kubernetes.io/name: daml-trigger
+  template:
+    metadata:
+      annotations:
+        "checksum/config": "8bd0fccaca26900b462771958654ff2b2777eeedbba91b47612c2b92792829b7"
+        "checksum/env": "1d5af272b7e5faa49e271f1415a04dda085abf0c02790db8c23dc1a0f5b7a440"
+        "checksum/secret": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+      labels:
+        app.kubernetes.io/component: trigger
+        app.kubernetes.io/instance: my-daml-trigger
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: daml-trigger
+        app.kubernetes.io/part-of: daml
+        app.kubernetes.io/version: 2.8.1
+        helm.sh/chart: daml-trigger-0.6.1
+    spec:
+      serviceAccountName: my-daml-trigger
+      securityContext:
+        fsGroup: 65532
+        fsGroupChangePolicy: Always
+        sysctls: []
+      containers:
+        - name: trigger
+          image: "digitalasset-docker.jfrog.io/trigger-service:2.8.1"
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            readOnlyRootFilesystem: true
+            runAsGroup: 65532
+            runAsNonRoot: true
+            runAsUser: 65532
+          args:
+            - "--log-level-root=INFO"
+            - "--log-encoder=plain"
+            - "--config=/etc/trigger/trigger.conf"
+          envFrom:
+            - configMapRef:
+                name: my-daml-trigger-envmap
+          ports:
+            - name: http
+              containerPort: 8088
+          resources:
+            limits:
+              cpu: 1
+              memory: 1Gi
+            requests:
+              cpu: 200m
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: http
+            timeoutSeconds: 1
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            timeoutSeconds: 1
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+          volumeMounts:
+            - name: config
+              mountPath: /etc/trigger
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: my-daml-trigger

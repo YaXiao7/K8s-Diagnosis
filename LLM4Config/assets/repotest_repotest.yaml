@@ -1,0 +1,102 @@
+---
+# Source: repotest/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-repotest
+  labels:
+    helm.sh/chart: repotest-0.1.0
+    app.kubernetes.io/name: repotest
+    app.kubernetes.io/instance: my-repotest
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: repotest/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-repotest
+  labels:
+    helm.sh/chart: repotest-0.1.0
+    app.kubernetes.io/name: repotest
+    app.kubernetes.io/instance: my-repotest
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: repotest
+    app.kubernetes.io/instance: my-repotest
+---
+# Source: repotest/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-repotest
+  labels:
+    helm.sh/chart: repotest-0.1.0
+    app.kubernetes.io/name: repotest
+    app.kubernetes.io/instance: my-repotest
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: repotest
+      app.kubernetes.io/instance: my-repotest
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: repotest
+        app.kubernetes.io/instance: my-repotest
+    spec:
+      serviceAccountName: my-repotest
+      securityContext:
+        {}
+      containers:
+        - name: repotest
+          securityContext:
+            {}
+          image: "nginx:1.16.0"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+            {}
+---
+# Source: repotest/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-repotest-test-connection"
+  labels:
+    helm.sh/chart: repotest-0.1.0
+    app.kubernetes.io/name: repotest
+    app.kubernetes.io/instance: my-repotest
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-repotest:80']
+  restartPolicy: Never

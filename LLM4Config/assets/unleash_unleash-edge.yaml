@@ -1,0 +1,103 @@
+---
+# Source: unleash-edge/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-unleash-edge
+  labels:
+    helm.sh/chart: unleash-edge-2.6.6
+    app.kubernetes.io/name: unleash-edge
+    app.kubernetes.io/instance: my-unleash-edge
+    app.kubernetes.io/version: "v19.2.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: unleash-edge/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-unleash-edge
+  labels:
+    helm.sh/chart: unleash-edge-2.6.6
+    app.kubernetes.io/name: unleash-edge
+    app.kubernetes.io/instance: my-unleash-edge
+    app.kubernetes.io/version: "v19.2.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3063
+      targetPort: 3063
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: unleash-edge
+    app.kubernetes.io/instance: my-unleash-edge
+---
+# Source: unleash-edge/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-unleash-edge
+  labels:
+    helm.sh/chart: unleash-edge-2.6.6
+    app.kubernetes.io/name: unleash-edge
+    app.kubernetes.io/instance: my-unleash-edge
+    app.kubernetes.io/version: "v19.2.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: unleash-edge
+      app.kubernetes.io/instance: my-unleash-edge
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: unleash-edge
+        app.kubernetes.io/instance: my-unleash-edge
+    spec:
+      serviceAccountName: my-unleash-edge
+      securityContext:
+        {}
+      containers:
+        - name: unleash-edge
+          args: ["edge"]
+          env:
+            - name: UPSTREAM_URL
+              value: "http://unleash.unleash:4242"
+            - name: RUST_LOG
+              value: "warn"
+            - name: LOG_FORMAT
+              value: "json"
+
+          securityContext:
+            {}
+          image: "unleashorg/unleash-edge:v19.2.0"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3063
+              protocol: TCP
+          livenessProbe:
+            exec:
+              command:
+              - /unleash-edge
+              - health
+            failureThreshold: 5
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 10
+          readinessProbe:
+            exec:
+              command:
+              - /unleash-edge
+              - health
+            failureThreshold: 1
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 10
+          
+          resources:
+            {}

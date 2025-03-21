@@ -1,0 +1,1767 @@
+---
+# Source: devspace-cloud/charts/cert-manager/templates/psp.yaml
+apiVersion: policy/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: my-devspace-cloud-cert-manager
+  labels:
+    app: cert-manager
+    chart: cert-manager-v0.13.1
+    release: my-devspace-cloud
+    heritage: Helm
+  annotations:
+    seccomp.security.alpha.kubernetes.io/allowedProfileNames: 'docker/default'
+    seccomp.security.alpha.kubernetes.io/defaultProfileName:  'docker/default'
+    apparmor.security.beta.kubernetes.io/allowedProfileNames: 'runtime/default'
+    apparmor.security.beta.kubernetes.io/defaultProfileName:  'runtime/default'
+spec:
+  privileged: false
+  allowPrivilegeEscalation: false
+  allowedCapabilities: []  # default set of capabilities are implicitly allowed
+  volumes:
+  - 'configMap'
+  - 'emptyDir'
+  - 'projected'
+  - 'secret'
+  - 'downwardAPI'
+  hostNetwork: false
+  hostIPC: false
+  hostPID: false
+  runAsUser:
+    rule: 'MustRunAs'
+    ranges:
+    - min: 1000
+      max: 1000
+  seLinux:
+    rule: 'RunAsAny'
+  supplementalGroups:
+    rule: 'MustRunAs'
+    ranges:
+    - min: 1000
+      max: 1000
+  fsGroup:
+    rule: 'MustRunAs'
+    ranges:
+    - min: 1000
+      max: 1000
+---
+# Source: devspace-cloud/charts/cert-manager/templates/webhook-psp.yaml
+apiVersion: policy/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: my-devspace-cloud-cert-manager-webhook
+  labels:
+    app: webhook
+    chart: cert-manager-v0.13.1
+    release: my-devspace-cloud
+    heritage: Helm
+  annotations:
+    seccomp.security.alpha.kubernetes.io/allowedProfileNames: 'docker/default'
+    seccomp.security.alpha.kubernetes.io/defaultProfileName:  'docker/default'
+    apparmor.security.beta.kubernetes.io/allowedProfileNames: 'runtime/default'
+    apparmor.security.beta.kubernetes.io/defaultProfileName:  'runtime/default'
+spec:
+  privileged: false
+  allowPrivilegeEscalation: false
+  allowedCapabilities: []  # default set of capabilities are implicitly allowed
+  volumes:
+  - 'configMap'
+  - 'emptyDir'
+  - 'projected'
+  - 'secret'
+  - 'downwardAPI'
+  hostNetwork: false
+  hostIPC: false
+  hostPID: false
+  runAsUser:
+    rule: 'MustRunAs'
+    ranges:
+    - min: 1000
+      max: 1000
+  seLinux:
+    rule: 'RunAsAny'
+  supplementalGroups:
+    rule: 'MustRunAs'
+    ranges:
+    - min: 1000
+      max: 1000
+  fsGroup:
+    rule: 'MustRunAs'
+    ranges:
+    - min: 1000
+      max: 1000
+---
+# Source: devspace-cloud/charts/nginx-ingress/templates/controller-psp.yaml
+apiVersion: policy/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: my-devspace-cloud-nginx-ingress
+  labels:
+    app: nginx-ingress
+    chart: nginx-ingress-1.33.1
+    heritage: Helm
+    release: my-devspace-cloud
+spec:
+  allowedCapabilities:
+    - NET_BIND_SERVICE
+  privileged: false
+  allowPrivilegeEscalation: true
+  # Allow core volume types.
+  volumes:
+    - 'configMap'
+    #- 'emptyDir'
+    #- 'projected'
+    - 'secret'
+    #- 'downwardAPI'
+  hostNetwork: false
+  hostIPC: false
+  hostPID: false
+  runAsUser:
+    # Require the container to run without root privileges.
+    rule: 'MustRunAsNonRoot'
+  supplementalGroups:
+    rule: 'MustRunAs'
+    ranges:
+      # Forbid adding the root group.
+      - min: 1
+        max: 65535
+  fsGroup:
+    rule: 'MustRunAs'
+    ranges:
+      # Forbid adding the root group.
+      - min: 1
+        max: 65535
+  readOnlyRootFilesystem: false
+  seLinux:
+    rule: 'RunAsAny'
+---
+# Source: devspace-cloud/charts/nginx-ingress/templates/default-backend-psp.yaml
+apiVersion: policy/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: my-devspace-cloud-nginx-ingress-backend
+  labels:
+    app: nginx-ingress
+    chart: nginx-ingress-1.33.1
+    heritage: Helm
+    release: my-devspace-cloud
+spec:
+  allowPrivilegeEscalation: false
+  fsGroup:
+    ranges:
+    - max: 65535
+      min: 1
+    rule: MustRunAs
+  requiredDropCapabilities:
+  - ALL
+  runAsUser:
+    rule: MustRunAsNonRoot
+  seLinux:
+    rule: RunAsAny
+  supplementalGroups:
+    ranges:
+    - max: 65535
+      min: 1
+    rule: MustRunAs
+  volumes:
+  - configMap
+  - emptyDir
+  - projected
+  - secret
+  - downwardAPI
+---
+# Source: devspace-cloud/templates/rbac/devspace-default-podsecuritypolicy.yaml
+apiVersion: policy/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: devspace-default-podsecuritypolicy
+spec:
+  allowPrivilegeEscalation: false
+  fsGroup:
+    rule: RunAsAny
+  hostPorts:
+    - max: 0
+      min: 0
+  runAsUser:
+    rule: RunAsAny
+  seLinux:
+    rule: RunAsAny
+  supplementalGroups:
+    rule: RunAsAny
+  volumes:
+    - secret
+    - configMap
+    - emptyDir
+    - downwardAPI
+    - persistentVolumeClaim
+---
+# Source: devspace-cloud/templates/rbac/devspace-manager-podsecuritypolicy.yaml
+apiVersion: policy/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: devspace-manager-podsecuritypolicy
+spec:
+  allowPrivilegeEscalation: true
+  fsGroup:
+    rule: RunAsAny
+  hostIPC: true
+  hostNetwork: true
+  hostPID: true
+  privileged: true
+  runAsUser:
+    rule: RunAsAny
+  seLinux:
+    rule: RunAsAny
+  supplementalGroups:
+    rule: RunAsAny
+  volumes:
+    - "*"
+---
+# Source: devspace-cloud/charts/nginx-ingress/templates/controller-serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    app: nginx-ingress
+    chart: nginx-ingress-1.33.1
+    heritage: Helm
+    release: my-devspace-cloud
+  name: my-devspace-cloud-nginx-ingress
+---
+# Source: devspace-cloud/charts/nginx-ingress/templates/default-backend-serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    app: nginx-ingress
+    chart: nginx-ingress-1.33.1
+    heritage: Helm
+    release: my-devspace-cloud
+  name: my-devspace-cloud-nginx-ingress-backend
+---
+# Source: devspace-cloud/templates/rbac/devspace-default-serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: devspace-default
+---
+# Source: devspace-cloud/templates/rbac/devspace-manager-serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: devspace-manager
+---
+# Source: devspace-cloud/charts/cert-manager/templates/psp-clusterrole.yaml
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-devspace-cloud-cert-manager-psp
+  labels:
+    app: cert-manager
+    chart: cert-manager-v0.13.1
+    release: my-devspace-cloud
+    heritage: Helm
+rules:
+- apiGroups: ['policy']
+  resources: ['podsecuritypolicies']
+  verbs:     ['use']
+  resourceNames:
+  - my-devspace-cloud-cert-manager
+---
+# Source: devspace-cloud/charts/cert-manager/templates/rbac.yaml
+# Issuer controller role
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRole
+metadata:
+  name: my-devspace-cloud-cert-manager-controller-issuers
+  labels:
+    app: cert-manager
+    app.kubernetes.io/name: cert-manager
+    app.kubernetes.io/instance: my-devspace-cloud
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: cert-manager-v0.13.1
+rules:
+  - apiGroups: ["cert-manager.io"]
+    resources: ["issuers", "issuers/status"]
+    verbs: ["update"]
+  - apiGroups: ["cert-manager.io"]
+    resources: ["issuers"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "delete"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+---
+# Source: devspace-cloud/charts/cert-manager/templates/rbac.yaml
+# ClusterIssuer controller role
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRole
+metadata:
+  name: my-devspace-cloud-cert-manager-controller-clusterissuers
+  labels:
+    app: cert-manager
+    app.kubernetes.io/name: cert-manager
+    app.kubernetes.io/instance: my-devspace-cloud
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: cert-manager-v0.13.1
+rules:
+  - apiGroups: ["cert-manager.io"]
+    resources: ["clusterissuers", "clusterissuers/status"]
+    verbs: ["update"]
+  - apiGroups: ["cert-manager.io"]
+    resources: ["clusterissuers"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "delete"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+---
+# Source: devspace-cloud/charts/cert-manager/templates/rbac.yaml
+# Certificates controller role
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRole
+metadata:
+  name: my-devspace-cloud-cert-manager-controller-certificates
+  labels:
+    app: cert-manager
+    app.kubernetes.io/name: cert-manager
+    app.kubernetes.io/instance: my-devspace-cloud
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: cert-manager-v0.13.1
+rules:
+  - apiGroups: ["cert-manager.io"]
+    resources: ["certificates", "certificates/status", "certificaterequests", "certificaterequests/status"]
+    verbs: ["update"]
+  - apiGroups: ["cert-manager.io"]
+    resources: ["certificates", "certificaterequests", "clusterissuers", "issuers"]
+    verbs: ["get", "list", "watch"]
+  # We require these rules to support users with the OwnerReferencesPermissionEnforcement
+  # admission controller enabled:
+  # https://kubernetes.io/docs/reference/access-authn-authz/admission-controllers/#ownerreferencespermissionenforcement
+  - apiGroups: ["cert-manager.io"]
+    resources: ["certificates/finalizers", "certificaterequests/finalizers"]
+    verbs: ["update"]
+  - apiGroups: ["acme.cert-manager.io"]
+    resources: ["orders"]
+    verbs: ["create", "delete", "get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "delete"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+---
+# Source: devspace-cloud/charts/cert-manager/templates/rbac.yaml
+# Orders controller role
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRole
+metadata:
+  name: my-devspace-cloud-cert-manager-controller-orders
+  labels:
+    app: cert-manager
+    app.kubernetes.io/name: cert-manager
+    app.kubernetes.io/instance: my-devspace-cloud
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: cert-manager-v0.13.1
+rules:
+  - apiGroups: ["acme.cert-manager.io"]
+    resources: ["orders", "orders/status"]
+    verbs: ["update"]
+  - apiGroups: ["acme.cert-manager.io"]
+    resources: ["orders", "challenges"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["cert-manager.io"]
+    resources: ["clusterissuers", "issuers"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["acme.cert-manager.io"]
+    resources: ["challenges"]
+    verbs: ["create", "delete"]
+  # We require these rules to support users with the OwnerReferencesPermissionEnforcement
+  # admission controller enabled:
+  # https://kubernetes.io/docs/reference/access-authn-authz/admission-controllers/#ownerreferencespermissionenforcement
+  - apiGroups: ["acme.cert-manager.io"]
+    resources: ["orders/finalizers"]
+    verbs: ["update"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+---
+# Source: devspace-cloud/charts/cert-manager/templates/rbac.yaml
+# Challenges controller role
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRole
+metadata:
+  name: my-devspace-cloud-cert-manager-controller-challenges
+  labels:
+    app: cert-manager
+    app.kubernetes.io/name: cert-manager
+    app.kubernetes.io/instance: my-devspace-cloud
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: cert-manager-v0.13.1
+rules:
+  # Use to update challenge resource status
+  - apiGroups: ["acme.cert-manager.io"]
+    resources: ["challenges", "challenges/status"]
+    verbs: ["update"]
+  # Used to watch challenge resources
+  - apiGroups: ["acme.cert-manager.io"]
+    resources: ["challenges"]
+    verbs: ["get", "list", "watch"]
+  # Used to watch challenges, issuer and clusterissuer resources
+  - apiGroups: ["cert-manager.io"]
+    resources: ["issuers", "clusterissuers"]
+    verbs: ["get", "list", "watch"]
+  # Need to be able to retrieve ACME account private key to complete challenges
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch"]
+  # Used to create events
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+  # HTTP01 rules
+  - apiGroups: [""]
+    resources: ["pods", "services"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  - apiGroups: ["extensions"]
+    resources: ["ingresses"]
+    verbs: ["get", "list", "watch", "create", "delete", "update"]
+  # We require these rules to support users with the OwnerReferencesPermissionEnforcement
+  # admission controller enabled:
+  # https://kubernetes.io/docs/reference/access-authn-authz/admission-controllers/#ownerreferencespermissionenforcement
+  - apiGroups: ["acme.cert-manager.io"]
+    resources: ["challenges/finalizers"]
+    verbs: ["update"]
+  # DNS01 rules (duplicated above)
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch"]
+---
+# Source: devspace-cloud/charts/cert-manager/templates/rbac.yaml
+# ingress-shim controller role
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRole
+metadata:
+  name: my-devspace-cloud-cert-manager-controller-ingress-shim
+  labels:
+    app: cert-manager
+    app.kubernetes.io/name: cert-manager
+    app.kubernetes.io/instance: my-devspace-cloud
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: cert-manager-v0.13.1
+rules:
+  - apiGroups: ["cert-manager.io"]
+    resources: ["certificates", "certificaterequests"]
+    verbs: ["create", "update", "delete"]
+  - apiGroups: ["cert-manager.io"]
+    resources: ["certificates", "certificaterequests", "issuers", "clusterissuers"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["extensions"]
+    resources: ["ingresses"]
+    verbs: ["get", "list", "watch"]
+  # We require these rules to support users with the OwnerReferencesPermissionEnforcement
+  # admission controller enabled:
+  # https://kubernetes.io/docs/reference/access-authn-authz/admission-controllers/#ownerreferencespermissionenforcement
+  - apiGroups: ["extensions"]
+    resources: ["ingresses/finalizers"]
+    verbs: ["update"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+---
+# Source: devspace-cloud/charts/cert-manager/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-devspace-cloud-cert-manager-view
+  labels:
+    app: cert-manager
+    app.kubernetes.io/name: cert-manager
+    app.kubernetes.io/instance: my-devspace-cloud
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: cert-manager-v0.13.1
+    rbac.authorization.k8s.io/aggregate-to-view: "true"
+    rbac.authorization.k8s.io/aggregate-to-edit: "true"
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+rules:
+  - apiGroups: ["cert-manager.io"]
+    resources: ["certificates", "certificaterequests", "issuers"]
+    verbs: ["get", "list", "watch"]
+---
+# Source: devspace-cloud/charts/cert-manager/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-devspace-cloud-cert-manager-edit
+  labels:
+    app: cert-manager
+    app.kubernetes.io/name: cert-manager
+    app.kubernetes.io/instance: my-devspace-cloud
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: cert-manager-v0.13.1
+    rbac.authorization.k8s.io/aggregate-to-edit: "true"
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+rules:
+  - apiGroups: ["cert-manager.io"]
+    resources: ["certificates", "certificaterequests", "issuers"]
+    verbs: ["create", "delete", "deletecollection", "patch", "update"]
+---
+# Source: devspace-cloud/charts/cert-manager/templates/webhook-psp-clusterrole.yaml
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-devspace-cloud-cert-manager-webhook-psp
+  labels:
+    app: webhook
+    chart: cert-manager-v0.13.1
+    release: my-devspace-cloud
+    heritage: Helm
+rules:
+- apiGroups: ['policy']
+  resources: ['podsecuritypolicies']
+  verbs:     ['use']
+  resourceNames:
+  - my-devspace-cloud-cert-manager-webhook
+---
+# Source: devspace-cloud/charts/nginx-ingress/templates/clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app: nginx-ingress
+    chart: nginx-ingress-1.33.1
+    heritage: Helm
+    release: my-devspace-cloud
+  name: my-devspace-cloud-nginx-ingress
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+      - endpoints
+      - nodes
+      - pods
+      - secrets
+    verbs:
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - nodes
+    verbs:
+      - get
+  - apiGroups:
+      - ""
+    resources:
+      - services
+    verbs:
+      - get
+      - list
+      - update
+      - watch
+  - apiGroups:
+      - extensions
+      - "networking.k8s.io" # k8s 1.14+
+    resources:
+      - ingresses
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - create
+      - patch
+  - apiGroups:
+      - extensions
+      - "networking.k8s.io" # k8s 1.14+
+    resources:
+      - ingresses/status
+    verbs:
+      - update
+---
+# Source: devspace-cloud/templates/rbac/devspace-default-clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: devspace-default-clusterrole
+rules:
+  - apiGroups:
+      - extensions
+      - policy
+    resourceNames:
+      - devspace-default-podsecuritypolicy
+    resources:
+      - podsecuritypolicies
+    verbs:
+      - use
+---
+# Source: devspace-cloud/templates/rbac/devspace-manager-clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: devspace-manager-clusterrole
+rules:
+  - apiGroups:
+      - "*"
+    resources:
+      - "*"
+    verbs:
+      - "*"
+  - apiGroups:
+      - extensions
+      - policy
+    resourceNames:
+      - devspace-manager-podsecuritypolicy
+    resources:
+      - podsecuritypolicies
+    verbs:
+      - use
+---
+# Source: devspace-cloud/charts/cert-manager/templates/psp-clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-devspace-cloud-cert-manager-psp
+  labels:
+    app: cert-manager
+    chart: cert-manager-v0.13.1
+    release: my-devspace-cloud
+    heritage: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-devspace-cloud-cert-manager-psp
+subjects:
+  - kind: ServiceAccount
+    name: my-devspace-cloud-cert-manager
+    namespace: default
+---
+# Source: devspace-cloud/charts/cert-manager/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRoleBinding
+metadata:
+  name: my-devspace-cloud-cert-manager-controller-issuers
+  labels:
+    app: cert-manager
+    app.kubernetes.io/name: cert-manager
+    app.kubernetes.io/instance: my-devspace-cloud
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: cert-manager-v0.13.1
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-devspace-cloud-cert-manager-controller-issuers
+subjects:
+  - name: default
+    namespace: "default"
+    kind: ServiceAccount
+---
+# Source: devspace-cloud/charts/cert-manager/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRoleBinding
+metadata:
+  name: my-devspace-cloud-cert-manager-controller-clusterissuers
+  labels:
+    app: cert-manager
+    app.kubernetes.io/name: cert-manager
+    app.kubernetes.io/instance: my-devspace-cloud
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: cert-manager-v0.13.1
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-devspace-cloud-cert-manager-controller-clusterissuers
+subjects:
+  - name: default
+    namespace: "default"
+    kind: ServiceAccount
+---
+# Source: devspace-cloud/charts/cert-manager/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRoleBinding
+metadata:
+  name: my-devspace-cloud-cert-manager-controller-certificates
+  labels:
+    app: cert-manager
+    app.kubernetes.io/name: cert-manager
+    app.kubernetes.io/instance: my-devspace-cloud
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: cert-manager-v0.13.1
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-devspace-cloud-cert-manager-controller-certificates
+subjects:
+  - name: default
+    namespace: "default"
+    kind: ServiceAccount
+---
+# Source: devspace-cloud/charts/cert-manager/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRoleBinding
+metadata:
+  name: my-devspace-cloud-cert-manager-controller-orders
+  labels:
+    app: cert-manager
+    app.kubernetes.io/name: cert-manager
+    app.kubernetes.io/instance: my-devspace-cloud
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: cert-manager-v0.13.1
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-devspace-cloud-cert-manager-controller-orders
+subjects:
+  - name: default
+    namespace: "default"
+    kind: ServiceAccount
+---
+# Source: devspace-cloud/charts/cert-manager/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRoleBinding
+metadata:
+  name: my-devspace-cloud-cert-manager-controller-challenges
+  labels:
+    app: cert-manager
+    app.kubernetes.io/name: cert-manager
+    app.kubernetes.io/instance: my-devspace-cloud
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: cert-manager-v0.13.1
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-devspace-cloud-cert-manager-controller-challenges
+subjects:
+  - name: default
+    namespace: "default"
+    kind: ServiceAccount
+---
+# Source: devspace-cloud/charts/cert-manager/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRoleBinding
+metadata:
+  name: my-devspace-cloud-cert-manager-controller-ingress-shim
+  labels:
+    app: cert-manager
+    app.kubernetes.io/name: cert-manager
+    app.kubernetes.io/instance: my-devspace-cloud
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: cert-manager-v0.13.1
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-devspace-cloud-cert-manager-controller-ingress-shim
+subjects:
+  - name: default
+    namespace: "default"
+    kind: ServiceAccount
+---
+# Source: devspace-cloud/charts/cert-manager/templates/webhook-psp-clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-devspace-cloud-cert-manager-webhook-psp
+  labels:
+    app: webhook
+    chart: cert-manager-v0.13.1
+    release: my-devspace-cloud
+    heritage: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-devspace-cloud-cert-manager-webhook-psp
+subjects:
+  - kind: ServiceAccount
+    name: my-devspace-cloud-cert-manager-webhook
+    namespace: default
+---
+# Source: devspace-cloud/charts/nginx-ingress/templates/clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app: nginx-ingress
+    chart: nginx-ingress-1.33.1
+    heritage: Helm
+    release: my-devspace-cloud
+  name: my-devspace-cloud-nginx-ingress
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-devspace-cloud-nginx-ingress
+subjects:
+  - kind: ServiceAccount
+    name: my-devspace-cloud-nginx-ingress
+    namespace: default
+---
+# Source: devspace-cloud/templates/rbac/devspace-default-clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: devspace-default-clusterrolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: devspace-default-clusterrole
+subjects:
+- kind: ServiceAccount
+  name: devspace-default
+  namespace: default
+---
+# Source: devspace-cloud/templates/rbac/devspace-manager-clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: devspace-manager-clusterrolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: devspace-manager-clusterrole
+subjects:
+- kind: ServiceAccount
+  name: devspace-manager
+  namespace: default
+---
+# Source: devspace-cloud/charts/cert-manager/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: Role
+metadata:
+  name: my-devspace-cloud-cert-manager:leaderelection
+  namespace: kube-system
+  labels:
+    app: cert-manager
+    app.kubernetes.io/name: cert-manager
+    app.kubernetes.io/instance: my-devspace-cloud
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: cert-manager-v0.13.1
+rules:
+  # Used for leader election by the controller
+  # TODO: refine the permission to *just* the leader election configmap
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "create", "update", "patch"]
+---
+# Source: devspace-cloud/charts/nginx-ingress/templates/controller-role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  labels:
+    app: nginx-ingress
+    chart: nginx-ingress-1.33.1
+    heritage: Helm
+    release: my-devspace-cloud
+  name: my-devspace-cloud-nginx-ingress
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - namespaces
+    verbs:
+      - get
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+      - pods
+      - secrets
+      - endpoints
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - services
+    verbs:
+      - get
+      - list
+      - update
+      - watch
+  - apiGroups:
+      - extensions
+      - "networking.k8s.io" # k8s 1.14+
+    resources:
+      - ingresses
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - extensions
+      - "networking.k8s.io" # k8s 1.14+
+    resources:
+      - ingresses/status
+    verbs:
+      - update
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+    resourceNames:
+      - ingress-controller-leader-nginx
+    verbs:
+      - get
+      - update
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+    verbs:
+      - create
+  - apiGroups:
+      - ""
+    resources:
+      - endpoints
+    verbs:
+      - create
+      - get
+      - update
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - create
+      - patch
+  - apiGroups:      ['policy']
+    resources:      ['podsecuritypolicies']
+    verbs:          ['use']
+    resourceNames:  [my-devspace-cloud-nginx-ingress]
+---
+# Source: devspace-cloud/charts/nginx-ingress/templates/default-backend-role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  labels:
+    app: nginx-ingress
+    chart: nginx-ingress-1.33.1
+    heritage: Helm
+    release: my-devspace-cloud
+  name: my-devspace-cloud-nginx-ingress-backend
+rules:
+  - apiGroups:      ['policy']
+    resources:      ['podsecuritypolicies']
+    verbs:          ['use']
+    resourceNames:  [my-devspace-cloud-nginx-ingress-backend]
+---
+# Source: devspace-cloud/charts/cert-manager/templates/rbac.yaml
+# grant cert-manager permission to manage the leaderelection configmap in the
+# leader election namespace
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: RoleBinding
+metadata:
+  name: my-devspace-cloud-cert-manager:leaderelection
+  namespace: kube-system
+  labels:
+    app: cert-manager
+    app.kubernetes.io/name: cert-manager
+    app.kubernetes.io/instance: my-devspace-cloud
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: cert-manager-v0.13.1
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: my-devspace-cloud-cert-manager:leaderelection
+subjects:
+  - apiGroup: ""
+    kind: ServiceAccount
+    name: default
+    namespace: default
+---
+# Source: devspace-cloud/charts/nginx-ingress/templates/controller-rolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    app: nginx-ingress
+    chart: nginx-ingress-1.33.1
+    heritage: Helm
+    release: my-devspace-cloud
+  name: my-devspace-cloud-nginx-ingress
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: my-devspace-cloud-nginx-ingress
+subjects:
+  - kind: ServiceAccount
+    name: my-devspace-cloud-nginx-ingress
+    namespace: default
+---
+# Source: devspace-cloud/charts/nginx-ingress/templates/default-backend-rolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    app: nginx-ingress
+    chart: nginx-ingress-1.33.1
+    heritage: Helm
+    release: my-devspace-cloud
+  name: my-devspace-cloud-nginx-ingress-backend
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: my-devspace-cloud-nginx-ingress-backend
+subjects:
+  - kind: ServiceAccount
+    name: my-devspace-cloud-nginx-ingress-backend
+    namespace: default
+---
+# Source: devspace-cloud/charts/cert-manager/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-devspace-cloud-cert-manager
+  namespace: "default"
+  labels:
+    app: cert-manager
+    app.kubernetes.io/name: cert-manager
+    app.kubernetes.io/instance: my-devspace-cloud
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: cert-manager-v0.13.1
+spec:
+  type: ClusterIP
+  ports:
+    - protocol: TCP
+      port: 9402
+      targetPort: 9402
+  selector:
+    app.kubernetes.io/name: cert-manager
+    app.kubernetes.io/instance: my-devspace-cloud
+---
+# Source: devspace-cloud/charts/nginx-ingress/templates/controller-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: nginx-ingress
+    chart: nginx-ingress-1.33.1
+    component: "controller"
+    heritage: Helm
+    release: my-devspace-cloud
+  name: my-devspace-cloud-nginx-ingress-controller
+spec:
+  ports:
+    - name: http
+      port: 80
+      protocol: TCP
+      targetPort: http
+    - name: https
+      port: 443
+      protocol: TCP
+      targetPort: https
+  selector:
+    app: nginx-ingress
+    component: "controller"
+    release: my-devspace-cloud
+  type: "LoadBalancer"
+---
+# Source: devspace-cloud/charts/nginx-ingress/templates/default-backend-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: nginx-ingress
+    chart: nginx-ingress-1.33.1
+    component: "default-backend"
+    heritage: Helm
+    release: my-devspace-cloud
+  name: my-devspace-cloud-nginx-ingress-default-backend
+spec:
+  ports:
+    - name: http
+      port: 80
+      protocol: TCP
+      targetPort: http
+  selector:
+    app: nginx-ingress
+    component: "default-backend"
+    release: my-devspace-cloud
+  type: "ClusterIP"
+---
+# Source: devspace-cloud/templates/auth/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: devspace-auth
+spec:
+  ports:
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
+  selector:
+    app: devspace-auth
+---
+# Source: devspace-cloud/templates/database/postgres-headless-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: devspace-postgres-headless
+  labels:
+    app: devspace-postgres
+spec:
+  clusterIP: None
+  ports:
+    - port: 5432
+      protocol: TCP
+  selector:
+    app: devspace-postgres
+---
+# Source: devspace-cloud/templates/database/postgres-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: devspace-postgres
+  labels:
+    app: devspace-postgres
+spec:
+  ports:
+  - port: 5432
+    protocol: TCP
+  selector:
+    app: devspace-postgres
+---
+# Source: devspace-cloud/templates/hasura/hasura-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: devspace-hasura
+  name: devspace-hasura
+spec:
+  ports:
+  - protocol: TCP
+    port: 8080
+    targetPort: 8080
+  selector:
+    app: devspace-hasura
+---
+# Source: devspace-cloud/templates/manager/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: devspace-manager
+spec:
+  ports:
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
+  selector:
+    app: devspace-manager
+---
+# Source: devspace-cloud/templates/ui/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: devspace-ui
+spec:
+  ports:
+    - port: 8080
+      targetPort: 5000
+      protocol: TCP
+  selector:
+    app: devspace-ui
+---
+# Source: devspace-cloud/charts/cert-manager/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-devspace-cloud-cert-manager
+  namespace: "default"
+  labels:
+    app: cert-manager
+    app.kubernetes.io/name: cert-manager
+    app.kubernetes.io/instance: my-devspace-cloud
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: cert-manager-v0.13.1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cert-manager
+      app.kubernetes.io/name: cert-manager
+      app.kubernetes.io/instance: my-devspace-cloud
+      app.kubernetes.io/managed-by: Helm
+  template:
+    metadata:
+      labels:
+        app: cert-manager
+        app.kubernetes.io/name: cert-manager
+        app.kubernetes.io/instance: my-devspace-cloud
+        app.kubernetes.io/managed-by: Helm
+        helm.sh/chart: cert-manager-v0.13.1
+      annotations:
+        prometheus.io/path: "/metrics"
+        prometheus.io/scrape: 'true'
+        prometheus.io/port: '9402'
+    spec:
+      serviceAccountName: default
+      containers:
+        - name: cert-manager
+          image: "quay.io/jetstack/cert-manager-controller:v0.13.1"
+          imagePullPolicy: IfNotPresent
+          args:
+          - --v=2
+          - --cluster-resource-namespace=$(POD_NAMESPACE)
+          - --leader-election-namespace=kube-system
+          - --acme-http01-solver-resource-request-cpu=0
+          - --acme-http01-solver-resource-request-memory=0
+          - --webhook-namespace=$(POD_NAMESPACE)
+          - --webhook-ca-secret=my-devspace-cloud-cert-manager-webhook-ca
+          - --webhook-serving-secret=my-devspace-cloud-cert-manager-webhook-tls
+          - --webhook-dns-names=my-devspace-cloud-cert-manager-webhook,my-devspace-cloud-cert-manager-webhook.default,my-devspace-cloud-cert-manager-webhook.default.svc
+          ports:
+          - containerPort: 9402
+            protocol: TCP
+          env:
+          - name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          resources:
+            {}
+---
+# Source: devspace-cloud/charts/nginx-ingress/templates/controller-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nginx-ingress
+    chart: nginx-ingress-1.33.1
+    component: "controller"
+    heritage: Helm
+    release: my-devspace-cloud
+  name: my-devspace-cloud-nginx-ingress-controller
+  annotations:
+    {}
+spec:
+  selector:
+    matchLabels:
+      app: nginx-ingress
+      release: my-devspace-cloud
+  replicas: 1
+  revisionHistoryLimit: 10
+  strategy:
+    {}
+  minReadySeconds: 0
+  template:
+    metadata:
+      labels:
+        app: nginx-ingress
+        component: "controller"
+        release: my-devspace-cloud
+    spec:
+      dnsPolicy: ClusterFirst
+      containers:
+        - name: nginx-ingress-controller
+          image: "quay.io/kubernetes-ingress-controller/nginx-ingress-controller:0.30.0"
+          imagePullPolicy: "IfNotPresent"
+          args:
+            - /nginx-ingress-controller
+            - --default-backend-service=default/my-devspace-cloud-nginx-ingress-default-backend
+            - --publish-service=default/my-devspace-cloud-nginx-ingress-controller
+            - --election-id=ingress-controller-leader
+            - --ingress-class=nginx
+            - --configmap=default/my-devspace-cloud-nginx-ingress-controller
+          securityContext:
+            capabilities:
+                drop:
+                - ALL
+                add:
+                - NET_BIND_SERVICE
+            runAsUser: 101
+            allowPrivilegeEscalation: true
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 10254
+              scheme: HTTP
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 1
+            successThreshold: 1
+            failureThreshold: 3
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+            - name: https
+              containerPort: 443
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 10254
+              scheme: HTTP
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 1
+            successThreshold: 1
+            failureThreshold: 3
+          resources:
+            {}
+      hostNetwork: false
+      serviceAccountName: my-devspace-cloud-nginx-ingress
+      terminationGracePeriodSeconds: 60
+---
+# Source: devspace-cloud/charts/nginx-ingress/templates/default-backend-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nginx-ingress
+    chart: nginx-ingress-1.33.1
+    component: "default-backend"
+    heritage: Helm
+    release: my-devspace-cloud
+  name: my-devspace-cloud-nginx-ingress-default-backend
+spec:
+  selector:
+    matchLabels:
+      app: nginx-ingress
+      release: my-devspace-cloud
+  replicas: 1
+  revisionHistoryLimit: 10
+  template:
+    metadata:
+      labels:
+        app: nginx-ingress
+        component: "default-backend"
+        release: my-devspace-cloud
+    spec:
+      containers:
+        - name: nginx-ingress-default-backend
+          image: "k8s.gcr.io/defaultbackend-amd64:1.5"
+          imagePullPolicy: "IfNotPresent"
+          args:
+          securityContext:
+            runAsUser: 65534
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+              scheme: HTTP
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+              scheme: HTTP
+            initialDelaySeconds: 0
+            periodSeconds: 5
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          resources:
+            {}
+      serviceAccountName: my-devspace-cloud-nginx-ingress-backend
+      terminationGracePeriodSeconds: 60
+---
+# Source: devspace-cloud/templates/auth/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: devspace-auth
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: devspace-auth
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: devspace-auth
+    spec:
+      serviceAccountName: devspace-default
+      containers:
+      - name: default
+        image: "devspacecloud/auth:0.3.3"
+        env:
+        - name: DB_PORT
+          value: "5432"
+        - name: DB_HOST
+          value: "devspace-postgres"
+        - name: DB_DATABASE
+          value: devspace
+        - name: DB_USER
+          value: devspace
+        - name: DB_PASSWORD
+          value: MY_PASSWORD
+        - name: AUTH_TOKEN_CERT
+          value: "/auth-cert/tls.crt"
+        - name: AUTH_TOKEN_KEY
+          value: "/auth-cert/tls.key"
+        - name: AUTH_VERIFY_EMAIL
+          value: "false"
+        volumeMounts:
+        - name: auth-cert-volume
+          mountPath: /auth-cert
+          readOnly: true
+      volumes:
+        - name: auth-cert-volume
+          secret:
+            secretName: devspace-auth-secret
+            items:
+            - key: tls.crt
+              path: tls.crt
+            - key: tls.key
+              path: tls.key
+---
+# Source: devspace-cloud/templates/hasura/hasura-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: devspace-hasura
+    hasuraService: custom
+  name: devspace-hasura
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: devspace-hasura
+  template:
+    metadata:
+      labels:
+        app: devspace-hasura
+    spec:
+      serviceAccountName: devspace-default
+      containers:
+      - name: hasura
+        image: "devspacecloud/hasura:0.3.3"
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: DEVSPACE_JWT_CERT
+          valueFrom:
+            secretKeyRef:
+              name: devspace-auth-secret
+              key: tls.crt
+        - name: HASURA_GRAPHQL_DATABASE_URL
+          value: postgres://devspace:MY_PASSWORD@devspace-postgres:5432/devspace
+        - name: HASURA_GRAPHQL_ADMIN_SECRET
+          value: MY_PASSWORD
+        - name: HASURA_GRAPHQL_JWT_SECRET
+          value: "{\"type\":\"RS256\", \"key\": \"$(DEVSPACE_JWT_CERT)\"}"
+        - name: HASURA_GRAPHQL_ENABLE_CONSOLE
+          value: "true"
+        - name: HASURA_GRAPHQL_SERVER_PORT
+          value: "8080"
+        ports:
+        - containerPort: 8080
+          protocol: TCP
+---
+# Source: devspace-cloud/templates/manager/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: devspace-manager
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: devspace-manager
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: devspace-manager
+    spec:
+      serviceAccountName: devspace-manager
+      containers:
+      - name: default
+        image: "devspacecloud/manager:0.3.3"
+        env:
+        - name: DEVSPACE_NAMESPACE
+          value: default
+        - name: DB_PORT
+          value: "5432"
+        - name: DB_HOST
+          value: "devspace-postgres"
+        - name: DB_DATABASE
+          value: devspace
+        - name: DB_USER
+          value: devspace
+        - name: DB_PASSWORD
+          value: MY_PASSWORD
+        - name: DOCKER_REGISTRY_CACERT
+          valueFrom:
+            secretKeyRef:
+              name: devspace-auth-secret
+              key: tls.crt
+        - name: DEFAULT_BACKEND_IMAGE
+          value: "devspacecloud/default-backend:0.3.3"
+        - name: ADMISSION_CONTROLLER_IMAGE
+          value: "devspacecloud/admission-controller:0.3.3"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+---
+# Source: devspace-cloud/templates/ui/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: devspace-ui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: devspace-ui
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: devspace-ui
+    spec:
+      serviceAccountName: devspace-default
+      containers:
+        - name: default
+          image: "devspacecloud/ui:0.3.3"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 5000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 5000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+---
+# Source: devspace-cloud/templates/database/postgres-statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: devspace-postgres
+spec:
+  selector:
+    matchLabels:
+      app: devspace-postgres
+  serviceName: devspace-postgres-headless
+  replicas: 1
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: devspace-postgres
+    spec:
+      terminationGracePeriodSeconds: 30
+      serviceAccountName: devspace-default
+      containers:
+      - name: postgres
+        image: postgres:11
+        ports:
+        - containerPort: 5432
+        env:
+        - name: POSTGRES_PASSWORD
+          value: MY_PASSWORD
+        - name: POSTGRES_USER
+          value: "devspace"
+        - name: POSTGRES_DB
+          value: "devspace"
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/postgresql/data
+        livenessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - exec pg_isready -U "devspace" -d "devspace" -h 127.0.0.1 -p 5432
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 6
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - exec pg_isready -U "devspace" -d "devspace" -h 127.0.0.1 -p 5432
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 6
+          failureThreshold: 1
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 50Gi
+---
+# Source: devspace-cloud/templates/ingress/hasura-ingress.yaml
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: devspace-hasura-ingress
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/rewrite-target: /v1/graphql
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  rules:
+  - host: "devspace.local"
+    http:
+      paths:
+      - path: /graphql
+        backend:
+          serviceName: devspace-hasura
+          servicePort: 8080
+  tls:
+  - hosts:
+    - "devspace.local"
+    secretName: tls-devspace-cloud
+---
+# Source: devspace-cloud/templates/ingress/ingress.yaml
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: devspace-ingress
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  rules:
+  - host: "devspace.local"
+    http:
+      paths:
+      - path: /auth
+        backend:
+          serviceName: devspace-auth
+          servicePort: 8080
+      - path: /
+        backend:
+          serviceName: devspace-ui
+          servicePort: 8080
+      - path: /v1
+        backend:
+          serviceName: devspace-hasura
+          servicePort: 8080
+      - path: /console
+        backend:
+          serviceName: devspace-hasura
+          servicePort: 8080
+  tls:
+  - hosts:
+    - "devspace.local"
+    secretName: tls-devspace-cloud
+---
+# Source: devspace-cloud/templates/cert-manager/devspace-auth-certificate.yaml
+apiVersion: cert-manager.io/v1alpha2
+kind: Certificate
+metadata:
+  name: devspace-auth-cert
+spec:
+  dnsNames:
+  - "localhost"
+  issuerRef:
+    kind: Issuer
+    name: devspace-self-signed
+  secretName: devspace-auth-secret
+---
+# Source: devspace-cloud/templates/cert-manager/ingress-certificate.yaml
+apiVersion: cert-manager.io/v1alpha2
+kind: Certificate
+metadata:
+  name: devspace-cert
+spec:
+  secretName: tls-devspace-cloud
+  dnsNames:
+    - "devspace.local"
+  issuerRef:
+    name: lets-encrypt-http-issuer
+    # We can reference ClusterIssuers by changing the kind here.
+    # The default value is Issuer (i.e. a locally namespaced Issuer)
+    kind: ClusterIssuer
+---
+# Source: devspace-cloud/templates/cert-manager/ingress-clusterissuer.yaml
+apiVersion: cert-manager.io/v1alpha2
+kind: ClusterIssuer
+metadata:
+  name: lets-encrypt-http-issuer
+spec:
+  acme:
+    # The ACME server URL
+    server: https://acme-v02.api.letsencrypt.org/directory
+    # Email address used for ACME registration
+    email: noreply@devspace.cloud
+    # Name of a secret used to store the ACME account private key
+    privateKeySecretRef:
+      name: letsencrypt-account
+    # ACME DNS-01 provider configurations
+    solvers:
+    - http01:
+       ingress:
+         serviceType: ClusterIP
+         class: nginx
+---
+# Source: devspace-cloud/templates/cert-manager/devspace-auth-issuer.yaml
+apiVersion: cert-manager.io/v1alpha2
+kind: Issuer
+metadata:
+  name: devspace-self-signed
+spec:
+  selfSigned: {}

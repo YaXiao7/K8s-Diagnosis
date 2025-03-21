@@ -1,0 +1,1001 @@
+---
+# Source: tfy-configs/templates/cicd-templates-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-tfy-configs-cicd-templates-cm
+  namespace: default
+data:
+  bitbucket-pipelines-git-source-patch-application.yaml: |
+    name: Patch Commit SHA to Build and Deploy via Git Integration on TrueFoundry
+    cicd_provider_id: bitbucket
+    enabled: true
+    description: "TrueFoundry Control Plane will git clone the source code and build the image to deploy the application."
+    deployment_mode: patch-application
+    build_source: git
+    image_builder: truefoundry-control-plane
+    steps:
+      - label: Generate API Key
+        icon: null
+        usage: Generate an API Key to authenticate and deploy applications
+        type: generate-api-key
+      - label: Add API Key to Secrets
+        icon: null
+        usage: null
+        type: markdown-content
+        args:
+          content: |
+            In your Bitbucket Repository, navigate to **Pipelines > Workspace variables**.
+            Add a new secret called `TFY_API_KEY` and set the generated api key as value
+      - label: Create Bitbucket Pipeline
+        icon: null
+        usage: |
+          Add the below workflow as `bitbucket-pipelines.yml` in your root directory.
+          Following Pipelines will be triggered on each push to `main` branch
+        type: markdown-content
+        args:
+          content: |
+            ```yaml
+            image: python:3.11.9-bullseye
+            options:
+              max-time: 30
+  
+            pipelines:
+              branches:
+                main:
+                  - stage:
+                      name: deploy
+                      steps:
+                        - step:
+                            name: Deploying the application
+                            script:
+                              - export TFY_HOST={{ TRUEFOUNDRY_TFY_HOST }}
+                              - export APPLICATION_FQN={{ TRUEFOUNDRY_APPLICATION_FQN }}
+                              - apt update && apt install -y jq
+                              - pip3 install "truefoundry<1.0.0"
+                              - tfy patch-application --application-fqn "$APPLICATION_FQN" --patch="{\"image\": {\"build_source\": {\"ref\": \"$BITBUCKET_COMMIT\"}}}"
+            ```
+  bitbucket-pipelines-git-source.yaml: "name: Build and Deploy via Git Integration on
+    TrueFoundry\ncicd_provider_id: bitbucket\nenabled: true\ndescription: \"TrueFoundry
+    Control Plane will git clone the source code and build the image to deploy the application.\"\ndeployment_mode:
+    deploy\nbuild_source: git\nimage_builder: truefoundry-control-plane\nsteps:\n  -
+    label: Generate API Key\n    icon: null\n    usage: Generate an API Key to authenticate
+    and deploy applications\n    type: generate-api-key\n  - label: Add API Key to Secrets\n
+    \   icon: null\n    usage: null\n    type: markdown-content\n    args:\n      content:
+    |\n        In your Bitbucket Repository, navigate to **Pipelines > Workspace variables**.\n
+    \       Add a new secret called `TFY_API_KEY` and set the generated api key as value\n
+    \ - label: Download Application Spec\n    icon: null\n    usage: Click the button
+    below to download the `truefoundry.yaml` application spec file. Copy it to the root
+    of your project directory.\n    type: download-truefoundry-spec\n  - label: Create
+    Bitbucket Pipeline\n    icon: null\n    usage: |\n      Add the below workflow as
+    `bitbucket-pipelines.yml` in your root directory.\n      Following Pipelines will
+    be triggered on each push to `main` branch\n    type: markdown-content\n    args:\n
+    \     content: |\n        ```yaml\n        image: python:3.11.9-bullseye\n        options:\n
+    \         max-time: 30\n\n        pipelines:\n          branches:\n            main:\n
+    \             - stage:\n                  name: deploy\n                  steps:\n
+    \                   - step:\n                        name: Deploying the application\n
+    \                       script:\n                          - export TFY_HOST={{
+    TRUEFOUNDRY_TFY_HOST }}\n                          - export WORKSPACE_FQN={{ TRUEFOUNDRY_WORKSPACE_FQN
+    }}\n                          - apt update && apt install -y jq\n                          -
+    pip3 install \"truefoundry<1.0.0\"\n                          - tfy patch -f truefoundry.yaml
+    --filter \".image.build_source.ref = \\\"$BITBUCKET_COMMIT\\\" | .image.build_source.branch_name
+    = \\\"$BITBUCKET_BRANCH\\\"\" -o truefoundry-patched.yaml\n                          -
+    tfy deploy -f truefoundry-patched.yaml -w \"$WORKSPACE_FQN\" --no-wait\n        \n
+    \       ```\n"
+  bitbucket-pipelines-local-source.yaml: |
+    name: Upload Code, Build and Deploy using TrueFoundry
+    cicd_provider_id: bitbucket
+    enabled: true
+    description: "TrueFoundry Control Plane will pull an archive of the source code from your Storage Integrations and build the image to deploy the application."
+    deployment_mode: deploy
+    build_source: local
+    image_builder: truefoundry-control-plane
+    steps:
+      - label: Generate API Key
+        icon: null
+        usage: Generate an API Key to authenticate and deploy applications
+        type: generate-api-key
+      - label: Add API Key to Secrets
+        icon: null
+        usage: null
+        type: markdown-content
+        args:
+          content: |
+            In your Bitbucket Repository, navigate to **Pipelines > Workspace variables**.
+            Add a new secret called `TFY_API_KEY` and set the generated api key as value
+      - label: Download Application Spec
+        icon: null
+        usage: Click the button below to download the `truefoundry.yaml` application spec file. Copy it to the root of your project directory.
+        type: download-truefoundry-spec
+      - label: Create Bitbucket Pipeline
+        icon: null
+        usage: |
+          Add the below workflow as `bitbucket-pipelines.yml` in your root directory.
+          Following Pipelines will be triggered on each push to `main` branch
+        type: markdown-content
+        args:
+          content: |
+            ```yaml
+            image: python:3.11.9-bullseye
+            options:
+              max-time: 30
+  
+            pipelines:
+              branches:
+                main:
+                  - stage:
+                      name: deploy
+                      steps:
+                        - step:
+                            name: Deploying the application
+                            script:
+                              - export TFY_HOST={{ TRUEFOUNDRY_TFY_HOST }}
+                              - export WORKSPACE_FQN={{ TRUEFOUNDRY_WORKSPACE_FQN }}
+                              - apt update && apt install -y jq
+                              - pip3 install "truefoundry<1.0.0"
+                              - tfy deploy -f truefoundry.yaml -w "$WORKSPACE_FQN" --no-wait
+            ```
+  bitbucket-pipelines-self-build-image-patch-application.yaml: "name: Build Image Yourself
+    and Patch Image URI to Deploy Image on TrueFoundry\ncicd_provider_id: bitbucket\nenabled:
+    true\ndescription: \"Build Docker Image using your own steps and deploy the image
+    on TrueFoundry.\"\ndeployment_mode: patch-application\nbuild_source: local\nimage_builder:
+    self\nsteps:\n  - label: Generate API Key\n    icon: null\n    usage: Generate an
+    API Key to authenticate and deploy applications\n    type: generate-api-key\n  -
+    label: Add API Key to Secrets\n    icon: null\n    usage: null\n    type: markdown-content\n
+    \   args:\n      content: |\n        In your Bitbucket Repository, navigate to **Pipelines
+    > Workspace variables**.\n        Add a new secret called `TFY_API_KEY` and set
+    the generated api key as value\n  - label: Create Bitbucket Pipeline\n    icon:
+    null\n    usage: |\n      Add the below workflow as `bitbucket-pipelines.yml` in
+    your root directory.\n      Following Pipelines will be triggered on each push to
+    `main` branch\n    type: markdown-content\n    args:\n      content: |\n        >
+    **Note:** Please read through the `variables` section and `build-image` Steps and
+    update them for your registry and repo.\n        \n\n        ```yaml\n        image:
+    python:3.11.9-bullseye\n        options:\n          max-time: 30\n\n        pipelines:\n
+    \         branches:\n            main:\n              - stage:\n                  name:
+    deploy\n                  steps:\n                    - step:\n                        name:
+    Deploying the application\n                        services:\n                          -
+    docker\n                        script:\n                          - export TFY_HOST={{
+    TRUEFOUNDRY_TFY_HOST }}\n                          - export APPLICATION_FQN={{ TRUEFOUNDRY_APPLICATION_FQN
+    }}\n\n                          ### Image Build Section ###\n                          #
+    Here is a sample for docker, you can replace this with any other registry.\n                          #
+    The registry here should be also be linked in Integrations on TrueFoundry\n                          -
+    export DOCKER_BUILDKIT=1\n\n                          # Update these with your Docker
+    Registry and Repository\n                          - export DOCKER_REGISTRY=docker.io\n
+    \                         - export DOCKER_REPO_NAME=$BITBUCKET_REPO_SLUG\n                          -
+    export DOCKER_IMAGE_REPO=$DOCKER_REGISTRY/$DOCKER_REPO_NAME\n                          -
+    export DOCKER_IMAGE_TAG=$BITBUCKET_COMMIT\n                          - export DOCKER_IMAGE_URI=$DOCKER_IMAGE_REPO:$DOCKER_IMAGE_TAG\n
+    \                         - echo \"$DOCKER_REGISTRY_PASSWORD\" | docker login $DOCKER_REGISTRY
+    --username $DOCKER_REGISTRY_USER --password-stdin\n                          - docker
+    build --cache-from $DOCKER_IMAGE_REPO:buildcache --tag $DOCKER_IMAGE_URI --tag $DOCKER_IMAGE_REPO:buildcache
+    .\n                          - docker push $DOCKER_IMAGE_URI\n                          -
+    docker push $DOCKER_IMAGE_REPO:buildcache\n\n                          ###########################\n
+    \                         - apt update && apt install -y jq\n                          -
+    pip3 install \"truefoundry<1.0.0\"\n                          - tfy patch-application
+    --application-fqn \"$APPLICATION_FQN\" --patch=\"{\\\"image\\\": {\\\"image_uri\\\":
+    \\\"$DOCKER_IMAGE_URI\\\"}}\"\n        ```\n"
+  bitbucket-pipelines-self-build-image.yaml: "name: Build Image Yourself and Deploy
+    Image on TrueFoundry\ncicd_provider_id: bitbucket\nenabled: true\ndescription: \"Build
+    Docker Image using your own steps and deploy the image on TrueFoundry.\"\ndeployment_mode:
+    deploy\nbuild_source: local\nimage_builder: self\nsteps:\n  - label: Generate API
+    Key\n    icon: null\n    usage: Generate an API Key to authenticate and deploy applications\n
+    \   type: generate-api-key\n  - label: Add API Key to Secrets\n    icon: null\n
+    \   usage: null\n    type: markdown-content\n    args:\n      content: |\n        In
+    your Bitbucket Repository, navigate to **Pipelines > Workspace variables**.\n        Add
+    a new secret called `TFY_API_KEY` and set the generated api key as value\n  - label:
+    Download Application Spec\n    icon: null\n    usage: Click the button below to
+    download the `truefoundry.yaml` application spec file. Copy it to the root of your
+    project directory.\n    type: download-truefoundry-spec\n  - label: Create Bitbucket
+    Pipeline\n    icon: null\n    usage: |\n      Add the below workflow as `bitbucket-pipelines.yml`
+    in your root directory.\n      Following Pipelines will be triggered on each push
+    to `main` branch\n    type: markdown-content\n    args:\n      content: |\n        >
+    **Note:** Please read through the `variables` section and `build-image` Steps and
+    update them for your registry and repo.\n        \n\n        ```yaml\n        image:
+    python:3.11.9-bullseye\n        options:\n          max-time: 30\n\n        pipelines:\n
+    \         branches:\n            main:\n              - stage:\n                  name:
+    deploy\n                  steps:\n                    - step:\n                        name:
+    Deploying the application\n                        services:\n                          -
+    docker\n                        script:\n                          - export TFY_HOST={{
+    TRUEFOUNDRY_TFY_HOST }}\n                          - export WORKSPACE_FQN={{ TRUEFOUNDRY_WORKSPACE_FQN
+    }}\n\n                          ### Image Build Section ###\n                          #
+    Here is a sample for docker, you can replace this with any other registry.\n                          #
+    The registry here should be also be linked in Integrations on TrueFoundry\n                          -
+    export DOCKER_BUILDKIT=1\n\n                          # Update these with your Docker
+    Registry and Repository\n                          - export DOCKER_REGISTRY=docker.io\n
+    \                         - export DOCKER_REPO_NAME=$BITBUCKET_REPO_SLUG\n                          -
+    export DOCKER_IMAGE_REPO=$DOCKER_REGISTRY/$DOCKER_REPO_NAME\n                          -
+    export DOCKER_IMAGE_TAG=$BITBUCKET_COMMIT\n                          - export DOCKER_IMAGE_URI=$DOCKER_IMAGE_REPO:$DOCKER_IMAGE_TAG\n
+    \                         - echo \"$DOCKER_REGISTRY_PASSWORD\" | docker login $DOCKER_REGISTRY
+    --username $DOCKER_REGISTRY_USER --password-stdin\n                          - docker
+    build --cache-from $DOCKER_IMAGE_REPO:buildcache --tag $DOCKER_IMAGE_URI --tag $DOCKER_IMAGE_REPO:buildcache
+    .\n                          - docker push $DOCKER_IMAGE_URI\n                          -
+    docker push $DOCKER_IMAGE_REPO:buildcache\n\n                          ###########################\n
+    \                         - apt update && apt install -y jq\n                          -
+    pip3 install \"truefoundry<1.0.0\"\n                          - tfy patch -f truefoundry.yaml
+    --filter \".image.image_uri = \\\"$DOCKER_IMAGE_URI\\\"\" -o truefoundry-patched.yaml\n
+    \                         - tfy deploy -f truefoundry-patched.yaml -w \"$WORKSPACE_FQN\"
+    --no-wait\n\n        ```\n"
+  cicd-providers.yaml: |
+    - id: github
+      name: GitHub
+      icon: github
+      enabled: true
+    - id: gitlab
+      name: GitLab
+      icon: gitlab
+      enabled: true
+    - id: bitbucket
+      name: Bitbucket
+      icon: bitbucket
+      enabled: true
+  github-actions-git-source-patch-application.yaml: |
+    name: Patch Commit SHA to Build and Deploy via Git Integration on TrueFoundry
+    cicd_provider_id: github
+    enabled: true
+    description: "TrueFoundry Control Plane will git clone the source code and build the image to deploy the application."
+    deployment_mode: patch-application
+    build_source: git
+    image_builder: truefoundry-control-plane
+    steps:
+      - label: Generate API Key
+        icon: null
+        usage: Generate an API Key to authenticate and deploy applications
+        type: generate-api-key
+      - label: Add API Key to Github Secrets
+        icon: null
+        usage: null
+        type: markdown-content
+        args:
+          content: |
+            In your GitHub Repository, navigate to **Settings > Secrets and Variables > Actions**.
+            Add a new secret called `TFY_API_KEY` and set the generated api key as value
+      - label: Create GitHub Action
+        icon: null
+        usage: |
+          Add the below workflow as `tfy-deploy.yaml` in your github workflow directory (`.github/workflows/`).
+          Following GitHub Action will be triggered on each push to `main` branch
+        type: markdown-content
+        args:
+          content: |
+            ```yaml
+            name: Deploy to TrueFoundry
+  
+            on:
+              push:
+                branches:
+                  - 'main'
+  
+            env:
+              TFY_HOST: {{ TRUEFOUNDRY_TFY_HOST }}
+              TFY_API_KEY: $\{{ secrets.TFY_API_KEY }}
+              APPLICATION_FQN: {{ TRUEFOUNDRY_APPLICATION_FQN }}
+  
+            jobs:
+              deploy:
+                runs-on: ubuntu-latest
+                timeout-minutes: 30
+                steps:
+                  - name: Checkout code
+                    uses: actions/checkout@v3
+  
+                  - name: Set up Python
+                    uses: actions/setup-python@v4
+                    with:
+                      python-version: 3.11
+  
+                  - name: Install dependencies
+                    run: |
+                      pip install "truefoundry<1.0.0"
+  
+                  - name: Patch the commit sha
+                    run: |
+                      tfy patch-application --application-fqn $\{{ env.APPLICATION_FQN }} --patch='{"image": {"build_source": {"ref": "$\{{ github.sha }}"}}}'
+            ```
+  github-actions-git-source.yaml: |
+    name: Build and Deploy via Git Integration on TrueFoundry
+    cicd_provider_id: github
+    enabled: true
+    description: "TrueFoundry Control Plane will git clone the source code and build the image to deploy the application."
+    deployment_mode: deploy
+    build_source: git
+    image_builder: truefoundry-control-plane
+    steps:
+      - label: Generate API Key
+        icon: null
+        usage: Generate an API Key to authenticate and deploy applications
+        type: generate-api-key
+      - label: Add API Key to Github Secrets
+        icon: null
+        usage: null
+        type: markdown-content
+        args:
+          content: |
+            In your GitHub Repository, navigate to **Settings > Secrets and Variables > Actions**.
+            Add a new secret called `TFY_API_KEY` and set the generated api key as value
+      - label: Download Application Spec
+        icon: null
+        usage: Click the button below to download the `truefoundry.yaml` application spec file. Copy it to the root of your project directory.
+        type: download-truefoundry-spec
+      - label: Create GitHub Action
+        icon: null
+        usage: |
+          Add the below workflow as `tfy-deploy.yaml` in your github workflow directory (`.github/workflows/`).
+          Following GitHub Action will be triggered on each push to `main` branch
+        type: markdown-content
+        args:
+          content: |
+            ```yaml
+            name: Deploy to TrueFoundry
+  
+            on:
+              push:
+                branches:
+                  - 'main'
+  
+            env:
+              TFY_HOST: {{ TRUEFOUNDRY_TFY_HOST }}
+              TFY_API_KEY: $\{{ secrets.TFY_API_KEY }}
+              WORKSPACE_FQN: {{ TRUEFOUNDRY_WORKSPACE_FQN }}
+  
+            jobs:
+              deploy:
+                runs-on: ubuntu-latest
+                timeout-minutes: 30
+                steps:
+                  - name: Checkout code
+                    uses: actions/checkout@v3
+  
+                  - name: Set up Python
+                    uses: actions/setup-python@v4
+                    with:
+                      python-version: 3.11
+  
+                  - name: Install dependencies
+                    run: |
+                      pip install "truefoundry<1.0.0"
+  
+                  - name: Deploy to workspace
+                    run: |
+                      tfy patch -f truefoundry.yaml --filter '.image.build_source.ref = "$\{{ github.sha }}" | .image.build_source.branch_name = "$\{{ github.ref_name }}"' -o truefoundry-patched.yaml
+                      tfy deploy -f truefoundry-patched.yaml -w "$\{{ env.WORKSPACE_FQN }}" --no-wait
+            ```
+  github-actions-local-source.yaml: |
+    name: Upload Code, Build and Deploy using TrueFoundry
+    cicd_provider_id: github
+    enabled: true
+    description: "TrueFoundry Control Plane will pull an archive of the source code from your Storage Integrations and build the image to deploy the application."
+    deployment_mode: deploy
+    build_source: local
+    image_builder: truefoundry-control-plane
+    steps:
+      - label: Generate API Key
+        icon: null
+        usage: Generate an API Key to authenticate and deploy applications
+        type: generate-api-key
+      - label: Add API Key to Github Secrets
+        icon: null
+        usage: null
+        type: markdown-content
+        args:
+          content: |
+            In your GitHub Repository, navigate to **Settings > Secrets and Variables > Actions**.
+            Add a new secret called `TFY_API_KEY` and set the generated api key as value
+      - label: Download Application Spec
+        icon: null
+        usage: Click the button below to download the `truefoundry.yaml` application spec file. Copy it to the root of your project directory.
+        type: download-truefoundry-spec
+      - label: Create GitHub Action
+        icon: null
+        usage: |
+          Add the below workflow as `tfy-deploy.yaml` in your github workflow directory (`.github/workflows/`).
+          Following GitHub Action will be triggered on each push to `main` branch
+        type: markdown-content
+        args:
+          content: |
+            ```yaml
+            name: Deploy to TrueFoundry
+  
+            on:
+              push:
+                branches:
+                  - 'main'
+  
+            env:
+              TFY_HOST: {{ TRUEFOUNDRY_TFY_HOST }}
+              TFY_API_KEY: $\{{ secrets.TFY_API_KEY }}
+              WORKSPACE_FQN: {{ TRUEFOUNDRY_WORKSPACE_FQN }}
+  
+            jobs:
+              build_deploy:
+                name: Build Image
+                runs-on: ubuntu-latest
+                timeout-minutes: 30
+                steps:
+                  - name: Checkout code
+                    uses: actions/checkout@v3
+  
+                  - name: Set up Docker Buildx
+                    uses: docker/setup-buildx-action@v3
+  
+                  - name: Set up Python
+                    uses: actions/setup-python@v4
+                    with:
+                      python-version: 3.11
+  
+                  - name: Install dependencies
+                    run: |
+                      pip install "truefoundry<1.0.0"
+  
+                  - name: Deploy to workspace
+                    run: |
+                      tfy deploy -f truefoundry.yaml -w "$\{{ env.WORKSPACE_FQN }}" --no-wait
+            ```
+  github-actions-self-build-image-patch-application.yaml: "name: Build Image Yourself
+    and Patch Image URI to deploy on TrueFoundry\ncicd_provider_id: github\nenabled:
+    true\ndescription: \"Build Docker Image using your own steps and deploy the image
+    on TrueFoundry.\"\ndeployment_mode: patch-application\nbuild_source: local\nimage_builder:
+    self\nsteps:\n  - label: Generate API Key\n    icon: null\n    usage: Generate an
+    API Key to authenticate and deploy applications\n    type: generate-api-key\n  -
+    label: Add API Key to Github Secrets\n    icon: null\n    usage: null\n    type:
+    markdown-content\n    args:\n      content: |\n        In your GitHub Repository,
+    navigate to **Settings > Secrets and Variables > Actions**.\n        Add a new secret
+    called `TFY_API_KEY` and set the generated api key as value\n  - label: Create GitHub
+    Action\n    icon: null\n    usage: |\n      Add the below workflow as `tfy-deploy.yaml`
+    in your github workflow directory (`.github/workflows/`).\n      Following GitHub
+    Action will be triggered on each push to `main` branch\n    type: markdown-content\n
+    \   args:\n      content: |\n        > **Note:** Please read through the `env` section
+    and Image Build Section and update them for your registry and repo.\n       \n       \n
+    \       ```yaml\n        name: Deploy to TrueFoundry\n\n        on:\n          push:\n
+    \           branches:\n              - 'main'\n\n        permissions:\n          id-token:
+    write\n          contents: read\n\n        env:\n          TFY_HOST: {{ TRUEFOUNDRY_TFY_HOST
+    }}\n          TFY_API_KEY: $\\{{ secrets.TFY_API_KEY }}\n          APPLICATION_FQN:
+    {{ TRUEFOUNDRY_APPLICATION_FQN }}\n          \n          # Update these with your
+    Docker Registry and Repository\n          DOCKER_REGISTRY: docker.io\n          DOCKER_REPO_NAME:
+    $\\{{ github.event.repository.name }}\n          \n          DOCKER_IMAGE_REPO:
+    $\\{{ env.DOCKER_REGISTRY }}/$\\{{ env.DOCKER_REPO_NAME }}\n          DOCKER_IMAGE_TAG:
+    $\\{{ github.sha }}\n          DOCKER_IMAGE_URI: \"$\\{{ env.DOCKER_IMAGE_REPO }}:$\\{{
+    env.DOCKER_IMAGE_TAG }}\"\n\n        jobs:\n          build_deploy:\n            name:
+    Build Image\n            runs-on: ubuntu-latest\n            timeout-minutes: 30\n
+    \           steps:\n              - name: Checkout code\n                uses: actions/checkout@v3\n\n
+    \             - name: Set up Docker Buildx\n                uses: docker/setup-buildx-action@v3\n\n
+    \             ### Image Build Section ###\n\n              # Build your image, push
+    it\n              # Here is a sample, you can replace this with your registry specific
+    steps.\n              # The registry here should be also be linked in Integrations
+    on TrueFoundry\n\n              # Please see https://github.com/docker/login-action?tab=readme-ov-file#usage
+    for examples\n              name: Login to Docker Hub\n              uses: docker/login-action@v3\n
+    \             with:\n                registry: $\\{{ env.DOCKER_REGISTRY }}\n                username:
+    $\\{{ secrets.DOCKER_REGISTRY_USERNAME }}\n                password: $\\{{ secrets.DOCKER_REGISTRY_PASSWORD
+    }}\n                \n              - name: Build and push image\n                uses:
+    docker/build-push-action@v5\n                with:\n                  platforms:
+    linux/amd64\n                  context: .\n                  push: true\n                  tags:
+    $\\{{ env.DOCKER_IMAGE_URI }}\n                  cache-from: type=registry,ref=$\\{{
+    env.DOCKER_IMAGE_REPO }}:buildcache\n                  cache-to: mode=max,image-manifest=true,type=registry,ref=$\\{{
+    env.DOCKER_IMAGE_REPO }}:buildcache\n\n              ############################\n\n
+    \             - name: Set up Python\n                uses: actions/setup-python@v4\n
+    \               with:\n                  python-version: 3.11\n\n              -
+    name: Install dependencies\n                run: |\n                  pip install
+    \"truefoundry<1.0.0\"\n\n              - name: Deploy to workspace\n                run:
+    |\n                  tfy patch-application --application-fqn $\\{{ env.APPLICATION_FQN
+    }} --patch='{\"image\": {\"image_uri\": \"$\\{{ env.DOCKER_IMAGE_URI }}\"}}'\n        ```\n"
+  github-actions-self-build-image.yaml: "name: Build Image Yourself and Deploy Image
+    on TrueFoundry\ncicd_provider_id: github\nenabled: true\ndescription: \"Build Docker
+    Image using your own steps and deploy the image on TrueFoundry.\"\ndeployment_mode:
+    deploy\nbuild_source: local\nimage_builder: self\nsteps:\n  - label: Generate API
+    Key\n    icon: null\n    usage: Generate an API Key to authenticate and deploy applications\n
+    \   type: generate-api-key\n  - label: Add API Key to Github Secrets\n    icon:
+    null\n    usage: null\n    type: markdown-content\n    args:\n      content: |\n
+    \       In your GitHub Repository, navigate to **Settings > Secrets and Variables
+    > Actions**.\n        Add a new secret called `TFY_API_KEY` and set the generated
+    api key as value\n  - label: Download Application Spec\n    icon: null\n    usage:
+    Click the button below to download the `truefoundry.yaml` application spec file.
+    Copy it to the root of your project directory.\n    type: download-truefoundry-spec\n
+    \ - label: Create GitHub Action\n    icon: null\n    usage: |\n      Add the below
+    workflow as `tfy-deploy.yaml` in your github workflow directory (`.github/workflows/`).\n
+    \     Following GitHub Action will be triggered on each push to `main` branch\n
+    \   type: markdown-content\n    args:\n      content: |\n        > **Note:** Please
+    read through the `env` section and Image Build Section and update them for your
+    registry and repo.\n       \n       \n        ```yaml\n        name: Deploy to TrueFoundry\n\n
+    \       on:\n          push:\n            branches:\n              - 'main'\n\n
+    \       permissions:\n          id-token: write\n          contents: read\n\n        env:\n
+    \         TFY_HOST: {{ TRUEFOUNDRY_TFY_HOST }}\n          TFY_API_KEY: $\\{{ secrets.TFY_API_KEY
+    }}\n          WORKSPACE_FQN: {{ TRUEFOUNDRY_WORKSPACE_FQN }}\n          \n          #
+    Update these with your Docker Registry and Repository\n          DOCKER_REGISTRY:
+    docker.io\n          DOCKER_REPO_NAME: $\\{{ github.event.repository.name }}\n          \n
+    \         DOCKER_IMAGE_REPO: $\\{{ env.DOCKER_REGISTRY }}/$\\{{ env.DOCKER_REPO_NAME
+    }}\n          DOCKER_IMAGE_TAG: $\\{{ github.sha }}\n          DOCKER_IMAGE_URI:
+    \"$\\{{ env.DOCKER_IMAGE_REPO }}:$\\{{ env.DOCKER_IMAGE_TAG }}\"\n\n        jobs:\n
+    \         build_deploy:\n            name: Build Image\n            runs-on: ubuntu-latest\n
+    \           timeout-minutes: 30\n            steps:\n              - name: Checkout
+    code\n                uses: actions/checkout@v3\n\n              - name: Set up
+    Docker Buildx\n                uses: docker/setup-buildx-action@v3\n\n              ###
+    Image Build Section ###\n\n              # Build your image, push it\n              #
+    Here is a sample, you can replace this with your registry specific steps.\n              #
+    The registry here should be also be linked in Integrations on TrueFoundry\n\n              #
+    Please see https://github.com/docker/login-action?tab=readme-ov-file#usage for examples\n
+    \             name: Login to Docker Hub\n              uses: docker/login-action@v3\n
+    \             with:\n                registry: $\\{{ env.DOCKER_REGISTRY }}\n                username:
+    $\\{{ secrets.DOCKER_REGISTRY_USERNAME }}\n                password: $\\{{ secrets.DOCKER_REGISTRY_PASSWORD
+    }}\n                \n              - name: Build and push image\n                uses:
+    docker/build-push-action@v5\n                with:\n                  platforms:
+    linux/amd64\n                  context: .\n                  push: true\n                  tags:
+    $\\{{ env.DOCKER_IMAGE_URI }}\n                  cache-from: type=registry,ref=$\\{{
+    env.DOCKER_IMAGE_REPO }}:buildcache\n                  cache-to: mode=max,image-manifest=true,type=registry,ref=$\\{{
+    env.DOCKER_IMAGE_REPO }}:buildcache\n\n              ############################\n\n
+    \             - name: Set up Python\n                uses: actions/setup-python@v4\n
+    \               with:\n                  python-version: 3.11\n\n              -
+    name: Install dependencies\n                run: |\n                  pip install
+    \"truefoundry<1.0.0\"\n\n              - name: Deploy to workspace\n                run:
+    |\n                  tfy patch -f truefoundry.yaml --filter '.image.image_uri =
+    \"$\\{{ env.DOCKER_IMAGE_URI }}\"' -o truefoundry-patched.yaml\n                  tfy
+    deploy -f truefoundry-patched.yaml -w \"$\\{{ env.WORKSPACE_FQN }}\" --no-wait\n
+    \       ```\n"
+  gitlab-pipeline-git-source-patch-application.yaml: "name: Patch Commit SHA to Build
+    and Deploy via Git Integration on TrueFoundry\ncicd_provider_id: gitlab\nenabled:
+    true\ndescription: \"TrueFoundry Control Plane will git clone the source code and
+    build the image to deploy the application.\"\ndeployment_mode: patch-application\nbuild_source:
+    git\nimage_builder: truefoundry-control-plane\nsteps:\n  - label: Generate API Key\n
+    \   icon: null\n    usage: Generate an API Key to authenticate and deploy applications\n
+    \   type: generate-api-key\n  - label: Add API Key to Secrets\n    icon: null\n
+    \   usage: null\n    type: markdown-content\n    args:\n      content: |\n        In
+    your GitLab Repository, navigate to **Settings > CI/CD** then expand **Variables**.\n
+    \       Add a new secret called `TFY_API_KEY` and set the generated api key as value
+    and select the **Mask Variable** checkbox.\n  - label: Create GitLab Pipeline\n
+    \   icon: null\n    usage: |\n      Add the below workflow as `.gitlab-ci.yml` in
+    your root directory.\n      Following Pipelines will be triggered on each push to
+    `main` branch\n    type: markdown-content\n    args:\n      content: |\n        ```yaml\n
+    \       default:\n          image: python:3.11.9-bullseye\n        \n        workflow:\n
+    \         rules:\n            - if: $CI_COMMIT_BRANCH == \"main\"\n\n        variables:\n
+    \         TFY_HOST: {{ TRUEFOUNDRY_TFY_HOST }}\n          APPLICATION_FQN: {{ TRUEFOUNDRY_APPLICATION_FQN
+    }}\n          \n        deploy-job:\n          stage: deploy\n          timeout:
+    30 minutes\n          script: \n            - apt update && apt install -y jq\n
+    \           - pip3 install \"truefoundry<1.0.0\"\n            - tfy patch-application
+    --application-fqn \"$APPLICATION_FQN\" --patch=\"{\\\"image\\\": {\\\"build_source\\\":
+    {\\\"ref\\\": \\\"$CI_COMMIT_SHA\\\"}}}\"\n        ```\n"
+  gitlab-pipeline-git-source.yaml: "name: Build and Deploy via Git Integration on TrueFoundry\ncicd_provider_id:
+    gitlab\nenabled: true\ndescription: \"TrueFoundry Control Plane will git clone the
+    source code and build the image to deploy the application.\"\ndeployment_mode: deploy\nbuild_source:
+    git\nimage_builder: truefoundry-control-plane\nsteps:\n  - label: Generate API Key\n
+    \   icon: null\n    usage: Generate an API Key to authenticate and deploy applications\n
+    \   type: generate-api-key\n  - label: Add API Key to Secrets\n    icon: null\n
+    \   usage: null\n    type: markdown-content\n    args:\n      content: |\n        In
+    your GitLab Repository, navigate to **Settings > CI/CD** then expand **Variables**.\n
+    \       Add a new secret called `TFY_API_KEY` and set the generated api key as value
+    and select the **Mask Variable** checkbox.\n  - label: Download Application Spec\n
+    \   icon: null\n    usage: Click the button below to download the `truefoundry.yaml`
+    application spec file. Copy it to the root of your project directory.\n    type:
+    download-truefoundry-spec\n  - label: Create GitLab Pipeline\n    icon: null\n    usage:
+    |\n      Add the below workflow as `.gitlab-ci.yml` in your root directory.\n      Following
+    Pipelines will be triggered on each push to `main` branch\n    type: markdown-content\n
+    \   args:\n      content: |\n        ```yaml\n        default:\n          image:
+    python:3.11.9-bullseye\n        \n        workflow:\n          rules:\n            -
+    if: $CI_COMMIT_BRANCH == \"main\"\n\n        variables:\n          TFY_HOST: {{
+    TRUEFOUNDRY_TFY_HOST }}\n          WORKSPACE_FQN: {{ TRUEFOUNDRY_WORKSPACE_FQN }}\n
+    \         \n        deploy-job:\n          stage: deploy\n          timeout: 30
+    minutes\n          script: \n            - apt update && apt install -y jq\n            -
+    pip3 install \"truefoundry<1.0.0\"\n            - tfy patch -f truefoundry.yaml
+    --filter \".image.build_source.ref = \\\"$CI_COMMIT_SHA\\\" | .image.build_source.branch_name
+    = \\\"$CI_COMMIT_REF_NAME\\\"\" -o truefoundry-patched.yaml\n            - tfy deploy
+    -f truefoundry-patched.yaml -w \"$WORKSPACE_FQN\" --no-wait\n        ```\n"
+  gitlab-pipelines-local-source.yaml: "name: Upload Code, Build and Deploy using TrueFoundry\ncicd_provider_id:
+    gitlab\nenabled: true\ndescription: \"TrueFoundry Control Plane will pull an archive
+    of the source code from your Storage Integrations and build the image to deploy
+    the application.\"\ndeployment_mode: deploy\nbuild_source: local\nimage_builder:
+    truefoundry-control-plane\nsteps:\n  - label: Generate API Key\n    icon: null\n
+    \   usage: Generate an API Key to authenticate and deploy applications\n    type:
+    generate-api-key\n  - label: Add API Key to Secrets\n    icon: null\n    usage:
+    null\n    type: markdown-content\n    args:\n      content: |\n        In your GitLab
+    Repository, navigate to **Settings > CI/CD** then expand **Variables**.\n        Add
+    a new secret called `TFY_API_KEY` and set the generated api key as value and select
+    the **Mask Variable** checkbox.\n  - label: Download Application Spec\n    icon:
+    null\n    usage: Click the button below to download the `truefoundry.yaml` application
+    spec file. Copy it to the root of your project directory.\n    type: download-truefoundry-spec\n
+    \ - label: Create GitLab Pipeline\n    icon: null\n    usage: |\n      Add the below
+    workflow as `.gitlab-ci.yml` in your root directory.\n      Following Pipelines
+    will be triggered on each push to `main` branch\n    type: markdown-content\n    args:\n
+    \     content: |\n        ```yaml\n        default:\n          image: python:3.11.9-bullseye\n
+    \       \n        workflow:\n          rules:\n            - if: $CI_COMMIT_BRANCH
+    == \"main\"\n        \n        variables:\n          TFY_HOST: {{ TRUEFOUNDRY_TFY_HOST
+    }}\n          WORKSPACE_FQN: {{ TRUEFOUNDRY_WORKSPACE_FQN }}\n          \n        deploy-job:\n
+    \         stage: deploy\n          timeout: 30 minutes\n          script: \n            -
+    apt update && apt install -y jq\n            - pip3 install \"truefoundry<1.0.0\"\n
+    \           - tfy deploy -f truefoundry.yaml -w \"$WORKSPACE_FQN\" --no-wait\n        ```\n"
+  gitlab-pipelines-self-build-image-patch-application.yaml: "name: Build Image Yourself
+    and Patch Image URI to deploy on TrueFoundry\ncicd_provider_id: gitlab\nenabled:
+    true\ndescription: \"Build Docker Image using your own steps and deploy the image
+    on TrueFoundry.\"\ndeployment_mode: patch-application\nbuild_source: local\nimage_builder:
+    self\nsteps:\n  - label: Generate API Key\n    icon: null\n    usage: Generate an
+    API Key to authenticate and deploy applications\n    type: generate-api-key\n  -
+    label: Add API Key to Secrets\n    icon: null\n    usage: null\n    type: markdown-content\n
+    \   args:\n      content: |\n        In your GitLab Repository, navigate to **Settings
+    > CI/CD** then expand **Variables**.\n        Add a new secret called `TFY_API_KEY`
+    and set the generated api key as value and select the **Mask Variable** checkbox.\n
+    \ - label: Create GitLab Pipeline\n    icon: null\n    usage: |\n      Add the below
+    workflow as `.gitlab-ci.yml` in your root directory.\n      Following Pipelines
+    will be triggered on each push to `main` branch\n    type: markdown-content\n    args:\n
+    \     content: |\n        > **Note:** Please read through the `variables` section
+    and `build-image` Steps and update them for your registry and repo.\n        \n
+    \       \n        ```yaml\n        stages:\n          - build\n          - deploy\n
+    \       \n        workflow:\n          rules:\n            - if: $CI_COMMIT_BRANCH
+    == \"main\"\n\n        variables:\n          TFY_HOST: {{ TRUEFOUNDRY_TFY_HOST }}\n
+    \         APPLICATION_FQN: {{ TRUEFOUNDRY_APPLICATION_FQN }}\n\n          # Update
+    these with your Docker Registry and Repository\n          DOCKER_REGISTRY: docker.io\n
+    \         DOCKER_REPO_NAME: $CI_PROJECT_NAME\n          \n          DOCKER_IMAGE_REPO:
+    $DOCKER_REGISTRY/$DOCKER_REPO_NAME\n          DOCKER_IMAGE_TAG: $CI_COMMIT_SHA\n
+    \         DOCKER_IMAGE_URI: \"$DOCKER_IMAGE_REPO:$DOCKER_IMAGE_TAG\"\n\n        ###
+    Image Build Section ###\n        # Build your image, push it\n        # Here is
+    a sample, you can replace this with your registry specific steps.\n        # The
+    registry here should be also be linked in Integrations on TrueFoundry\n\n        build-image:\n
+    \         stage: build\n          image: docker:24.0.5\n          environment: production\n
+    \         timeout: 30 minutes\n          services:\n            - docker:24.0.5-dind\n
+    \         variables:\n            DOCKER_HOST: tcp://docker:2376\n            DOCKER_TLS_CERTDIR:
+    \"/certs\"\n          before_script:\n            - docker info\n            - export
+    BUILDX_VERSION=v0.6.3\n            - apk add --no-cache curl\n            - mkdir
+    -p ~/.docker/cli-plugins\n            - curl -sSLo ~/.docker/cli-plugins/docker-buildx
+    \"https://github.com/docker/buildx/releases/download/${BUILDX_VERSION}/buildx-${BUILDX_VERSION}.linux-amd64\"\n
+    \           - chmod a+x ~/.docker/cli-plugins/docker-buildx\n            - docker
+    buildx create --use --platform=linux/amd64,linux/arm64\n          script:\n            -
+    echo \"$DOCKER_REGISTRY_PASSWORD\" | docker login $DOCKER_REGISTRY --username $DOCKER_REGISTRY_USER
+    --password-stdin\n            # Assuming Dockerfile is present at the root of the
+    project. If not, please pass it via --file\n            - docker buildx build --cache-from
+    type=registry,ref=$DOCKER_IMAGE_REPO:buildcache --cache-to mode=max,image-manifest=true,type=registry,ref=$DOCKER_IMAGE_REPO:buildcache
+    --tag $DOCKER_IMAGE_URI --push .\n\n        ############################\n\n        deploy-job:\n
+    \         needs: [\"build-image\"]\n          stage: deploy\n          image: python:3.11.9-bullseye\n
+    \         environment: production\n          timeout: 30 minutes\n          variables:\n
+    \           PIP_CACHE_DIR: \"$CI_PROJECT_DIR/.cache/pip\"\n          script:\n            -
+    apt update && apt install -y jq\n            - pip3 install \"truefoundry<1.0.0\"\n
+    \           - tfy patch-application --application-fqn \"$APPLICATION_FQN\" --patch=\"{\\\"image\\\":
+    {\\\"image_uri\\\": \\\"$DOCKER_IMAGE_URI\\\"}}\"\n        ```\n"
+  gitlab-pipelines-self-build-image.yaml: "name: Build Image Yourself and Deploy Image
+    on TrueFoundry\ncicd_provider_id: gitlab\nenabled: true\ndescription: \"Build Docker
+    Image using your own steps and deploy the image on TrueFoundry.\"\ndeployment_mode:
+    deploy\nbuild_source: local\nimage_builder: self\nsteps:\n  - label: Generate API
+    Key\n    icon: null\n    usage: Generate an API Key to authenticate and deploy applications\n
+    \   type: generate-api-key\n  - label: Add API Key to Secrets\n    icon: null\n
+    \   usage: null\n    type: markdown-content\n    args:\n      content: |\n        In
+    your GitLab Repository, navigate to **Settings > CI/CD** then expand **Variables**.\n
+    \       Add a new secret called `TFY_API_KEY` and set the generated api key as value
+    and select the **Mask Variable** checkbox.\n  - label: Download Application Spec\n
+    \   icon: null\n    usage: Click the button below to download the `truefoundry.yaml`
+    application spec file. Copy it to the root of your project directory.\n    type:
+    download-truefoundry-spec\n  - label: Create GitLab Pipeline\n    icon: null\n    usage:
+    |\n      Add the below workflow as `.gitlab-ci.yml` in your root directory.\n      Following
+    Pipelines will be triggered on each push to `main` branch\n    type: markdown-content\n
+    \   args:\n      content: |\n        > **Note:** Please read through the `variables`
+    section and `build-image` Steps and update them for your registry and repo.\n        \n
+    \       \n        ```yaml\n        stages:\n          - build\n          - deploy\n
+    \       \n        workflow:\n          rules:\n            - if: $CI_COMMIT_BRANCH
+    == \"main\"\n\n        variables:\n          TFY_HOST: {{ TRUEFOUNDRY_TFY_HOST }}\n
+    \         WORKSPACE_FQN: {{ TRUEFOUNDRY_WORKSPACE_FQN }}\n\n          # Update these
+    with your Docker Registry and Repository\n          DOCKER_REGISTRY: docker.io\n
+    \         DOCKER_REPO_NAME: $CI_PROJECT_NAME\n          \n          DOCKER_IMAGE_REPO:
+    $DOCKER_REGISTRY/$DOCKER_REPO_NAME\n          DOCKER_IMAGE_TAG: $CI_COMMIT_SHA\n
+    \         DOCKER_IMAGE_URI: \"$DOCKER_IMAGE_REPO:$DOCKER_IMAGE_TAG\"\n\n        ###
+    Image Build Section ###\n        # Build your image, push it\n        # Here is
+    a sample, you can replace this with your registry specific steps.\n        # The
+    registry here should be also be linked in Integrations on TrueFoundry\n\n        build-image:\n
+    \         stage: build\n          image: docker:24.0.5\n          environment: production\n
+    \         timeout: 30 minutes\n          services:\n            - docker:24.0.5-dind\n
+    \         variables:\n            DOCKER_HOST: tcp://docker:2376\n            DOCKER_TLS_CERTDIR:
+    \"/certs\"\n          before_script:\n            - docker info\n            - export
+    BUILDX_VERSION=v0.6.3\n            - apk add --no-cache curl\n            - mkdir
+    -p ~/.docker/cli-plugins\n            - curl -sSLo ~/.docker/cli-plugins/docker-buildx
+    \"https://github.com/docker/buildx/releases/download/${BUILDX_VERSION}/buildx-${BUILDX_VERSION}.linux-amd64\"\n
+    \           - chmod a+x ~/.docker/cli-plugins/docker-buildx\n            - docker
+    buildx create --use --platform=linux/amd64,linux/arm64\n          script:\n            -
+    echo \"$DOCKER_REGISTRY_PASSWORD\" | docker login $DOCKER_REGISTRY --username $DOCKER_REGISTRY_USER
+    --password-stdin\n            # Assuming Dockerfile is present at the root of the
+    project. If not, please pass it via --file\n            - docker buildx build --cache-from
+    type=registry,ref=$DOCKER_IMAGE_REPO:buildcache --cache-to mode=max,image-manifest=true,type=registry,ref=$DOCKER_IMAGE_REPO:buildcache
+    --tag $DOCKER_IMAGE_URI --push .\n\n        ############################\n\n        deploy-job:\n
+    \         needs: [\"build-image\"]\n          stage: deploy\n          image: python:3.11.9-bullseye\n
+    \         environment: production\n          timeout: 30 minutes\n          variables:\n
+    \           PIP_CACHE_DIR: \"$CI_PROJECT_DIR/.cache/pip\"\n          script:\n            -
+    apt update && apt install -y jq\n            - pip3 install \"truefoundry<1.0.0\"\n
+    \           - tfy patch -f truefoundry.yaml --filter \".image.image_uri = \\\"$DOCKER_IMAGE_URI\\\"\"
+    -o truefoundry-patched.yaml\n            - tfy deploy -f truefoundry-patched.yaml
+    -w \"$WORKSPACE_FQN\" --no-wait\n        ```\n"
+---
+# Source: tfy-configs/templates/workbench-images-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-tfy-configs-workbench-images-cm
+  namespace: default
+data:
+  workbench-images.yaml: |-
+    
+    # cluster_region is based on topology.kubernetes.io/region
+    # image section can also contain `build_script` and `docker_registry`
+    images:
+      - name: Jupyter Lab Minimal Image
+        type: notebook
+        enabled: true
+        description: Minimal image with Python 3.11 environment. Starts quickly
+        image:
+          - match:
+              - key: cluster_type
+                operator: In
+                values:
+                  - 'gcp-gke-standard'
+              - key: cluster_region
+                operator: StartsWith
+                values:
+                  - 'us-'
+            spec:
+              image_uri: 'us-docker.pkg.dev/production-01-407505/tfy-docker-us/jupyter:0.3.0-sudo'
+          - match:
+              - key: cluster_type
+                operator: In
+                values:
+                  - 'gcp-gke-standard'
+              - key: cluster_region
+                operator: StartsWith
+                values:
+                  - 'europe-'
+            spec:
+              image_uri: 'europe-docker.pkg.dev/production-01-407505/tfy-docker-eu/jupyter:0.3.0-sudo'
+          - match:
+              - key: cluster_type
+                operator: In
+                values:
+                  - 'gcp-gke-standard'
+              - key: cluster_region
+                operator: StartsWith
+                values:
+                  - 'asia-'
+            spec:
+              image_uri: 'asia-docker.pkg.dev/production-01-407505/tfy-docker-as/jupyter:0.3.0-sudo'
+          - match: []
+            spec:
+              image_uri: 'public.ecr.aws/truefoundrycloud/jupyter:0.3.0-sudo'
+    
+      - name: Jupyter Lab Cuda 12.1 Image
+        type: notebook
+        enabled: true
+        description: Python 3.11 environment with cuda toolkit 12.1
+        image:
+          - match:
+              - key: cluster_type
+                operator: In
+                values:
+                  - 'gcp-gke-standard'
+              - key: cluster_region
+                operator: StartsWith
+                values:
+                  - 'us-'
+            spec:
+              image_uri: 'us-docker.pkg.dev/production-01-407505/tfy-docker-us/jupyter:0.3.0-cu121-sudo'
+          - match:
+              - key: cluster_type
+                operator: In
+                values:
+                  - 'gcp-gke-standard'
+              - key: cluster_region
+                operator: StartsWith
+                values:
+                  - 'europe-'
+            spec:
+              image_uri: 'europe-docker.pkg.dev/production-01-407505/tfy-docker-eu/jupyter:0.3.0-cu121-sudo'
+          - match:
+              - key: cluster_type
+                operator: In
+                values:
+                  - 'gcp-gke-standard'
+              - key: cluster_region
+                operator: StartsWith
+                values:
+                  - 'asia-'
+            spec:
+              image_uri: 'asia-docker.pkg.dev/production-01-407505/tfy-docker-as/jupyter:0.3.0-cu121-sudo'
+          - match: []
+            spec:
+              image_uri: 'public.ecr.aws/truefoundrycloud/jupyter:0.3.0-cu121-sudo'
+    
+      - name: Jupyter Lab Full Image
+        type: notebook
+        enabled: true
+        description: Python 3.11 environment with common ML Libraries and cuda toolkit 12.1
+        image:
+          - match:
+              - key: cluster_type
+                operator: In
+                values:
+                  - 'gcp-gke-standard'
+              - key: cluster_region
+                operator: StartsWith
+                values:
+                  - 'us-'
+            spec:
+              image_uri: 'us-docker.pkg.dev/production-01-407505/tfy-docker-us/jupyter-full:0.3.0-sudo'
+          - match:
+              - key: cluster_type
+                operator: In
+                values:
+                  - 'gcp-gke-standard'
+              - key: cluster_region
+                operator: StartsWith
+                values:
+                  - 'europe-'
+            spec:
+              image_uri: 'europe-docker.pkg.dev/production-01-407505/tfy-docker-eu/jupyter-full:0.3.0-sudo'
+          - match:
+              - key: cluster_type
+                operator: In
+                values:
+                  - 'gcp-gke-standard'
+              - key: cluster_region
+                operator: StartsWith
+                values:
+                  - 'asia-'
+            spec:
+              image_uri: 'asia-docker.pkg.dev/production-01-407505/tfy-docker-as/jupyter-full:0.3.0-sudo'
+          - match: []
+            spec:
+              image_uri: 'public.ecr.aws/truefoundrycloud/jupyter-full:0.3.0-sudo'
+    
+      - name: SSH Server Minimal Image
+        type: ssh-server
+        enabled: true
+        description: SSH Server image with Python 3.11 environment
+        image:
+          - match:
+              - key: cluster_type
+                operator: In
+                values:
+                  - 'gcp-gke-standard'
+              - key: cluster_region
+                operator: StartsWith
+                values:
+                  - 'us-'
+            spec:
+              image_uri: 'us-docker.pkg.dev/production-01-407505/tfy-docker-us/ssh-server:0.3.0'
+          - match:
+              - key: cluster_type
+                operator: In
+                values:
+                  - 'gcp-gke-standard'
+              - key: cluster_region
+                operator: StartsWith
+                values:
+                  - 'europe-'
+            spec:
+              image_uri: 'europe-docker.pkg.dev/production-01-407505/tfy-docker-eu/ssh-server:0.3.0'
+          - match:
+              - key: cluster_type
+                operator: In
+                values:
+                  - 'gcp-gke-standard'
+              - key: cluster_region
+                operator: StartsWith
+                values:
+                  - 'asia-'
+            spec:
+              image_uri: 'asia-docker.pkg.dev/production-01-407505/tfy-docker-as/ssh-server:0.3.0'
+          - match: []
+            spec:
+              image_uri: 'public.ecr.aws/truefoundrycloud/ssh-server:0.3.0'
+    
+      - name: SSH Server Cuda 12.1 Image
+        type: ssh-server
+        enabled: true
+        description: Python 3.11 environment with cuda toolkit 12.1
+        image:
+          - match:
+              - key: cluster_type
+                operator: In
+                values:
+                  - 'gcp-gke-standard'
+              - key: cluster_region
+                operator: StartsWith
+                values:
+                  - 'us-'
+            spec:
+              image_uri: 'us-docker.pkg.dev/production-01-407505/tfy-docker-us/ssh-server:0.3.0-cu121'
+          - match:
+              - key: cluster_type
+                operator: In
+                values:
+                  - 'gcp-gke-standard'
+              - key: cluster_region
+                operator: StartsWith
+                values:
+                  - 'europe-'
+            spec:
+              image_uri: 'europe-docker.pkg.dev/production-01-407505/tfy-docker-eu/ssh-server:0.3.0-cu121'
+          - match:
+              - key: cluster_type
+                operator: In
+                values:
+                  - 'gcp-gke-standard'
+              - key: cluster_region
+                operator: StartsWith
+                values:
+                  - 'asia-'
+            spec:
+              image_uri: 'asia-docker.pkg.dev/production-01-407505/tfy-docker-as/ssh-server:0.3.0-cu121'
+          - match: []
+            spec:
+              image_uri: 'public.ecr.aws/truefoundrycloud/ssh-server:0.3.0-cu121'
+    
+      - name: CodeServer (VS Code) Minimal Image
+        type: codeserver
+        enabled: true
+        description: CodeServer (VS Code) image with Python 3.11 environment
+        image:
+          - match:
+              - key: cluster_type
+                operator: In
+                values:
+                  - 'gcp-gke-standard'
+              - key: cluster_region
+                operator: StartsWith
+                values:
+                  - 'us-'
+            spec:
+              image_uri: 'us-docker.pkg.dev/production-01-407505/tfy-docker-us/codeserver-python:0.3.0-sudo'
+          - match:
+              - key: cluster_type
+                operator: In
+                values:
+                  - 'gcp-gke-standard'
+              - key: cluster_region
+                operator: StartsWith
+                values:
+                  - 'europe-'
+            spec:
+              image_uri: 'europe-docker.pkg.dev/production-01-407505/tfy-docker-eu/codeserver-python:0.3.0-sudo'
+          - match:
+              - key: cluster_type
+                operator: In
+                values:
+                  - 'gcp-gke-standard'
+              - key: cluster_region
+                operator: StartsWith
+                values:
+                  - 'asia-'
+            spec:
+              image_uri: 'asia-docker.pkg.dev/production-01-407505/tfy-docker-as/codeserver-python:0.3.0-sudo'
+          - match: []
+            spec:
+              image_uri: 'public.ecr.aws/truefoundrycloud/codeserver-python:0.3.0-sudo'
+    
+      - name: CodeServer (VS Code) Cuda 12.1 Image
+        type: codeserver
+        enabled: true
+        description: CodeServer (VS Code) image with Python 3.11 environment and cuda toolkit 12.1
+        image:
+          - match:
+              - key: cluster_type
+                operator: In
+                values:
+                  - 'gcp-gke-standard'
+              - key: cluster_region
+                operator: StartsWith
+                values:
+                  - 'us-'
+            spec:
+              image_uri: 'us-docker.pkg.dev/production-01-407505/tfy-docker-us/codeserver-python:0.3.0-cu121-sudo'
+          - match:
+              - key: cluster_type
+                operator: In
+                values:
+                  - 'gcp-gke-standard'
+              - key: cluster_region
+                operator: StartsWith
+                values:
+                  - 'europe-'
+            spec:
+              image_uri: 'europe-docker.pkg.dev/production-01-407505/tfy-docker-eu/codeserver-python:0.3.0-cu121-sudo'
+          - match:
+              - key: cluster_type
+                operator: In
+                values:
+                  - 'gcp-gke-standard'
+              - key: cluster_region
+                operator: StartsWith
+                values:
+                  - 'asia-'
+            spec:
+              image_uri: 'asia-docker.pkg.dev/production-01-407505/tfy-docker-as/codeserver-python:0.3.0-cu121-sudo'
+          - match: []
+            spec:
+              image_uri: 'public.ecr.aws/truefoundrycloud/codeserver-python:0.3.0-cu121-sudo'

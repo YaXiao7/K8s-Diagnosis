@@ -1,0 +1,135 @@
+---
+# Source: part-db/templates/config.yaml
+apiVersion: v1
+kind: Secret
+type: Opaque
+metadata:
+  name: my-part-db-config
+  labels: 
+    app.kubernetes.io/name: part-db
+    helm.sh/chart: part-db-0.1.0
+    app.kubernetes.io/instance: my-part-db
+    app.kubernetes.io/managed-by: Helm
+stringData:
+  APP_ENV: docker
+  DEFAULT_URI: "http://part-db"
+  BASE_CURRENCY: "EUR"
+  ALLOW_ATTACHMENT_DOWNLOADS: "0"
+  USE_GRAVATAR: "0"
+  DEFAULT_LANG: en
+  DEFAULT_TIMEZONE: ""
+  ENFORCE_CHANGE_COMMENTS_FOR: "part_edit,part_delete,datastructure_edit,datastructure_delete"
+  MAX_ATTACHMENT_FILE_SIZE: "100M"
+  CHECK_FOR_UPDATES: "0"
+  HISTORY_SAVE_CHANGED_FIELDS: "true"
+  HISTORY_SAVE_CHANGED_DATA: "true"
+  HISTORY_SAVE_REMOVED_DATA: "true"
+  DB_TYPE: sqlite
+  DATABASE_URL: "sqlite:///%kernel.project_dir%/var/db/app.db"
+  MAILER_DSN: "$(SMTP_PROTOCOL)://$(SMTP_HOST):$(SMTP_PORT)"
+  SMTP_HOST: ""
+  SMTP_PORT: "587"
+  TRUSTED_PROXIES: "127.0.0.0/8,::1,10.0.0.0/8,192.168.0.0/16"
+---
+# Source: part-db/templates/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-part-db
+  labels: 
+    app.kubernetes.io/name: part-db
+    helm.sh/chart: part-db-0.1.0
+    app.kubernetes.io/instance: my-part-db
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  selector: 
+    app.kubernetes.io/name: part-db
+    app.kubernetes.io/instance: my-part-db
+  ports:
+  - name: http
+    port: 80
+    targetPort: http
+---
+# Source: part-db/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-part-db
+  labels:
+    app.kubernetes.io/name: part-db
+    helm.sh/chart: part-db-0.1.0
+    app.kubernetes.io/instance: my-part-db
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: part-db
+      app.kubernetes.io/instance: my-part-db
+  replicas: 1
+  serviceName: my-part-db
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: part-db
+        helm.sh/chart: part-db-0.1.0
+        app.kubernetes.io/instance: my-part-db
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      securityContext:
+        fsGroup: 33
+      initContainers:
+      - name: migrate-db
+        image: "docker.io/jbtronics/part-db1:latest"
+        imagePullPolicy: "Always"
+        securityContext:
+          runAsUser: 33 # www-data
+        command: [/bin/bash, "-c"]
+        args: 
+          - >-
+            touch var/db/app.db &&
+            php bin/console doctrine:migrations:migrate | tee -a output || exit 1 ;
+            grep "initial password" output > /dev/termination-log || true
+        envFrom:
+        - secretRef:
+            name: my-part-db-config
+        volumeMounts:
+        - name: data
+          mountPath: /var/www/html/var/db
+          subPath: db
+      containers:
+      - name: part-db
+        image: "docker.io/jbtronics/part-db1:latest"
+        imagePullPolicy: "Always"
+        envFrom:
+        - secretRef:
+            name: my-part-db-config
+        ports:
+        - name: http
+          containerPort: 80
+        livenessProbe:
+          httpGet:
+            path: /
+            port: http
+          timeoutSeconds: 5
+        volumeMounts:
+        - name: data
+          mountPath: /var/www/html/var/db
+          subPath: db
+        - name: data
+          mountPath: /var/www/html/uploads
+          subPath: uploads
+        - name: data
+          mountPath: /var/www/html/public/media
+          subPath: public_media
+      volumes:
+        []
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "4Gi"

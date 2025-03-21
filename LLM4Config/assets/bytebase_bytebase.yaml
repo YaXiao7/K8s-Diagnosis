@@ -1,0 +1,89 @@
+---
+# Source: bytebase/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: bytebase-entrypoint
+  namespace: default
+  labels:
+    app: bytebase
+    app.kubernetes.io/version: 2.22.3
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  selector:
+    app: bytebase
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 8080
+---
+# Source: bytebase/templates/statefulset.yaml
+# bytebase
+# bytebase.option
+# bytebase.option.externalPg
+# bytbease.persistence
+# bytbease.resources---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: bytebase
+  namespace: default
+  labels:
+    app: bytebase
+    app.kubernetes.io/version: 2.22.3
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+    matchLabels:
+      app: bytebase
+  serviceName: "bytebase"
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: bytebase
+    spec:
+      containers:
+        - name: bytebase
+          image: bytebase/bytebase:2.22.3
+          imagePullPolicy: Always
+          env:
+          # Otherwise, we should construct the external pg connection string from the specified parameters.
+          - name: PG_URL
+            value: postgres://username:password@host:port/database
+          command:
+            - /bin/sh
+            - -c
+          args:
+            - |
+              exec bytebase \
+              --data \
+              "/var/opt/bytebase" \
+              --port \
+              "8080" \
+              --external-url \
+              "https://www.bytebase.com/docs/get-started/install/external-url" \
+          ports:
+            - containerPort: 8080
+              name: web
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 300
+            periodSeconds: 300
+            timeoutSeconds: 60
+          volumeMounts:
+            - mountPath: /var/opt/bytebase
+              # Either user disable persistence or enable persistence but not specify an existing PVC, use "bytebase-volume" as the volume name. It means
+              # that we will request to create a PVC with the specified storage class with name "bytebase-volume".
+              name: bytebase-volume
+            - mountPath: /mnt/bytebase-shared-volume
+              name: bytebase-shared-volume
+      volumes:
+        # Mount the shared volume.
+        - name: bytebase-volume
+          emptyDir: {}
+        - name: bytebase-shared-volume
+          emptyDir: {}

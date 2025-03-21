@@ -1,0 +1,142 @@
+---
+# Source: multicluster-ingress-reader/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-multicluster-ingress-reader
+  labels:
+    helm.sh/chart: multicluster-ingress-reader-v2024.7.10
+    app.kubernetes.io/name: multicluster-ingress-reader
+    app.kubernetes.io/instance: my-multicluster-ingress-reader
+    app.kubernetes.io/version: "v0.0.2"
+    app.kubernetes.io/managed-by: Helm
+automountServiceAccountToken: true
+---
+# Source: multicluster-ingress-reader/templates/rbac-cm-creator.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: my-multicluster-ingress-reader:cm-creator
+  namespace: default
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+    verbs:
+      - get
+      - create
+      - update
+      - patch
+---
+# Source: multicluster-ingress-reader/templates/rbac-svc-reader.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: my-multicluster-ingress-reader:svc-reader
+  namespace: default
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - services
+    verbs:
+      - "get"
+      - "list"
+---
+# Source: multicluster-ingress-reader/templates/rbac-cm-creator.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: my-multicluster-ingress-reader:cm-creator
+  namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: my-multicluster-ingress-reader:cm-creator
+subjects:
+  - kind: ServiceAccount
+    name: my-multicluster-ingress-reader
+    namespace: default
+---
+# Source: multicluster-ingress-reader/templates/rbac-svc-reader.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: my-multicluster-ingress-reader:svc-reader
+  namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: my-multicluster-ingress-reader:svc-reader
+subjects:
+  - kind: ServiceAccount
+    name: my-multicluster-ingress-reader
+    namespace: default
+---
+# Source: multicluster-ingress-reader/templates/job.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: my-multicluster-ingress-reader
+  namespace: default
+  labels:
+    helm.sh/chart: multicluster-ingress-reader-v2024.7.10
+    app.kubernetes.io/name: multicluster-ingress-reader
+    app.kubernetes.io/instance: my-multicluster-ingress-reader
+    app.kubernetes.io/version: "v0.0.2"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade,post-rollback
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded,hook-failed
+spec:
+  ttlSecondsAfterFinished: 0
+  backoffLimit: 3
+  template:
+    spec:
+      serviceAccountName: my-multicluster-ingress-reader
+      securityContext:
+        {}
+      containers:
+        - name: multicluster-ingress-reader
+          securityContext:
+            {}
+          image: ghcr.io/appscode/kubectl-nonroot:1.25
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - |
+                set -x; \
+                sleep 2; \
+                x=`kubectl get svc -n default ingress-nginx-mc-controller -o jsonpath='{.status.loadBalancer.ingress[*].ip}'`; \
+                if [ -z "${x}" ]; then \
+                  x=`kubectl get svc -n default ingress-nginx-mc-controller -o jsonpath='{.status.loadBalancer.ingress[*].hostname}'`; \
+                fi; \
+                kubectl apply -f - <<EOF
+                apiVersion: v1
+                kind: Secret
+                metadata:
+                  name: multicluster-ingress-values
+                  namespace: default
+                  labels:
+                    helm.sh/chart: multicluster-ingress-reader-v2024.7.10
+                    app.kubernetes.io/name: multicluster-ingress-reader
+                    app.kubernetes.io/instance: my-multicluster-ingress-reader
+                    app.kubernetes.io/version: "v0.0.2"
+                    app.kubernetes.io/managed-by: Helm
+                stringData:
+                  mc.yaml: |
+                    apiserver:
+                      externalHostname: $x
+                      externalPort: 9443
+                  proxy.yaml: |
+                    proxyServer:
+                      entrypointAddress: $x
+                  gateway.yaml: |
+                    clusterProxy:
+                      proxyServerHost: $x
+                EOF
+          resources:
+            {}
+      restartPolicy: Never

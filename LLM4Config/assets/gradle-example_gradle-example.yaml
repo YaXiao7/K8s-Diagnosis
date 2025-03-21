@@ -1,0 +1,110 @@
+---
+# Source: gradle-example/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-gradle-example
+  labels:
+    helm.sh/chart: gradle-example-1.1.3
+    app.kubernetes.io/name: gradle-example
+    app.kubernetes.io/instance: my-gradle-example
+    app.kubernetes.io/version: "1.1.3"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: gradle-example/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-gradle-example
+  labels:
+    helm.sh/chart: gradle-example-1.1.3
+    app.kubernetes.io/name: gradle-example
+    app.kubernetes.io/instance: my-gradle-example
+    app.kubernetes.io/version: "1.1.3"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: NodePort
+  ports:
+    - port: 8080
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: gradle-example
+    app.kubernetes.io/instance: my-gradle-example
+---
+# Source: gradle-example/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-gradle-example
+  labels:
+    helm.sh/chart: gradle-example-1.1.3
+    app.kubernetes.io/name: gradle-example
+    app.kubernetes.io/instance: my-gradle-example
+    app.kubernetes.io/version: "1.1.3"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: gradle-example
+      app.kubernetes.io/instance: my-gradle-example
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: gradle-example
+        app.kubernetes.io/instance: my-gradle-example
+    spec:
+      serviceAccountName: my-gradle-example
+      securityContext:
+        {}
+      containers:
+        - name: gradle-example
+          securityContext:
+            {}
+          image: "quay.io/srcmaxim/gradle-example-app:1.1.3"
+          imagePullPolicy: Always
+          env:
+            - name: SERVER_ADDRESS
+              value: 0.0.0.0 # For http probes
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /cat
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /cat
+              port: http
+          resources:
+            limits:
+              cpu: 100m
+              memory: 250Mi
+            requests:
+              cpu: 100m
+              memory: 250Mi
+---
+# Source: gradle-example/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-gradle-example-test-connection"
+  labels:
+    helm.sh/chart: gradle-example-1.1.3
+    app.kubernetes.io/name: gradle-example
+    app.kubernetes.io/instance: my-gradle-example
+    app.kubernetes.io/version: "1.1.3"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-gradle-example:8080/cat']
+  restartPolicy: Never

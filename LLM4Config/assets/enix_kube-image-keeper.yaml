@@ -1,0 +1,600 @@
+---
+# Source: kube-image-keeper/templates/garbage-collection-service-account.yaml
+kind: ServiceAccount
+apiVersion: v1
+metadata:
+  name: my-kube-image-keeper-registry-restart
+---
+# Source: kube-image-keeper/templates/registry-serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-kube-image-keeper-registry
+  labels:
+    helm.sh/chart: kube-image-keeper-1.9.3
+    app.kubernetes.io/name: kube-image-keeper
+    app.kubernetes.io/instance: my-kube-image-keeper
+    app.kubernetes.io/version: "1.9.3"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: kube-image-keeper/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-kube-image-keeper-controllers
+  labels:
+    helm.sh/chart: kube-image-keeper-1.9.3
+    app.kubernetes.io/name: kube-image-keeper
+    app.kubernetes.io/instance: my-kube-image-keeper
+    app.kubernetes.io/version: "1.9.3"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: kube-image-keeper/templates/clusterrole.yaml
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-kube-image-keeper-controllers
+rules:
+  - apiGroups:
+    - ""
+    resources:
+    - events
+    verbs:
+    - create
+    - patch
+  - apiGroups:
+    - ""
+    resources:
+    - pods
+    verbs:
+    - create
+    - delete
+    - get
+    - list
+    - patch
+    - update
+    - watch
+  - apiGroups:
+    - ""
+    resources:
+    - serviceaccounts
+    verbs:
+    - list
+    - watch
+  - apiGroups:
+    - ""
+    resources:
+    - pods/finalizers
+    verbs:
+    - update
+  - apiGroups:
+    - ""
+    resources:
+    - pods/status
+    verbs:
+    - get
+    - patch
+    - update
+  - apiGroups:
+    - ""
+    resources:
+    - secrets
+    verbs:
+    - get
+    - list
+    - watch
+  - apiGroups:
+    - kuik.enix.io
+    resources:
+    - cachedimages
+    verbs:
+    - create
+    - delete
+    - get
+    - list
+    - patch
+    - update
+    - watch
+  - apiGroups:
+    - kuik.enix.io
+    resources:
+    - cachedimages/finalizers
+    verbs:
+    - update
+  - apiGroups:
+    - kuik.enix.io
+    resources:
+    - cachedimages/status
+    verbs:
+    - get
+    - patch
+    - update
+  - apiGroups:
+    - kuik.enix.io
+    resources:
+    - repositories
+    verbs:
+    - create
+    - delete
+    - get
+    - list
+    - patch
+    - update
+    - watch
+  - apiGroups:
+    - kuik.enix.io
+    resources:
+    - repositories/finalizers
+    verbs:
+    - update
+  - apiGroups:
+    - kuik.enix.io
+    resources:
+    - repositories/status
+    verbs:
+    - get
+    - patch
+    - update
+---
+# Source: kube-image-keeper/templates/clusterrole.yaml
+# permissions to do leader election.
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-kube-image-keeper-controllers-leader-election
+rules:
+  - apiGroups:
+    - ""
+    resources:
+    - configmaps
+    verbs:
+    - get
+    - list
+    - watch
+    - create
+    - update
+    - patch
+    - delete
+  - apiGroups:
+    - coordination.k8s.io
+    resources:
+    - leases
+    verbs:
+    - get
+    - list
+    - watch
+    - create
+    - update
+    - patch
+    - delete
+  - apiGroups:
+    - ""
+    resources:
+    - events
+    verbs:
+    - create
+    - patch
+---
+# Source: kube-image-keeper/templates/clusterrolebinding.yaml
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-kube-image-keeper-controllers
+roleRef:
+  kind: ClusterRole
+  name: my-kube-image-keeper-controllers
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+  - kind: ServiceAccount
+    name: my-kube-image-keeper-controllers
+    namespace: default
+---
+# Source: kube-image-keeper/templates/clusterrolebinding.yaml
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-kube-image-keeper-controllers-leader-election
+roleRef:
+  kind: ClusterRole
+  name: my-kube-image-keeper-controllers-leader-election
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+  - kind: ServiceAccount
+    name: my-kube-image-keeper-controllers
+    namespace: default
+---
+# Source: kube-image-keeper/templates/garbage-collection-role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: my-kube-image-keeper-registry-restart
+rules:
+  - apiGroups: ["apps", "extensions"]
+    resources: ["statefulsets", "deployments"]
+    resourceNames: ["my-kube-image-keeper-registry"]
+    verbs: ["get", "patch", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["list"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+---
+# Source: kube-image-keeper/templates/garbage-collection-role-binding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: my-kube-image-keeper-registry-restart
+  namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: my-kube-image-keeper-registry-restart
+subjects:
+  - kind: ServiceAccount
+    name: my-kube-image-keeper-registry-restart
+    namespace: default
+---
+# Source: kube-image-keeper/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-kube-image-keeper-registry
+  labels:
+    helm.sh/chart: kube-image-keeper-1.9.3
+    app.kubernetes.io/name: kube-image-keeper
+    app.kubernetes.io/instance: my-kube-image-keeper
+    app.kubernetes.io/version: "1.9.3"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: registry
+spec:
+  type: ClusterIP
+  ports:
+    - name: docker-registry
+      port: 5000
+      targetPort: 5000
+    - name: registry-metrics
+      port: 5001
+      targetPort: 5001
+  selector:
+    app.kubernetes.io/name: kube-image-keeper
+    app.kubernetes.io/instance: my-kube-image-keeper
+    app.kubernetes.io/component: registry
+---
+# Source: kube-image-keeper/templates/webhook-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-kube-image-keeper-webhook
+spec:
+  ports:
+  - port: 443
+    targetPort: 9443
+  selector:
+    app.kubernetes.io/name: kube-image-keeper
+    app.kubernetes.io/instance: my-kube-image-keeper
+    app.kubernetes.io/component: controllers
+    control-plane: controller-manager
+---
+# Source: kube-image-keeper/templates/proxy-daemonset.yaml
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: my-kube-image-keeper-proxy
+  labels:
+    helm.sh/chart: kube-image-keeper-1.9.3
+    app.kubernetes.io/name: kube-image-keeper
+    app.kubernetes.io/instance: my-kube-image-keeper
+    app.kubernetes.io/version: "1.9.3"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: proxy
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kube-image-keeper
+      app.kubernetes.io/instance: my-kube-image-keeper
+      app.kubernetes.io/component: proxy
+      control-plane: controller-manager
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kube-image-keeper
+        app.kubernetes.io/instance: my-kube-image-keeper
+        app.kubernetes.io/component: proxy
+        control-plane: controller-manager
+    spec:
+      serviceAccountName: my-kube-image-keeper-controllers
+      priorityClassName: "system-node-critical"
+      securityContext:
+        {}
+      containers:
+        - name: cache-proxy
+          securityContext:
+            {}
+          image: "ghcr.io/enix/kube-image-keeper:1.9.3"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 7439
+              hostIP: 127.0.0.1
+              hostPort: 7439
+              protocol: TCP
+            - containerPort: 8080
+              name: metrics
+              protocol: TCP
+          command:
+            - registry-proxy
+            - -v=1
+            - -registry-endpoint=my-kube-image-keeper-registry:5000
+            - -bind-address=:7439
+          env:
+            - name: GIN_MODE
+              value: release
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 7439
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 7439
+          resources:
+            limits:
+              cpu: "1"
+              memory: 512Mi
+            requests:
+              cpu: 50m
+              memory: 50Mi
+      tolerations:
+        - effect: NoSchedule
+          operator: Exists
+        - key: CriticalAddonsOnly
+          operator: Exists
+        - effect: NoExecute
+          operator: Exists
+        - effect: NoExecute
+          key: node.kubernetes.io/not-ready
+          operator: Exists
+        - effect: NoExecute
+          key: node.kubernetes.io/unreachable
+          operator: Exists
+        - effect: NoSchedule
+          key: node.kubernetes.io/disk-pressure
+          operator: Exists
+        - effect: NoSchedule
+          key: node.kubernetes.io/memory-pressure
+          operator: Exists
+        - effect: NoSchedule
+          key: node.kubernetes.io/pid-pressure
+          operator: Exists
+        - effect: NoSchedule
+          key: node.kubernetes.io/unschedulable
+          operator: Exists
+        - effect: NoSchedule
+          key: node.kubernetes.io/network-unavailable
+          operator: Exists
+---
+# Source: kube-image-keeper/templates/controller-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-kube-image-keeper-controllers
+  labels:
+    helm.sh/chart: kube-image-keeper-1.9.3
+    app.kubernetes.io/name: kube-image-keeper
+    app.kubernetes.io/instance: my-kube-image-keeper
+    app.kubernetes.io/version: "1.9.3"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: controllers
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kube-image-keeper
+      app.kubernetes.io/instance: my-kube-image-keeper
+      app.kubernetes.io/component: controllers
+      control-plane: controller-manager
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kube-image-keeper
+        app.kubernetes.io/instance: my-kube-image-keeper
+        app.kubernetes.io/component: controllers
+        control-plane: controller-manager
+    spec:
+      serviceAccountName: my-kube-image-keeper-controllers
+      securityContext:
+        {}
+      containers:
+        - name: cache-manager
+          securityContext:
+            {}
+          image: "ghcr.io/enix/kube-image-keeper:1.9.3"
+          imagePullPolicy: IfNotPresent
+          command:
+            - manager
+            - -leader-elect
+            - -expiry-delay=30
+            - -proxy-port=7439
+            - -registry-endpoint=my-kube-image-keeper-registry:5000
+            - -max-concurrent-cached-image-reconciles=3
+            - -zap-log-level=INFO
+            - -ignore-pull-policy-always=true
+            - -arch=amd64
+          env:
+            - name: no_proxy
+              value: my-kube-image-keeper-registry
+          ports:
+            - containerPort: 9443
+              name: webhook-server
+              protocol: TCP
+            - containerPort: 8080
+              name: metrics
+              protocol: TCP
+          volumeMounts:
+            - mountPath: /tmp/k8s-webhook-server/serving-certs
+              name: webhook-cert
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+          resources:
+            limits:
+              cpu: "1"
+              memory: 512Mi
+            requests:
+              cpu: 50m
+              memory: 50Mi
+      volumes:
+      - name: webhook-cert
+        secret:
+          defaultMode: 420
+          secretName: my-kube-image-keeper-webhook-server-cert
+---
+# Source: kube-image-keeper/templates/registry-statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-kube-image-keeper-registry
+  labels:
+    helm.sh/chart: kube-image-keeper-1.9.3
+    app.kubernetes.io/name: kube-image-keeper
+    app.kubernetes.io/instance: my-kube-image-keeper
+    app.kubernetes.io/version: "1.9.3"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: registry
+spec:
+  replicas: 1
+  serviceName: my-kube-image-keeper-registry
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kube-image-keeper
+      app.kubernetes.io/instance: my-kube-image-keeper
+      app.kubernetes.io/component: registry
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kube-image-keeper
+        app.kubernetes.io/instance: my-kube-image-keeper
+        app.kubernetes.io/component: registry
+    spec:
+      serviceAccountName: my-kube-image-keeper-registry
+      securityContext:
+        {}
+      containers:
+        - name: registry
+          securityContext:
+            {}
+          image: "registry:2.8"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5000
+              protocol: TCP
+          resources:
+            limits:
+              cpu: "1"
+              memory: 1Gi
+            requests:
+              cpu: 50m
+              memory: 256Mi
+          env:
+            - name: REGISTRY_STORAGE_DELETE_ENABLED
+              value: "true"
+          readinessProbe:
+            httpGet:
+              path: /v2/
+              port: 5000
+          livenessProbe:
+            httpGet:
+              path: /v2/
+              port: 5000
+---
+# Source: kube-image-keeper/templates/webhook-certificate.yaml
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: my-kube-image-keeper-serving-cert
+spec:
+  dnsNames:
+  - my-kube-image-keeper-webhook.default.svc
+  - my-kube-image-keeper-webhook.default.svc.cluster.local
+  secretName: my-kube-image-keeper-webhook-server-cert
+  issuerRef:
+    kind: Issuer
+    name: my-kube-image-keeper-selfsigned-issuer
+---
+# Source: kube-image-keeper/templates/webhook-certificate.yaml
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: my-kube-image-keeper-selfsigned-issuer
+spec:
+  selfSigned: {}
+---
+# Source: kube-image-keeper/templates/mutatingwebhookconfiguration.yaml
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  annotations:
+    cert-manager.io/inject-ca-from: default/my-kube-image-keeper-serving-cert
+  name: my-kube-image-keeper-mutating-webhook
+webhooks:
+- admissionReviewVersions:
+  - v1
+  - v1beta1
+  clientConfig:
+    service:
+      name: my-kube-image-keeper-webhook
+      namespace: default
+      path: /mutate-core-v1-pod
+  failurePolicy: Ignore
+  reinvocationPolicy: IfNeeded
+  namespaceSelector:
+    matchExpressions:
+    - key: kubernetes.io/metadata.name
+      operator: NotIn
+      values:
+      - kube-system
+      - default
+  objectSelector:
+    matchExpressions:
+    - key: kube-image-keeper.enix.io/image-caching-policy
+      operator: NotIn
+      values:
+      - ignore
+  name: mpod.kb.io
+  rules:
+  - apiGroups:
+    - ""
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - pods
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: my-kube-image-keeper-webhook
+      namespace: default
+      path: /mutate-kuik-enix-io-v1alpha1-cachedimage
+  failurePolicy: Fail
+  name: mcachedimage.kb.io
+  rules:
+  - apiGroups:
+    - kuik.enix.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - cachedimages
+  sideEffects: None

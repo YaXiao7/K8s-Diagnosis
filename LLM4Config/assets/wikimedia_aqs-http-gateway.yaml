@@ -1,0 +1,207 @@
+---
+# Source: aqs-http-gateway/templates/networkpolicy.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: aqs-http-gateway-my-aqs-http-gateway  
+  labels:
+    app: aqs-http-gateway
+    chart: aqs-http-gateway-0.0.7
+    release: my-aqs-http-gateway
+    heritage: Helm
+spec:
+  podSelector:    
+    matchLabels:
+      app: aqs-http-gateway
+      release: my-aqs-http-gateway
+  policyTypes:
+    - Egress
+    - Ingress
+  ingress:
+    - ports:
+      - port: 8080
+        protocol: TCP      
+  egress:
+---
+# Source: aqs-http-gateway/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: aqs-http-gateway-my-aqs-http-gateway-secret-config  
+  labels:
+    app: aqs-http-gateway
+    chart: aqs-http-gateway-0.0.7
+    release: my-aqs-http-gateway
+    heritage: Helm
+type: Opaque
+data:
+  cassandra_pass: "YmFy"
+  druid_pass: "YmFy"
+---
+# Source: aqs-http-gateway/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aqs-http-gateway-base-config  
+  labels:
+    app: aqs-http-gateway
+    chart: aqs-http-gateway-0.0.7
+    release: my-aqs-http-gateway
+    heritage: Helm
+data:
+  config.yaml: |-     
+    service_name: 
+    
+    listen_address: 0.0.0.0
+    listen_port: 8080
+    
+    # Log level, one of (in increasing severity): debug, info, warning, error and fatal
+    log_level: info
+    
+    druid:
+      host: http://localhost
+      port: 8082
+      datasource: my_datasource
+      tls:
+        ca: /etc/ssl/certs/wmf-ca-certificates.crt
+    
+    cassandra:
+      port: 9042
+      consistency: one
+      hosts:
+      config_table: aqs.config
+      local_dc: local
+      authentication:
+        username: foo
+        password: bar
+      tls:
+        ca: /etc/ssl/certs/wmf-ca-certificates.crt
+---
+# Source: aqs-http-gateway/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: aqs-http-gateway-my-aqs-http-gateway  
+  labels:
+    app: aqs-http-gateway
+    chart: aqs-http-gateway-0.0.7
+    release: my-aqs-http-gateway
+    heritage: Helm
+spec:
+  type: NodePort
+  selector:
+    app: aqs-http-gateway
+    release: my-aqs-http-gateway
+  ports:
+    - name: http
+      targetPort: 8080
+      port: 8080
+---
+# Source: aqs-http-gateway/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aqs-http-gateway-my-aqs-http-gateway  
+  labels:
+    app: aqs-http-gateway
+    chart: aqs-http-gateway-0.0.7
+    release: my-aqs-http-gateway
+    heritage: Helm
+spec:
+  selector:    
+    matchLabels:
+      app: aqs-http-gateway
+      release: my-aqs-http-gateway
+  replicas: 1
+  template:
+    metadata:
+      labels:        
+        app: aqs-http-gateway
+        release: my-aqs-http-gateway
+        routed_via: my-aqs-http-gateway
+      annotations:
+        checksum/secrets: aea9c45d88890d16b995933b66686f0cd00177cce88d036259b49c85b6f74a8a
+        checksum/config: cd5c76bd35e351b039267617457a50e9d9aeb7170c55c6eff976a3609d0f2a54        
+    spec:
+      containers:        
+        # The main application container
+        - name: aqs-http-gateway-my-aqs-http-gateway
+          image: "docker-registry.wikimedia.org/:latest"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          livenessProbe:
+            tcpSocket:
+              port: 8080
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+          env:
+            - name: SERVICE_IDENTIFIER
+              value: aqs-http-gateway-my-aqs-http-gateway
+            - name: CASSANDRA_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: aqs-http-gateway-my-aqs-http-gateway-secret-config
+                  key: cassandra_pass
+            - name: DRUID_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: aqs-http-gateway-my-aqs-http-gateway-secret-config
+                  key: druid_pass
+          
+          resources:
+            requests:
+              cpu: 200m
+              memory: 200Mi
+            limits:
+              cpu: 1
+              memory: 400Mi
+          
+          volumeMounts:
+            - mountPath: /etc/aqs-http-gateway/
+              name: config-volume  
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+               drop:
+               - ALL
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault        
+      volumes:        
+        
+        # TLS configurations
+        # Additional app-specific volumes.
+        - configMap:
+            name: aqs-http-gateway-base-config
+          name: config-volume
+---
+# Source: aqs-http-gateway/templates/ingress.yaml
+---
+---
+# Source: aqs-http-gateway/templates/tests/test-service-checker.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: 'aqs-http-gateway-my-aqs-http-gateway-service-checker'
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  containers:
+  - name: 'aqs-http-gateway-my-aqs-http-gateway-service-checker'
+    image: "docker-registry.wikimedia.org/service-checker"
+    imagePullPolicy: IfNotPresent
+    args: ["-t", "5", '$(AQS_HTTP_GATEWAY_MY_AQS_HTTP_GATEWAY_SERVICE_HOST)', 'http://aqs-http-gateway-my-aqs-http-gateway:8080']    
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+         drop:
+         - ALL
+      runAsNonRoot: true
+      seccompProfile:
+        type: RuntimeDefault
+  dnsPolicy: ClusterFirst
+  restartPolicy: Never

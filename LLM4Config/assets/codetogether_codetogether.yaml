@@ -1,0 +1,238 @@
+---
+# Source: codetogether/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: codetogether
+  labels:
+    helm.sh/chart: codetogether-1.4.21
+    app.kubernetes.io/name: codetogether
+    app.kubernetes.io/instance: my-codetogether
+    app.kubernetes.io/version: "2024.2.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: codetogether/templates/secret-coturn.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-codetogether-coturn
+  labels:
+    helm.sh/chart: codetogether-1.4.21
+    app.kubernetes.io/name: codetogether
+    app.kubernetes.io/instance: my-codetogether
+    app.kubernetes.io/version: "2024.2.0"
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  secret: "bXktc2VjcmV0"
+---
+# Source: codetogether/templates/secret-license.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-codetogether-license
+  labels:
+    helm.sh/chart: codetogether-1.4.21
+    app.kubernetes.io/name: codetogether
+    app.kubernetes.io/instance: my-codetogether
+    app.kubernetes.io/version: "2024.2.0"
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  licensee: "RXhhbXBsZQ=="
+  max_connections: "MA=="
+  expiration: "MTk3MC8wMS8wMQ=="
+  signature: "MTIzNDU2Nzg5YWJjZGVm"
+---
+# Source: codetogether/templates/secret-ssl.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-codetogether-ssl
+  labels:
+    helm.sh/chart: codetogether-1.4.21
+    app.kubernetes.io/name: codetogether
+    app.kubernetes.io/instance: my-codetogether
+    app.kubernetes.io/version: "2024.2.0"
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+---
+# Source: codetogether/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-codetogether
+  labels:
+    helm.sh/chart: codetogether-1.4.21
+    app.kubernetes.io/name: codetogether
+    app.kubernetes.io/instance: my-codetogether
+    app.kubernetes.io/version: "2024.2.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 443
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: codetogether
+    app.kubernetes.io/instance: my-codetogether
+---
+# Source: codetogether/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-codetogether
+  labels:
+    helm.sh/chart: codetogether-1.4.21
+    app.kubernetes.io/name: codetogether
+    app.kubernetes.io/instance: my-codetogether
+    app.kubernetes.io/version: "2024.2.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: codetogether
+      app.kubernetes.io/instance: my-codetogether
+  template:
+    metadata:
+      annotations:
+        checksum/coturn: 2960ca77e6005f2c6f0dfb63233289fff6331c418845ada964d8dc8e36bd38f6
+        checksum/dashboard: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+        checksum/license: ce09fd211109f64a29842fced8421b27e681c8847bc1ce958696310c54d9bb75
+        checksum/sso: 01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b
+        checksum/ssl: c9632d8cd9d3caf34bf1d1858b8e192e64ebf02bbf946c0aa64092b4437f5a3f
+      labels:
+        app.kubernetes.io/name: codetogether
+        app.kubernetes.io/instance: my-codetogether
+    spec:
+      serviceAccountName: codetogether
+      containers:
+        - name: codetogether
+          securityContext:
+            {}
+          image: "codetogether/codetogether:latest"
+          imagePullPolicy: Always
+
+          env:
+          #
+          # Set CodeTogether runtime configuration
+          #         
+          - name: CT_SERVER_URL
+            value: "https://codetogether.local"
+          - name: CT_TRUST_ALL_CERTS
+            value: "true"
+          - name: CT_LOCATOR
+            value: "none"
+          - name: CT_PROMETHEUS_ENABLED
+            value: "false"
+          - name: CT_AV_ENABLED
+            value: "false"
+
+          - name: CT_LICENSEE
+            valueFrom:
+              secretKeyRef:
+                name: my-codetogether-license
+                key: licensee
+          - name: CT_MAXCONNECTIONS
+            valueFrom:
+              secretKeyRef:
+                name: my-codetogether-license
+                key: max_connections
+          - name: CT_EXPIRATION
+            valueFrom:
+              secretKeyRef:
+                name: my-codetogether-license
+                key: expiration
+          - name: CT_SIGNATURE
+            valueFrom:
+              secretKeyRef:
+                name: my-codetogether-license
+                key: signature
+          - name: CT_AUTO_RESTART_CRON_PATTERN
+            value: "* 11 * * 0"
+          #
+          # Set SSO configuration
+          #
+
+          # 
+          # Set container configuration
+          #
+          ports:
+            - name: http
+              containerPort: 1080
+              protocol: TCP
+          
+          livenessProbe:
+            initialDelaySeconds: 60
+            periodSeconds: 60
+            timeoutSeconds: 15
+            successThreshold: 1
+            failureThreshold: 1
+            httpGet:
+              path: /ct-health/
+              port: http
+          
+          readinessProbe:
+            initialDelaySeconds: 60
+            periodSeconds: 60
+            timeoutSeconds: 15
+            successThreshold: 1
+            failureThreshold: 1
+            httpGet:
+              path: /ct-health/
+              port: http
+
+          resources:
+            null
+---
+# Source: codetogether/templates/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: my-codetogether
+  labels:
+    helm.sh/chart: codetogether-1.4.21
+    app.kubernetes.io/name: codetogether
+    app.kubernetes.io/instance: my-codetogether
+    app.kubernetes.io/version: "2024.2.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  tls:
+    - hosts:
+        - "codetogether.local"
+      secretName: codetogether-tls
+  rules:
+    - host: "codetogether.local"
+      http:
+        paths:
+          - path: /
+            pathType: "Prefix"
+            backend:
+              service:
+                name: my-codetogether
+                port:
+                  number: 443
+---
+# Source: codetogether/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-codetogether-test-connection"
+  labels:
+    helm.sh/chart: codetogether-1.4.21
+    app.kubernetes.io/name: codetogether
+    app.kubernetes.io/instance: my-codetogether
+    app.kubernetes.io/version: "2024.2.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-codetogether:443']
+  restartPolicy: Never

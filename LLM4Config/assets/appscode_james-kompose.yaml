@@ -1,0 +1,347 @@
+---
+# Source: james-kompose/templates/james/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-james-kompose
+  labels:
+    helm.sh/chart: james-kompose-0.1.0
+    app.kubernetes.io/name: james-kompose
+    app.kubernetes.io/instance: my-james-kompose
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+automountServiceAccountToken: true
+---
+# Source: james-kompose/templates/cassandra/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-james-kompose-cassandra
+  labels:
+    app.kubernetes.io/component: cassandra
+    helm.sh/chart: james-kompose-0.1.0
+    app.kubernetes.io/name: james-kompose
+    app.kubernetes.io/instance: my-james-kompose
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - name: "9042"
+      port: 9042
+      targetPort: 9042
+  selector:
+    app.kubernetes.io/component: cassandra
+    app.kubernetes.io/name: james-kompose
+    app.kubernetes.io/instance: my-james-kompose
+---
+# Source: james-kompose/templates/james/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-james-kompose
+  labels:
+    app.kubernetes.io/component: james
+    helm.sh/chart: james-kompose-0.1.0
+    app.kubernetes.io/name: james-kompose
+    app.kubernetes.io/instance: my-james-kompose
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - name: "80"
+      port: 80
+      targetPort: 80
+    - name: "25"
+      port: 25
+      targetPort: 25
+    - name: "110"
+      port: 110
+      targetPort: 110
+    - name: "143"
+      port: 143
+      targetPort: 143
+    - name: "465"
+      port: 465
+      targetPort: 465
+    - name: "587"
+      port: 587
+      targetPort: 587
+    - name: "993"
+      port: 993
+      targetPort: 993
+    - name: "8000"
+      port: 8000
+      targetPort: 8000
+  selector:
+    app.kubernetes.io/component: james
+    app.kubernetes.io/name: james-kompose
+    app.kubernetes.io/instance: my-james-kompose
+---
+# Source: james-kompose/templates/opensearch/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-james-kompose-opensearch
+  labels:
+    app.kubernetes.io/component: opensearch
+    helm.sh/chart: james-kompose-0.1.0
+    app.kubernetes.io/name: james-kompose
+    app.kubernetes.io/instance: my-james-kompose
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - name: "9200"
+      port: 9200
+      targetPort: 9200
+    - name: "9300"
+      port: 9300
+      targetPort: 9300
+  selector:
+    app.kubernetes.io/component: opensearch
+    app.kubernetes.io/name: james-kompose
+    app.kubernetes.io/instance: my-james-kompose
+---
+# Source: james-kompose/templates/rabbitmq/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-james-kompose-rabbitmq
+  labels:
+    app.kubernetes.io/component: rabbitmq
+    helm.sh/chart: james-kompose-0.1.0
+    app.kubernetes.io/name: james-kompose
+    app.kubernetes.io/instance: my-james-kompose
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - name: "5672"
+      port: 5672
+      targetPort: 5672
+    - name: "15672"
+      port: 15672
+      targetPort: 15672
+  selector:
+    app.kubernetes.io/component: rabbitmq
+    app.kubernetes.io/name: james-kompose
+    app.kubernetes.io/instance: my-james-kompose
+---
+# Source: james-kompose/templates/cassandra/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-james-kompose-cassandra
+  labels:
+    app.kubernetes.io/component: cassandra
+    helm.sh/chart: james-kompose-0.1.0
+    app.kubernetes.io/name: james-kompose
+    app.kubernetes.io/instance: my-james-kompose
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: cassandra
+      app.kubernetes.io/name: james-kompose
+      app.kubernetes.io/instance: my-james-kompose
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: cassandra
+        helm.sh/chart: james-kompose-0.1.0
+        app.kubernetes.io/name: james-kompose
+        app.kubernetes.io/instance: my-james-kompose
+        app.kubernetes.io/version: "1.16.0"
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      securityContext:
+        {}
+      containers:
+        - name: cassandra
+          env:
+            - name: JVM_OPTS
+              value: -Dcassandra.skip_wait_for_gossip_to_settle=0 -Dcassandra.initial_token=1
+          securityContext:
+            {}
+          image: "cassandra:4.1.3"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 9042
+              protocol: TCP
+          livenessProbe:
+            exec:
+              command:
+              - cqlsh
+              - -e
+              - describe keyspaces
+            failureThreshold: 5
+            periodSeconds: 3
+            timeoutSeconds: 20
+          resources:
+            {}
+---
+# Source: james-kompose/templates/james/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-james-kompose
+  labels:
+    app.kubernetes.io/component: james
+    helm.sh/chart: james-kompose-0.1.0
+    app.kubernetes.io/name: james-kompose
+    app.kubernetes.io/instance: my-james-kompose
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: james
+      app.kubernetes.io/name: james-kompose
+      app.kubernetes.io/instance: my-james-kompose
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: james
+        helm.sh/chart: james-kompose-0.1.0
+        app.kubernetes.io/name: james-kompose
+        app.kubernetes.io/instance: my-james-kompose
+        app.kubernetes.io/version: "1.16.0"
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      serviceAccountName: my-james-kompose
+      securityContext:
+        {}
+      containers:
+        - name: james-kompose
+          args:
+            - --generate-keystore
+          securityContext:
+            {}
+          image: "ghcr.io/appscode/inbox-server:MailetGroup"
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+              protocol: TCP
+            - containerPort: 25
+              protocol: TCP
+            - containerPort: 110
+              protocol: TCP
+            - containerPort: 143
+              protocol: TCP
+            - containerPort: 465
+              protocol: TCP
+            - containerPort: 587
+              protocol: TCP
+            - containerPort: 993
+              protocol: TCP
+            - containerPort: 8000
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+            {}
+---
+# Source: james-kompose/templates/opensearch/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-james-kompose-opensearch
+  labels:
+    app.kubernetes.io/component: opensearch
+    helm.sh/chart: james-kompose-0.1.0
+    app.kubernetes.io/name: james-kompose
+    app.kubernetes.io/instance: my-james-kompose
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: opensearch
+      app.kubernetes.io/name: james-kompose
+      app.kubernetes.io/instance: my-james-kompose
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: opensearch
+        helm.sh/chart: james-kompose-0.1.0
+        app.kubernetes.io/name: james-kompose
+        app.kubernetes.io/instance: my-james-kompose
+        app.kubernetes.io/version: "1.16.0"
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      securityContext:
+        {}
+      containers:
+        - name: opensearch
+          env:
+            - name: DISABLE_INSTALL_DEMO_CONFIG
+              value: "true"
+            - name: DISABLE_SECURITY_PLUGIN
+              value: "true"
+            - name: discovery.type
+              value: single-node
+          securityContext:
+            {}
+          image: "opensearchproject/opensearch:2.1.0"
+          imagePullPolicy: IfNotPresent
+          resources:
+            {}
+---
+# Source: james-kompose/templates/rabbitmq/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-james-kompose-rabbitmq
+  labels:
+    app.kubernetes.io/component: rabbitmq
+    helm.sh/chart: james-kompose-0.1.0
+    app.kubernetes.io/name: james-kompose
+    app.kubernetes.io/instance: my-james-kompose
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: rabbitmq
+      app.kubernetes.io/name: james-kompose
+      app.kubernetes.io/instance: my-james-kompose
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: rabbitmq
+        helm.sh/chart: james-kompose-0.1.0
+        app.kubernetes.io/name: james-kompose
+        app.kubernetes.io/instance: my-james-kompose
+        app.kubernetes.io/version: "1.16.0"
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      securityContext:
+        {}
+      containers:
+        - name: rabbitmq
+          securityContext:
+            {}
+          image: "rabbitmq:3.12.1-management"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5672
+              protocol: TCP
+            - containerPort: 15672
+              protocol: TCP
+          resources:
+            {}

@@ -1,0 +1,160 @@
+---
+# Source: documentserver/templates/secrets/jwt.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: jwt
+type: Opaque
+#immutable: true
+stringData:
+  JWT_ENABLED: "true"
+  
+  JWT_SECRET: "MYSECRET"
+---
+# Source: documentserver/templates/secrets/license.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: license
+type: Opaque
+data:
+  {}
+---
+# Source: documentserver/templates/configmaps/documentserver.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: documentserver
+data:
+  DB_USER: postgres
+  DB_HOST: postgresql
+  DB_PORT: "5432"
+  REDIST_SERVER_HOST: redis-master
+  AMQP_HOST: rabbitmq
+  AMQP_USER: user
+  AMQP_PROTO: amqp
+  METRICS_HOST: statsd-exporter-prometheus-statsd-exporter
+  METRICS_ENABLED: "false"
+---
+# Source: documentserver/templates/services/docservice.yaml
+kind: Service
+apiVersion: v1
+metadata:
+  name: docservice
+spec:
+  selector:
+    app: docservice
+  ports:
+    - name: http
+      protocol: TCP
+      port: 8000
+      targetPort: 8000
+  type: ClusterIP
+---
+# Source: documentserver/templates/services/documentserver.yaml
+kind: Service
+apiVersion: v1
+metadata:
+  name: documentserver
+spec:
+  selector:
+    app: docservice
+  ports:
+    - name: http
+      protocol: TCP
+      port: 8888
+      targetPort: 8888
+  type: ClusterIP
+---
+# Source: documentserver/templates/deployments/converter.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: converter
+  labels:
+    app: converter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: converter
+  template:
+    metadata:
+      labels:
+        app: converter
+    spec:
+      volumes:
+        - name: ds-license
+          secret:
+            secretName: license
+      containers:
+        - name: converter
+          image: onlyoffice/docs-converter-de:7.0.0.132
+          resources:
+            {}
+          env:
+          envFrom:
+          - secretRef:
+              name: jwt
+          - configMapRef:
+              name: documentserver
+          volumeMounts:
+          - name: ds-license
+            mountPath: /var/www/onlyoffice/Data
+            readOnly: true
+---
+# Source: documentserver/templates/deployments/docservice.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: docservice
+  labels:
+    app: docservice
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: docservice
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: docservice
+    spec:
+      volumes:
+        - name: ds-license
+          secret:
+            secretName: license
+      containers:
+        - name: proxy
+          image: onlyoffice/docs-proxy-de:7.0.0.132
+          ports:
+            - containerPort: 8888
+          
+          
+          resources: 
+            {}
+          envFrom:
+          - configMapRef:
+              name: documentserver
+
+        - name: docservice
+          image: onlyoffice/docs-docservice-de:7.0.0.132
+          ports:
+            - containerPort: 8000
+          
+          
+          
+          resources: 
+            {}
+          env:
+          envFrom:
+          - secretRef:
+              name: jwt
+          - configMapRef:
+              name: documentserver
+          volumeMounts:
+          - name: ds-license
+            mountPath: /var/www/onlyoffice/Data
+            readOnly: true

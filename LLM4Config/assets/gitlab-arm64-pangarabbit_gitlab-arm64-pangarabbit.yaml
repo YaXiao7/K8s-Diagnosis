@@ -1,0 +1,117 @@
+---
+# Source: gitlab-arm64-pangarabbit/charts/onechart/templates/pvc.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: my-gitlab-arm64-pangarabbit-gitlab
+  namespace: default 
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: nfs-csi-default
+  resources:
+    requests:
+      storage: 10Gi
+---
+# Source: gitlab-arm64-pangarabbit/charts/onechart/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-gitlab-arm64-pangarabbit
+  namespace: default
+  labels:
+    helm.sh/chart: onechart-0.69.0
+    app.kubernetes.io/name: onechart
+    app.kubernetes.io/instance: my-gitlab-arm64-pangarabbit
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: onechart
+    app.kubernetes.io/instance: my-gitlab-arm64-pangarabbit
+---
+# Source: gitlab-arm64-pangarabbit/charts/onechart/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-gitlab-arm64-pangarabbit
+  namespace: default
+  labels:
+    helm.sh/chart: onechart-0.69.0
+    app.kubernetes.io/name: onechart
+    app.kubernetes.io/instance: my-gitlab-arm64-pangarabbit
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    kubectl.kubernetes.io/default-container: my-gitlab-arm64-pangarabbit
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: onechart
+      app.kubernetes.io/instance: my-gitlab-arm64-pangarabbit
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      annotations:
+        checksum/config: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+      labels:
+        app.kubernetes.io/name: onechart
+        app.kubernetes.io/instance: my-gitlab-arm64-pangarabbit
+    spec:
+      containers:
+      - image: zengxs/gitlab:17.0
+        imagePullPolicy: IfNotPresent
+        name: my-gitlab-arm64-pangarabbit
+        ports:
+        - containerPort: 80
+          name: http
+          protocol: TCP
+        resources:
+          limits:
+            cpu: 200m
+            memory: 200Mi
+          requests:
+            cpu: 200m
+            memory: 200Mi
+        securityContext: {}
+        volumeMounts:
+        - mountPath: /your path
+          name: gitlab
+      initContainers: null
+      securityContext:
+        fsGroup: 999
+      serviceAccountName: map[annotations:map[] automount:true create:true name:]
+      volumes:
+      - name: gitlab
+        persistentVolumeClaim:
+          claimName: my-gitlab-arm64-pangarabbit-gitlab
+---
+# Source: gitlab-arm64-pangarabbit/charts/onechart/templates/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: my-gitlab-arm64-pangarabbit
+  namespace: default
+  labels:
+    helm.sh/chart: onechart-0.69.0
+    app.kubernetes.io/name: onechart
+    app.kubernetes.io/instance: my-gitlab-arm64-pangarabbit
+    app.kubernetes.io/managed-by: Helm
+spec:
+  rules:
+    - host: 
+      http:
+        paths:
+          - path: "/"
+            pathType: "Prefix"
+            backend:
+              service:
+                name: my-gitlab-arm64-pangarabbit
+                port:
+                  number: 80

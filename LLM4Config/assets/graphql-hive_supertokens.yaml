@@ -1,0 +1,150 @@
+---
+# Source: supertokens/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-supertokens
+  labels:
+    helm.sh/chart: supertokens-1.0.0
+    app.kubernetes.io/name: supertokens
+    app.kubernetes.io/instance: my-supertokens
+    app.kubernetes.io/version: "3.14.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: supertokens/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-supertokens
+  labels: 
+    helm.sh/chart: supertokens-1.0.0
+    app.kubernetes.io/name: supertokens
+    app.kubernetes.io/instance: my-supertokens
+    app.kubernetes.io/version: "3.14.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3567
+      targetPort: 3567
+      
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: supertokens
+    app.kubernetes.io/instance: my-supertokens
+---
+# Source: supertokens/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-supertokens
+  labels:
+    helm.sh/chart: supertokens-1.0.0
+    app.kubernetes.io/name: supertokens
+    app.kubernetes.io/instance: my-supertokens
+    app.kubernetes.io/version: "3.14.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: supertokens
+      app.kubernetes.io/instance: my-supertokens
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: supertokens
+        app.kubernetes.io/instance: my-supertokens
+    spec:
+      serviceAccountName: my-supertokens  
+      containers:
+        - name: supertokens 
+          # securityContext:
+          #   readOnlyRootFilesystem: true
+          image: "supertokens/supertokens-postgresql:3.14"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: "POSTGRESQL_DATABASE_NAME"
+              value: "graphql-hive"
+            - name: "POSTGRESQL_PORT"
+              value: "5432"
+            - name: "POSTGRESQL_HOST"
+              value: "postgres-postgresql"
+            - name: "POSTGRESQL_USER"
+              value: "hive"
+            - name: "POSTGRESQL_PASSWORD"
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: postgres-password
+            - name: "POSTGRESQL_TABLE_SCHEMA"
+              value: 
+            - name: "POSTGRESQL_CONNECTION_POOL_SIZE"
+              value: 
+            - name: "SUPERTOKENS_PORT"
+              value: "3567"
+            - name: "ACCESS_TOKEN_VALIDITY"
+              value: "3600"
+            - name: "ACCESS_TOKEN_BLACKLISTING"
+              value: "true"
+            - name: "ACCESS_TOKEN_SIGNING_KEY_DYNAMIC"
+              value: "true"
+            - name: "ACCESS_TOKEN_SIGNING_KEY_UPDATE_INTERVAL"
+              value: "168"
+            - name: "REFRESH_TOKEN_VALIDITY"
+              value: "144000"
+            - name: "PASSWORD_RESET_TOKEN_LIFETIME"
+              value: "3.6e+06"
+            - name: "EMAIL_VERIFICATION_TOKEN_LIFETIME"
+              value: "8.64e+07"
+            - name: "PASSWORDLESS_MAX_CODE_INPUT_ATTEMPTS"
+              value: "5"
+            - name: "PASSWORDLESS_CODE_LIFETIME"
+              value: "900000"
+            - name: "BASE_PATH"
+              value: ""
+            - name: "DISABLE_TELEMETRY"
+              value: "false"
+            - name: "MAX_SERVER_POOL_SIZE"
+              value: "10"
+            - name: "API_KEYS"
+              valueFrom:
+                secretKeyRef:
+                  name: supertokens-secret
+                  key: supertokens-api-key
+          ports:
+            - name: http
+              containerPort: 3567
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /hello
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /hello
+              port: http
+---
+# Source: supertokens/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-supertokens-test-connection"
+  labels:
+    helm.sh/chart: supertokens-1.0.0
+    app.kubernetes.io/name: supertokens
+    app.kubernetes.io/instance: my-supertokens
+    app.kubernetes.io/version: "3.14.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-supertokens:3567/hello']
+      securityContext:
+        readOnlyRootFilesystem: true
+  restartPolicy: Never

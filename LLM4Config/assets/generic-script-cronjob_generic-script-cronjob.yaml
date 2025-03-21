@@ -1,0 +1,46 @@
+---
+# Source: generic-script-cronjob/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-generic-script-cronjob-cronjob-config
+data:
+  entrypoint.sh: |
+        #!/bin/sh
+        python /mnt/script.py
+  script.py: |
+        const axios = require('axios');
+        
+        axios.get('https://httpbin.org/get')
+         .then(response => {
+            console.log(response.data);
+          })
+         .catch(error => {
+            console.error(error);
+          });
+---
+# Source: generic-script-cronjob/templates/cronjob.yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: my-generic-script-cronjob-cronjob
+spec:
+  schedule: "*/5 * * * *"
+  concurrencyPolicy: Forbid
+  timezone: Asia/Kolkata
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: script-container
+            image: python:3.8
+            command: [/bin/bash /mnt/entrypoint.sh]
+            volumeMounts:
+            - name: 
+              mountPath: /mnt
+          restartPolicy: OnFailure
+          volumes:
+          - name: script-volume
+            configMap:
+              name: my-generic-script-cronjob-cronjob-cm

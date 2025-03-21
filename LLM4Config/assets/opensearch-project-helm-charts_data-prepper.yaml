@@ -1,0 +1,224 @@
+---
+# Source: data-prepper/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-data-prepper
+  labels:
+    helm.sh/chart: data-prepper-0.1.0
+    app.kubernetes.io/name: data-prepper
+    app.kubernetes.io/instance: my-data-prepper
+    app.kubernetes.io/version: "2.8.0"
+    app.kubernetes.io/managed-by: Helm
+automountServiceAccountToken: true
+---
+# Source: data-prepper/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-data-prepper-pipeline
+  labels:
+    helm.sh/chart: data-prepper-0.1.0
+    app.kubernetes.io/name: data-prepper
+    app.kubernetes.io/instance: my-data-prepper
+    app.kubernetes.io/version: "2.8.0"
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+stringData:
+  pipelines.yaml: |
+    simple-sample-pipeline:
+      buffer:
+        bounded_blocking:
+          batch_size: 256
+          buffer_size: 1024
+      delay: 5000
+      processor:
+      - string_converter:
+          upper_case: true
+      sink:
+      - stdout: null
+      source:
+        random: null
+      workers: 2
+---
+# Source: data-prepper/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-data-prepper-config
+  labels:
+    helm.sh/chart: data-prepper-0.1.0
+    app.kubernetes.io/name: data-prepper
+    app.kubernetes.io/instance: my-data-prepper
+    app.kubernetes.io/version: "2.8.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+  data-prepper-config.yaml: |
+    ssl: false
+    # circuit_breakers:
+    #   heap:
+    #     usage: 2gb
+    #     reset: 30s
+    #     check_interval: 5s
+    
+  log4j2-rolling.properties: |
+    #
+    # Copyright OpenSearch Contributors
+    # SPDX-License-Identifier: Apache-2.0
+    #
+    
+    status = error
+    dest = err
+    name = PropertiesConfig
+    
+    property.filename = log/data-prepper/data-prepper.log
+    
+    appender.console.type = Console
+    appender.console.name = STDOUT
+    appender.console.layout.type = PatternLayout
+    appender.console.layout.pattern = %d{ISO8601} [%t] %-5p %40C - %m%n
+    
+    appender.rolling.type = RollingFile
+    appender.rolling.name = RollingFile
+    appender.rolling.fileName = ${filename}
+    appender.rolling.filePattern = logs/data-prepper.log.%d{MM-dd-yy-HH}-%i.gz
+    appender.rolling.layout.type = PatternLayout
+    appender.rolling.layout.pattern = %d{ISO8601} [%t] %-5p %40C - %m%n
+    appender.rolling.policies.type = Policies
+    appender.rolling.policies.time.type = TimeBasedTriggeringPolicy
+    appender.rolling.policies.time.interval = 1
+    appender.rolling.policies.time.modulate = true
+    appender.rolling.policies.size.type = SizeBasedTriggeringPolicy
+    appender.rolling.policies.size.size=100MB
+    appender.rolling.strategy.type = DefaultRolloverStrategy
+    appender.rolling.strategy.max = 168
+    
+    rootLogger.level = warn
+    rootLogger.appenderRef.stdout.ref = STDOUT
+    rootLogger.appenderRef.file.ref = RollingFile
+    
+    logger.pipeline.name = org.opensearch.dataprepper.pipeline
+    logger.pipeline.level = info
+    
+    logger.parser.name = org.opensearch.dataprepper.parser
+    logger.parser.level = info
+    
+    logger.plugins.name = org.opensearch.dataprepper.plugins
+    logger.plugins.level = info
+---
+# Source: data-prepper/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-data-prepper
+  labels:
+    helm.sh/chart: data-prepper-0.1.0
+    app.kubernetes.io/name: data-prepper
+    app.kubernetes.io/instance: my-data-prepper
+    app.kubernetes.io/version: "2.8.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - name: http-source
+      port: 2021
+      targetPort: 2021
+      protocol: TCP
+    - name: otel-traces
+      port: 21890
+      targetPort: 21890
+      protocol: TCP
+    - name: otel-metrics
+      port: 21891
+      targetPort: 21891
+      protocol: TCP
+    - name: otel-logs
+      port: 21892
+      targetPort: 21892
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: data-prepper
+    app.kubernetes.io/instance: my-data-prepper
+---
+# Source: data-prepper/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-data-prepper
+  labels:
+    helm.sh/chart: data-prepper-0.1.0
+    app.kubernetes.io/name: data-prepper
+    app.kubernetes.io/instance: my-data-prepper
+    app.kubernetes.io/version: "2.8.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: data-prepper
+      app.kubernetes.io/instance: my-data-prepper
+  template:
+    metadata:
+      annotations:
+        checksum/config: 98dbd707dc6ea2c9924886910b3e6216b6f09f1f37247a4620b0b23f10310ab
+        checksum/pipelineconfig: 6171800560849e0ac5a93430100a1db3e2142a28698e7899579c4c435ad49e4
+      labels:
+        helm.sh/chart: data-prepper-0.1.0
+        app.kubernetes.io/name: data-prepper
+        app.kubernetes.io/instance: my-data-prepper
+        app.kubernetes.io/version: "2.8.0"
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      serviceAccountName: my-data-prepper
+      securityContext:
+        {}
+      containers:
+        - name: data-prepper
+          env:
+          securityContext:
+            {}
+          image: "opensearchproject/data-prepper:2.8.0"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http-source
+              containerPort: 2021
+              protocol: TCP
+            - name: otel-traces
+              containerPort: 21890
+              protocol: TCP
+            - name: otel-metrics
+              containerPort: 21891
+              protocol: TCP
+            - name: otel-logs
+              containerPort: 21892
+              protocol: TCP
+            - name: server
+              containerPort: 4900
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /list
+              port: server
+            periodSeconds: 10
+            initialDelaySeconds: 2
+            failureThreshold: 2
+          readinessProbe:
+            httpGet:
+              path: /list
+              port: server
+          resources:
+            {}
+          volumeMounts:
+            - name: data-prepper-config
+              mountPath: /usr/share/data-prepper/config
+              readOnly: true
+            - name: data-prepper-pipelines
+              mountPath: /usr/share/data-prepper/pipelines
+              readOnly: true
+      volumes:
+        - name: data-prepper-config
+          configMap:
+            name: my-data-prepper-config
+        - name: data-prepper-pipelines
+          secret:
+            secretName: my-data-prepper-pipeline

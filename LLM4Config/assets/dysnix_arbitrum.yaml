@@ -1,0 +1,326 @@
+---
+# Source: arbitrum/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-arbitrum
+  labels:
+    helm.sh/chart: arbitrum-0.1.1
+    app.kubernetes.io/name: arbitrum
+    app.kubernetes.io/instance: my-arbitrum
+    app.kubernetes.io/version: "v3.1.0-7d1d84c"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: arbitrum/templates/configmap-scripts.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-arbitrum-scripts
+  labels:
+    helm.sh/chart: arbitrum-0.1.1
+    app.kubernetes.io/name: arbitrum
+    app.kubernetes.io/instance: my-arbitrum
+    app.kubernetes.io/version: "v3.1.0-7d1d84c"
+    app.kubernetes.io/managed-by: Helm
+data:
+  readiness.sh: |-
+    #!/usr/bin/env sh
+    # shellcheck disable=SC3040
+    
+    # Node is ready when the latest block is fresh enough.
+    # We are checking the timestamp of the latest block and compare it to current local time.
+    
+    set -e
+    
+    HTTP_PORT="8545"
+    AGE_THRESHOLD=$1
+    
+    if [ -z "$AGE_THRESHOLD" ]; then
+        echo "Usage: $0 <block age threshold>"; exit 1
+    fi
+    
+    # expected output format: 0x65cb8ca8
+    get_block_timestamp() {
+        curl -s "http://localhost:$HTTP_PORT" \
+            -H 'Content-Type: application/json' \
+            -d '{"jsonrpc":"2.0","method":"eth_getBlockByNumber","params":["latest", false],"id":1}' \
+        | jq -r .result.timestamp
+    }
+    
+    # using $(()) converts hex string to number
+    block_timestamp=$(($(get_block_timestamp)))
+    current_timestamp=$(date +%s)
+    
+    if ! echo "$block_timestamp" | grep -qE '^[0-9]+$'; then
+        echo "Error reading block timestamp"; exit 1
+    fi
+    
+    age=$((current_timestamp - block_timestamp))
+    
+    if [ $age -le $AGE_THRESHOLD ]; then
+        exit 0
+    else
+        echo "Latest block is $age seconds old. Threshold is $AGE_THRESHOLD seconds" && exit 1
+    fi
+  liveness.sh: |-
+    #!/usr/bin/env sh
+    # shellcheck disable=SC3040
+    
+    # Node is alive when new blocks are being imported.
+    # We are checking the age when last block import event occured.
+    
+    set -e
+    
+    AGE_THRESHOLD=$1
+    STATE_FILE=${2:-"/home/user/.arbitrum/arb1/saved_block_number.txt"}
+    HTTP_PORT="8545"
+    
+    if [ -z "${AGE_THRESHOLD}" ] || [ -z "${STATE_FILE}" ]; then
+        echo "Usage: $0 <last block import age threshold> [state file]" 1>&2; exit 1
+    fi
+    
+    
+    # expected output format: 0x50938d
+    get_block_number() {
+        curl -s "http://localhost:$HTTP_PORT" \
+            -H 'Content-Type: application/json' \
+            -d '{"jsonrpc":"2.0","method":"eth_blockNumber","id":1}' \
+        | jq -r .result
+    }
+    
+    # using $(()) converts hex string to number
+    block_number=$(($(get_block_number)))
+    saved_block_number=""
+    
+    if ! echo "$block_number" | grep -qE '^[0-9]+$'; then
+        echo "Error reading block number"; exit 1
+    fi
+    
+    if [ -f "${STATE_FILE}" ]; then
+        saved_block_number=$(cat "${STATE_FILE}")
+    fi
+    
+    if [ "${block_number}" != "${saved_block_number}" ]; then
+      mkdir -p "$(dirname "${STATE_FILE}")"
+      echo "${block_number}" > "${STATE_FILE}"
+    fi
+    
+    current_timestamp=$(date +%s)
+    last_import_timestamp=$(date -r "${STATE_FILE}" +%s)
+    
+    age=$((current_timestamp - last_import_timestamp))
+    
+    if [ $age -lt $AGE_THRESHOLD ]; then
+        exit 0
+    else
+        echo "Last block import event was $age seconds ago. Threshold is $AGE_THRESHOLD seconds"; exit 1
+    fi
+---
+# Source: arbitrum/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-arbitrum
+  labels:
+    helm.sh/chart: arbitrum-0.1.1
+    app.kubernetes.io/name: arbitrum
+    app.kubernetes.io/instance: my-arbitrum
+    app.kubernetes.io/version: "v3.1.0-7d1d84c"
+    app.kubernetes.io/managed-by: Helm
+data:
+  config.json: |
+    {
+      "chain": {
+        "name": "arb1"
+      },
+      "http": {
+        "addr": "0.0.0.0",
+        "api": [
+          "eth",
+          "net",
+          "web3",
+          "arb"
+        ],
+        "corsdomain": [
+          "*"
+        ],
+        "port": 8545,
+        "server-timeouts": {
+          "idle-timeout": "60m",
+          "read-header-timeout": "60m",
+          "read-timeout": "60m",
+          "write-timeout": "60m"
+        },
+        "vhosts": [
+          "*"
+        ]
+      },
+      "init": {
+        "download-path": "",
+        "url": "https://snapshot.arbitrum.foundation/arb1/nitro-pruned.tar"
+      },
+      "metrics": true,
+      "metrics-server": {
+        "addr": "0.0.0.0",
+        "port": 6070
+      },
+      "parent-chain": {
+        "blob-client": {
+          "beacon-url": "http://lighthouse:5052"
+        },
+        "connection": {
+          "url": "http://geth:8545"
+        },
+        "id": 1
+      },
+      "persistent": {
+        "chain": "/home/user/.arbitrum/arb1"
+      },
+      "pprof": false,
+      "pprof-cfg": {
+        "addr": "0.0.0.0",
+        "port": 6071
+      },
+      "ws": {
+        "addr": "0.0.0.0",
+        "api": [
+          "eth",
+          "net",
+          "web3",
+          "arb"
+        ],
+        "origins": [
+          "*"
+        ],
+        "port": 8546
+      }
+    }
+---
+# Source: arbitrum/templates/service-rpc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-arbitrum-rpc
+  labels:
+    service-type: rpc
+    helm.sh/chart: arbitrum-0.1.1
+    app.kubernetes.io/name: arbitrum
+    app.kubernetes.io/instance: my-arbitrum
+    app.kubernetes.io/version: "v3.1.0-7d1d84c"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8545
+      targetPort: http
+  selector:
+    app.kubernetes.io/name: arbitrum
+    app.kubernetes.io/instance: my-arbitrum
+---
+# Source: arbitrum/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-arbitrum
+  labels:
+    helm.sh/chart: arbitrum-0.1.1
+    app.kubernetes.io/name: arbitrum
+    app.kubernetes.io/instance: my-arbitrum
+    app.kubernetes.io/version: "v3.1.0-7d1d84c"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  serviceName: arbitrum
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: arbitrum
+      app.kubernetes.io/instance: my-arbitrum
+  template:
+    metadata:
+      annotations:
+        checksum/config: d6b0200937585ecf82a9b42646664b5606d58fad216beb065c8f6c7f45fab4fd
+        checksum/scripts: 25fc87ee5994f2f7716251fc91200d8a0d217fb33d795d736bf1cb2deff84256
+      labels:
+        app.kubernetes.io/name: arbitrum
+        app.kubernetes.io/instance: my-arbitrum
+    spec:
+      enableServiceLinks: false
+      terminationGracePeriodSeconds: 300
+      serviceAccountName: my-arbitrum
+      initContainers:
+      containers:
+      - name: arbitrum
+        image: "offchainlabs/nitro-node:v3.1.0-7d1d84c"
+        imagePullPolicy: "IfNotPresent"
+        args:
+        - --metrics
+        - --conf.file=/config/config.json
+        ports:
+        - name: http
+          containerPort: 8545
+          protocol: TCP
+        - name: ws
+          containerPort: 8546
+          protocol: TCP
+        - name: metrics
+          containerPort: 6070
+          protocol: TCP
+        livenessProbe:
+          exec:
+            command:
+            - sh
+            - /scripts/liveness.sh
+            - "300"
+          failureThreshold: 10
+          initialDelaySeconds: 120
+          periodSeconds: 60
+          successThreshold: 1
+          timeoutSeconds: 10
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - /scripts/readiness.sh
+            - "60"
+          failureThreshold: 2
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 5
+        startupProbe:
+          failureThreshold: 518400
+          periodSeconds: 5
+          successThreshold: 1
+          tcpSocket:
+            port: http
+          timeoutSeconds: 2
+        volumeMounts:
+        - name: config
+          mountPath: /config
+        - name: scripts
+          mountPath: /scripts
+        - name: data
+          mountPath: /home/user/.arbitrum/arb1
+        resources:
+          {}
+      volumes:
+        - name: config
+          configMap:
+            name: my-arbitrum
+        - name: scripts
+          configMap:
+            name: my-arbitrum-scripts
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+      labels:
+        app.kubernetes.io/name: arbitrum
+        app.kubernetes.io/instance: my-arbitrum
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: "1280Gi"

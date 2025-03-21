@@ -1,0 +1,95 @@
+---
+# Source: kuma-ingress-watcher/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kuma-ingress-discovery
+  namespace: monitoring
+---
+# Source: kuma-ingress-watcher/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: kuma-ingress-discovery-token
+  namespace: monitoring
+  annotations:
+    kubernetes.io/service-account.name: kuma-ingress-discovery
+type: kubernetes.io/service-account-token
+---
+# Source: kuma-ingress-watcher/templates/clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ingress-reader
+rules:
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list"]
+---
+# Source: kuma-ingress-watcher/templates/clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kuma-ingress-reader-binding
+subjects:
+- kind: ServiceAccount
+  name: kuma-ingress-discovery
+  namespace: monitoring
+roleRef:
+  kind: ClusterRole
+  name: ingress-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: kuma-ingress-watcher/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kuma-ingress-watcher
+  namespace: monitoring
+spec:
+  replicas: 1
+  strategy:
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: kuma-ingress-watcher
+  template:
+    metadata:
+      labels:
+        app: kuma-ingress-watcher
+    spec:
+      serviceAccountName: kuma-ingress-discovery
+      containers:
+      - name: controller
+        ports:
+        - containerPort: 4025
+          protocol: TCP
+        image: "squent/kuma-ingress-watcher:1.3.0"
+        stdin: true
+        env:
+        - name: LOG_LEVEL
+          value: "INFO"
+        - name: UPTIME_KUMA_URL
+          value: "http://uptime-kuma:3001"
+        - name: WATCH_INTERVAL
+          value: "10"
+        - name: WATCH_INGRESSROUTES
+          value: "false"
+        - name: WATCH_INGRESS
+          value: "true"
+        - name: UPTIME_KUMA_USER
+          valueFrom:
+            secretKeyRef:
+              name: uptime-kuma-credentials
+              key: user
+        - name: UPTIME_KUMA_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: uptime-kuma-credentials
+              key: password

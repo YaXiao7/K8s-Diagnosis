@@ -1,0 +1,78 @@
+---
+# Source: spot-scheduler/templates/rbac.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  namespace: default
+  name: my-spot-scheduler
+  labels:
+    app: spot-scheduler
+    chart: spot-scheduler
+    heritage: Helm
+    release: my-spot-scheduler
+    component: scheduler
+---
+# Source: spot-scheduler/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-spot-scheduler
+subjects:
+- kind: ServiceAccount
+  name: my-spot-scheduler
+  namespace: default
+roleRef:
+  kind: ClusterRole
+  apiGroup: rbac.authorization.k8s.io
+  name: system:kube-scheduler
+---
+# Source: spot-scheduler/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-spot-scheduler
+  labels:
+    app: spot-scheduler
+    chart: spot-scheduler-0.1.2
+    release: my-spot-scheduler
+    heritage: Helm
+    component: scheduler
+spec:
+  selector:
+    matchLabels:
+      app: spot-scheduler
+      release: my-spot-scheduler
+      component: scheduler
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: spot-scheduler
+        release: my-spot-scheduler
+        component: scheduler
+    spec:
+      serviceAccountName: my-spot-scheduler
+      containers:
+      - name: spot-scheduler
+        command:
+        - /usr/local/bin/kube-scheduler
+        - --address=0.0.0.0
+        - --leader-elect=false
+        - --scheduler-name=spot-scheduler
+        - --feature-gates=PersistentLocalVolumes=false,VolumeScheduling=false
+        image: "banzaicloud/spot-scheduler:1.10.3"
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 10251
+          initialDelaySeconds: 15
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 10251
+        securityContext:
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+        resources:
+            {}

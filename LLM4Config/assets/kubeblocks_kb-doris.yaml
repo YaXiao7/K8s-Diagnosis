@@ -1,0 +1,146 @@
+---
+# Source: kb-doris/templates/account.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    app.kubernetes.io/name: kb-doris
+    helm.sh/chart: kb-doris-2.0.3
+    app.kubernetes.io/instance: my-kb-doris
+    app.kubernetes.io/managed-by: Helm
+  name: my-kb-doris-kb-doris-sa
+  namespace: "default"
+---
+# Source: kb-doris/templates/account.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  labels:
+    app.kubernetes.io/name: kb-doris
+    helm.sh/chart: kb-doris-2.0.3
+    app.kubernetes.io/instance: my-kb-doris
+    app.kubernetes.io/managed-by: Helm
+  name: my-kb-doris-kb-doris-sa
+  namespace: "default"
+rules:
+  - apiGroups:
+      - '*'
+    resources:
+      - '*'
+    verbs:
+      - get
+      - watch
+      - list
+      - exec
+---
+# Source: kb-doris/templates/account.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/name: kb-doris
+    helm.sh/chart: kb-doris-2.0.3
+    app.kubernetes.io/instance: my-kb-doris
+    app.kubernetes.io/managed-by: Helm
+  name: my-kb-doris-kb-doris-sa
+  namespace: "default"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: my-kb-doris-kb-doris-sa
+subjects:
+  - kind: ServiceAccount
+    name: my-kb-doris-kb-doris-sa
+    namespace: "default"
+---
+# Source: kb-doris/templates/cluster.yaml
+apiVersion: apps.kubeblocks.io/v1alpha1
+kind: Cluster
+metadata:
+  labels:
+    app.kubernetes.io/name: kb-doris
+    helm.sh/chart: kb-doris-2.0.3
+    app.kubernetes.io/instance: my-kb-doris
+    app.kubernetes.io/managed-by: Helm
+    clusterdefinition.kubeblocks.io/name: doris
+  annotations: {}
+  name: my-kb-doris
+  namespace: "default"
+spec:
+  affinity:
+    nodeLabels: {}
+    podAntiAffinity: Preferred
+    tenancy: SharedNode
+    topologyKeys: []
+  clusterDefinitionRef: doris
+  clusterVersionRef: doris-2.0.3
+  componentSpecs:
+    - componentDefRef: doris-fe
+      monitor: true
+      name: doris-fe
+      replicas: 3
+      resources:
+        limits:
+          cpu: 1000m
+          memory: 2Gi
+        requests:
+          cpu: 1000m
+          memory: 2Gi
+      serviceAccountName: my-kb-doris-kb-doris-sa
+      volumeClaimTemplates:
+        #- name: metadata
+        #  spec:
+        #    storageClassName: rook-cephfs
+        #    accessModes:
+        #
+        #      - "ReadWriteOnce"
+        #
+        #    resources:
+        #      requests:
+        #        storage: "10Gi"
+        - name: data
+          spec:
+            storageClassName: rook-cephfs
+            accessModes:
+              - "ReadWriteOnce"
+            resources:
+              requests:
+                storage: "10Gi"
+      tls: false
+    - componentDefRef: doris-be
+      monitor: true
+      name: doris-be
+      replicas: 3
+      resources:
+        limits:
+          cpu: 1000m
+          memory: 2Gi
+        requests:
+          cpu: 1000m
+          memory: 2Gi
+      serviceAccountName: my-kb-doris-kb-doris-sa
+      volumeClaimTemplates:
+        - name: data
+          spec:
+            storageClassName: rook-cephfs
+            accessModes:
+              - "ReadWriteOnce"
+            resources:
+              requests:
+                storage: "10Gi"
+      tls: false
+    - componentDefRef: doris-cn
+      monitor: true
+      name: doris-cn
+      replicas: 3
+      resources:
+        limits:
+          cpu: 1000m
+          memory: 2Gi
+        requests:
+          cpu: 1000m
+          memory: 2Gi
+      serviceAccountName: my-kb-doris-kb-doris-sa
+      tls: false
+  terminationPolicy: "Delete"
+  tolerations: []

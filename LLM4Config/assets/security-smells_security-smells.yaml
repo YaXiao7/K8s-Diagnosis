@@ -1,0 +1,123 @@
+---
+# Source: security-smells/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-security-smells
+  labels:
+    helm.sh/chart: security-smells-0.1.0
+    app.kubernetes.io/name: security-smells
+    app.kubernetes.io/instance: my-security-smells
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+automountServiceAccountToken: true
+---
+# Source: security-smells/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-security-smells
+  labels:
+    helm.sh/chart: security-smells-0.1.0
+    app.kubernetes.io/name: security-smells
+    app.kubernetes.io/instance: my-security-smells
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: LoadBalancer
+  ports:
+    - port: 3000
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: security-smells
+    app.kubernetes.io/instance: my-security-smells
+---
+# Source: security-smells/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-security-smells
+  labels:
+    helm.sh/chart: security-smells-0.1.0
+    app.kubernetes.io/name: security-smells
+    app.kubernetes.io/instance: my-security-smells
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: security-smells
+      app.kubernetes.io/instance: my-security-smells
+  template:
+    metadata:
+      labels:
+        helm.sh/chart: security-smells-0.1.0
+        app.kubernetes.io/name: security-smells
+        app.kubernetes.io/instance: my-security-smells
+        app.kubernetes.io/version: "1.16.0"
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      serviceAccountName: my-security-smells
+      securityContext:
+        {}
+      containers:
+        - name: security-smells
+          securityContext:
+            {}
+          image: "durellirsd/security-smells-api:v1"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          resources:
+            {}
+---
+# Source: security-smells/templates/hpa.yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: my-security-smells
+  labels:
+    helm.sh/chart: security-smells-0.1.0
+    app.kubernetes.io/name: security-smells
+    app.kubernetes.io/instance: my-security-smells
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: my-security-smells
+  minReplicas: 1
+  maxReplicas: 100
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 80
+---
+# Source: security-smells/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-security-smells-test-connection"
+  labels:
+    helm.sh/chart: security-smells-0.1.0
+    app.kubernetes.io/name: security-smells
+    app.kubernetes.io/instance: my-security-smells
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-security-smells:3000']
+  restartPolicy: Never

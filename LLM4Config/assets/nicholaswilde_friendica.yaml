@@ -1,0 +1,71 @@
+---
+# Source: friendica/templates/common.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-friendica
+  labels:
+    helm.sh/chart: friendica-1.0.0
+    app.kubernetes.io/name: friendica
+    app.kubernetes.io/instance: my-friendica
+    app.kubernetes.io/version: "2021.04"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: friendica
+    app.kubernetes.io/instance: my-friendica
+---
+# Source: friendica/templates/common.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-friendica
+  labels:
+    helm.sh/chart: friendica-1.0.0
+    app.kubernetes.io/name: friendica
+    app.kubernetes.io/instance: my-friendica
+    app.kubernetes.io/version: "2021.04"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: friendica
+      app.kubernetes.io/instance: my-friendica
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: friendica
+        app.kubernetes.io/instance: my-friendica
+    spec:
+      serviceAccountName: default
+      dnsPolicy: ClusterFirst
+      containers:
+      - name: my-friendica
+        image: "friendica:2021.04"
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 80
+          protocol: TCP
+        volumeMounts:
+        livenessProbe:
+          tcpSocket:
+            port: http
+          initialDelaySeconds: 30
+          failureThreshold: 5
+          timeoutSeconds: 10
+        readinessProbe:
+          tcpSocket:
+            port: http
+          initialDelaySeconds: 30
+          failureThreshold: 5
+          timeoutSeconds: 10

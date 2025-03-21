@@ -1,0 +1,183 @@
+---
+# Source: prometheus-memcached-exporter/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: memecached-exporter
+  namespace: default
+  labels:
+    helm.sh/chart: prometheus-memcached-exporter-0.7.1
+    app.kubernetes.io/name: memecached-exporter
+    app.kubernetes.io/version: "0.6.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9150
+      targetPort: metrics
+      protocol: TCP
+      name: metrics
+  selector:
+    app.kubernetes.io/name: memecached-exporter
+---
+# Source: prometheus-memcached-exporter/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: memecached-exporter
+  namespace: default
+  labels:
+    helm.sh/chart: prometheus-memcached-exporter-0.7.1
+    app.kubernetes.io/name: memecached-exporter
+    app.kubernetes.io/version: "0.6.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: memecached-exporter
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: memecached-exporter
+    spec:
+      securityContext:
+        {}
+      containers:
+        - name: prometheus-memcached-exporter
+          args:
+          - --memcached.address=memcached:11211
+          securityContext:
+            {}
+          image: "registry.cn-beijing.aliyuncs.com/kubegemsapp/memcached-exporter:0.6.0-debian-10-r28"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: metrics
+              containerPort: 9150
+              protocol: TCP
+          resources:
+            limits:
+              cpu: 100m
+              memory: 128Mi
+            requests:
+              cpu: 20m
+              memory: 64Mi
+---
+# Source: prometheus-memcached-exporter/templates/alertmanagerconfig.yaml
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: AlertmanagerConfig
+metadata:
+  creationTimestamp: null
+  labels:
+    alertmanagerconfig.kubegems.io/name: memecached-exporter
+    alertmanagerconfig.kubegems.io/type: monitor
+  name: memecached-exporter
+  namespace: default
+spec:
+  receivers:
+  - name: "null"
+  - name: gemcloud-default-webhook
+    webhookConfigs:
+    - httpConfig:
+        tlsConfig:
+          ca: {}
+          cert: {}
+          insecureSkipVerify: true
+      url: https://kubegems-local-agent.kubegems-local:8041/alert
+  route:
+    groupBy:
+    - gems_namespace
+    - gems_alertname
+    groupInterval: 30s
+    groupWait: 30s
+    receiver: "null"
+    routes:
+    - continue: true
+      matchers:
+      - name: gems_namespace
+        value: default
+      - name: gems_alertname
+        value: MemcachedDown
+      receiver: gemcloud-default-webhook
+      repeatInterval: 10m
+    - continue: true
+      matchers:
+      - name: gems_namespace
+        value: default
+      - name: gems_alertname
+        value: MemcachedLowAvalibleConnections
+      receiver: gemcloud-default-webhook
+      repeatInterval: 10m
+---
+# Source: prometheus-memcached-exporter/templates/prometheusrule.yaml
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  creationTimestamp: null
+  labels:
+    prometheusrule.kubegems.io/name: memecached-exporter
+    prometheusrule.kubegems.io/type: monitor
+  name: memecached-exporter
+  namespace: default
+spec:
+  groups:
+  - name: MemcachedDown
+    rules:
+    - alert: MemcachedDown
+      annotations:
+        message: Memcached [namespace {{ $labels.namespace }}] [service {{ $labels.service
+          }}] [instance {{ $labels.instance }}] down
+        value: '{{ $value | printf "%.1f" }}'
+      expr: memcached_up{service="memecached-exporter",namespace="default"}==0
+      for: 0m
+      labels:
+        gems_alert_from: monitor
+        gems_alert_scope: normal
+        gems_alertname: MemcachedDown
+        gems_namespace: default
+        severity: critical
+  - name: MemcachedLowAvalibleConnections
+    rules:
+    - alert: MemcachedLowAvalibleConnections
+      annotations:
+        message: memcached few available connections [namespace {{ $labels.namespace
+          }}] [service {{ $labels.service }}] [instance {{ $labels.instance }}]
+        value: '{{ $value | printf "%.1f" }}'
+      expr: memcached_current_connections{service="memecached-exporter",namespace="default"}
+        / memcached_max_connections{service="memecached-exporter",namespace="default"}
+        * 100>90
+      for: 0m
+      labels:
+        gems_alert_from: monitor
+        gems_alert_scope: normal
+        gems_alertname: MemcachedLowAvalibleConnections
+        gems_namespace: default
+        severity: error
+---
+# Source: prometheus-memcached-exporter/templates/servicemonitor.yaml
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: memecached-exporter
+  namespace: default
+  labels:
+    helm.sh/chart: prometheus-memcached-exporter-0.7.1
+    app.kubernetes.io/name: memecached-exporter
+    app.kubernetes.io/version: "0.6.0"
+    app.kubernetes.io/managed-by: Helm        
+spec:
+  selector:
+    matchLabels:
+      helm.sh/chart: prometheus-memcached-exporter-0.7.1
+      app.kubernetes.io/name: memecached-exporter
+      app.kubernetes.io/version: "0.6.0"
+      app.kubernetes.io/managed-by: Helm
+  endpoints:
+    - port: metrics
+      interval: 60s
+      scrapeTimeout: 10s
+      scheme: http
+      path: /metrics
+  namespaceSelector:
+    matchNames:
+      - default

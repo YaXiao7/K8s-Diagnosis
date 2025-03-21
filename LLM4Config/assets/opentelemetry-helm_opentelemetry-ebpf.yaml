@@ -1,0 +1,376 @@
+---
+# Source: opentelemetry-ebpf/templates/k8s-collector-serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-opentelemetry-ebpf-k8s-collector
+  labels:
+    helm.sh/chart: opentelemetry-ebpf-0.1.2
+    app.kubernetes.io/name: opentelemetry-ebpf
+    app.kubernetes.io/instance: my-opentelemetry-ebpf
+    app.kubernetes.io/version: "v0.10.2"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: opentelemetry-ebpf/templates/kernel-collector-serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-opentelemetry-ebpf-kernel-collector
+  labels:
+    helm.sh/chart: opentelemetry-ebpf-0.1.2
+    app.kubernetes.io/name: opentelemetry-ebpf
+    app.kubernetes.io/instance: my-opentelemetry-ebpf
+    app.kubernetes.io/version: "v0.10.2"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: opentelemetry-ebpf/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-opentelemetry-ebpf-config
+  labels:
+    helm.sh/chart: opentelemetry-ebpf-0.1.2
+    app.kubernetes.io/name: opentelemetry-ebpf
+    app.kubernetes.io/instance: my-opentelemetry-ebpf
+    app.kubernetes.io/version: "v0.10.2"
+    app.kubernetes.io/managed-by: Helm
+data:
+  config.yaml: |
+    labels:
+      environment: ""
+---
+# Source: opentelemetry-ebpf/templates/k8s-collector-clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-opentelemetry-ebpf-k8s-collector
+  labels:
+    helm.sh/chart: opentelemetry-ebpf-0.1.2
+    app.kubernetes.io/name: opentelemetry-ebpf
+    app.kubernetes.io/instance: my-opentelemetry-ebpf
+    app.kubernetes.io/version: "v0.10.2"
+    app.kubernetes.io/managed-by: Helm
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - replicasets
+  verbs:
+  - get
+  - list
+  - watch
+---
+# Source: opentelemetry-ebpf/templates/kernel-collector-clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-opentelemetry-ebpf-kernel-collector
+  labels:
+    helm.sh/chart: opentelemetry-ebpf-0.1.2
+    app.kubernetes.io/name: opentelemetry-ebpf
+    app.kubernetes.io/instance: my-opentelemetry-ebpf
+    app.kubernetes.io/version: "v0.10.2"
+    app.kubernetes.io/managed-by: Helm
+rules:
+- apiGroups:
+  - policy
+  resourceNames:
+  - my-opentelemetry-ebpf-kernel-collector
+  resources:
+  - podsecuritypolicies
+  verbs:
+  - use
+---
+# Source: opentelemetry-ebpf/templates/k8s-collector-clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-opentelemetry-ebpf-k8s-collector
+  labels:
+    helm.sh/chart: opentelemetry-ebpf-0.1.2
+    app.kubernetes.io/name: opentelemetry-ebpf
+    app.kubernetes.io/instance: my-opentelemetry-ebpf
+    app.kubernetes.io/version: "v0.10.2"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-opentelemetry-ebpf-k8s-collector
+subjects:
+- kind: ServiceAccount
+  name: my-opentelemetry-ebpf-k8s-collector
+  namespace: default
+---
+# Source: opentelemetry-ebpf/templates/kernel-collector-clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-opentelemetry-ebpf-kernel-collector
+  labels:
+    helm.sh/chart: opentelemetry-ebpf-0.1.2
+    app.kubernetes.io/name: opentelemetry-ebpf
+    app.kubernetes.io/instance: my-opentelemetry-ebpf
+    app.kubernetes.io/version: "v0.10.2"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-opentelemetry-ebpf-kernel-collector
+subjects:
+- kind: ServiceAccount
+  name: my-opentelemetry-ebpf-kernel-collector
+  namespace: default
+---
+# Source: opentelemetry-ebpf/templates/reducer-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-opentelemetry-ebpf-reducer
+  labels:
+    helm.sh/chart: opentelemetry-ebpf-0.1.2
+    app.kubernetes.io/name: opentelemetry-ebpf
+    app.kubernetes.io/instance: my-opentelemetry-ebpf
+    app.kubernetes.io/version: "v0.10.2"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: my-opentelemetry-ebpf-reducer
+    app.kubernetes.io/instance: my-opentelemetry-ebpf
+  ports:
+    
+    - name: stats
+      port: 7001
+      targetPort: 7001
+      protocol: TCP
+      appProtocol: http
+    - name: telemetry
+      port: 7000
+      targetPort: 7000
+      protocol: TCP
+      appProtocol: http
+---
+# Source: opentelemetry-ebpf/templates/kernel-collector-daemonset.yaml
+# kernel collector daemonset: deploys the kernel collector to each node in the cluster.
+# The kernel collector needs to be able to compile and install
+# eBPF programs in the node's kernel, so needs to run as root and
+# needs to mount /lib/modules and /usr/src from the node itself.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: my-opentelemetry-ebpf-kernel-collector
+  labels:
+    helm.sh/chart: opentelemetry-ebpf-0.1.2
+    app.kubernetes.io/name: opentelemetry-ebpf
+    app.kubernetes.io/instance: my-opentelemetry-ebpf
+    app.kubernetes.io/version: "v0.10.2"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: my-opentelemetry-ebpf-kernel-collector
+      app.kubernetes.io/instance: my-opentelemetry-ebpf
+  template:
+    metadata:
+      annotations:
+        charts.flowmill.com/version: 0.1.2
+      labels:
+        app.kubernetes.io/name: my-opentelemetry-ebpf-kernel-collector
+        app.kubernetes.io/instance: my-opentelemetry-ebpf
+    spec:
+      containers:
+        - name: kernel-collector
+          image: "otel/opentelemetry-ebpf-kernel-collector:v0.10.2"
+          imagePullPolicy: IfNotPresent
+          args:
+            - --config-file=/etc/network-explorer/config.yaml
+            - --disable-nomad-metadata
+            - --warning
+          # TODO: liveness probe
+          env:
+            - name: "EBPF_NET_CLUSTER_NAME"
+              value: ""
+            - name: "EBPF_NET_DISABLE_HTTP_METRICS"
+              value: "false"
+            - name: "EBPF_NET_KERNEL_HEADERS_AUTO_FETCH"
+              value: "true"
+            - name: "EBPF_NET_INTAKE_HOST"
+              value: my-opentelemetry-ebpf-reducer
+            - name: "EBPF_NET_INTAKE_PORT"
+              value: "7000"
+            - name: "EBPF_NET_HOST_DIR"
+              value: "/hostfs"
+          securityContext:
+            privileged: true
+          volumeMounts:
+          - mountPath: /hostfs/
+            name: host-root
+            readOnly: true
+          - mountPath: /hostfs/var/cache
+            name: host-var-cache
+            readOnly: false
+          - mountPath: /etc/network-explorer
+            name: my-opentelemetry-ebpf-config
+            readOnly: true
+      dnsPolicy: ClusterFirstWithHostNet
+      hostNetwork: true
+      hostPID: true
+      serviceAccountName: my-opentelemetry-ebpf-kernel-collector
+      volumes:
+      - name: my-opentelemetry-ebpf-config
+        projected:
+          sources:
+          - configMap:
+              name: my-opentelemetry-ebpf-config
+              items:
+              - key: config.yaml
+                path: config.yaml
+      - name: host-root
+        hostPath:
+          path: /
+          type: Directory
+      - name: host-var-cache
+        hostPath:
+          path: /var/cache
+          type: DirectoryOrCreate
+      tolerations:
+        - effect: NoExecute
+          operator: Exists
+        - effect: NoSchedule
+          operator: Exists
+---
+# Source: opentelemetry-ebpf/templates/k8s-collector-deployment.yaml
+# The k8s-collector consists of two services:
+# 1) k8s-watcher: talks to the Kubernetes API server to determine the current state of
+#    the cluster; sets up watches to be notified of subsequent changes to pods, services
+#    and other resources.
+# 2) k8s-relay: relays the information collected by k8s-watcher to the reducer.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-opentelemetry-ebpf-k8s-collector
+  labels:
+    helm.sh/chart: opentelemetry-ebpf-0.1.2
+    app.kubernetes.io/name: opentelemetry-ebpf
+    app.kubernetes.io/instance: my-opentelemetry-ebpf
+    app.kubernetes.io/version: "v0.10.2"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: my-opentelemetry-ebpf-k8s-collector
+      app.kubernetes.io/instance: my-opentelemetry-ebpf
+  strategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations:
+        # This is here to allow us to do "zero-downtime" updates without an image change.
+        rollingUpdateVersion: "1"
+        charts.flowmill.com/version: 0.1.2
+      labels:
+        app.kubernetes.io/name: my-opentelemetry-ebpf-k8s-collector
+        app.kubernetes.io/instance: my-opentelemetry-ebpf
+    spec:
+      containers:
+      - name: k8s-watcher
+        image: "otel/opentelemetry-ebpf-k8s-watcher:v0.10.2"
+        imagePullPolicy: IfNotPresent
+        args:
+          - --log-console
+          - --log-level=warning
+      # k8s-relay, which is a service that the k8s-watcher talks to.
+      # Currently not configurable, has to be reachable on localhost:8172, so must
+      # share a pod with the k8s-watcher above.
+      - name: k8s-relay
+        image: "otel/opentelemetry-ebpf-k8s-relay:v0.10.2"
+        imagePullPolicy: IfNotPresent
+        args:
+          - --config-file=/etc/network-explorer/config.yaml
+          - --warning
+        env:
+          - name: "EBPF_NET_CLUSTER_NAME"
+            value: ""
+          - name: "EBPF_NET_INTAKE_HOST"
+            value: my-opentelemetry-ebpf-reducer
+          - name: "EBPF_NET_INTAKE_PORT"
+            value: "7000"
+        volumeMounts:
+        - mountPath: /etc/network-explorer
+          name: k8s-relay-config
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - name: k8s-relay-config
+        projected:
+          sources:
+            - configMap:
+                name: my-opentelemetry-ebpf-config
+                items:
+                - key: config.yaml
+                  path: config.yaml
+      securityContext: {}
+      serviceAccountName: my-opentelemetry-ebpf-k8s-collector
+---
+# Source: opentelemetry-ebpf/templates/reducer-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-opentelemetry-ebpf-reducer
+  labels:
+    helm.sh/chart: opentelemetry-ebpf-0.1.2
+    app.kubernetes.io/name: opentelemetry-ebpf
+    app.kubernetes.io/instance: my-opentelemetry-ebpf
+    app.kubernetes.io/version: "v0.10.2"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: my-opentelemetry-ebpf-reducer
+      app.kubernetes.io/instance: my-opentelemetry-ebpf
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: my-opentelemetry-ebpf-reducer
+        app.kubernetes.io/instance: my-opentelemetry-ebpf
+    spec:
+      containers:
+        - name: reducer
+          image: "otel/opentelemetry-ebpf-reducer:v0.10.2"
+          imagePullPolicy: IfNotPresent
+          args:
+            - --port=7000
+            - --log-console
+            - --no-log-file
+            - --warning
+            - --enable-aws-enrichment
+            - --disable-prometheus-metrics
+            - --enable-otlp-grpc-metrics
+            - --otlp-grpc-metrics-host=
+            - --otlp-grpc-metrics-port=4317
+            - --num-ingest-shards=1
+            - --num-matching-shards=1
+            - --num-aggregation-shards=1
+          ports:
+            - name: telemetry
+              containerPort: 7000
+              protocol: TCP
+          readinessProbe:
+            initialDelaySeconds: 5
+            periodSeconds: 20
+            timeoutSeconds: 5
+            exec:
+              command: ['/srv/health_check.sh', 'readiness_probe', 'localhost', "7000"]

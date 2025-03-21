@@ -1,0 +1,1104 @@
+---
+# Source: memphis/templates/memphis_pdb.yaml
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: memphis
+  namespace: default
+  labels:
+    helm.sh/chart: memphis-1.4.4
+    
+    app.kubernetes.io/name: memphis
+    app.kubernetes.io/instance: my-memphis
+    app.kubernetes.io/version: "1.4.4"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      
+      app.kubernetes.io/name: memphis
+      app.kubernetes.io/instance: my-memphis
+---
+# Source: memphis/templates/memphis_rbac.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: default-cp-account
+  namespace: default
+---
+# Source: memphis/charts/metadata/templates/pgpool/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: memphis-metadata-coordinator
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: metadata
+    helm.sh/chart: metadata-11.5.2
+    app.kubernetes.io/instance: my-memphis
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: pgpool
+type: Opaque
+data:
+  admin-password: "ZEZ3Ym5qSm9vZg=="
+---
+# Source: memphis/charts/metadata/templates/postgresql/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: memphis-metadata
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: metadata
+    helm.sh/chart: metadata-11.5.2
+    app.kubernetes.io/instance: my-memphis
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: postgresql
+type: Opaque
+data:
+  password: "bER1eDM5MkU3Tg=="
+  repmgr-password: "N2txWEdCOTRESQ=="
+---
+# Source: memphis/templates/memphis-creds.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: memphis-creds
+  namespace: default
+type: Opaque
+data:
+  ROOT_PASSWORD: "OU9tdUdjbjVlZFdGNnptNTV4T1c="
+  CONNECTION_TOKEN: "Vm5LQmwzdkM2ZUFhU0dOcUJDT3c="
+  JWT_SECRET: "dzd0enVPa3o2c1pwZVNDVWpQaG9zNnZlZ1B2TmplNk83MVlseUtMcWRxRkxGMVhxWWlQYW1lU1Fuc0psS2dGQWtNeUdmME5laEk3UGRLeXJ6STVsbGtkYUZTd0RuazdFa1FmeG41ZHZFV0NDUjY5RmwzU1d3OW1xRFRZRnlpQjU="
+  REFRESH_JWT_SECRET: "VzRacExOOEtXS3FnME5EM3dOSWJYYXRDTmdGelFQRjlJY211WVNWTlVhSTVvV2NmY0VINFdLSFFxR3dvaURKNnZtdzQydGhvdFp3dDM0Zk9PNmFvWnVMRDNQeVhVY1IxaHUwQWpGdUhXZXJxZ0NMZHA2bDVHRXd1cTJ4b1FLcEs="
+  ENCRYPTION_SECRET_KEY: "djlBSmprSk1rd0NmdnNYZUxoMVJlMVZOS00wMFQzd3E="
+  JWT_SECRET_REST_GW: "OXFod0szN0FPWm93eEhhRGxxa1ZlUkk5WlJjQUlqS0pZdmJwZEVuWW8yNTNiNFJ4dGdpdUk1MjNLZ3hNQlBqMzA1TGdNNkM5dWR0ZWZhREhNZ25sMUI2aTVBRHVUaFZ0R0MyNXgzNGtUUGR3bHMxT1BtNG9uNGtOa3ZJQ2NmdHk="
+  REFRESH_JWT_SECRET_REST_GW: "ZzhWZk9oQTdkN3piUkFDdng3UUU2alBORVVrTzg4SzNTQkcyR2ZlRnRkdEE1NVN5N0w3VEo2YnpFc3VQaW9La0hMTzdCbXRxdnZsdEIzVkNRN2hNa2dCa0lLTEt1NnJzQ1ZhTkxpeFRiSWdnM0RPU2g5dTU1ODVubU1ncXNBQ3Y="
+---
+# Source: memphis/charts/metadata/templates/postgresql/hooks-scripts-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: memphis-metadata-hooks-scripts
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: metadata
+    helm.sh/chart: metadata-11.5.2
+    app.kubernetes.io/instance: my-memphis
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: postgresql
+data:
+  pre-stop.sh: |-
+    #!/bin/bash
+    set -o errexit
+    set -o pipefail
+    set -o nounset
+
+    # Debug section
+    exec 3>&1
+    exec 4>&2
+
+    # Load Libraries
+    . /opt/bitnami/scripts/liblog.sh
+    . /opt/bitnami/scripts/libpostgresql.sh
+    . /opt/bitnami/scripts/librepmgr.sh
+
+    # Load PostgreSQL & repmgr environment variables
+    . /opt/bitnami/scripts/postgresql-env.sh
+
+    # Auxiliary functions
+    is_new_primary_ready() {
+        return_value=1
+        currenty_primary_node="$(repmgr_get_primary_node)"
+        currenty_primary_host="$(echo $currenty_primary_node | awk '{print $1}')"
+
+        info "$currenty_primary_host != $REPMGR_NODE_NETWORK_NAME"
+        if [[ $(echo $currenty_primary_node | wc -w) -eq 2 ]] && [[ "$currenty_primary_host" != "$REPMGR_NODE_NETWORK_NAME" ]]; then
+            info "New primary detected, leaving the cluster..."
+            return_value=0
+        else
+            info "Waiting for a new primary to be available..."
+        fi
+        return $return_value
+    }
+
+    export MODULE="pre-stop-hook"
+
+    if [[ "${BITNAMI_DEBUG}" == "true" ]]; then
+        info "Bash debug is on"
+    else
+        info "Bash debug is off"
+        exec 1>/dev/null
+        exec 2>/dev/null
+    fi
+
+    postgresql_enable_nss_wrapper
+
+    # Prepare env vars for managing roles
+    readarray -t primary_node < <(repmgr_get_upstream_node)
+    primary_host="${primary_node[0]}"
+
+    # Stop postgresql for graceful exit.
+    postgresql_stop
+
+    if [[ -z "$primary_host" ]] || [[ "$primary_host" == "$REPMGR_NODE_NETWORK_NAME" ]]; then
+        info "Primary node need to wait for a new primary node before leaving the cluster"
+        retry_while is_new_primary_ready 10 5
+    else
+        info "Standby node doesn't need to wait, leaving the cluster."
+    fi
+---
+# Source: memphis/charts/metadata/templates/postgresql/initdb-scripts-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: memphis-metadata-initdb-scripts
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: metadata
+    helm.sh/chart: metadata-11.5.2
+    app.kubernetes.io/instance: my-memphis
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: postgresql
+data:
+    init.sql: |
+      CREATE DATABASE memphis;
+---
+# Source: memphis/templates/memphis_configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: memphis-config
+  namespace: default
+  labels:
+    helm.sh/chart: memphis-1.4.4
+    
+    app.kubernetes.io/name: memphis
+    app.kubernetes.io/instance: my-memphis
+    app.kubernetes.io/version: "1.4.4"
+    app.kubernetes.io/managed-by: Helm
+data:
+  memphis.conf: |
+    # Memphis Clients Port
+    port: 6666
+
+    # PID file shared with configuration reloader.
+    pid_file: "/var/run/memphis/memphis.pid"
+    
+    # Memphis K8s namespace
+    k8s_namespace: default
+
+    # Memphis HTTP/UI Port
+    ui_port: 9000
+
+    # Memphis Rest Gateway API Port
+    rest_gw_port: 4444    
+
+    # Logs retention parameter in days
+    logs_retention_days: 3
+
+    # Disconnected producer/consumer retention in hours
+    gc_producer_consumer_retention_hours: 3
+    
+    # Tiered storage upload interval in seconds
+    tiered_storage_upload_interval_seconds: 8
+
+    # Dead letter station retention
+    dls_retention_hours: 3
+
+    ###############
+    #             #
+    # Monitoring  #
+    #             #
+    ###############
+    http: 8222
+    server_name:$POD_NAME
+
+    #######################################
+    #                                     #
+    #            storageEngine            #
+    #                                     #
+    #######################################
+    jetstream {
+      store_dir: /data
+    }
+
+    debug: false
+
+    trace: false
+    max_payload: 1MB
+    lame_duck_duration: 30s
+    ##################
+    #                #
+    # Websocket      #
+    #                #
+    ##################
+    websocket {
+      port: 7770
+      no_tls: true
+      same_origin: false
+    }
+---
+# Source: memphis/templates/memphis_rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: default-cp-role
+  namespace: default
+rules:
+- apiGroups: ["*"]
+  resources: ["statefulsets"]
+  verbs: ["list", "watch"]
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["*"]
+- apiGroups: ["*"]
+  resources: ["deployments"]
+  verbs: ["list", "watch"]
+- apiGroups: [""]
+  resources: ["namespaces"]
+  verbs: ["list", "watch", "get"]
+- apiGroups: [""]
+  resources: ["componentstatuses"]
+  verbs: ["list", "watch", "get"]
+- apiGroups: [""]
+  resources: ["services"]
+  verbs: ["*"]
+- apiGroups: [""]
+  resources: ["pods" , "pods/exec"]
+  verbs: ["create", "get", "list"]
+- apiGroups: [""]
+  resources: ["nodes" , "nodes/proxy"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["persistentvolumeclaims"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["" , "metrics.k8s.io"]
+  resources: ["pods"]
+  verbs: ["get", "watch", "list"]
+---
+# Source: memphis/templates/memphis_rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: default-cp-role-binding
+  namespace: default
+subjects:
+- kind: ServiceAccount
+  name: default-cp-account
+  namespace: default
+roleRef:
+  kind: ClusterRole
+  name: default-cp-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: memphis/charts/metadata/templates/pgpool/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: memphis-metadata-coordinator
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: metadata
+    helm.sh/chart: metadata-11.5.2
+    app.kubernetes.io/instance: my-memphis
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: pgpool
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+    - name: "postgresql"
+      port: 5432
+      targetPort: postgresql
+      protocol: TCP
+      nodePort: null
+  selector:
+    app.kubernetes.io/name: metadata
+    app.kubernetes.io/instance: my-memphis
+    app.kubernetes.io/component: pgpool
+---
+# Source: memphis/charts/metadata/templates/postgresql/service-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: memphis-metadata-headless
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: metadata
+    helm.sh/chart: metadata-11.5.2
+    app.kubernetes.io/instance: my-memphis
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: "postgresql"
+      port: 5432
+      targetPort: postgresql
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: metadata
+    app.kubernetes.io/instance: my-memphis
+    app.kubernetes.io/component: postgresql
+    role: data
+---
+# Source: memphis/charts/metadata/templates/postgresql/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: memphis-metadata
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: metadata
+    helm.sh/chart: metadata-11.5.2
+    app.kubernetes.io/instance: my-memphis
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: postgresql
+spec:
+  type: ClusterIP
+  ports:
+    - name: "postgresql"
+      port: 5432
+      targetPort: postgresql
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: metadata
+    app.kubernetes.io/instance: my-memphis
+    app.kubernetes.io/component: postgresql
+    role: data
+---
+# Source: memphis/templates/memphis-rest-gateway.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: memphis-rest-gateway
+  namespace: default
+spec:
+  type: ClusterIP
+  ports:
+    - protocol: TCP
+      port: 4444
+      targetPort: 4444
+  selector:
+    app: memphis-rest-gateway
+---
+# Source: memphis/templates/memphis_service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: memphis
+  namespace: default
+  labels:
+    helm.sh/chart: memphis-1.4.4
+    
+    app.kubernetes.io/name: memphis
+    app.kubernetes.io/instance: my-memphis
+    app.kubernetes.io/version: "1.4.4"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+    
+    app.kubernetes.io/name: memphis
+    app.kubernetes.io/instance: my-memphis
+  clusterIP: None
+  ports:
+  - name: memphis-cp-management
+    port: 9000
+    targetPort: 9000
+    appProtocol: http
+  - name: memphis-ws
+    port: 7770
+    targetPort: 7770
+    appProtocol: tcp
+  - name: memphis-cp-tcp
+    port: 6666
+    targetPort: 6666
+    appProtocol: tcp
+  - name: monitor
+    port: 8222
+    appProtocol: http
+---
+# Source: memphis/charts/metadata/templates/pgpool/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: memphis-metadata-coordinator
+  namespace: "default"
+  labels: 
+    app.kubernetes.io/name: metadata
+    helm.sh/chart: metadata-11.5.2
+    app.kubernetes.io/instance: my-memphis
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: pgpool
+spec:
+  replicas: 1
+  selector:
+    matchLabels: 
+      app.kubernetes.io/name: metadata
+      app.kubernetes.io/instance: my-memphis
+      app.kubernetes.io/component: pgpool
+  template:
+    metadata:
+      labels: 
+        app.kubernetes.io/name: metadata
+        helm.sh/chart: metadata-11.5.2
+        app.kubernetes.io/instance: my-memphis
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/component: pgpool
+    spec:
+      
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: metadata
+                    app.kubernetes.io/instance: my-memphis
+                    app.kubernetes.io/component: pgpool
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+      initContainers:
+      # Auxiliary vars to populate environment variables
+      containers:
+        - name: pgpool
+          image: docker.io/memphisos/memphis-metadata-coordinator:4.4.2-debian-11-r28
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 1001
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: PGPOOL_BACKEND_NODES
+              value: 0:memphis-metadata-0.memphis-metadata-headless:5432,1:memphis-metadata-1.memphis-metadata-headless:5432,2:memphis-metadata-2.memphis-metadata-headless:5432,
+            - name: PGPOOL_SR_CHECK_USER
+              value: "repmgr"
+            - name: PGPOOL_SR_CHECK_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: memphis-metadata
+                  key: repmgr-password
+            - name: PGPOOL_SR_CHECK_DATABASE
+              value: "postgres"
+            - name: PGPOOL_ENABLE_LDAP
+              value: "no"
+            - name: PGPOOL_POSTGRES_USERNAME
+              value: "postgres"
+            - name: PGPOOL_POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: memphis-metadata
+                  key: password
+            - name: PGPOOL_ADMIN_USERNAME
+              value: "admin"
+            - name: PGPOOL_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: memphis-metadata-coordinator
+                  key: admin-password
+            - name: PGPOOL_AUTHENTICATION_METHOD
+              value: "scram-sha-256"
+            - name: PGPOOL_ENABLE_LOAD_BALANCING
+              value: "yes"
+            - name: PGPOOL_DISABLE_LOAD_BALANCE_ON_WRITE
+              value: transaction
+            - name: PGPOOL_ENABLE_LOG_CONNECTIONS
+              value: "no"
+            - name: PGPOOL_ENABLE_LOG_HOSTNAME
+              value: "yes"
+            - name: PGPOOL_ENABLE_LOG_PER_NODE_STATEMENT
+              value: "no"
+            - name: PGPOOL_RESERVED_CONNECTIONS
+              value: '1'
+            - name: PGPOOL_CHILD_LIFE_TIME
+              value: ""
+            - name: PGPOOL_ENABLE_TLS
+              value: "no"
+          envFrom:
+          ports:
+            - name: postgresql
+              containerPort: 5432
+              protocol: TCP
+          livenessProbe:
+            failureThreshold: 5
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+            exec:
+              command:
+                - /opt/bitnami/scripts/pgpool/healthcheck.sh
+          readinessProbe:
+            failureThreshold: 5
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            successThreshold: 1
+            timeoutSeconds: 5
+            exec:
+              command:
+                - bash
+                - -ec
+                - PGPASSWORD=${PGPOOL_POSTGRES_PASSWORD} psql -U "postgres" -d "postgres" -h /opt/bitnami/pgpool/tmp -tA -c "SELECT 1" >/dev/null
+          resources:
+            limits: {}
+            requests: {}
+          volumeMounts:
+      volumes:
+---
+# Source: memphis/templates/memphis-rest-gateway.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: memphis-rest-gateway
+  namespace: default
+  labels:
+    app: memphis-rest-gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: memphis-rest-gateway
+  template:
+    metadata:
+      name: memphis-rest-gateway
+      labels:
+        app: memphis-rest-gateway
+    spec:
+      initContainers:
+        - name: k8s-busybox-waits4broker
+          image: busybox:1.36.1
+          imagePullPolicy: IfNotPresent
+          command: ['sh', '-c', "until nslookup memphis.$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace).svc.cluster.local; do echo waiting for broker; sleep 2; done"]
+      containers:
+        - name: memphis-rest-gateway
+          image: memphisos/memphis-rest-gateway:1.2.8
+          resources:
+            {}
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 4444
+          env:
+          - name: ROOT_USER
+            value: "root"
+          - name: HTTP_PORT
+            value: "4444"
+          - name: MEMPHIS_HOST
+            value: memphis.default.svc.cluster.local
+          - name: USER_PASS_BASED_AUTH
+            value: "true"
+          - name: ROOT_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: "memphis-creds"
+                key: ROOT_PASSWORD
+          - name: CONNECTION_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: "memphis-creds"
+                key: CONNECTION_TOKEN
+          - name: JWT_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: "memphis-creds"
+                key: JWT_SECRET_REST_GW
+          - name: REFRESH_JWT_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: "memphis-creds"
+                key: REFRESH_JWT_SECRET_REST_GW
+---
+# Source: memphis/charts/metadata/templates/postgresql/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: memphis-metadata
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: metadata
+    helm.sh/chart: metadata-11.5.2
+    app.kubernetes.io/instance: my-memphis
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: postgresql
+    role: data
+spec:
+  replicas: 1
+  podManagementPolicy: Parallel
+  serviceName: memphis-metadata-headless
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: metadata
+      app.kubernetes.io/instance: my-memphis
+      app.kubernetes.io/component: postgresql
+      role: data
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: metadata
+        helm.sh/chart: metadata-11.5.2
+        app.kubernetes.io/instance: my-memphis
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/component: postgresql
+        role: data
+    spec:
+      
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: metadata
+                    app.kubernetes.io/instance: my-memphis
+                    app.kubernetes.io/component: postgresql
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+      hostNetwork: false
+      hostIPC: false
+      initContainers:
+      containers:
+        - name: postgresql
+          image: docker.io/memphisos/memphis-metadata:15.2.0-debian-11-r27
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 1001
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - /pre-stop.sh
+          # Auxiliary vars to populate environment variables
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            # PostgreSQL configuration
+            - name: POSTGRESQL_VOLUME_DIR
+              value: "/bitnami/postgresql"
+            - name: PGDATA
+              value: "/bitnami/postgresql/data"
+            - name: POSTGRES_USER
+              value: "postgres"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: memphis-metadata
+                  key: password
+            - name: POSTGRES_DB
+              value: "postgres"
+            - name: POSTGRESQL_LOG_HOSTNAME
+              value: "true"
+            - name: POSTGRESQL_LOG_CONNECTIONS
+              value: "false"
+            - name: POSTGRESQL_LOG_DISCONNECTIONS
+              value: "false"
+            - name: POSTGRESQL_PGAUDIT_LOG_CATALOG
+              value: "off"
+            - name: POSTGRESQL_CLIENT_MIN_MESSAGES
+              value: "error"
+            - name: POSTGRESQL_SHARED_PRELOAD_LIBRARIES
+              value: "pgaudit, repmgr"
+            - name: POSTGRESQL_ENABLE_TLS
+              value: "no"
+            - name: POSTGRESQL_PORT_NUMBER
+              value: "5432"
+            # Repmgr configuration
+            - name: REPMGR_PORT_NUMBER
+              value: "5432"
+            - name: REPMGR_PRIMARY_PORT
+              value: "5432"
+            - name: MY_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: REPMGR_UPGRADE_EXTENSION
+              value: "no"
+            - name: REPMGR_PGHBA_TRUST_ALL
+              value: "no"
+            - name: REPMGR_MOUNTED_CONF_DIR
+              value: "/bitnami/repmgr/conf"
+            - name: REPMGR_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: REPMGR_PARTNER_NODES
+              value: memphis-metadata-0.memphis-metadata-headless.$(REPMGR_NAMESPACE).svc.cluster.local,memphis-metadata-1.memphis-metadata-headless.$(REPMGR_NAMESPACE).svc.cluster.local,memphis-metadata-2.memphis-metadata-headless.$(REPMGR_NAMESPACE).svc.cluster.local,
+            - name: REPMGR_PRIMARY_HOST
+              value: "memphis-metadata-0.memphis-metadata-headless.$(REPMGR_NAMESPACE).svc.cluster.local"
+            - name: REPMGR_NODE_NAME
+              value: "$(MY_POD_NAME)"
+            - name: REPMGR_NODE_NETWORK_NAME
+              value: "$(MY_POD_NAME).memphis-metadata-headless.$(REPMGR_NAMESPACE).svc.cluster.local"
+            - name: REPMGR_NODE_TYPE
+              value: "data"
+            - name: REPMGR_LOG_LEVEL
+              value: "NOTICE"
+            - name: REPMGR_CONNECT_TIMEOUT
+              value: "5"
+            - name: REPMGR_RECONNECT_ATTEMPTS
+              value: "2"
+            - name: REPMGR_RECONNECT_INTERVAL
+              value: "3"
+            - name: REPMGR_USERNAME
+              value: "repmgr"
+            - name: REPMGR_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: memphis-metadata
+                  key: repmgr-password
+            - name: REPMGR_DATABASE
+              value: "repmgr"
+            - name: REPMGR_FENCE_OLD_PRIMARY
+              value: "no"
+            - name: REPMGR_CHILD_NODES_CHECK_INTERVAL
+              value: "5"
+            - name: REPMGR_CHILD_NODES_CONNECTED_MIN_COUNT
+              value: "1"
+            - name: REPMGR_CHILD_NODES_DISCONNECT_TIMEOUT
+              value: "30"
+          envFrom:
+          ports:
+            - name: postgresql
+              containerPort: 5432
+              protocol: TCP
+          livenessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+            exec:
+              command:
+                - bash
+                - -ec
+                - 'PGPASSWORD=$POSTGRES_PASSWORD psql -w -U "postgres" -d "postgres" -h 127.0.0.1 -p 5432 -c "SELECT 1"'
+          readinessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+            exec:
+              command:
+                - bash
+                - -ec
+                - 'PGPASSWORD=$POSTGRES_PASSWORD psql -w -U "postgres" -d "postgres" -h 127.0.0.1 -p 5432 -c "SELECT 1"'
+          resources:
+            limits: {}
+            requests: {}
+          volumeMounts:
+            - name: custom-init-scripts
+              mountPath: /docker-entrypoint-initdb.d/
+            - name: data
+              mountPath: /bitnami/postgresql
+            - name: hooks-scripts
+              mountPath: /pre-stop.sh
+              subPath: pre-stop.sh
+      volumes:
+        - name: hooks-scripts
+          configMap:
+            name: memphis-metadata-hooks-scripts
+            defaultMode: 0755
+        - name: custom-init-scripts
+          configMap:
+            name: memphis-metadata-initdb-scripts
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "8Gi"
+---
+# Source: memphis/templates/memphis_statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: memphis
+  namespace: default
+  labels:
+    helm.sh/chart: memphis-1.4.4
+    
+    app.kubernetes.io/name: memphis
+    app.kubernetes.io/instance: my-memphis
+    app.kubernetes.io/version: "1.4.4"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+    matchLabels:
+      
+      app.kubernetes.io/name: memphis
+      app.kubernetes.io/instance: my-memphis
+  replicas: 1
+  updateStrategy:
+    type: RollingUpdate  
+  serviceName: memphis
+
+  podManagementPolicy: Parallel
+
+  template:
+    metadata:
+      labels:
+        
+        app.kubernetes.io/name: memphis
+        app.kubernetes.io/instance: my-memphis
+        app.kubernetes.io/component: memphis-statefulset
+    spec:
+      serviceAccount: default-cp-account
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  
+                  app.kubernetes.io/name: memphis
+                  app.kubernetes.io/instance: my-memphis
+      # Common volumes for the containers.
+      volumes:
+      - name: config-volume
+        configMap:
+          name: memphis-config
+
+
+
+      
+
+      # Local volume shared with the reloader.
+      - name: pid
+        emptyDir: {}
+
+
+      #################
+      #               #
+      #  TLS Volumes  #
+      #               #
+      #################
+
+      # Required to be able to HUP signal and apply config
+      # reload to the server without restarting the pod.
+      shareProcessNamespace: true
+
+      #####################
+      #                   #
+      #  InitContainerts  #
+      #                   #
+      #####################
+      initContainers:
+        - name: memphis-metadata-readiness
+          image: busybox:1.36.1
+          imagePullPolicy: IfNotPresent
+          env:
+          - name: NAMESPACE
+            value: default
+          command: ['sh', '-c', "until nslookup memphis-metadata-0.memphis-metadata-headless.$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace).svc.cluster.local; do echo waiting for memphis-metadata; sleep 2; done"]
+
+      ####################
+      #                  #
+      #  Memphis Server  #
+      #                  #
+      ####################
+      terminationGracePeriodSeconds: 60
+      containers:
+      - name: memphis
+        image: memphisos/memphis:1.4.4
+        imagePullPolicy: Always
+        resources:
+          {}
+        ports:
+        - containerPort: 9000
+          name: http
+        - containerPort: 7770
+          name: ws
+        - containerPort: 6666
+          name: clients
+        - containerPort: 8222
+          name: monitor
+        - containerPort: 6222
+          name: cluster
+        command:
+         - "nats-server"
+         - "--config"
+         - "/etc/nats-config/memphis.conf"
+
+        # Required to be able to define an environment variable
+        # that refers to other environment variables.  This env var
+        # is later used as part of the configuration file.
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: SERVER_NAME
+          value: $(POD_NAME)
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: CLUSTER_ADVERTISE
+          value: $(POD_NAME).memphis.$(POD_NAMESPACE).svc.cluster.local
+        - name: WS_HOST
+          value: localhost:7770
+        - name: USER_PASS_BASED_AUTH
+          value: "true"
+        - name: LOGS_RETENTION_IN_DAYS
+          value: "3"
+        - name: K8S_NAMESPACE
+          value: default
+        - name: ROOT_PASSWORD
+          valueFrom:
+              secretKeyRef:
+                name: "memphis-creds"
+                key: ROOT_PASSWORD 
+        - name: JWT_SECRET
+          valueFrom:
+              secretKeyRef:
+                name: "memphis-creds"
+                key: JWT_SECRET
+        - name: REFRESH_JWT_SECRET
+          valueFrom:
+              secretKeyRef:
+                name: "memphis-creds"
+                key: REFRESH_JWT_SECRET
+        - name: CONNECTION_TOKEN
+          valueFrom:
+              secretKeyRef:
+                name: "memphis-creds"
+                key: CONNECTION_TOKEN
+        - name: ENCRYPTION_SECRET_KEY
+          valueFrom:
+              secretKeyRef:
+                name: "memphis-creds"
+                key: ENCRYPTION_SECRET_KEY
+        - name: EXPORTER
+          value: "false"
+        - name: INSTALLATION_SOURCE
+          value: "main"
+        - name: METADATA_DB_USER
+          value: "postgres"
+        - name: METADATA_DB_PASS
+          valueFrom:
+              secretKeyRef:
+                name: memphis-metadata
+                key: password
+        - name: METADATA_DB_DBNAME
+          value: "memphis"
+        - name: METADATA_DB_HOST
+          value: memphis-metadata-coordinator.default.svc
+        - name: METADATA_DB_PORT
+          value: "5432"
+        volumeMounts:
+          - name: config-volume
+            mountPath: /etc/nats-config
+          - name: pid
+            mountPath: /var/run/memphis
+          
+          - name: memphis-js-pvc
+            mountPath: /data
+
+        #######################
+        #                     #
+        # Healthcheck Probes  #
+        #                     #
+        #######################
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8222
+          initialDelaySeconds: 10
+          timeoutSeconds: 5
+          periodSeconds: 60
+          successThreshold: 1
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            # During upgrades, healthz will be enabled instead to allow for a grace period
+            # in case of storageEngine enabled deployments to form quorum and streams to catch up.
+            path: /
+            port: 8222
+          initialDelaySeconds: 10
+          timeoutSeconds: 5
+          periodSeconds: 10
+          successThreshold: 1
+          failureThreshold: 30
+
+        # Gracefully stop Memphis Server on pod deletion or image upgrade.
+        #
+        lifecycle:
+          preStop:
+            exec:
+              # Using the alpine based Memphis image, we add an extra sleep that is
+              # the same amount as the terminationGracePeriodSeconds to allow
+              # the Memphis Server to gracefully terminate the client connections.
+              #
+              command:
+              - "/bin/sh"
+              - "-c"
+              - "nats-server -sl=ldm=/var/run/memphis/memphis.pid"
+
+      ####################################
+      #                                  #
+      #  Memphis Configuration Reloader  #
+      #                                  #
+      ####################################
+      
+      - name: reloader
+        image: memphisos/memphis-config-reloader:0.13.0
+        imagePullPolicy: IfNotPresent
+        resources:
+          null
+        command:
+         - "memphis-config-reloader"
+         - "-pid"
+         - "/var/run/memphis/memphis.pid"
+         - "-config"
+         - "/etc/nats-config/memphis.conf"
+        volumeMounts:
+          - name: config-volume
+            mountPath: /etc/nats-config
+          - name: pid
+            mountPath: /var/run/memphis
+      
+
+      #################################
+      #                               #
+      #  Memphis Prometheus Exporter  #
+      #                               #
+      #################################
+      
+
+
+  volumeClaimTemplates:
+  #########################################
+  #                                       #
+  #  storageEngine New Persistent Volume  #
+  #                                       #
+  #########################################
+    - metadata:
+        name: memphis-js-pvc
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: 30Gi

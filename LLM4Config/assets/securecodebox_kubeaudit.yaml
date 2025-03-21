@@ -1,0 +1,149 @@
+---
+# Source: kubeaudit/templates/kubeaudit-rbac.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kubeaudit
+  namespace: default
+---
+# Source: kubeaudit/templates/kubeaudit-rbac.yaml
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: kubeaudit
+  namespace: default
+rules:
+  - apiGroups: [""]
+    resources:
+      - pods
+      - podtemplates
+      - replicationcontrollers
+      - namespaces
+    verbs: ["get", "list"]
+  - apiGroups: ["apps"]
+    resources:
+      - daemonsets
+      - statefulsets
+      - deployments
+    verbs: ["get", "list"]
+  - apiGroups: ["batch"]
+    resources:
+      - cronjobs
+    verbs: ["get", "list"]
+  - apiGroups: ["networking"]
+    resources:
+      - networkpolicies
+    verbs: ["get", "list"]
+---
+# Source: kubeaudit/templates/kubeaudit-rbac.yaml
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: kubeaudit-lurker
+  namespace: default
+subjects:
+  - kind: ServiceAccount
+    name: kubeaudit
+    namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: lurker
+---
+# Source: kubeaudit/templates/kubeaudit-rbac.yaml
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: kubeaudit
+  namespace: default
+subjects:
+  - kind: ServiceAccount
+    name: kubeaudit
+    namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: kubeaudit
+---
+# Source: kubeaudit/templates/kubeaudit-rbac.yaml
+# SPDX-FileCopyrightText: the secureCodeBox authors
+#
+# SPDX-License-Identifier: Apache-2.0
+---
+# Source: kubeaudit/templates/kubeaudit-parse-definition.yaml
+# SPDX-FileCopyrightText: the secureCodeBox authors
+#
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: "execution.securecodebox.io/v1"
+kind: ParseDefinition
+metadata:
+  name: "kubeaudit-jsonl"
+spec:
+  image: "docker.io/securecodebox/parser-kubeaudit:4.8.0"
+  imagePullPolicy: IfNotPresent
+  ttlSecondsAfterFinished: 
+  env:
+    []
+  scopeLimiterAliases:
+    {}
+  affinity:
+    {}
+  tolerations:
+    []
+---
+# Source: kubeaudit/templates/kubeaudit-scan-type.yaml
+# SPDX-FileCopyrightText: the secureCodeBox authors
+#
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: "execution.securecodebox.io/v1"
+kind: ScanType
+metadata:
+  name: "kubeaudit"
+spec:
+  extractResults:
+    type: kubeaudit-jsonl
+    location: "/home/securecodebox/kubeaudit.jsonl"
+  jobTemplate:
+    spec:
+      suspend: false
+      backoffLimit: 3
+      template:
+        spec:
+          restartPolicy: OnFailure
+          affinity:
+            {}
+          tolerations:
+            []
+          securityContext:
+            {}
+          containers:
+            - name: kubeaudit
+              image: "docker.io/securecodebox/scanner-kubeaudit:0.22.1"
+              imagePullPolicy: IfNotPresent
+              command:
+                - "sh"
+                - "/wrapper.sh"
+                - "all"
+                - "--exitcode"
+                - "0"
+                - "--format"
+                - "json"
+              resources:
+                {}
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                  - all
+                privileged: false
+                readOnlyRootFilesystem: true
+                runAsNonRoot: true
+              env:
+                []
+              volumeMounts:
+                []
+          volumes:
+            []
+          serviceAccountName: kubeaudit

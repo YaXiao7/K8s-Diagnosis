@@ -1,0 +1,132 @@
+---
+# Source: chirpstack-packet-multiplexer/templates/ConfigMap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-chirpstack-packet-multiplexer
+  labels:
+    helm.sh/chart: chirpstack-packet-multiplexer-3.0.0
+    app.kubernetes.io/name: chirpstack-packet-multiplexer
+    app.kubernetes.io/instance: my-chirpstack-packet-multiplexer
+    app.kubernetes.io/version: "latest"
+    app.kubernetes.io/managed-by: Helm
+    
+data:
+  chirpstack-packet-multiplexer.toml: |
+    [general]
+    # Log level
+    #
+    # debug=5, info=4, warning=3, error=2, fatal=1, panic=0
+    log_level=4
+
+
+    [packet_multiplexer]
+    # Bind
+    #
+    # The interface:port on which the packet-multiplexer will bind for receiving
+    # data from the packet-forwarder (UDP data).
+    bind="0.0.0.0:1700"
+
+
+    # Backends
+    #
+    # The backends to which the packet-multiplexer will forward the
+    # packet-forwarder UDP data.
+    #
+    # Example:
+    # [[packet_multiplexer.backend]]
+    # # Host
+    # #
+    # # The host:IP of the backend.
+    # host="192.16.1.5:1700"
+    #
+    # # Uplink only
+    #
+    # # This backend is for uplink only. It is not able to send data
+    # # back to the gateways.
+    # uplink_only=false
+    #
+    # # Gateway IDs
+    # #
+    # # The Gateway IDs to forward data for.
+    # gateway_ids = [
+    #   "0101010101010101",
+    #   "0202020202020202",
+    # ]
+    [[packet_multiplexer.backend]]
+    host="eu1.cloud.thethings.network:1700"
+    uplink_only=false
+    gateway_ids = [
+    ]
+---
+# Source: chirpstack-packet-multiplexer/templates/common.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-chirpstack-packet-multiplexer
+  labels:
+    app.kubernetes.io/service: my-chirpstack-packet-multiplexer
+    app.kubernetes.io/instance: my-chirpstack-packet-multiplexer
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: chirpstack-packet-multiplexer
+    app.kubernetes.io/version: latest
+    helm.sh/chart: chirpstack-packet-multiplexer-3.0.0
+  annotations:
+spec:
+  type: ClusterIP
+  ports:
+    - port: 1700
+      targetPort: lorawan
+      protocol: UDP
+      name: lorawan
+  selector:
+    app.kubernetes.io/instance: my-chirpstack-packet-multiplexer
+    app.kubernetes.io/name: chirpstack-packet-multiplexer
+---
+# Source: chirpstack-packet-multiplexer/templates/common.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-chirpstack-packet-multiplexer
+  labels:
+    app.kubernetes.io/instance: my-chirpstack-packet-multiplexer
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: chirpstack-packet-multiplexer
+    app.kubernetes.io/version: latest
+    helm.sh/chart: chirpstack-packet-multiplexer-3.0.0
+spec:
+  revisionHistoryLimit: 3
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: chirpstack-packet-multiplexer
+      app.kubernetes.io/instance: my-chirpstack-packet-multiplexer
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: chirpstack-packet-multiplexer
+        app.kubernetes.io/instance: my-chirpstack-packet-multiplexer
+    spec:
+      
+      serviceAccountName: default
+      automountServiceAccountToken: true
+      dnsPolicy: ClusterFirst
+      enableServiceLinks: true
+      containers:
+        - name: my-chirpstack-packet-multiplexer
+          image: ghcr.io/angelnu/chirpstack-packet-multiplexer:latest
+          imagePullPolicy: 
+          ports:
+            - name: lorawan
+              containerPort: 1700
+              protocol: UDP
+          volumeMounts:
+            - name: config
+              mountPath: /etc/chirpstack-packet-multiplexer
+          
+      volumes:
+        - name: config
+          configMap:
+            name: my-chirpstack-packet-multiplexer

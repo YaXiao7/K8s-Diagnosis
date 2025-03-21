@@ -1,0 +1,238 @@
+---
+# Source: openstack-cloud-controller-manager/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cloud-controller-manager
+  labels:
+    app.kubernetes.io/name: openstack-cloud-controller-manager
+    helm.sh/chart: openstack-cloud-controller-manager-2.31.0
+    app.kubernetes.io/instance: my-openstack-cloud-controller-manager
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "v1.31.0"
+  namespace: default
+  annotations:
+---
+# Source: openstack-cloud-controller-manager/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cloud-config
+  labels:
+    app.kubernetes.io/name: openstack-cloud-controller-manager
+    helm.sh/chart: openstack-cloud-controller-manager-2.31.0
+    app.kubernetes.io/instance: my-openstack-cloud-controller-manager
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "v1.31.0"
+  namespace: default
+  annotations:
+type: Opaque
+data:
+  cloud.conf: W0dsb2JhbF0KCltOZXR3b3JraW5nXQoKW0xvYWRCYWxhbmNlcl0KCltCbG9ja1N0b3JhZ2VdCgpbTWV0YWRhdGFdCgpbUm91dGVd
+---
+# Source: openstack-cloud-controller-manager/templates/clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: system:cloud-controller-manager
+  labels:
+    app.kubernetes.io/name: openstack-cloud-controller-manager
+    helm.sh/chart: openstack-cloud-controller-manager-2.31.0
+    app.kubernetes.io/instance: my-openstack-cloud-controller-manager
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "v1.31.0"
+  annotations:
+rules:
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - get
+  - create
+  - update
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+  - update
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  verbs:
+  - '*'
+- apiGroups:
+  - ""
+  resources:
+  - nodes/status
+  verbs:
+  - patch
+- apiGroups:
+  - ""
+  resources:
+  - services
+  verbs:
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - services/status
+  verbs:
+  - patch
+- apiGroups:
+  - ""
+  resources:
+  - serviceaccounts/token
+  verbs:
+  - create
+- apiGroups:
+  - ""
+  resources:
+  - serviceaccounts
+  verbs:
+  - create
+  - get
+- apiGroups:
+  - ""
+  resources:
+  - persistentvolumes
+  verbs:
+  - '*'
+- apiGroups:
+  - ""
+  resources:
+  - endpoints
+  verbs:
+  - create
+  - get
+  - list
+  - watch
+  - update
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - list
+  - get
+  - watch
+---
+# Source: openstack-cloud-controller-manager/templates/clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: system:cloud-controller-manager
+  labels:
+    app.kubernetes.io/name: openstack-cloud-controller-manager
+    helm.sh/chart: openstack-cloud-controller-manager-2.31.0
+    app.kubernetes.io/instance: my-openstack-cloud-controller-manager
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "v1.31.0"
+  annotations:
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:cloud-controller-manager
+subjects:
+- kind: ServiceAccount
+  name: cloud-controller-manager
+  namespace: "default"
+---
+# Source: openstack-cloud-controller-manager/templates/daemonset.yaml
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: openstack-cloud-controller-manager
+  labels:
+    app.kubernetes.io/name: openstack-cloud-controller-manager
+    helm.sh/chart: openstack-cloud-controller-manager-2.31.0
+    app.kubernetes.io/instance: my-openstack-cloud-controller-manager
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "v1.31.0"
+  namespace: default
+  annotations:
+spec:
+  selector:
+    matchLabels:
+      component: controllermanager
+      app: openstack-cloud-controller-manager
+      release: my-openstack-cloud-controller-manager
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations:
+        checksum/config: b0b31d6311d187dd53758033396c83505652c1ec8a62bef0b9afe7f9572f8db4
+      labels:
+        component: controllermanager
+        app: openstack-cloud-controller-manager
+        release: my-openstack-cloud-controller-manager
+        chart: openstack-cloud-controller-manager-2.31.0
+        heritage: Helm
+    spec:
+      nodeSelector:
+        node-role.kubernetes.io/control-plane: ""
+      securityContext:
+        runAsUser: 1001
+      tolerations:
+        - effect: NoSchedule
+          key: node.cloudprovider.kubernetes.io/uninitialized
+          value: "true"
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/control-plane
+      serviceAccountName: cloud-controller-manager
+      containers:
+        - name: openstack-cloud-controller-manager
+          image: "registry.k8s.io/provider-os/openstack-cloud-controller-manager:v1.31.0"
+          args:
+            - /bin/openstack-cloud-controller-manager
+            - --v=2
+            - --cloud-config=$(CLOUD_CONFIG)
+            - --cluster-name=$(CLUSTER_NAME)
+            - --cloud-provider=openstack
+            - --use-service-account-credentials=false
+            - --controllers=cloud-node,cloud-node-lifecycle,route,service
+            - --bind-address=127.0.0.1
+          volumeMounts:
+            - mountPath: /etc/config
+              name: cloud-config-volume
+              readOnly: true
+            - mountPath: /usr/libexec/kubernetes/kubelet-plugins/volume/exec
+              name: flexvolume-dir
+              readOnly: true
+            - mountPath: /etc/kubernetes/pki
+              name: k8s-certs
+              readOnly: true
+          env:
+            - name: CLOUD_CONFIG
+              value: /etc/config/cloud.conf
+            - name: CLUSTER_NAME
+              value: kubernetes
+      dnsPolicy: ClusterFirst
+      hostNetwork: true
+      volumes:
+      - name: cloud-config-volume
+        secret:
+          secretName: cloud-config
+        
+      - hostPath:
+          path: /usr/libexec/kubernetes/kubelet-plugins/volume/exec
+        name: flexvolume-dir
+      - hostPath:
+          path: /etc/kubernetes/pki
+        name: k8s-certs

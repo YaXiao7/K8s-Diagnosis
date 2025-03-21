@@ -1,0 +1,204 @@
+---
+# Source: eth-cache-proxy/templates/base-all.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-eth-cache-proxy
+  labels:
+    app.kubernetes.io/name: eth-cache-proxy
+    helm.sh/chart: eth-cache-proxy-0.1.12
+    app.kubernetes.io/instance: my-eth-cache-proxy
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: eth-cache-proxy/templates/base-all.yaml
+apiVersion: v1
+kind: ConfigMap
+immutable: false
+metadata:
+  name: my-eth-cache-proxy
+  labels:
+    app.kubernetes.io/name: eth-cache-proxy
+    helm.sh/chart: eth-cache-proxy-0.1.12
+    app.kubernetes.io/instance: my-eth-cache-proxy
+    app.kubernetes.io/managed-by: Helm
+data:
+  config.yaml: |
+    cachedAll: false
+    debugMode: false
+    globalTtl: 3s
+    monitoring:
+      enabled: true
+    olric:
+      client:
+        dialTimeout: 0s
+        keepAlive: 0s
+        maxConn: 10
+        minConn: 1
+        poolTimeout: 15s
+        readTimeout: 0s
+        writeTimeout: 0s
+      configType: local
+      keepAlivePeriod: 0s
+      logLevel: DEBUG
+      logVerbosity: 6
+      mapName: test-map
+      name: eth-cache-proxy
+      namespace: default
+      shutdownTimeout: 5s
+      startTimeout: 3s
+    profiling:
+      enabled: false
+    remoteClient:
+      backendRpcUrl: https://bsc-dataseed.binance.org
+      requestsTimeouts: 1s
+      responseHeaderTimeout: 35s
+      transport:
+        buffer:
+          readBufferSize: 256KiB
+          writeBufferSize: 256KiB
+        maxIdleConns: 0
+        tcpKeepalive:
+          enabled: false
+          period: 15s
+    rpcObjectKey: method
+    server:
+      host: 0.0.0.0
+      httptransport:
+        maxIdleConnDuration: 15s
+        readTimeout: 7s
+        writeTimeout: 7s
+      keepalive: true
+      port: 8091
+      requestsPause: 80ms
+    single:
+      buffer:
+        readBufferSize: 256KiB
+        writeBufferSize: 256KiB
+      concurrency: 100000
+      enabled: true
+      host: 0.0.0.0
+      httptransport:
+        maxIdleConnDuration: 15s
+        readTimeout: 7s
+        writeTimeout: 7s
+      name: pprof/monitoring server
+      port: 8097
+      tcpKeepalive:
+        enabled: true
+        period: 1s
+---
+# Source: eth-cache-proxy/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-eth-cache-proxy
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "watch", "list"]
+---
+# Source: eth-cache-proxy/templates/rbac.yaml
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-eth-cache-proxy
+subjects:
+  - kind: ServiceAccount
+    name: my-eth-cache-proxy
+    namespace: default
+roleRef:
+  kind: ClusterRole
+  name: my-eth-cache-proxy
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: eth-cache-proxy/templates/base-all.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-eth-cache-proxy
+  labels:
+    app.kubernetes.io/name: eth-cache-proxy
+    helm.sh/chart: eth-cache-proxy-0.1.12
+    app.kubernetes.io/instance: my-eth-cache-proxy
+    app.kubernetes.io/managed-by: Helm
+spec:
+  ports:
+    - name: http
+      port: 8091
+    - name: memberlist
+      port: 3322
+    - name: monitoring
+      port: 8097
+    - name: olricd
+      port: 3320
+  selector:
+    app.kubernetes.io/name: eth-cache-proxy
+    app.kubernetes.io/instance: my-eth-cache-proxy
+---
+# Source: eth-cache-proxy/templates/base-all.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-eth-cache-proxy
+  labels:
+    app.kubernetes.io/name: eth-cache-proxy
+    helm.sh/chart: eth-cache-proxy-0.1.12
+    app.kubernetes.io/instance: my-eth-cache-proxy
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: eth-cache-proxy
+      app.kubernetes.io/instance: my-eth-cache-proxy
+  template:
+    metadata:
+      annotations:
+        checksum/config.yaml: '1aa0e2cdf72c5d1869eae4631ea95db4742da1ad6e616efacc253df87f4c5536'
+      labels:
+        app.kubernetes.io/name: eth-cache-proxy
+        helm.sh/chart: eth-cache-proxy-0.1.12
+        app.kubernetes.io/instance: my-eth-cache-proxy
+        app.kubernetes.io/managed-by: Helm
+    spec:      
+      serviceAccountName: my-eth-cache-proxy
+      securityContext: 
+        fsGroup: 1001
+      containers:
+        -
+          name: eth-cache-proxy
+          image: eu.gcr.io/predictkube/rpc-proxy-cacher:v0.1.0
+          imagePullPolicy: IfNotPresent
+          securityContext: 
+            runAsNonRoot: true
+            runAsUser: 1001
+          command:
+            - /app
+          args:
+            - -conf=/etc/eth-cache-proxy/configs/config.yaml
+          resources:
+            limits:
+              cpu: 1300m
+              memory: 1024Mi
+            requests:
+              cpu: 1000m
+              memory: 256Mi
+          ports:  
+            - name: http
+              containerPort: 8091
+            - name: memberlist
+              containerPort: 3322
+            - name: monitoring
+              containerPort: 8097
+            - name: olricd
+              containerPort: 3320
+          volumeMounts:  
+            - mountPath: /etc/eth-cache-proxy/configs
+              name: configs
+              readOnly: true
+      volumes:   
+        - configMap:
+            name: 'my-eth-cache-proxy'
+          name: configs

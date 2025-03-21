@@ -1,0 +1,102 @@
+---
+# Source: lancache/templates/common.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-lancache
+  labels:
+    app.kubernetes.io/instance: my-lancache
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: lancache
+    app.kubernetes.io/version: 1.0.0
+    helm.sh/chart: lancache-0.6.2
+  annotations:
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: http
+    protocol: TCP
+    name: http
+  - port: 443
+    targetPort: https
+    protocol: TCP
+    name: https
+  selector:
+    app.kubernetes.io/name: lancache
+    app.kubernetes.io/instance: my-lancache
+---
+# Source: lancache/templates/common.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-lancache
+  labels:
+    app.kubernetes.io/instance: my-lancache
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: lancache
+    app.kubernetes.io/version: 1.0.0
+    helm.sh/chart: lancache-0.6.2
+spec:
+  revisionHistoryLimit: 3
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: lancache
+      app.kubernetes.io/instance: my-lancache
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: lancache
+        app.kubernetes.io/instance: my-lancache
+    spec:
+      
+      serviceAccountName: default
+      automountServiceAccountToken: true
+      dnsPolicy: None
+      dnsConfig:
+        nameservers:
+        - 127.0.0.1
+      enableServiceLinks: true
+      containers:
+        - name: my-lancache
+          image: "lancachenet/monolithic:latest"
+          imagePullPolicy: Always
+          env:
+            - name: TZ
+              value: UTC
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+            - name: https
+              containerPort: 443
+              protocol: TCP
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /lancache-heartbeat
+              port: 80
+            initialDelaySeconds: 0
+            periodSeconds: 10
+            timeoutSeconds: 1
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /lancache-heartbeat
+              port: 80
+            initialDelaySeconds: 0
+            periodSeconds: 10
+            timeoutSeconds: 1
+          startupProbe:
+            failureThreshold: 30
+            httpGet:
+              path: /lancache-heartbeat
+              port: 80
+            initialDelaySeconds: 0
+            periodSeconds: 5
+            timeoutSeconds: 1
+      nodeSelector:
+        kubernetes.io/arch: amd64

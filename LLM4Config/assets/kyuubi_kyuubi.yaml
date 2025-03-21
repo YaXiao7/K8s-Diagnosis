@@ -1,0 +1,156 @@
+---
+# Source: kyuubi/templates/kyuubi-configmap.yaml
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kyuubi-defaults
+  labels:
+    app: kyuubi
+data:
+  kyuubi-defaults.conf: |
+    #
+    # Licensed to the Apache Software Foundation (ASF) under one or more
+    # contributor license agreements.  See the NOTICE file distributed with
+    # this work for additional information regarding copyright ownership.
+    # The ASF licenses this file to You under the Apache License, Version 2.0
+    # (the "License"); you may not use this file except in compliance with
+    # the License.  You may obtain a copy of the License at
+    #
+    #    http://www.apache.org/licenses/LICENSE-2.0
+    #
+    # Unless required by applicable law or agreed to in writing, software
+    # distributed under the License is distributed on an "AS IS" BASIS,
+    # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    # See the License for the specific language governing permissions and
+    # limitations under the License.
+    #
+
+    ## Kyuubi Configurations
+
+    #
+    # kyuubi.authentication           NONE
+    #
+    kyuubi.frontend.bind.host=0.0.0.0
+    kyuubi.frontend.bind.port=10009
+
+    # Details in https://kyuubi.apache.org/docs/latest/deployment/settings.html
+---
+# Source: kyuubi/templates/kyuubi-service.yaml
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: kyuubi-svc
+  labels:
+    app: kyuubi
+spec:
+  ports:
+    - name: http
+      nodePort: 30009
+      port: 10009
+      protocol: TCP
+  type: NodePort
+  selector:
+    app: kyuubi
+    release: my-kyuubi
+---
+# Source: kyuubi/templates/kyuubi-deployment.yaml
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kyuubi-server
+  labels:
+    app: kyuubi
+    release: my-kyuubi
+    heritage: Helm
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: kyuubi
+      release: my-kyuubi
+  template:
+    metadata:
+      labels:
+        app: kyuubi
+        release: my-kyuubi
+    spec:
+      containers:
+        - name: kyuubi-server
+          image: "apache/kyuubi:master-snapshot"
+          imagePullPolicy: Always
+          ports:
+            - name: frontend-port
+              containerPort: 10009
+              protocol: TCP
+          livenessProbe:
+            tcpSocket:
+              port: 10009
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 10
+          readinessProbe:
+            tcpSocket:
+              port: 10009
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 10
+          resources:
+            {}
+          volumeMounts:
+            - name: kyuubi-defaults
+              mountPath: /opt/kyuubi/conf
+      volumes:
+        - name: kyuubi-defaults
+          configMap:
+            name: kyuubi-defaults

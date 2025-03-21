@@ -1,0 +1,379 @@
+---
+# Source: trivy/templates/trivy-rbac.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: trivy-k8s
+  namespace: default
+---
+# Source: trivy/templates/trivy-rbac.yaml
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: trivy-k8s
+rules:
+  - apiGroups: [""]
+    resources:
+      - pods
+      - podtemplates
+      - replicationcontrollers
+      - namespaces
+    verbs: ["get", "list"]
+  - apiGroups: ["apps"]
+    resources:
+      - daemonsets
+      - statefulsets
+      - deployments
+    verbs: ["get", "list"]
+  - apiGroups: ["batch"]
+    resources:
+      - cronjobs
+    verbs: ["get", "list"]
+  - apiGroups: ["networking"]
+    resources:
+      - networkpolicies
+    verbs: ["get", "list"]
+---
+# Source: trivy/templates/trivy-rbac.yaml
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: trivy-k8s
+subjects:
+  - kind: ServiceAccount
+    name: trivy-k8s
+    namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+---
+# Source: trivy/templates/trivy-rbac.yaml
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: trivy-k8s-lurker
+  namespace: default
+subjects:
+  - kind: ServiceAccount
+    name: trivy-k8s
+    namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: lurker
+---
+# Source: trivy/templates/trivy-database-cache.yaml
+# SPDX-FileCopyrightText: the secureCodeBox authors
+#
+# SPDX-License-Identifier: Apache-2.0
+
+
+# We use trivy in client/server mode for central storing of the trivy vulnerability database to prevent downloading it for each scan again, enabled by default.
+# First declare a service that will serve requests to the database cache pod
+kind: Service
+apiVersion: v1
+metadata:
+  name: trivy-database
+  labels:
+    app: trivy-database
+spec:
+  selector:
+    app: trivy-database
+  ports:
+  - port: 8080
+    protocol: TCP
+    targetPort: 8080
+  type: ClusterIP
+---
+# Source: trivy/templates/trivy-database-cache.yaml
+# Now declare the actual deployment of the database cache server
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trivy-database
+  labels:
+    app: trivy-database
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: trivy-database
+  template:
+    metadata:
+      labels:
+        app: trivy-database
+    spec:
+      containers:
+      - name: trivy-database
+        image: "docker.io/aquasec/trivy:0.54.1"
+        imagePullPolicy: IfNotPresent
+        args:
+        - "server"
+        - "--listen"
+        - "0.0.0.0:8080"
+        ports:
+        - containerPort: 8080
+          protocol: TCP
+          name: trivy-http
+        livenessProbe:
+          httpGet:
+            scheme: HTTP
+            path: /healthz
+            port: trivy-http
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          successThreshold: 1
+          failureThreshold: 10
+        readinessProbe:
+          httpGet:
+            scheme: HTTP
+            path: /healthz
+            port: trivy-http
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          successThreshold: 1
+          failureThreshold: 3
+---
+# Source: trivy/templates/trivy-rbac.yaml
+# SPDX-FileCopyrightText: the secureCodeBox authors
+#
+# SPDX-License-Identifier: Apache-2.0
+---
+# Source: trivy/templates/trivy-parse-definition.yaml
+# SPDX-FileCopyrightText: the secureCodeBox authors
+#
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: "execution.securecodebox.io/v1"
+kind: ParseDefinition
+metadata:
+  name: "trivy-json"
+spec:
+  image: "docker.io/securecodebox/parser-trivy:4.8.0"
+  imagePullPolicy: IfNotPresent
+  ttlSecondsAfterFinished: 
+  env:
+    []
+  scopeLimiterAliases:
+    {}
+  affinity:
+    {}
+  tolerations:
+    []
+---
+# Source: trivy/templates/trivy-scan-type.yaml
+# SPDX-FileCopyrightText: the secureCodeBox authors
+#
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: "execution.securecodebox.io/v1"
+kind: ScanType
+metadata:
+  name: "trivy-image"
+spec:
+  extractResults:
+    type: trivy-json
+    location: "/home/securecodebox/trivy-results.json"
+  jobTemplate:
+    spec:
+      backoffLimit: 3
+      template:
+        spec:
+          restartPolicy: OnFailure
+          affinity:
+            {}
+          tolerations:
+            []
+          securityContext:
+            {}
+          containers:
+            - name: trivy
+              image: "docker.io/aquasec/trivy:0.54.1"
+              imagePullPolicy: IfNotPresent
+              command:
+                - "trivy"
+                - "image"
+                # Suppress progress bar, as it pollutes non interactive terminal logs
+                - "--no-progress"
+                # Connect to trivy database cache to avoid downloading the vulnerability DB for each scan
+                - "--server"
+                - "http://trivy-database.default.svc:8080"
+                - "--format"
+                - "json"
+                - "--output"
+                - "/home/securecodebox/trivy-results.json"
+              resources:
+                {}
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                  - all
+                privileged: false
+                readOnlyRootFilesystem: false
+                runAsNonRoot: false
+              env:
+                []
+              volumeMounts:
+                []
+          volumes:
+            []
+---
+# Source: trivy/templates/trivy-scan-type.yaml
+apiVersion: "execution.securecodebox.io/v1"
+kind: ScanType
+metadata:
+  name: "trivy-filesystem"
+spec:
+  extractResults:
+    type: trivy-json
+    location: "/home/securecodebox/trivy-results.json"
+  jobTemplate:
+    spec:
+      suspend: false
+      backoffLimit: 3
+      template:
+        spec:
+          restartPolicy: OnFailure
+          affinity:
+            {}
+          tolerations:
+            []
+          containers:
+            - name: trivy
+              image: "docker.io/aquasec/trivy:0.54.1"
+              imagePullPolicy: IfNotPresent
+              command:
+                - "trivy"
+                - "filesystem"
+                # Suppress progress bar, as it pollutes non interactive terminal logs
+                - "--no-progress"
+                # Connect to trivy database cache to avoid downloading the vulnerability DB for each scan
+                - "--server"
+                - "http://trivy-database.default.svc:8080"
+                - "--format"
+                - "json"
+                - "--output"
+                - "/home/securecodebox/trivy-results.json"
+              resources:
+                {}
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                  - all
+                privileged: false
+                readOnlyRootFilesystem: false
+                runAsNonRoot: false
+              env:
+                []
+              volumeMounts:
+                []
+          volumes:
+            []
+---
+# Source: trivy/templates/trivy-scan-type.yaml
+apiVersion: "execution.securecodebox.io/v1"
+kind: ScanType
+metadata:
+  name: "trivy-repo"
+spec:
+  extractResults:
+    type: trivy-json
+    location: "/home/securecodebox/trivy-results.json"
+  jobTemplate:
+    spec:
+      suspend: false
+      backoffLimit: 3
+      template:
+        spec:
+          restartPolicy: OnFailure
+          affinity:
+            {}
+          tolerations:
+            []
+          containers:
+            - name: trivy
+              image: "docker.io/aquasec/trivy:0.54.1"
+              imagePullPolicy: IfNotPresent
+              command:
+                - "trivy"
+                - "repo"
+                # Suppress progress bar, as it pollutes non interactive terminal logs
+                - "--no-progress"
+                # Connect to trivy database cache to avoid downloading the vulnerability DB for each scan
+                - "--server"
+                - "http://trivy-database.default.svc:8080"
+                - "--format"
+                - "json"
+                - "--output"
+                - "/home/securecodebox/trivy-results.json"
+              resources:
+                {}
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                  - all
+                privileged: false
+                readOnlyRootFilesystem: false
+                runAsNonRoot: false
+              env:
+                []
+              volumeMounts:
+                []
+          volumes:
+            []
+---
+# Source: trivy/templates/trivy-scan-type.yaml
+apiVersion: "execution.securecodebox.io/v1"
+kind: ScanType
+metadata:
+  name: "trivy-k8s"
+spec:
+  extractResults:
+    type: trivy-json
+    location: "/home/securecodebox/trivy-results.json"
+  jobTemplate:
+    spec:
+      backoffLimit: 3
+      template:
+        spec:
+          restartPolicy: OnFailure
+          affinity:
+            {}
+          tolerations:
+            []
+          containers:
+            - name: trivy
+              image: "docker.io/aquasec/trivy:0.54.1"
+              imagePullPolicy: IfNotPresent
+              command:
+                - "trivy"
+                - "k8s"
+                # Suppress progress bar, as it pollutes non interactive terminal logs
+                - "--no-progress"
+                - "--format"
+                - "json"
+                - "--report"
+                - "all"
+                - "--output"
+                - "/home/securecodebox/trivy-results.json"
+              resources:
+                {}
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                  - all
+                privileged: false
+                readOnlyRootFilesystem: false
+                runAsNonRoot: false
+              env:
+                []
+              volumeMounts:
+                []
+          serviceAccountName: trivy-k8s
+          volumes:
+            []

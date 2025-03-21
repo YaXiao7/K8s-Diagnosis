@@ -1,0 +1,206 @@
+---
+# Source: structurizr/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-structurizr
+  labels:
+    helm.sh/chart: structurizr-0.4.2
+    app.kubernetes.io/name: structurizr
+    app.kubernetes.io/instance: my-structurizr
+    app.kubernetes.io/version: "2024.06.25"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: structurizr/templates/config-map.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-structurizr-properties
+  labels:
+    helm.sh/chart: structurizr-0.4.2
+    app.kubernetes.io/name: structurizr
+    app.kubernetes.io/instance: my-structurizr
+    app.kubernetes.io/version: "2024.06.25"
+    app.kubernetes.io/managed-by: Helm
+data:
+  structurizr.properties: |
+---
+# Source: structurizr/templates/config-map.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-structurizr-users
+  labels:
+    helm.sh/chart: structurizr-0.4.2
+    app.kubernetes.io/name: structurizr
+    app.kubernetes.io/instance: my-structurizr
+    app.kubernetes.io/version: "2024.06.25"
+    app.kubernetes.io/managed-by: Helm
+data:
+  structurizr.users: |
+---
+# Source: structurizr/templates/config-map.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-structurizr-roles
+  labels:
+    helm.sh/chart: structurizr-0.4.2
+    app.kubernetes.io/name: structurizr
+    app.kubernetes.io/instance: my-structurizr
+    app.kubernetes.io/version: "2024.06.25"
+    app.kubernetes.io/managed-by: Helm
+data:
+  structurizr.roles: |
+---
+# Source: structurizr/templates/config-map.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-structurizr-saml-idp-metadata
+  labels:
+    helm.sh/chart: structurizr-0.4.2
+    app.kubernetes.io/name: structurizr
+    app.kubernetes.io/instance: my-structurizr
+    app.kubernetes.io/version: "2024.06.25"
+    app.kubernetes.io/managed-by: Helm
+data:
+  saml-idp-metadata.xml: |
+---
+# Source: structurizr/templates/config-map.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-structurizr-log4j2
+  labels:
+    helm.sh/chart: structurizr-0.4.2
+    app.kubernetes.io/name: structurizr
+    app.kubernetes.io/instance: my-structurizr
+    app.kubernetes.io/version: "2024.06.25"
+    app.kubernetes.io/managed-by: Helm
+data:
+  log4j2.properties: |
+---
+# Source: structurizr/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-structurizr
+  labels:
+    helm.sh/chart: structurizr-0.4.2
+    app.kubernetes.io/name: structurizr
+    app.kubernetes.io/instance: my-structurizr
+    app.kubernetes.io/version: "2024.06.25"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: structurizr
+    app.kubernetes.io/instance: my-structurizr
+---
+# Source: structurizr/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-structurizr
+  labels:
+    helm.sh/chart: structurizr-0.4.2
+    app.kubernetes.io/name: structurizr
+    app.kubernetes.io/instance: my-structurizr
+    app.kubernetes.io/version: "2024.06.25"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: structurizr
+      app.kubernetes.io/instance: my-structurizr
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: structurizr
+        app.kubernetes.io/instance: my-structurizr
+    spec:
+      serviceAccountName: my-structurizr
+      securityContext:
+        {}
+      containers:
+        - name: structurizr
+          securityContext:
+            {}
+          image: "structurizr/onpremises:2024.06.25"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+                #          livenessProbe:
+                #            httpGet:
+                #              path: /
+                #              port: http
+                #              initialDelaySeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+          volumeMounts:
+            - name: properties-volume
+              mountPath: /usr/local/structurizr/structurizr.properties
+              subPath: structurizr.properties
+            - name: users-volume
+              mountPath: /usr/local/structurizr/structurizr.users
+              subPath: structurizr.users
+            - name: roles-volume
+              mountPath: /usr/local/structurizr/structurizr.roles
+              subPath: structurizr.roles
+            - name: saml-idp-metadata-volume
+              mountPath: /usr/local/structurizr/saml-idp-metadata.xml
+              subPath: saml-idp-metadata.xml
+            - name: log4j2-volume
+              mountPath: /usr/local/structurizr/log4j2.properties
+              subPath: log4j2.properties
+          resources:
+            {}
+      volumes:
+        - name: properties-volume
+          configMap:
+            name: my-structurizr-properties
+        - name: users-volume
+          configMap:
+            name: my-structurizr-users
+        - name: roles-volume
+          configMap:
+            name: my-structurizr-roles
+        - name: saml-idp-metadata-volume
+          configMap:
+            name: my-structurizr-saml-idp-metadata
+        - name: log4j2-volume
+          configMap:
+            name: my-structurizr-log4j2
+---
+# Source: structurizr/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-structurizr-test-connection"
+  labels:
+    helm.sh/chart: structurizr-0.4.2
+    app.kubernetes.io/name: structurizr
+    app.kubernetes.io/instance: my-structurizr
+    app.kubernetes.io/version: "2024.06.25"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-structurizr:8080']
+  restartPolicy: Never

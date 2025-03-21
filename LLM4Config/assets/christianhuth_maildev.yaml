@@ -1,0 +1,151 @@
+---
+# Source: maildev/templates/maildev/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-maildev
+  labels:
+    helm.sh/chart: maildev-1.2.2
+    app.kubernetes.io/name: maildev
+    app.kubernetes.io/instance: my-maildev
+    app.kubernetes.io/version: "2.1.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: maildev/templates/smtp/incoming/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-maildev-smtp-incoming
+data:
+  smtp-incoming-password:
+---
+# Source: maildev/templates/smtp/outgoing/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-maildev-smtp-outgoing
+data:
+  smtp-outgoing-password:
+---
+# Source: maildev/templates/web/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-maildev-web
+data:
+  web-password:
+---
+# Source: maildev/templates/smtp/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-maildev-smtp
+  labels:
+    helm.sh/chart: maildev-1.2.2
+    app.kubernetes.io/name: maildev
+    app.kubernetes.io/instance: my-maildev
+    app.kubernetes.io/version: "2.1.0"
+    app.kubernetes.io/managed-by: Helms
+spec:
+  type: ClusterIP
+  ports:
+    - port: 1025
+      targetPort: smtp
+      protocol: TCP
+      name: smtp
+      
+  selector:
+    app.kubernetes.io/name: maildev
+    app.kubernetes.io/instance: my-maildev
+---
+# Source: maildev/templates/web/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-maildev-web
+  labels:
+    helm.sh/chart: maildev-1.2.2
+    app.kubernetes.io/name: maildev
+    app.kubernetes.io/instance: my-maildev
+    app.kubernetes.io/version: "2.1.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 1080
+      targetPort: web
+      protocol: TCP
+      name: web
+  selector:
+    app.kubernetes.io/name: maildev
+    app.kubernetes.io/instance: my-maildev
+---
+# Source: maildev/templates/maildev/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-maildev
+  labels:
+    helm.sh/chart: maildev-1.2.2
+    app.kubernetes.io/name: maildev
+    app.kubernetes.io/instance: my-maildev
+    app.kubernetes.io/version: "2.1.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: maildev
+      app.kubernetes.io/instance: my-maildev
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: maildev
+        app.kubernetes.io/instance: my-maildev
+    spec:
+      serviceAccountName: my-maildev
+      containers:
+        - name: maildev
+          image: "docker.io/maildev/maildev:2.1.0"
+          imagePullPolicy: Always
+          args:
+            - "--silent"
+          env:
+            # Maildev Settings
+            - name: MAILDEV_MAIL_DIRECTORY
+              value: "/home/node/maildev-data"
+            # SMTP Settings
+            - name: MAILDEV_SMTP_PORT
+              value: "1025"
+            - name: MAILDEV_OUTGOING_PORT
+              value: "25"
+            - name: MAILDEV_OUTGOING_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: my-maildev-smtp-outgoing
+                  key: smtp-outgoing-password
+            # Web Settings
+            - name: MAILDEV_WEB_PORT
+              value: "1080"
+          ports:
+            - name: web
+              containerPort: 1080
+              protocol: TCP
+            - name: smtp
+              containerPort: 1025
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: web
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: web
+          volumeMounts:
+            - name: data
+              mountPath: "/home/node/maildev-data"
+      volumes:
+        - name: data
+          emptyDir: {}

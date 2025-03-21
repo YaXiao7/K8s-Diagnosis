@@ -1,0 +1,110 @@
+---
+# Source: aws-iam-authenticator/templates/configmap.yaml
+# Copyright 2017 by the contributors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-aws-iam-authenticator
+  labels:
+    k8s-app: aws-iam-authenticator
+data:
+  config.yaml: |
+    clusterID: 
+    server:
+      mapUsers:
+      mapRoles:
+---
+# Source: aws-iam-authenticator/templates/daemonset.yaml
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: my-aws-iam-authenticator
+  labels:
+    app.kubernetes.io/name: aws-iam-authenticator
+    app.kubernetes.io/instance: my-aws-iam-authenticator
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: aws-iam-authenticator-v1.7.6
+  annotations:
+    checksum/config: 6b4a325b51fe276c54ace982737df4ccf3d5722e4c69630867de4fed74ac21be
+spec:
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: aws-iam-authenticator
+      app.kubernetes.io/instance: my-aws-iam-authenticator
+  template:
+    metadata:
+      annotations:
+        checksum/config: 6b4a325b51fe276c54ace982737df4ccf3d5722e4c69630867de4fed74ac21be
+      labels:
+        app.kubernetes.io/name: aws-iam-authenticator
+        app.kubernetes.io/instance: my-aws-iam-authenticator
+    spec:
+      # run on the host network (don't depend on CNI)
+      hostNetwork: true
+      priorityClassName: system-cluster-critical
+      nodeSelector:
+        node-role.kubernetes.io/master: ""
+      tolerations:
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/master
+        - key: CriticalAddonsOnly
+          operator: Exists
+
+      securityContext:
+        runAsUser: 10000
+        runAsGroup: 10000
+        fsGroup: 10000
+      # run `aws-iam-authenticator server` with three volumes
+      # - config (mounted from the ConfigMap at /etc/aws-iam-authenticator/config.yaml)
+      # - state (persisted TLS certificate and keys, mounted from the host)
+      # - output (output kubeconfig to plug into your apiserver configuration, mounted from the host)
+      containers:
+      - name: aws-iam-authenticator
+        image: "602401143452.dkr.ecr.us-west-2.amazonaws.com/amazon/aws-iam-authenticator:v0.5.9"
+        imagePullPolicy: Always
+        args:
+        - server
+        - --config=/etc/aws-iam-authenticator/config.yaml
+        - --state-dir=/var/aws-iam-authenticator/
+        - --generate-kubeconfig=/etc/kubernetes/aws-iam-authenticator/kubeconfig.yaml
+        - --kubeconfig-pregenerated=true
+
+        resources:
+          limits:
+            cpu: 100m
+            memory: 20Mi
+          requests:
+            cpu: 10m
+            memory: 20Mi
+        volumeMounts:
+        - name: config
+          mountPath: /etc/aws-iam-authenticator/
+        - name: state
+          mountPath: /var/aws-iam-authenticator/
+        - name: output
+          mountPath: /etc/kubernetes/aws-iam-authenticator/
+
+      volumes:
+      - name: config
+        configMap:
+          name: my-aws-iam-authenticator
+      - name: output
+        hostPath:
+          path: /srv/kubernetes/kube-apiserver/aws-iam-authenticator/
+      - name: state
+        hostPath:
+          path: /srv/kubernetes/kube-apiserver/aws-iam-authenticator/

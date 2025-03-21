@@ -1,0 +1,345 @@
+---
+# Source: instana-agent/templates/k8s-sensor-serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: k8sensor
+  namespace: default
+  labels:
+    app.kubernetes.io/name: instana-agent
+    app.kubernetes.io/version: 1.2.73
+    app.kubernetes.io/instance: my-instana-agent
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: instana-agent-1.2.73
+---
+# Source: instana-agent/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-instana-agent
+  namespace: default
+  labels:
+    app.kubernetes.io/name: instana-agent
+    app.kubernetes.io/version: 1.2.73
+    app.kubernetes.io/instance: my-instana-agent
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: instana-agent-1.2.73
+---
+# Source: instana-agent/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-instana-agent
+  namespace: default
+  labels:
+    app.kubernetes.io/name: instana-agent
+    app.kubernetes.io/version: 1.2.73
+    app.kubernetes.io/instance: my-instana-agent
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: instana-agent-1.2.73
+type: Opaque
+data:
+---
+# Source: instana-agent/templates/agent-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-instana-agent
+  namespace: default
+  labels:
+    app.kubernetes.io/name: instana-agent
+    app.kubernetes.io/version: 1.2.73
+    app.kubernetes.io/instance: my-instana-agent
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: instana-agent-1.2.73
+data:
+  configuration.yaml: |
+  
+    # Manual a-priori configuration. Configuration will be only used when the sensor
+    # is actually installed by the agent.
+    # The commented out example values represent example configuration and are not
+    # necessarily defaults. Defaults are usually 'absent' or mentioned separately.
+    # Changes are hot reloaded unless otherwise mentioned.
+    
+    # It is possible to create files called 'configuration-abc.yaml' which are
+    # merged with this file in file system order. So 'configuration-cde.yaml' comes
+    # after 'configuration-abc.yaml'. Only nested structures are merged, values are
+    # overwritten by subsequent configurations.
+    
+    # Secrets
+    # To filter sensitive data from collection by the agent, all sensors respect
+    # the following secrets configuration. If a key collected by a sensor matches
+    # an entry from the list, the value is redacted.
+    #com.instana.secrets:
+    #  matcher: 'contains-ignore-case' # 'contains-ignore-case', 'contains', 'regex'
+    #  list:
+    #    - 'key'
+    #    - 'password'
+    #    - 'secret'
+    
+    # Host
+    #com.instana.plugin.host:
+    #  tags:
+    #    - 'dev'
+    #    - 'app1'
+    
+    # Hardware & Zone
+    #com.instana.plugin.generic.hardware:
+    #  enabled: true # disabled by default
+    #  availability-zone: 'zone'
+    
+
+  
+  configuration-disable-kubernetes-sensor.yaml: |
+    com.instana.plugin.kubernetes:
+      enabled: false
+---
+# Source: instana-agent/templates/k8s-sensor-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: k8sensor
+  namespace: default
+  labels:
+    app.kubernetes.io/name: instana-agent
+    app.kubernetes.io/version: 1.2.73
+    app.kubernetes.io/instance: my-instana-agent
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: instana-agent-1.2.73
+data:
+  backend: ingress-red-saas.instana.io:443
+---
+# Source: instana-agent/templates/clusterrole.yaml
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-instana-agent
+  labels:
+    app.kubernetes.io/name: instana-agent
+    app.kubernetes.io/version: 1.2.73
+    app.kubernetes.io/instance: my-instana-agent
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: instana-agent-1.2.73
+rules:
+- nonResourceURLs:
+    - "/version"
+    - "/healthz"
+    - "/metrics"
+    - "/stats/summary"
+    - "/metrics/cadvisor"
+  verbs: ["get"]
+- apiGroups: [""]
+  resources:
+    - "nodes"
+    - "nodes/stats"
+    - "nodes/metrics"
+    - "pods"
+  verbs: ["get", "list", "watch"]
+---
+# Source: instana-agent/templates/k8s-sensor-role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: k8sensor
+  labels:
+    app.kubernetes.io/name: instana-agent
+    app.kubernetes.io/version: 1.2.73
+    app.kubernetes.io/instance: my-instana-agent
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: instana-agent-1.2.73
+rules:
+  -
+    nonResourceURLs:
+      - /version
+      - /healthz
+    verbs:
+      - get
+  -
+    apiGroups:
+      - extensions
+    resources:
+      - deployments
+      - replicasets
+      - ingresses
+    verbs:
+      - get
+      - list
+      - watch
+  -
+    apiGroups:
+      - ""
+    resources:
+      - configmaps
+      - events
+      - services
+      - endpoints
+      - namespaces
+      - nodes
+      - pods
+      - replicationcontrollers
+      - resourcequotas
+      - persistentvolumes
+      - persistentvolumeclaims
+    verbs:
+      - get
+      - list
+      - watch
+  -
+    apiGroups:
+      - apps
+    resources:
+      - daemonsets
+      - deployments
+      - replicasets
+      - statefulsets
+    verbs:
+      - get
+      - list
+      - watch
+  -
+    apiGroups:
+      - batch
+    resources:
+      - cronjobs
+      - jobs
+    verbs:
+      - get
+      - list
+      - watch
+  -
+    apiGroups:
+      - networking.k8s.io
+    resources:
+      - ingresses
+    verbs:
+      - get
+      - list
+      - watch
+  -
+    apiGroups:
+      - ""
+    resources:
+      - pods/log
+    verbs:
+      - get
+      - list
+      - watch
+  -
+    apiGroups:
+      - autoscaling
+    resources:
+      - horizontalpodautoscalers
+    verbs:
+      - get
+      - list
+      - watch
+  -
+    apiGroups:
+      - apps.openshift.io
+    resources:
+      - deploymentconfigs
+    verbs:
+      - get
+      - list
+      - watch
+  -
+    apiGroups:
+      - security.openshift.io
+    resourceNames:
+      - privileged
+    resources:
+      - securitycontextconstraints
+    verbs:
+      - use
+---
+# Source: instana-agent/templates/clusterrolebinding.yaml
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-instana-agent
+  labels:
+    app.kubernetes.io/name: instana-agent
+    app.kubernetes.io/version: 1.2.73
+    app.kubernetes.io/instance: my-instana-agent
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: instana-agent-1.2.73
+subjects:
+- kind: ServiceAccount
+  name: my-instana-agent
+  namespace: default
+roleRef:
+  kind: ClusterRole
+  name: my-instana-agent
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: instana-agent/templates/k8s-sensor-rolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: k8sensor
+  labels:
+    app.kubernetes.io/name: instana-agent
+    app.kubernetes.io/version: 1.2.73
+    app.kubernetes.io/instance: my-instana-agent
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: instana-agent-1.2.73
+roleRef:
+  kind: ClusterRole
+  name: k8sensor
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+  - kind: ServiceAccount
+    name: k8sensor
+    namespace: default
+---
+# Source: instana-agent/templates/headless-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-instana-agent-headless
+  namespace: default
+  labels:
+    app.kubernetes.io/name: instana-agent
+    app.kubernetes.io/version: 1.2.73
+    app.kubernetes.io/instance: my-instana-agent
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: instana-agent-1.2.73
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: instana-agent
+    app.kubernetes.io/instance: my-instana-agent
+  ports:
+    # Prometheus remote_write, Trace Web SDK and other APIs
+    - name: agent-apis
+      protocol: TCP
+      port: 42699
+      targetPort: 42699
+---
+# Source: instana-agent/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-instana-agent
+  namespace: default
+  labels:
+    app.kubernetes.io/name: instana-agent
+    app.kubernetes.io/version: 1.2.73
+    app.kubernetes.io/instance: my-instana-agent
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: instana-agent-1.2.73
+spec:
+  selector:
+    app.kubernetes.io/name: instana-agent
+    app.kubernetes.io/instance: my-instana-agent
+  ports:
+    # Prometheus remote_write, Trace Web SDK and other APIs
+    - name: agent-apis
+      protocol: TCP
+      port: 42699
+      targetPort: 42699
+    
+  internalTrafficPolicy: Local
+---
+# Source: instana-agent/templates/agent-daemonset.yaml
+# TODO: Combine into single template with agent-daemonset-with-zones.yaml

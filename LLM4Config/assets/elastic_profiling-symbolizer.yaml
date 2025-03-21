@@ -1,0 +1,125 @@
+---
+# Source: profiling-symbolizer/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: default
+  name: my-profiling-symbolizer-profiling-symbolizer
+  labels:
+    app: profiling-symbolizer
+  annotations:
+    checksum/config: 8e62717cb4d6daaa19b36858b66ea1298b338c87639c3edb5a8dfd7611e8727b
+data:
+  pf-elastic-symbolizer.yml: |
+    pf-elastic-symbolizer:
+      endpoint: ""
+      ssl:
+        enabled: false
+      telemetry: true
+      verbose: false
+    output:
+      elasticsearch:
+        hosts:
+        - localhost:9200
+---
+# Source: profiling-symbolizer/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: default
+  name: my-profiling-symbolizer-profiling-symbolizer
+  labels:
+    app: profiling-symbolizer
+    release: my-profiling-symbolizer
+spec:
+  selector:
+    app: profiling-symbolizer
+    stack: my-profiling-symbolizer-elastic-universal-profiling
+  ports:
+    - port: 8240
+      targetPort: 8240
+      name: http
+  type: ClusterIP
+---
+# Source: profiling-symbolizer/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: default
+  name: my-profiling-symbolizer
+  labels:
+    app: profiling-symbolizer
+    stack: my-profiling-symbolizer-elastic-universal-profiling
+spec:
+  replicas: 1
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 20%
+      maxSurge: 100%
+  selector:
+    matchLabels:
+      app: profiling-symbolizer
+      stack: my-profiling-symbolizer-elastic-universal-profiling
+  template:
+    metadata:
+      labels:
+        app: profiling-symbolizer
+        stack: my-profiling-symbolizer-elastic-universal-profiling
+      annotations:
+        checksum/config: 5ed66e704014ad4287e02ac8a0926fc831449366d8b7beead3a536086a5bc997
+    spec:
+      containers:
+        - name: pf-elastic-symbolizer
+          image: "docker.elastic.co/observability/profiling-symbolizer:8.15.1"
+          command: [ "/root/pf-elastic-symbolizer" ]
+          args:
+            - -c
+            - /etc/Elastic/universal-profiling/pf-elastic-symbolizer.yml
+            - -E
+            - pf-elastic-symbolizer.host=":8240"
+            - -E
+            - pf-elastic-symbolizer.memory_limit="8Gi"
+          resources:
+              limits:
+                memory: 8Gi
+              requests:
+                cpu: "1"
+                memory: 1Gi
+          ports:
+            - containerPort: 8240
+              name: http
+              protocol: TCP
+            - containerPort: 9090
+              name: metrics
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              port: 8240
+              path: /health/live
+          readinessProbe:
+            httpGet:
+              port: 8240
+              path: /health/ready
+          volumeMounts:
+            - mountPath: /etc/Elastic/universal-profiling
+              name: config
+            - mountPath: /secrets/tls
+              name: tls-certificate
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: my-profiling-symbolizer-profiling-symbolizer
+        - name: tls-certificate
+          secret:
+            secretName: pf-symbolizer-tls-certificate
+            optional: true
+            items:
+            - key: tls.key
+              path: server.key
+            - key: tls.crt
+              path: server.cert
+            - key: ca.pem
+              path: ca.pem
+      terminationGracePeriodSeconds: 60
+      restartPolicy: Always

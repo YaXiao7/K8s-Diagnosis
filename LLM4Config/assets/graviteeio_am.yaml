@@ -1,0 +1,844 @@
+---
+# Source: am/templates/common/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-am-am
+  annotations:
+  labels:
+    app.kubernetes.io/name: am
+    app.kubernetes.io/instance: my-am
+    app.kubernetes.io/version: "4.4.6"
+    app.kubernetes.io/component: "am"
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: am-4.4.6
+---
+# Source: am/templates/api/api-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-am-management-api
+  labels:
+    app.kubernetes.io/name: am
+    app.kubernetes.io/instance: my-am
+    app.kubernetes.io/version: "4.4.6"
+    app.kubernetes.io/component: "management-api"
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: am-4.4.6
+data:
+  gravitee.yml: |
+    jetty:
+      host: 0.0.0.0
+      port: 8093
+      idleTimeout: 30000
+      acceptors: -1
+      selectors: -1
+      statistics: false
+      outputBufferSize: 32768
+      requestHeaderSize: 8192
+      responseHeaderSize: 8192
+      secured: false
+
+    liquibase:
+      enabled: true
+
+    management:
+      type: mongodb
+      mongodb:
+        sslEnabled: false
+        socketKeepAlive: false
+        uri: mongodb://mongo-mongodb-replicaset-headless:27017/gravitee?&replicaSet=rs0&connectTimeoutMS=30000
+
+    oauth2:
+      type: mongodb
+      mongodb:
+        sslEnabled: false
+        socketKeepAlive: false
+        uri: mongodb://mongo-mongodb-replicaset-headless:27017/gravitee?&replicaSet=rs0&connectTimeoutMS=30000
+
+    services:
+      core:
+        http:
+          enabled: true
+          port: 18093
+          host: localhost
+          authentication:
+            type: basic
+            users:
+              admin: adminadmin
+      notifier:
+        enabled: true
+        tryAvoidDuplicateNotification: true
+      certificate:
+        enabled: true
+        cronExpression: 0 0 5 * * *
+        expiryThresholds: 20,15,10,5,1
+        expiryEmailSubject: "Certificate will expire soon"
+
+    notifiers:
+      ui:
+        enabled: true
+    # SMTP configuration used to send mails
+    email:
+      enabled: true
+
+    domains:
+      identities:
+        default:
+          passwordEncoder:
+            algorithm: BCrypt
+            properties:
+              rounds: 10
+      certificates:
+        default:
+          keysize: 2048
+          alias: default
+          keypass:  gravitee
+          storepass:  gravitee
+          validity:  365
+          algorithm:  SHA256withRSA
+          name:  cn=Gravitee.io
+          refresh:
+            delay: 10
+            timeUnit: MINUTES
+    applications:
+      secret:
+        algorithm: None
+
+    jwt:
+      secret: s3cR3t4grAv1t3310AMS1g1ingDftK3y
+      kid: default-gravitee-AM-key
+      # Allows to define the end of validity of the token in seconds (default 604800 = a week)
+      expire-after: 604800
+      # Allows to define issuer (default https://gravitee.am)
+      issuer: https://gravitee.am
+      # Allows to define cookie context path (default /)
+      cookie-path: /
+      # Allows to define cookie domain (default "")
+      cookie-domain: 
+      # Allows to define if cookie secure only (default false)
+      cookie-secure: false
+
+    # Gateway entry point used in emails
+    gateway:
+      url: https://am.example.com/auth
+      # Alert Engine communication
+
+    # Alert Engine communication
+    
+    alerts:
+      alert-engine-connector-ws:
+        enabled: false
+---
+# Source: am/templates/gateway/gateway-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-am-gateway
+  labels:
+    app.kubernetes.io/name: am
+    app.kubernetes.io/instance: my-am
+    app.kubernetes.io/version: "4.4.6"
+    app.kubernetes.io/component: "gateway"
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: am-4.4.6
+data:
+  gravitee.yml: |
+
+    # Gateway HTTP server
+    http:
+      port: 8092
+      host: 0.0.0.0
+    #  idleTimeout: 0
+    #  tcpKeepAlive: true
+    #  compressionSupported: false
+    #  instances: 0
+      maxHeaderSize: 8192
+      maxChunkSize: 8192
+      maxInitialLineLength: 4096
+      maxFormAttributeSize: 2048
+      alpn: true
+
+    liquibase:
+      enabled: false
+
+    management:
+      type: mongodb
+      mongodb:
+        sslEnabled: false
+        socketKeepAlive: false
+        uri: mongodb://mongo-mongodb-replicaset-headless:27017/gravitee?&replicaSet=rs0&connectTimeoutMS=30000
+
+    oauth2:
+      type: mongodb
+      mongodb:
+        sslEnabled: false
+        socketKeepAlive: false
+        uri: mongodb://mongo-mongodb-replicaset-headless:27017/gravitee?&replicaSet=rs0&connectTimeoutMS=30000
+
+    # Sharding tags configuration
+    # Allows to define inclusion/exclusion sharding tags to only deploy a part of APIs. To exclude just prefix the tag with '!'.
+    tags: 
+
+    services:
+      core:
+        http:
+          enabled: true
+          port: 18092
+          host: localhost
+          authentication:
+           type: basic
+           users:
+             admin: adminadmin
+          secured: false
+
+      # Gateway monitoring service.
+      # This service retrieves metrics like os / process / jvm metrics.
+      monitoring:
+        delay: 5000
+        unit: MILLISECONDS
+
+    jwt:
+      secret: s3cR3t4grAv1t3310AMS1g1ingDftK3y
+      kid: default-gravitee-AM-key
+      # Allows to define the end of validity of the token in seconds (default 604800 = a week)
+      expire-after: 604800
+      # Allows to define issuer (default https://gravitee.am)
+      issuer: https://gravitee.am
+      # Allows to define cookie context path (default /)
+      cookie-path: /
+      # Allows to define cookie domain (default "")
+      cookie-domain: 
+      # Allows to define if cookie secure only (default false)
+      cookie-secure: false
+    # SMTP configuration used to send mails
+    email:
+      enabled: true
+    applications:
+      secret:
+        algorithm: None
+
+    # Gateway entry point used in emails
+    gateway:
+      url: https://am.example.com/auth
+    consent:
+      ip: false
+      user-agent: false
+    mfa_rate:
+      enabled: true
+      limit: 5
+      timePeriod: 15
+      timeUnit: Minutes
+
+    # Alert Engine communication
+    
+    alerts:
+      alert-engine-connector-ws:
+        enabled: false
+---
+# Source: am/templates/ui/ui-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-am-management-ui
+  labels:
+    app.kubernetes.io/name: am
+    app.kubernetes.io/instance: my-am
+    app.kubernetes.io/version: "4.4.6"
+    app.kubernetes.io/component: "management-ui"
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: am-4.4.6
+data:
+  use-gzip: "true"
+  gzip-level: "5"
+  gzip-types: "*"
+  constants.json: |
+    {
+      "baseURL": "https://am.example.com/management"
+    }
+---
+# Source: am/templates/common/role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: my-am-am-role
+  labels:
+    app.kubernetes.io/name: am
+    app.kubernetes.io/instance: my-am
+    app.kubernetes.io/version: "4.4.6"
+    app.kubernetes.io/component: "am"
+    app.kubernetes.io/managed-by: Helm
+rules: 
+  - apiGroups:
+    - ""
+    resources:
+    - configmaps
+    - secrets
+    verbs:
+    - get
+    - list
+    - watch
+---
+# Source: am/templates/common/rolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: my-am-am-role-binding
+  labels:
+    app.kubernetes.io/name: am
+    app.kubernetes.io/instance: my-am
+    app.kubernetes.io/version: "4.4.6"
+    app.kubernetes.io/component: "am"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  kind: Role
+  name: my-am-am-role
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+- kind: ServiceAccount
+  name: my-am-am
+  namespace: default
+---
+# Source: am/templates/api/api-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-am-management-api
+  labels:
+    app.kubernetes.io/name: am
+    app.kubernetes.io/instance: my-am
+    app.kubernetes.io/version: "4.4.6"
+    app.kubernetes.io/component: "management-api"
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: am-4.4.6
+  annotations:
+spec:
+  type: "ClusterIP"
+  ports:
+    - port: 83
+      targetPort: 8093
+      protocol: TCP
+      
+      appProtocol: http
+      
+      name: management-api
+  selector:
+    app.kubernetes.io/name: am
+    app.kubernetes.io/instance: my-am
+    app.kubernetes.io/component: "management-api"
+---
+# Source: am/templates/gateway/gateway-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-am-gateway
+  labels:
+    app.kubernetes.io/name: am
+    app.kubernetes.io/instance: my-am
+    app.kubernetes.io/version: "4.4.6"
+    app.kubernetes.io/component: "gateway"
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: am-4.4.6
+  annotations:
+spec:
+  type: "ClusterIP"
+  ports:
+    - port: 82
+      targetPort: 8092
+      protocol: TCP
+      
+      appProtocol: http
+      
+      name: gateway
+  selector:
+    app.kubernetes.io/name: am
+    app.kubernetes.io/instance: my-am
+    app.kubernetes.io/component: "gateway"
+---
+# Source: am/templates/ui/ui-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-am-management-ui
+  labels:
+    app.kubernetes.io/name: am
+    app.kubernetes.io/instance: my-am
+    app.kubernetes.io/version: "4.4.6"
+    app.kubernetes.io/component: "management-ui"
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: am-4.4.6
+  annotations:
+spec:
+  type: "ClusterIP"
+  ports:
+    - port: 8002
+      targetPort: 8080
+      protocol: TCP
+      
+      appProtocol: http
+      
+      name: management-ui
+  selector:
+    app.kubernetes.io/name: am
+    app.kubernetes.io/instance: my-am
+    app.kubernetes.io/component: "management-ui"
+---
+# Source: am/templates/api/api-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-am-management-api
+  labels:
+    app.kubernetes.io/name: am
+    app.kubernetes.io/instance: my-am
+    app.kubernetes.io/version: "4.4.6"
+    app.kubernetes.io/component: "management-api"
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: am-4.4.6
+spec:
+  strategy: 
+    rollingUpdate:
+      maxUnavailable: 25%
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: am
+      app.kubernetes.io/instance: my-am
+      app.kubernetes.io/component: "management-api"
+  template:
+    metadata:
+      annotations:
+        chaos.alpha.kubernetes.io/enabled: "false"
+        checksum/config: 65e5d2988cc125630e001253d99d6ac9f567832527f50f39c7217018590eeb2f
+      labels:
+        app.kubernetes.io/name: am
+        app.kubernetes.io/instance: my-am
+        app.kubernetes.io/version: "4.4.6"
+        app.kubernetes.io/component: "management-api"
+    spec:
+      serviceAccountName: my-am-am
+      
+      affinity: 
+        {}
+      nodeSelector: 
+        {}
+      topologySpreadConstraints: 
+        []
+      tolerations: 
+        []
+      terminationGracePeriodSeconds: 30
+      initContainers:        
+      containers:
+        - name: my-am-management-api
+          image: "graviteeio/am-management-api:4.4.6"
+          imagePullPolicy: Always
+          securityContext: 
+            runAsNonRoot: true
+            runAsUser: 1001
+          ports:
+            - name: http
+              containerPort: 8093
+            - name: managem-techapi
+              containerPort: 18093
+          env:
+          envFrom: 
+            []
+          livenessProbe: 
+            failureThreshold: 3
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            tcpSocket:
+              port: http
+          readinessProbe: 
+            failureThreshold: 3
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            tcpSocket:
+              port: http
+          resources: 
+            limits:
+              cpu: 500m
+              memory: 1024Mi
+            requests:
+              cpu: 200m
+              memory: 512Mi
+          volumeMounts:
+            - name: config
+              mountPath: /opt/graviteeio-am-management-api/config/gravitee.yml
+              subPath: gravitee.yml            
+      volumes:
+        - name: config
+          configMap:
+            name: my-am-management-api
+---
+# Source: am/templates/gateway/gateway-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-am-gateway
+  labels:
+    app.kubernetes.io/name: am
+    app.kubernetes.io/instance: my-am
+    app.kubernetes.io/version: "4.4.6"
+    app.kubernetes.io/component: "gateway"
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: am-4.4.6
+spec: 
+  strategy: 
+    rollingUpdate:
+      maxUnavailable: 25%
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: am
+      app.kubernetes.io/instance: my-am
+      app.kubernetes.io/component: "gateway"
+  template:
+    metadata:
+      annotations:
+        chaos.alpha.kubernetes.io/enabled: "false"
+        checksum/config: 586d433ac9629bc266da785d65be71659d3f80aa2b724ad073f640784ca81f64
+      labels:
+        app.kubernetes.io/name: am
+        app.kubernetes.io/instance: my-am
+        app.kubernetes.io/version: "4.4.6"
+        app.kubernetes.io/component: "gateway"  
+    spec:
+      serviceAccountName: my-am-am
+      
+      affinity: 
+        {}
+      nodeSelector: 
+        {}
+      topologySpreadConstraints: 
+        []
+      tolerations: 
+        []
+      terminationGracePeriodSeconds: 30
+      initContainers:        
+      containers:
+        - name: my-am-gateway
+          image: "graviteeio/am-gateway:4.4.6"
+          imagePullPolicy: Always
+          securityContext: 
+            runAsNonRoot: true
+            runAsUser: 1001
+          ports:
+            - name: http
+              containerPort: 8092
+            - name: gateway-techapi
+              containerPort: 18092
+          env:
+          envFrom: 
+            []
+          livenessProbe: 
+            failureThreshold: 3
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            tcpSocket:
+              port: http
+          readinessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            tcpSocket:
+              port: http
+          resources: 
+            limits:
+              cpu: 500m
+              memory: 512Mi
+            requests:
+              cpu: 200m
+              memory: 256Mi
+          volumeMounts:
+            - name: config
+              mountPath: /opt/graviteeio-am-gateway/config/gravitee.yml
+              subPath: gravitee.yml            
+      volumes:
+        - name: config
+          configMap:
+            name: my-am-gateway
+---
+# Source: am/templates/ui/ui-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-am-management-ui
+  labels:
+    app.kubernetes.io/name: am
+    app.kubernetes.io/instance: my-am
+    app.kubernetes.io/version: "4.4.6"
+    app.kubernetes.io/component: "management-ui"
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: am-4.4.6
+spec:
+  strategy: 
+    rollingUpdate:
+      maxUnavailable: 25%
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: am
+      app.kubernetes.io/instance: my-am
+      app.kubernetes.io/component: "management-ui"
+  template:
+    metadata:
+      annotations:
+        chaos.alpha.kubernetes.io/enabled: "false"
+        checksum/config: e1d1927d304513fb19a0c1a23f0126c390a649f6f675e15579910170e4a5234e
+      labels:
+        app.kubernetes.io/name: am
+        app.kubernetes.io/instance: my-am
+        app.kubernetes.io/version: "4.4.6"
+        app.kubernetes.io/component: "management-ui"
+    spec:
+      serviceAccountName: my-am-am
+      affinity: 
+        {}
+      nodeSelector: 
+        {}
+      topologySpreadConstraints: 
+        []
+      tolerations: 
+        []
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: my-am-management-ui
+          image: "graviteeio/am-management-ui:4.4.6"
+          imagePullPolicy: Always
+          securityContext: 
+            runAsGroup: 101
+            runAsNonRoot: true
+            runAsUser: 101
+          env:
+            - name: MGMT_API_URL
+              value: "https://am.example.com"
+            - name: MGMT_UI_URL
+              value: "https://am.example.com/"
+          envFrom: 
+            []
+          ports:
+            - name: http
+              containerPort: 8080
+          livenessProbe: 
+            failureThreshold: 3
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe: 
+            failureThreshold: 3
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          resources: 
+            limits:
+              cpu: 100m
+              memory: 128Mi
+            requests:
+              cpu: 50m
+              memory: 64Mi
+          volumeMounts:
+            - name: config
+              mountPath: /usr/share/nginx/html/constants.json
+              subPath: constants.json
+      volumes:
+        - name: config
+          configMap:
+            name: my-am-management-ui
+---
+# Source: am/templates/api/api-autoscaler.yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: my-am-management-api
+  labels:
+    app.kubernetes.io/name: am
+    app.kubernetes.io/instance: my-am
+    app.kubernetes.io/version: "4.4.6"
+    app.kubernetes.io/component: "management-api"
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: am-4.4.6
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: my-am-management-api
+  minReplicas: 1
+  maxReplicas: 3
+  metrics:
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+      
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 50
+---
+# Source: am/templates/gateway/gateway-autoscaler.yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: my-am-gateway
+  labels:
+    app.kubernetes.io/name: am
+    app.kubernetes.io/instance: my-am
+    app.kubernetes.io/version: "4.4.6"
+    app.kubernetes.io/component: "gateway"
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: am-4.4.6
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: my-am-gateway
+  minReplicas: 1
+  maxReplicas: 3
+  metrics:
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+      
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 50
+---
+# Source: am/templates/ui/ui-autoscaler.yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: my-am-management-ui
+  labels:
+    app.kubernetes.io/name: am
+    app.kubernetes.io/instance: my-am
+    app.kubernetes.io/version: "4.4.6"
+    app.kubernetes.io/component: "management-ui"
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: am-4.4.6
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: my-am-management-ui
+  minReplicas: 1
+  maxReplicas: 3
+  metrics:
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+      
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 50
+---
+# Source: am/templates/api/api-ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: my-am-management-api
+  labels:
+    app.kubernetes.io/name: am
+    app.kubernetes.io/instance: my-am
+    app.kubernetes.io/version: "4.4.6"
+    app.kubernetes.io/component: "management-api"
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: am-4.4.6
+  annotations:
+    
+    ingress.kubernetes.io/configuration-snippet: "etag on;\nproxy_pass_header ETag;\nproxy_set_header if-match \"\";\n"
+    kubernetes.io/ingress.class: "nginx"
+spec:
+  rules:
+  - host: "am.example.com"
+    http:
+      paths:
+      - pathType: Prefix
+        path: /management
+        backend:
+          service:
+            name: my-am-management-api
+            port:
+              number: 83
+---
+# Source: am/templates/gateway/gateway-ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: my-am-gateway
+  labels:
+    app.kubernetes.io/name: am
+    app.kubernetes.io/instance: my-am
+    app.kubernetes.io/version: "4.4.6"
+    app.kubernetes.io/component: "gateway"
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: am-4.4.6
+  annotations:
+    
+    kubernetes.io/app-root: "/auth"
+    kubernetes.io/ingress.class: "nginx"
+    kubernetes.io/rewrite-target: "/auth"
+    nginx.ingress.kubernetes.io/enable-rewrite-log: "true"
+spec:
+  rules:
+  - host: "am.example.com"
+    http:
+      paths:
+      - pathType: Prefix
+        path: /auth
+        backend:
+          service:
+            name: my-am-gateway
+            port:
+              number: 82
+---
+# Source: am/templates/ui/ui-ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: my-am-management-ui
+  labels:
+    app.kubernetes.io/name: am
+    app.kubernetes.io/instance: my-am
+    app.kubernetes.io/version: "4.4.6"
+    app.kubernetes.io/component: "management-ui"
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: am-4.4.6
+  annotations:
+    
+    ingress.kubernetes.io/configuration-snippet: "etag on;\nproxy_pass_header ETag;\n"
+    kubernetes.io/app-root: "/"
+    kubernetes.io/ingress.class: "nginx"
+    kubernetes.io/rewrite-target: "/"
+spec:
+  rules:
+  - host: "am.example.com"
+    http:
+      paths:
+      - pathType: Prefix
+        path: /
+        backend:
+          service:
+            name: my-am-management-ui
+            port:
+              number: 8002

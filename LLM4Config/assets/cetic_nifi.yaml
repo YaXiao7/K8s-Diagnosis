@@ -1,0 +1,1374 @@
+---
+# Source: nifi/charts/zookeeper/templates/scripts-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-nifi-zookeeper-scripts
+  namespace: default
+  labels:
+    app.kubernetes.io/name: zookeeper
+    helm.sh/chart: zookeeper-9.2.7
+    app.kubernetes.io/instance: my-nifi
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: zookeeper
+data:
+  init-certs.sh: |-
+    #!/bin/bash
+  setup.sh: |-
+    #!/bin/bash
+
+    # Execute entrypoint as usual after obtaining ZOO_SERVER_ID
+    # check ZOO_SERVER_ID in persistent volume via myid
+    # if not present, set based on POD hostname
+    if [[ -f "/bitnami/zookeeper/data/myid" ]]; then
+        export ZOO_SERVER_ID="$(cat /bitnami/zookeeper/data/myid)"
+    else
+        HOSTNAME="$(hostname -s)"
+        if [[ $HOSTNAME =~ (.*)-([0-9]+)$ ]]; then
+            ORD=${BASH_REMATCH[2]}
+            export ZOO_SERVER_ID="$((ORD + 1 ))"
+        else
+            echo "Failed to get index from hostname $HOST"
+            exit 1
+        fi
+    fi
+    exec /entrypoint.sh /run.sh
+---
+# Source: nifi/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-nifi-config
+  labels:
+    app: "nifi"
+    chart: "nifi-1.2.1"
+    release: "my-nifi"
+    heritage: "Helm"
+data:
+  authorizers.xml: |
+    <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+    <!--
+      Licensed to the Apache Software Foundation (ASF) under one or more
+      contributor license agreements.  See the NOTICE file distributed with
+      this work for additional information regarding copyright ownership.
+      The ASF licenses this file to You under the Apache License, Version 2.0
+      (the "License"); you may not use this file except in compliance with
+      the License.  You may obtain a copy of the License at
+          http://www.apache.org/licenses/LICENSE-2.0
+      Unless required by applicable law or agreed to in writing, software
+      distributed under the License is distributed on an "AS IS" BASIS,
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+      See the License for the specific language governing permissions and
+      limitations under the License.
+    -->
+    <!--
+        This file lists the userGroupProviders, accessPolicyProviders, and authorizers to use when running securely. In order
+        to use a specific authorizer it must be configured here and it's identifier must be specified in the nifi.properties file.
+        If the authorizer is a managedAuthorizer, it may need to be configured with an accessPolicyProvider and an userGroupProvider.
+        This file allows for configuration of them, but they must be configured in order:
+        ...
+        all userGroupProviders
+        all accessPolicyProviders
+        all Authorizers
+        ...
+    -->
+    <authorizers>
+        <!--
+            The FileUserGroupProvider will provide support for managing users and groups which is backed by a file
+            on the local file system.
+            - Users File - The file where the FileUserGroupProvider will store users and groups.
+            - Legacy Authorized Users File - The full path to an existing authorized-users.xml that will be automatically
+                be used to load the users and groups into the Users File.
+            - Initial User Identity [unique key] - The identity of a users and systems to seed the Users File. The name of
+                each property must be unique, for example: "Initial User Identity A", "Initial User Identity B",
+                "Initial User Identity C" or "Initial User Identity 1", "Initial User Identity 2", "Initial User Identity 3"
+                NOTE: Any identity mapping rules specified in nifi.properties will also be applied to the user identities,
+                so the values should be the unmapped identities (i.e. full DN from a certificate).
+        -->
+        <userGroupProvider>
+            <identifier>file-user-group-provider</identifier>
+            <class>org.apache.nifi.authorization.FileUserGroupProvider</class>
+            <property name="Users File">./auth-conf/users.xml</property>
+            <property name="Legacy Authorized Users File"></property>
+            <property name="Initial User Identity 0">CN=my-nifi-0.my-nifi-headless.default.svc.cluster.local, OU=NIFI</property>
+            <property name="Initial User Identity admin">CN=admin, OU=NIFI</property>
+        </userGroupProvider>
+        <!--
+            The LdapUserGroupProvider will retrieve users and groups from an LDAP server. The users and groups
+            are not configurable.
+            'Authentication Strategy' - How the connection to the LDAP server is authenticated. Possible
+                values are ANONYMOUS, SIMPLE, LDAPS, or START_TLS.
+            'Manager DN' - The DN of the manager that is used to bind to the LDAP server to search for users.
+            'Manager Password' - The password of the manager that is used to bind to the LDAP server to
+                search for users.
+            'TLS - Keystore' - Path to the Keystore that is used when connecting to LDAP using LDAPS or START_TLS.
+            'TLS - Keystore Password' - Password for the Keystore that is used when connecting to LDAP
+                using LDAPS or START_TLS.
+            'TLS - Keystore Type' - Type of the Keystore that is used when connecting to LDAP using
+                LDAPS or START_TLS (i.e. JKS or PKCS12).
+            'TLS - Truststore' - Path to the Truststore that is used when connecting to LDAP using LDAPS or START_TLS.
+            'TLS - Truststore Password' - Password for the Truststore that is used when connecting to
+                LDAP using LDAPS or START_TLS.
+            'TLS - Truststore Type' - Type of the Truststore that is used when connecting to LDAP using
+                LDAPS or START_TLS (i.e. JKS or PKCS12).
+            'TLS - Client Auth' - Client authentication policy when connecting to LDAP using LDAPS or START_TLS.
+                Possible values are REQUIRED, WANT, NONE.
+            'TLS - Protocol' - Protocol to use when connecting to LDAP using LDAPS or START_TLS. (i.e. TLS,
+                TLSv1.1, TLSv1.2, etc).
+            'TLS - Shutdown Gracefully' - Specifies whether the TLS should be shut down gracefully
+                before the target context is closed. Defaults to false.
+            'Referral Strategy' - Strategy for handling referrals. Possible values are FOLLOW, IGNORE, THROW.
+            'Connect Timeout' - Duration of connect timeout. (i.e. 10 secs).
+            'Read Timeout' - Duration of read timeout. (i.e. 10 secs).
+            'Url' - Space-separated list of URLs of the LDAP servers (i.e. ldap://<hostname>:<port>).
+            'Page Size' - Sets the page size when retrieving users and groups. If not specified, no paging is performed.
+            'Sync Interval' - Duration of time between syncing users and groups (i.e. 30 mins). Minimum allowable value is 10 secs.
+            'User Search Base' - Base DN for searching for users (i.e. ou=users,o=nifi). Required to search users.
+            'User Object Class' - Object class for identifying users (i.e. person). Required if searching users.
+            'User Search Scope' - Search scope for searching users (ONE_LEVEL, OBJECT, or SUBTREE). Required if searching users.
+            'User Search Filter' - Filter for searching for users against the 'User Search Base' (i.e. (memberof=cn=team1,ou=groups,o=nifi) ). Optional.
+            'User Identity Attribute' - Attribute to use to extract user identity (i.e. cn). Optional. If not set, the entire DN is used.
+            'User Group Name Attribute' - Attribute to use to define group membership (i.e. memberof). Optional. If not set
+                group membership will not be calculated through the users. Will rely on group membership being defined
+                through 'Group Member Attribute' if set. The value of this property is the name of the attribute in the user ldap entry that
+                associates them with a group. The value of that user attribute could be a dn or group name for instance. What value is expected
+                is configured in the 'User Group Name Attribute - Referenced Group Attribute'.
+            'User Group Name Attribute - Referenced Group Attribute' - If blank, the value of the attribute defined in 'User Group Name Attribute'
+                is expected to be the full dn of the group. If not blank, this property will define the attribute of the group ldap entry that
+                the value of the attribute defined in 'User Group Name Attribute' is referencing (i.e. name). Use of this property requires that
+                'Group Search Base' is also configured.
+            'Group Search Base' - Base DN for searching for groups (i.e. ou=groups,o=nifi). Required to search groups.
+            'Group Object Class' - Object class for identifying groups (i.e. groupOfNames). Required if searching groups.
+            'Group Search Scope' - Search scope for searching groups (ONE_LEVEL, OBJECT, or SUBTREE). Required if searching groups.
+            'Group Search Filter' - Filter for searching for groups against the 'Group Search Base'. Optional.
+            'Group Name Attribute' - Attribute to use to extract group name (i.e. cn). Optional. If not set, the entire DN is used.
+            'Group Member Attribute' - Attribute to use to define group membership (i.e. member). Optional. If not set
+                group membership will not be calculated through the groups. Will rely on group membership being defined
+                through 'User Group Name Attribute' if set. The value of this property is the name of the attribute in the group ldap entry that
+                associates them with a user. The value of that group attribute could be a dn or memberUid for instance. What value is expected
+                is configured in the 'Group Member Attribute - Referenced User Attribute'. (i.e. member: cn=User 1,ou=users,o=nifi vs. memberUid: user1)
+            'Group Member Attribute - Referenced User Attribute' - If blank, the value of the attribute defined in 'Group Member Attribute'
+                is expected to be the full dn of the user. If not blank, this property will define the attribute of the user ldap entry that
+                the value of the attribute defined in 'Group Member Attribute' is referencing (i.e. uid). Use of this property requires that
+                'User Search Base' is also configured. (i.e. member: cn=User 1,ou=users,o=nifi vs. memberUid: user1)
+            NOTE: Any identity mapping rules specified in nifi.properties will also be applied to the user identities.
+                Group names are not mapped.
+        -->
+  
+        <!--
+            The CompositeUserGroupProvider will provide support for retrieving users and groups from multiple sources.
+            - User Group Provider [unique key] - The identifier of user group providers to load from. The name of
+                each property must be unique, for example: "User Group Provider A", "User Group Provider B",
+                "User Group Provider C" or "User Group Provider 1", "User Group Provider 2", "User Group Provider 3"
+                NOTE: Any identity mapping rules specified in nifi.properties are not applied in this implementation. This behavior
+                would need to be applied by the base implementation.
+        -->
+  
+        <!--
+            The CompositeConfigurableUserGroupProvider will provide support for retrieving users and groups from multiple sources.
+            Additionally, a single configurable user group provider is required. Users from the configurable user group provider
+            are configurable, however users loaded from one of the User Group Provider [unique key] will not be.
+            - Configurable User Group Provider - A configurable user group provider.
+            - User Group Provider [unique key] - The identifier of user group providers to load from. The name of
+                each property must be unique, for example: "User Group Provider A", "User Group Provider B",
+                "User Group Provider C" or "User Group Provider 1", "User Group Provider 2", "User Group Provider 3"
+                NOTE: Any identity mapping rules specified in nifi.properties are not applied in this implementation. This behavior
+                would need to be applied by the base implementation.
+        -->
+        <!-- To enable the composite-configurable-user-group-provider remove 2 lines. This is 1 of 2.
+        <userGroupProvider>
+            <identifier>composite-configurable-user-group-provider</identifier>
+            <class>org.apache.nifi.authorization.CompositeConfigurableUserGroupProvider</class>
+            <property name="Configurable User Group Provider">file-user-group-provider</property>
+            <property name="User Group Provider 1"></property>
+        </userGroupProvider>
+        To enable the composite-configurable-user-group-provider remove 2 lines. This is 2 of 2. -->
+  
+        <!--
+            The FileAccessPolicyProvider will provide support for managing access policies which is backed by a file
+            on the local file system.
+            - User Group Provider - The identifier for an User Group Provider defined above that will be used to access
+                users and groups for use in the managed access policies.
+            - Authorizations File - The file where the FileAccessPolicyProvider will store policies.
+            - Initial Admin Identity - The identity of an initial admin user that will be granted access to the UI and
+                given the ability to create additional users, groups, and policies. The value of this property could be
+                a DN when using certificates or LDAP, or a Kerberos principal. This property will only be used when there
+                are no other policies defined. If this property is specified then a Legacy Authorized Users File can not be specified.
+                NOTE: Any identity mapping rules specified in nifi.properties will also be applied to the initial admin identity,
+                so the value should be the unmapped identity. This identity must be found in the configured User Group Provider.
+            - Legacy Authorized Users File - The full path to an existing authorized-users.xml that will be automatically
+                converted to the new authorizations model. If this property is specified then an Initial Admin Identity can
+                not be specified, and this property will only be used when there are no other users, groups, and policies defined.
+                NOTE: Any users in the legacy users file must be found in the configured User Group Provider.
+            - Node Identity [unique key] - The identity of a NiFi cluster node. When clustered, a property for each node
+                should be defined, so that every node knows about every other node. If not clustered these properties can be ignored.
+                The name of each property must be unique, for example for a three node cluster:
+                "Node Identity A", "Node Identity B", "Node Identity C" or "Node Identity 1", "Node Identity 2", "Node Identity 3"
+                NOTE: Any identity mapping rules specified in nifi.properties will also be applied to the node identities,
+                so the values should be the unmapped identities (i.e. full DN from a certificate). This identity must be found
+                in the configured User Group Provider.
+        -->
+        <accessPolicyProvider>
+            <identifier>file-access-policy-provider</identifier>
+            <class>org.apache.nifi.authorization.FileAccessPolicyProvider</class>
+            <property name="User Group Provider">file-user-group-provider</property>
+            <property name="Authorizations File">./auth-conf/authorizations.xml</property>
+            <property name="Initial Admin Identity">CN=admin, OU=NIFI</property>
+            <property name="Legacy Authorized Users File"></property>
+            <property name="Node Identity 0">CN=my-nifi-0.my-nifi-headless.default.svc.cluster.local, OU=NIFI</property>
+            <property name="Node Identity"></property>
+        </accessPolicyProvider>
+         <!--
+            The StandardManagedAuthorizer. This authorizer implementation must be configured with the
+            Access Policy Provider which it will use to access and manage users, groups, and policies.
+            These users, groups, and policies will be used to make all access decisions during authorization
+            requests.
+            - Access Policy Provider - The identifier for an Access Policy Provider defined above.
+        -->
+        <authorizer>
+            <identifier>managed-authorizer</identifier>
+            <class>org.apache.nifi.authorization.StandardManagedAuthorizer</class>
+            <property name="Access Policy Provider">file-access-policy-provider</property>
+        </authorizer>
+        <!--
+            NOTE: This Authorizer has been replaced with the more granular approach configured above with the Standard
+            Managed Authorizer. However, it is still available for backwards compatibility reasons.
+            The FileAuthorizer is NiFi's provided authorizer and has the following properties:
+            - Authorizations File - The file where the FileAuthorizer will store policies.
+            - Users File - The file where the FileAuthorizer will store users and groups.
+            - Initial Admin Identity - The identity of an initial admin user that will be granted access to the UI and
+                given the ability to create additional users, groups, and policies. The value of this property could be
+                a DN when using certificates or LDAP, or a Kerberos principal. This property will only be used when there
+                are no other users, groups, and policies defined. If this property is specified then a Legacy Authorized
+                Users File can not be specified.
+                NOTE: Any identity mapping rules specified in nifi.properties will also be applied to the initial admin identity,
+                so the value should be the unmapped identity.
+            - Legacy Authorized Users File - The full path to an existing authorized-users.xml that will be automatically
+                converted to the new authorizations model. If this property is specified then an Initial Admin Identity can
+                not be specified, and this property will only be used when there are no other users, groups, and policies defined.
+            - Node Identity [unique key] - The identity of a NiFi cluster node. When clustered, a property for each node
+                should be defined, so that every node knows about every other node. If not clustered these properties can be ignored.
+                The name of each property must be unique, for example for a three node cluster:
+                "Node Identity A", "Node Identity B", "Node Identity C" or "Node Identity 1", "Node Identity 2", "Node Identity 3"
+                NOTE: Any identity mapping rules specified in nifi.properties will also be applied to the node identities,
+                so the values should be the unmapped identities (i.e. full DN from a certificate).
+        -->
+    </authorizers>
+  bootstrap-notification-services.xml: "<?xml version=\"1.0\"?>\n<!--\n  Licensed to
+    the Apache Software Foundation (ASF) under one or more\n  contributor license agreements.
+    \ See the NOTICE file distributed with\n  this work for additional information regarding
+    copyright ownership.\n  The ASF licenses this file to You under the Apache License,
+    Version 2.0\n  (the \"License\"); you may not use this file except in compliance
+    with\n  the License.  You may obtain a copy of the License at\n      http://www.apache.org/licenses/LICENSE-2.0\n
+    \ Unless required by applicable law or agreed to in writing, software\n  distributed
+    under the License is distributed on an \"AS IS\" BASIS,\n  WITHOUT WARRANTIES OR
+    CONDITIONS OF ANY KIND, either express or implied.\n  See the License for the specific
+    language governing permissions and\n  limitations under the License.\n-->\n<services>\n
+    \   <!-- This file is used to define how interested parties are notified when events
+    in NiFi's lifecycle occur. -->\n    <!-- The format of this file is:\n        <services>\n
+    \           <service>\n                <id>service-identifier</id>\n                <class>org.apache.nifi.notifications.DesiredNotificationService</class>\n
+    \               <property name=\"property name\">property value</property>\n                <property
+    name=\"another property\">another property value</property>\n            </service>\n
+    \       </services>\n        \n        This file can contain 0 to many different
+    service definitions.\n        The id can then be referenced from the bootstrap.conf
+    file in order to configure the notification service\n        to be used when particular
+    lifecycle events occur.\n    -->\n    \n<!--\n     <service>\n        <id>email-notification</id>\n
+    \       <class>org.apache.nifi.bootstrap.notification.email.EmailNotificationService</class>\n
+    \       <property name=\"SMTP Hostname\"></property>\n        <property name=\"SMTP
+    Port\"></property>\n        <property name=\"SMTP Username\"></property>\n        <property
+    name=\"SMTP Password\"></property>\n        <property name=\"SMTP TLS\"></property>\n
+    \       <property name=\"From\"></property>\n        <property name=\"To\"></property>\n
+    \    </service>\n-->\n<!--\n     <service>\n        <id>http-notification</id>\n
+    \       <class>org.apache.nifi.bootstrap.notification.http.HttpNotificationService</class>\n
+    \       <property name=\"URL\"></property>\n     </service>\n-->\n</services>\n"
+  bootstrap.conf: |+
+    #
+    # Licensed to the Apache Software Foundation (ASF) under one or more
+    # contributor license agreements.  See the NOTICE file distributed with
+    # this work for additional information regarding copyright ownership.
+    # The ASF licenses this file to You under the Apache License, Version 2.0
+    # (the "License"); you may not use this file except in compliance with
+    # the License.  You may obtain a copy of the License at
+    #
+    #   http://www.apache.org/licenses/LICENSE-2.0
+    #
+    # Unless required by applicable law or agreed to in writing, software
+    # distributed under the License is distributed on an "AS IS" BASIS,
+    # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    # See the License for the specific language governing permissions and
+    # limitations under the License.
+    #
+  
+    # Java command to use when running NiFi
+    java=java
+  
+    # Username to use when running NiFi. This value will be ignored on Windows.
+    run.as=
+  
+    # Configure where NiFi's lib and conf directories live
+    lib.dir=./lib
+    conf.dir=./conf
+  
+    # How long to wait after telling NiFi to shutdown before explicitly killing the Process
+    graceful.shutdown.seconds=20
+  
+    # Disable JSR 199 so that we can use JSP's without running a JDK
+    java.arg.1=-Dorg.apache.jasper.compiler.disablejsr199=true
+  
+    # JVM memory settings
+    java.arg.2=-Xms2g
+    java.arg.3=-Xmx2g
+  
+    # Enable Remote Debugging
+    #java.arg.debug=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=8000
+  
+    java.arg.4=-Djava.net.preferIPv4Stack=true
+  
+    # allowRestrictedHeaders is required for Cluster/Node communications to work properly
+    java.arg.5=-Dsun.net.http.allowRestrictedHeaders=true
+    java.arg.6=-Djava.protocol.handler.pkgs=sun.net.www.protocol
+  
+    
+  
+    # The G1GC is still considered experimental but has proven to be very advantageous in providing great
+    # performance without significant "stop-the-world" delays.
+    #java.arg.13=-XX:+UseG1GC
+  
+    #Set headless mode by default
+    java.arg.14=-Djava.awt.headless=true
+  
+    # Master key in hexadecimal format for encrypted sensitive configuration values
+    nifi.bootstrap.sensitive.key=
+  
+    # Sets the provider of SecureRandom to /dev/urandom to prevent blocking on VMs
+    java.arg.15=-Djava.security.egd=file:/dev/urandom
+  
+    ###
+    # Notification Services for notifying interested parties when NiFi is stopped, started, dies
+    ###
+  
+    # XML File that contains the definitions of the notification services
+    notification.services.file=./conf/bootstrap-notification-services.xml
+  
+    # In the case that we are unable to send a notification for an event, how many times should we retry?
+    notification.max.attempts=5
+  
+    # Comma-separated list of identifiers that are present in the notification.services.file; which services should be used to notify when NiFi is started?
+    #nifi.start.notification.services=email-notification
+  
+    # Comma-separated list of identifiers that are present in the notification.services.file; which services should be used to notify when NiFi is stopped?
+    #nifi.stop.notification.services=email-notification
+  
+    # Comma-separated list of identifiers that are present in the notification.services.file; which services should be used to notify when NiFi dies?
+    #nifi.dead.notification.services=email-notification
+  
+  
+    # Extra bootstrap options
+  
+  flow.xml: |
+    <?xml version="1.0" encoding="UTF-8" standalone="no"?>
+    <flowController encoding-version="1.3">
+        <maxTimerDrivenThreadCount>10</maxTimerDrivenThreadCount>
+        <maxEventDrivenThreadCount>5</maxEventDrivenThreadCount>
+        <registries>
+            <flowRegistry>
+                <id>d30288ae-1b9a-4e41-9d94-312ca93df89e</id>
+                <name>default</name>
+                <url>http://:80</url>
+                <description/>
+            </flowRegistry>
+        </registries>
+        <rootGroup>
+            <id>a91f1f41-d620-4447-b5b9-37c83fa6032e</id>
+            <name>Nifi Flow</name>
+            <position x="0.0" y="0.0"/>
+            <comment/>
+        </rootGroup>
+        <controllerServices/>
+        <reportingTasks/>
+    </flowController>
+  login-identity-providers-ldap.xml: "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<!--\n
+    \ Licensed to the Apache Software Foundation (ASF) under one or more\n  contributor
+    license agreements.  See the NOTICE file distributed with\n  this work for additional
+    information regarding copyright ownership.\n  The ASF licenses this file to You
+    under the Apache License, Version 2.0\n  (the \"License\"); you may not use this
+    file except in compliance with\n  the License.  You may obtain a copy of the License
+    at\n      http://www.apache.org/licenses/LICENSE-2.0\n  Unless required by applicable
+    law or agreed to in writing, software\n  distributed under the License is distributed
+    on an \"AS IS\" BASIS,\n  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+    or implied.\n  See the License for the specific language governing permissions and\n
+    \ limitations under the License.\n-->\n<!--\n    This file lists the login identity
+    providers to use when running securely. In order\n    to use a specific provider
+    it must be configured here and it's identifier\n    must be specified in the nifi.properties
+    file.\n-->\n<loginIdentityProviders>\n    <!--\n        Identity Provider for users
+    logging in with username/password against an LDAP server.\n        \n        'Authentication
+    Strategy' - How the connection to the LDAP server is authenticated. Possible\n            values
+    are ANONYMOUS, SIMPLE, LDAPS, or START_TLS.\n        \n        'Manager DN' - The
+    DN of the manager that is used to bind to the LDAP server to search for users.\n
+    \       'Manager Password' - The password of the manager that is used to bind to
+    the LDAP server to\n            search for users.\n            \n        'TLS -
+    Keystore' - Path to the Keystore that is used when connecting to LDAP using LDAPS
+    or START_TLS.\n        'TLS - Keystore Password' - Password for the Keystore that
+    is used when connecting to LDAP\n            using LDAPS or START_TLS.\n        'TLS
+    - Keystore Type' - Type of the Keystore that is used when connecting to LDAP using\n
+    \           LDAPS or START_TLS (i.e. JKS or PKCS12).\n        'TLS - Truststore'
+    - Path to the Truststore that is used when connecting to LDAP using LDAPS or START_TLS.\n
+    \       'TLS - Truststore Password' - Password for the Truststore that is used when
+    connecting to\n            LDAP using LDAPS or START_TLS.\n        'TLS - Truststore
+    Type' - Type of the Truststore that is used when connecting to LDAP using\n            LDAPS
+    or START_TLS (i.e. JKS or PKCS12).\n        'TLS - Client Auth' - Client authentication
+    policy when connecting to LDAP using LDAPS or START_TLS.\n            Possible values
+    are REQUIRED, WANT, NONE.\n        'TLS - Protocol' - Protocol to use when connecting
+    to LDAP using LDAPS or START_TLS. (i.e. TLS,\n            TLSv1.1, TLSv1.2, etc).\n
+    \       'TLS - Shutdown Gracefully' - Specifies whether the TLS should be shut down
+    gracefully \n            before the target context is closed. Defaults to false.\n
+    \           \n        'Referral Strategy' - Strategy for handling referrals. Possible
+    values are FOLLOW, IGNORE, THROW.\n        'Connect Timeout' - Duration of connect
+    timeout. (i.e. 10 secs).\n        'Read Timeout' - Duration of read timeout. (i.e.
+    10 secs).\n       \n        'Url' - Space-separated list of URLs of the LDAP servers
+    (i.e. ldap://<hostname>:<port>).\n        'User Search Base' - Base DN for searching
+    for users (i.e. CN=Users,DC=example,DC=com).\n        'User Search Filter' - Filter
+    for searching for users against the 'User Search Base'.\n            (i.e. sAMAccountName={0}).
+    The user specified name is inserted into '{0}'.\n        'Identity Strategy' - Strategy
+    to identify users. Possible values are USE_DN and USE_USERNAME.\n            The
+    default functionality if this property is missing is USE_DN in order to retain\n
+    \           backward compatibility. USE_DN will use the full DN of the user entry
+    if possible.\n            USE_USERNAME will use the username the user logged in
+    with.\n        'Authentication Expiration' - The duration of how long the user authentication
+    is valid\n            for. If the user never logs out, they will be required to
+    log back in following\n            this duration.\n    -->\n    <provider>\n        <identifier>ldap-provider</identifier>\n
+    \       <class>org.apache.nifi.ldap.LdapProvider</class>\n        <property name=\"Authentication
+    Strategy\">SIMPLE</property>\n        <property name=\"Manager
+    DN\"></property>\n        <property name=\"Manager Password\"></property>\n
+    \       <property name=\"TLS - Keystore\">/opt/nifi/nifi-current/conf/my-nifi-nifi-0.my-nifi-nifi-headless.default.svc.cluster.local/keystore.jks</property>\n
+    \       <property name=\"TLS - Keystore Password\"></property>\n
+    \       <property name=\"TLS - Keystore Type\">JKS</property>\n        <property
+    name=\"TLS - Truststore\">/opt/nifi/nifi-current/conf/my-nifi-nifi-0.my-nifi-nifi-headless.default.svc.cluster.local/truststore.jks</property>\n
+    \       <property name=\"TLS - Truststore Password\"></property>\n
+    \       <property name=\"TLS - Truststore Type\">JKS</property>\n        <property
+    name=\"TLS - Client Auth\">NONE</property>\n        <property name=\"TLS - Protocol\">TLS</property>\n
+    \       <property name=\"TLS - Shutdown Gracefully\">false</property>\n\n        <property
+    name=\"Referral Strategy\">FOLLOW</property>\n        <property name=\"Connect Timeout\">10
+    secs</property>\n        <property name=\"Read Timeout\">10 secs</property>\n        <property
+    name=\"Url\"></property>\n        <property name=\"User
+    Search Base\"></property>\n        <property name=\"User
+    Search Filter\">(cn={0})</property>\n        <property
+    name=\"Identity Strategy\"></property>\n        <property
+    name=\"Authentication Expiration\">12 hours</property>\n
+    \   </provider>\n</loginIdentityProviders>\n"
+  nifi.properties: |
+    # Licensed to the Apache Software Foundation (ASF) under one or more
+    # contributor license agreements.  See the NOTICE file distributed with
+    # this work for additional information regarding copyright ownership.
+    # The ASF licenses this file to You under the Apache License, Version 2.0
+    # (the "License"); you may not use this file except in compliance with
+    # the License.  You may obtain a copy of the License at
+    #
+    #     http://www.apache.org/licenses/LICENSE-2.0
+    #
+    # Unless required by applicable law or agreed to in writing, software
+    # distributed under the License is distributed on an "AS IS" BASIS,
+    # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    # See the License for the specific language governing permissions and
+    # limitations under the License.
+  
+    # Core Properties #
+    nifi.flow.configuration.file=../data/flow.xml.gz
+    nifi.flow.configuration.archive.enabled=true
+    nifi.flow.configuration.archive.dir=../data/archive/
+    nifi.flow.configuration.archive.max.time=30 days
+    nifi.flow.configuration.archive.max.storage=500 MB
+    nifi.flow.configuration.archive.max.count=
+    nifi.flowcontroller.autoResumeState=true
+    nifi.flowcontroller.graceful.shutdown.period=10 sec
+    nifi.flowservice.writedelay.interval=500 ms
+    nifi.administrative.yield.duration=30 sec
+    # If a component has no work to do (is "bored"), how long should we wait before checking again for work?
+    nifi.bored.yield.duration=10 millis
+  
+    nifi.authorizer.configuration.file=./conf/authorizers.xml
+    nifi.login.identity.provider.configuration.file=./conf/login-identity-providers.xml
+    nifi.templates.directory=../data/templates
+    nifi.ui.banner.text=
+    nifi.ui.autorefresh.interval=30 sec
+    nifi.nar.library.directory=./lib
+    nifi.nar.library.directory.custom=
+    nifi.nar.library.autoload.directory=./extensions
+    nifi.nar.working.directory=./work/nar/
+    nifi.documentation.working.directory=./work/docs/components
+  
+    ####################
+    # State Management #
+    ####################
+    nifi.state.management.configuration.file=./conf/state-management.xml
+    # The ID of the local state provider
+    nifi.state.management.provider.local=local-provider
+    # The ID of the cluster-wide state provider. This will be ignored if NiFi is not clustered but must be populated if running in a cluster.
+    nifi.state.management.provider.cluster=zk-provider
+    # Specifies whether or not this instance of NiFi should run an embedded ZooKeeper server
+    nifi.state.management.embedded.zookeeper.start=false
+    # Properties file that provides the ZooKeeper properties to use if <nifi.state.management.embedded.zookeeper.start> is set to true
+    nifi.state.management.embedded.zookeeper.properties=./conf/zookeeper.properties
+  
+  
+    # H2 Settings
+    nifi.database.directory=../data/database_repository
+    nifi.h2.url.append=;LOCK_TIMEOUT=25000;WRITE_DELAY=0;AUTO_SERVER=FALSE
+  
+    # FlowFile Repository
+    nifi.flowfile.repository.implementation=org.apache.nifi.controller.repository.WriteAheadFlowFileRepository
+    nifi.flowfile.repository.directory=../flowfile_repository
+    nifi.flowfile.repository.partitions=256
+    nifi.flowfile.repository.checkpoint.interval=2 mins
+    nifi.flowfile.repository.always.sync=false
+  
+    nifi.swap.manager.implementation=org.apache.nifi.controller.FileSystemSwapManager
+    nifi.queue.swap.threshold=20000
+    nifi.swap.in.period=5 sec
+    nifi.swap.in.threads=1
+    nifi.swap.out.period=5 sec
+    nifi.swap.out.threads=4
+  
+    # Content Repository
+    nifi.content.repository.implementation=org.apache.nifi.controller.repository.FileSystemRepository
+    nifi.content.claim.max.appendable.size=1 MB
+    nifi.content.claim.max.flow.files=100
+    nifi.content.repository.directory.default=../content_repository
+    nifi.content.repository.archive.max.retention.period=3 days
+    nifi.content.repository.archive.max.usage.percentage=85%
+    nifi.content.repository.archive.enabled=true
+    nifi.content.repository.always.sync=false
+    nifi.content.viewer.url=/nifi-content-viewer/
+  
+    # Provenance Repository Properties
+    nifi.provenance.repository.implementation=org.apache.nifi.provenance.WriteAheadProvenanceRepository
+    nifi.provenance.repository.debug.frequency=1000000
+    nifi.provenance.repository.encryption.key.provider.implementation=
+    nifi.provenance.repository.encryption.key.provider.location=
+    nifi.provenance.repository.encryption.key.id=
+    nifi.provenance.repository.encryption.key=
+  
+    # Persistent Provenance Repository Properties
+    nifi.provenance.repository.directory.default=../provenance_repository
+    nifi.provenance.repository.max.storage.time=10 days
+    nifi.provenance.repository.max.storage.size=8 GB
+    nifi.provenance.repository.rollover.time=30 secs
+    nifi.provenance.repository.rollover.size=100 MB
+    nifi.provenance.repository.query.threads=2
+    nifi.provenance.repository.index.threads=2
+    nifi.provenance.repository.compress.on.rollover=true
+    nifi.provenance.repository.always.sync=false
+    nifi.provenance.repository.journal.count=16
+    # Comma-separated list of fields. Fields that are not indexed will not be searchable. Valid fields are:
+    # EventType, FlowFileUUID, Filename, TransitURI, ProcessorID, AlternateIdentifierURI, Relationship, Details
+    nifi.provenance.repository.indexed.fields=EventType, FlowFileUUID, Filename, ProcessorID, Relationship
+    # FlowFile Attributes that should be indexed and made searchable.  Some examples to consider are filename, uuid, mime.type
+    nifi.provenance.repository.indexed.attributes=
+    # Large values for the shard size will result in more Java heap usage when searching the Provenance Repository
+    # but should provide better performance
+    nifi.provenance.repository.index.shard.size=500 MB
+    # Indicates the maximum length that a FlowFile attribute can be when retrieving a Provenance Event from
+    # the repository. If the length of any attribute exceeds this value, it will be truncated when the event is retrieved.
+    nifi.provenance.repository.max.attribute.length=65536
+  
+    # Volatile Provenance Respository Properties
+    nifi.provenance.repository.buffer.size=100000
+  
+    # Component Status Repository
+    nifi.components.status.repository.implementation=org.apache.nifi.controller.status.history.VolatileComponentStatusRepository
+    nifi.components.status.repository.buffer.size=1440
+    nifi.components.status.snapshot.frequency=1 min
+  
+    # Site to Site properties
+    nifi.remote.input.host=
+    nifi.remote.input.secure=true
+    nifi.remote.input.socket.port=10000
+    nifi.remote.input.http.enabled=true
+    nifi.remote.input.http.transaction.ttl=30 sec
+    nifi.remote.contents.cache.expiration=30 secs
+  
+    # web properties #
+    nifi.web.war.directory=./lib
+    nifi.web.proxy.host=
+    nifi.web.https.port=8443
+    nifi.web.http.host=
+    nifi.web.http.network.interface.default=
+    nifi.web.https.host=
+    nifi.web.https.network.interface.default=
+    nifi.web.jetty.working.directory=./work/jetty
+    nifi.web.jetty.threads=200
+    # nifi.web.proxy.context.path=
+  
+    # security properties #
+    nifi.sensitive.props.key=changeMechangeMe
+    nifi.sensitive.props.key.protected=
+    nifi.sensitive.props.algorithm=NIFI_PBKDF2_AES_GCM_256
+    nifi.sensitive.props.provider=BC
+    nifi.sensitive.props.additional.keys=
+  
+    
+    nifi.security.keystore=./conf/keystore.p12
+    nifi.security.keystoreType=PKCS12
+    nifi.security.keystorePasswd=
+    nifi.security.keyPasswd=
+    nifi.security.truststore=./conf/truststore.p12
+    nifi.security.truststoreType=PKCS12
+    nifi.security.truststorePasswd=
+    nifi.security.user.login.identity.provider=single-user-provider
+    nifi.security.user.authorizer=single-user-authorizer
+    
+    nifi.security.needClientAuth=
+  
+    
+  
+  
+    # Apache Knox SSO Properties #
+    nifi.security.user.knox.url=
+    nifi.security.user.knox.publicKey=
+    nifi.security.user.knox.cookieName=hadoop-jwt
+    nifi.security.user.knox.audiences=
+  
+    # Identity Mapping Properties #
+    # These properties allow normalizing user identities such that identities coming from different identity providers
+    # (certificates, LDAP, Kerberos) can be treated the same internally in NiFi. The following example demonstrates normalizing
+    # DNs from certificates and principals from Kerberos into a common identity string:
+    #
+    # nifi.security.identity.mapping.pattern.dn=^CN=(.*?), OU=(.*?), O=(.*?), L=(.*?), ST=(.*?), C=(.*?)$
+    # nifi.security.identity.mapping.value.dn=$1@$2
+    # nifi.security.identity.mapping.pattern.kerb=^(.*?)/instance@(.*?)$
+    # nifi.security.identity.mapping.value.kerb=$1@$2
+  
+    # cluster common properties (all nodes must have same values) #
+    nifi.cluster.protocol.heartbeat.interval=5 sec
+    nifi.cluster.protocol.is.secure=true
+  
+    # cluster node properties (only configure for cluster nodes) #
+    nifi.cluster.is.node=false
+    nifi.cluster.node.address=
+    nifi.cluster.node.protocol.port=6007
+    nifi.cluster.node.protocol.threads=10
+    nifi.cluster.node.protocol.max.threads=50
+    nifi.cluster.node.event.history.size=25
+    nifi.cluster.node.connection.timeout=5 sec
+    nifi.cluster.node.read.timeout=5 sec
+    nifi.cluster.node.max.concurrent.requests=100
+    nifi.cluster.firewall.file=
+    nifi.cluster.flow.election.max.wait.time=1 mins
+    nifi.cluster.flow.election.max.candidates=
+  
+    # zookeeper properties, used for cluster management #
+    nifi.zookeeper.client.ensembleTracker=false
+    nifi.zookeeper.connect.string=
+    nifi.zookeeper.connect.timeout=3 secs
+    nifi.zookeeper.session.timeout=3 secs
+    nifi.zookeeper.root.node=/nifi
+  
+    # Zookeeper properties for the authentication scheme used when creating acls on znodes used for cluster management
+    # Values supported for nifi.zookeeper.auth.type are "default", which will apply world/anyone rights on znodes
+    # and "sasl" which will give rights to the sasl/kerberos identity used to authenticate the nifi node
+    # The identity is determined using the value in nifi.kerberos.service.principal and the removeHostFromPrincipal
+    # and removeRealmFromPrincipal values (which should align with the kerberos.removeHostFromPrincipal and kerberos.removeRealmFromPrincipal
+    # values configured on the zookeeper server).
+    nifi.zookeeper.auth.type=
+    nifi.zookeeper.kerberos.removeHostFromPrincipal=
+    nifi.zookeeper.kerberos.removeRealmFromPrincipal=
+  
+    # kerberos #
+    nifi.kerberos.krb5.file=
+  
+    # kerberos service principal #
+    nifi.kerberos.service.principal=
+    nifi.kerberos.service.keytab.location=
+  
+    # kerberos spnego principal #
+    nifi.kerberos.spnego.principal=
+    nifi.kerberos.spnego.keytab.location=
+    nifi.kerberos.spnego.authentication.expiration=12 hours
+  
+    # external properties files for variable registry
+    # supports a comma delimited list of file locations
+    nifi.variable.registry.properties=
+  state-management.xml: |
+    <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+    <stateManagement>
+        <local-provider>
+            <id>local-provider</id>
+            <class>org.apache.nifi.controller.state.providers.local.WriteAheadLocalStateProvider</class>
+            <property name="Directory">./state/local</property>
+            <property name="Always Sync">false</property>
+            <property name="Partitions">16</property>
+            <property name="Checkpoint Interval">2 mins</property>
+        </local-provider>
+        <cluster-provider>
+            <id>zk-provider</id>
+            <class>org.apache.nifi.controller.state.providers.zookeeper.ZooKeeperStateProvider</class>
+            <property name="Connect String">my-nifi-zookeeper:2181</property>
+            <property name="Root Node">/nifi</property>
+            <property name="Session Timeout">10 seconds</property>
+            <property name="Access Control">Open</property>
+        </cluster-provider>
+    </stateManagement>
+  zookeeper.properties: |+
+    #
+    #
+    # Licensed to the Apache Software Foundation (ASF) under one
+    # or more contributor license agreements.  See the NOTICE file
+    # distributed with this work for additional information
+    # regarding copyright ownership.  The ASF licenses this file
+    # to you under the Apache License, Version 2.0 (the
+    # "License"); you may not use this file except in compliance
+    # with the License.  You may obtain a copy of the License at
+    #
+    #   http://www.apache.org/licenses/LICENSE-2.0
+    #
+    # Unless required by applicable law or agreed to in writing,
+    # software distributed under the License is distributed on an
+    # "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    # KIND, either express or implied.  See the License for the
+    # specific language governing permissions and limitations
+    # under the License.
+    #
+    #
+    #
+  
+    initLimit=10
+    autopurge.purgeInterval=24
+    syncLimit=5
+    tickTime=2000
+    dataDir=./state/zookeeper
+    autopurge.snapRetainCount=30
+  
+    #
+    # Specifies the servers that are part of this zookeeper ensemble. For
+    # every NiFi instance running an embedded zookeeper, there needs to be
+    # a server entry below. For instance:
+    #
+    # server.1=nifi-node1-hostname:2888:3888;2181
+    # server.2=nifi-node2-hostname:2888:3888;2181
+    # server.3=nifi-node3-hostname:2888:3888;2181
+    #
+    # The index of the server corresponds to the myid file that gets created
+    # in the dataDir of each node running an embedded zookeeper. See the
+    # administration guide for more details.
+    #
+  
+    server.1=
+---
+# Source: nifi/charts/zookeeper/templates/svc-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-nifi-zookeeper-headless
+  namespace: default
+  labels:
+    app.kubernetes.io/name: zookeeper
+    helm.sh/chart: zookeeper-9.2.7
+    app.kubernetes.io/instance: my-nifi
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: zookeeper
+spec:
+  type: ClusterIP
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+    - name: tcp-client
+      port: 2181
+      targetPort: client
+    - name: tcp-follower
+      port: 2888
+      targetPort: follower
+    - name: tcp-election
+      port: 3888
+      targetPort: election
+  selector:
+    app.kubernetes.io/name: zookeeper
+    app.kubernetes.io/instance: my-nifi
+    app.kubernetes.io/component: zookeeper
+---
+# Source: nifi/charts/zookeeper/templates/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-nifi-zookeeper
+  namespace: default
+  labels:
+    app.kubernetes.io/name: zookeeper
+    helm.sh/chart: zookeeper-9.2.7
+    app.kubernetes.io/instance: my-nifi
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: zookeeper
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+    - name: tcp-client
+      port: 2181
+      targetPort: client
+      nodePort: null
+    - name: tcp-follower
+      port: 2888
+      targetPort: follower
+    - name: tcp-election
+      port: 3888
+      targetPort: election
+  selector:
+    app.kubernetes.io/name: zookeeper
+    app.kubernetes.io/instance: my-nifi
+    app.kubernetes.io/component: zookeeper
+---
+# Source: nifi/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-nifi-headless
+  labels:
+    app: "nifi"
+    chart: "nifi-1.2.1"
+    release: "my-nifi"
+    heritage: "Helm"
+  annotations:
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+  - port: 8443
+    name: https
+  - port: 6007
+    name: cluster
+  - port: 10000
+    name: site-to-site
+  selector:
+    app: "nifi"
+    release: "my-nifi"
+---
+# Source: nifi/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-nifi
+  labels:
+    app: "nifi"
+    chart: "nifi-1.2.1"
+    release: "my-nifi"
+    heritage: "Helm"
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8443
+      name: https
+      targetPort: 8443
+      nodePort: 
+    - port: 10000
+      name: site-to-site
+      targetPort: 10000
+  selector:
+    app: nifi
+    release: my-nifi
+---
+# Source: nifi/charts/zookeeper/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-nifi-zookeeper
+  namespace: default
+  labels:
+    app.kubernetes.io/name: zookeeper
+    helm.sh/chart: zookeeper-9.2.7
+    app.kubernetes.io/instance: my-nifi
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: zookeeper
+    role: zookeeper
+spec:
+  replicas: 3
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: zookeeper
+      app.kubernetes.io/instance: my-nifi
+      app.kubernetes.io/component: zookeeper
+  serviceName: my-nifi-zookeeper-headless
+  updateStrategy:
+    rollingUpdate: {}
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations:
+      labels:
+        app.kubernetes.io/name: zookeeper
+        helm.sh/chart: zookeeper-9.2.7
+        app.kubernetes.io/instance: my-nifi
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/component: zookeeper
+    spec:
+      serviceAccountName: default
+      
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: zookeeper
+                    app.kubernetes.io/instance: my-nifi
+                    app.kubernetes.io/component: zookeeper
+                namespaces:
+                  - "default"
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+      initContainers:
+      containers:
+        - name: zookeeper
+          image: docker.io/bitnami/zookeeper:3.8.0-debian-11-r5
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+          command:
+            - /scripts/setup.sh
+          resources:
+            limits: {}
+            requests:
+              cpu: 250m
+              memory: 256Mi
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: ZOO_DATA_LOG_DIR
+              value: ""
+            - name: ZOO_PORT_NUMBER
+              value: "2181"
+            - name: ZOO_TICK_TIME
+              value: "2000"
+            - name: ZOO_INIT_LIMIT
+              value: "10"
+            - name: ZOO_SYNC_LIMIT
+              value: "5"
+            - name: ZOO_PRE_ALLOC_SIZE
+              value: "65536"
+            - name: ZOO_SNAPCOUNT
+              value: "100000"
+            - name: ZOO_MAX_CLIENT_CNXNS
+              value: "60"
+            - name: ZOO_4LW_COMMANDS_WHITELIST
+              value: "srvr, mntr, ruok"
+            - name: ZOO_LISTEN_ALLIPS_ENABLED
+              value: "no"
+            - name: ZOO_AUTOPURGE_INTERVAL
+              value: "0"
+            - name: ZOO_AUTOPURGE_RETAIN_COUNT
+              value: "3"
+            - name: ZOO_MAX_SESSION_TIMEOUT
+              value: "40000"
+            - name: ZOO_SERVERS
+              value: my-nifi-zookeeper-0.my-nifi-zookeeper-headless.default.svc.cluster.local:2888:3888::1 my-nifi-zookeeper-1.my-nifi-zookeeper-headless.default.svc.cluster.local:2888:3888::2 my-nifi-zookeeper-2.my-nifi-zookeeper-headless.default.svc.cluster.local:2888:3888::3 
+            - name: ZOO_ENABLE_AUTH
+              value: "no"
+            - name: ZOO_HEAP_SIZE
+              value: "1024"
+            - name: ZOO_LOG_LEVEL
+              value: "ERROR"
+            - name: ALLOW_ANONYMOUS_LOGIN
+              value: "yes"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.name
+          ports:
+            - name: client
+              containerPort: 2181
+            - name: follower
+              containerPort: 2888
+            - name: election
+              containerPort: 3888
+          livenessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+            exec:
+              command: ['/bin/bash', '-c', 'echo "ruok" | timeout 2 nc -w 2 localhost 2181 | grep imok']
+          readinessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+            exec:
+              command: ['/bin/bash', '-c', 'echo "ruok" | timeout 2 nc -w 2 localhost 2181 | grep imok']
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts/setup.sh
+              subPath: setup.sh
+            - name: data
+              mountPath: /bitnami/zookeeper
+      volumes:
+        - name: scripts
+          configMap:
+            name: my-nifi-zookeeper-scripts
+            defaultMode: 0755
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        annotations:
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "8Gi"
+---
+# Source: nifi/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-nifi
+  labels:
+    app: "nifi"
+    chart: "nifi-1.2.1"
+    release: "my-nifi"
+    heritage: "Helm"
+spec:
+  podManagementPolicy: Parallel
+  serviceName: my-nifi-headless
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nifi
+      release: my-nifi
+  template:
+    metadata:
+      annotations:
+        security.alpha.kubernetes.io/sysctls: net.ipv4.ip_local_port_range=10000 65000
+      labels:
+        app: "nifi"
+        chart: "nifi-1.2.1"
+        release: "my-nifi"
+        heritage: "Helm"
+    spec:
+      serviceAccountName: default
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+             - weight: 1
+               podAffinityTerm:
+                 labelSelector:
+                    matchExpressions:
+                      - key: "app"
+                        operator: In
+                        values:
+                         - "nifi"
+                 topologyKey: "kubernetes.io/hostname"
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        fsGroup: 1000
+        runAsUser: 1000
+      initContainers:
+      containers:
+      - name: server
+        imagePullPolicy: "IfNotPresent"
+        image: "apache/nifi:1.23.2"
+        command:
+        - bash
+        - -ce
+        - |
+          prop_replace () {
+            target_file=${NIFI_HOME}/conf/${3:-nifi.properties}
+            echo "updating ${1} in ${target_file}"
+            if egrep "^${1}=" ${target_file} &> /dev/null; then
+              sed -i -e "s|^$1=.*$|$1=$2|"  ${target_file}
+            else
+              echo ${1}=${2} >> ${target_file}
+            fi
+          }
+          mkdir -p ${NIFI_HOME}/config-data/conf
+          FQDN=$(hostname -f)
+
+          cat "${NIFI_HOME}/conf/nifi.temp" > "${NIFI_HOME}/conf/nifi.properties"
+          bin/nifi.sh set-single-user-credentials username changemechangeme
+
+
+          if ! test -f /opt/nifi/data/flow.xml.gz && test -f /opt/nifi/data/flow.xml; then
+            gzip /opt/nifi/data/flow.xml
+          fi
+
+
+          prop_replace nifi.ui.banner.text $(hostname -s)
+          prop_replace nifi.remote.input.host ${FQDN}
+          prop_replace nifi.cluster.node.address ${FQDN}
+          prop_replace nifi.zookeeper.connect.string ${NIFI_ZOOKEEPER_CONNECT_STRING}
+          prop_replace nifi.web.http.host ${FQDN}
+          prop_replace nifi.web.proxy.host my-nifi.default.svc
+
+          if [ ! -r "${NIFI_HOME}/conf/nifi-cert.pem" ]
+          then
+            /opt/nifi/nifi-toolkit-current/bin/tls-toolkit.sh standalone \
+              -n 'my-nifi-nifi-0.my-nifi-nifi-headless.default.svc.cluster.local' \
+              -C 'CN=admin, OU=NIFI' \
+              -o "${NIFI_HOME}/conf/" \
+              -P changeMe \
+              -S changeMe \
+              --nifiPropertiesFile /opt/nifi/nifi-current/conf/nifi.properties
+          fi
+          prop_replace nifi.web.http.network.interface.default "eth0" nifi.properties
+          prop_replace nifi.web.http.network.interface.lo "lo" nifi.properties
+
+          for f in "${NIFI_HOME}/conf/authorizers.xml" "${NIFI_HOME}/conf/login-identity-providers.xml" ${NIFI_HOME}/conf/nifi.properties
+          do
+            echo === $f ===
+            cat $f
+          done
+          echo === end of files ===
+
+          function prop () {
+            target_file=${NIFI_HOME}/conf/nifi.properties
+            egrep "^${1}=" ${target_file} | cut -d'=' -f2
+          }
+
+          function offloadNode() {
+              FQDN=$(hostname -f)
+              echo "disconnecting node '$FQDN'"
+              baseUrl=https://${FQDN}:8443
+
+              echo "keystoreType=$(prop nifi.security.keystoreType)" > secure.properties
+              echo "keystore=$(prop nifi.security.keystore)" >> secure.properties
+              echo "keystorePasswd=$(prop nifi.security.keystorePasswd)" >> secure.properties
+              echo "truststoreType=$(prop nifi.security.truststoreType)" >> secure.properties
+              echo "truststore=$(prop nifi.security.truststore)" >> secure.properties
+              echo "truststorePasswd=$(prop nifi.security.truststorePasswd)" >> secure.properties
+              echo "proxiedEntity=CN=admin, OU=NIFI" >> secure.properties
+             
+              secureArgs="-p secure.properties"
+
+              echo baseUrl ${baseUrl}
+              echo "gracefully disconnecting node '$FQDN' from cluster"
+              ${NIFI_TOOLKIT_HOME}/bin/cli.sh nifi get-nodes -ot json -u ${baseUrl} ${secureArgs} > nodes.json
+              nnid=$(jq --arg FQDN "$FQDN" '.cluster.nodes[] | select(.address==$FQDN) | .nodeId' nodes.json)
+              echo "disconnecting node ${nnid}"
+              ${NIFI_TOOLKIT_HOME}/bin/cli.sh nifi disconnect-node -nnid $nnid -u ${baseUrl} ${secureArgs}
+              echo ""
+              echo "get a connected node"
+              connectedNode=$(jq -r 'first(.cluster.nodes|=sort_by(.address)| .cluster.nodes[] | select(.status=="CONNECTED")) | .address' nodes.json)
+              baseUrl=https://${connectedNode}:8443
+              echo baseUrl ${baseUrl}
+              echo ""
+              echo "wait until node has state 'DISCONNECTED'"
+              while [[ "${node_state}" != "DISCONNECTED" ]]; do
+                  sleep 1
+                  ${NIFI_TOOLKIT_HOME}/bin/cli.sh nifi get-nodes -ot json -u ${baseUrl} ${secureArgs} > nodes.json
+                  node_state=$(jq -r --arg FQDN "$FQDN" '.cluster.nodes[] | select(.address==$FQDN) | .status' nodes.json)
+                  echo "state is '${node_state}'"
+              done
+              echo ""
+              echo "node '${nnid}' was disconnected"
+              echo "offloading node"
+              ${NIFI_TOOLKIT_HOME}/bin/cli.sh nifi offload-node -nnid $nnid -u ${baseUrl} ${secureArgs}
+              echo ""
+              echo "wait until node has state 'OFFLOADED'"
+              while [[ "${node_state}" != "OFFLOADED" ]]; do
+                  sleep 1
+                  ${NIFI_TOOLKIT_HOME}/bin/cli.sh nifi get-nodes -ot json -u ${baseUrl} ${secureArgs} > nodes.json
+                  node_state=$(jq -r --arg FQDN "$FQDN" '.cluster.nodes[] | select(.address==$FQDN) | .status' nodes.json)
+                  echo "state is '${node_state}'"
+              done
+          }
+
+          deleteNode() {
+              echo "deleting node"
+              ${NIFI_TOOLKIT_HOME}/bin/cli.sh nifi delete-node -nnid ${nnid} -u ${baseUrl} ${secureArgs}
+              echo "node deleted"
+          }
+
+          executeTrap() {
+             echo Received trapped signal, beginning shutdown...;
+             ./bin/nifi.sh stop;
+             exit 0;
+          }
+
+          trap executeTrap TERM HUP INT;
+          trap ":" EXIT
+
+          exec bin/nifi.sh run & nifi_pid="$!"
+          echo NiFi running with PID ${nifi_pid}.
+          wait ${nifi_pid}
+
+        resources:
+          {}
+        ports:
+        - containerPort: 8443
+          name: https
+          protocol: TCP
+        - containerPort: 6007
+          name: cluster
+          protocol: TCP
+        env:
+        - name: NIFI_ZOOKEEPER_CONNECT_STRING
+          value: my-nifi-zookeeper:2181
+        - name: NIFI_WEB_HTTPS_HOST
+          value: 0.0.0.0
+        livenessProbe:
+          initialDelaySeconds: 90
+          periodSeconds: 60
+          tcpSocket:
+            port: 8443
+        volumeMounts:
+          - mountPath: /opt/nifi/nifi-current/logs
+            name: "logs"
+          - mountPath: /opt/nifi/data
+            name: "data"
+          - mountPath: /opt/nifi/nifi-current/auth-conf/
+            name: "auth-conf"
+          - mountPath: /opt/nifi/nifi-current/config-data
+            name: "config-data"
+          - mountPath: /opt/nifi/flowfile_repository
+            name: "flowfile-repository"
+          - mountPath: /opt/nifi/content_repository
+            name: "content-repository"
+          - mountPath: /opt/nifi/provenance_repository
+            name: "provenance-repository"
+          - name: "bootstrap-conf"
+            mountPath: /opt/nifi/nifi-current/conf/bootstrap.conf
+            subPath: "bootstrap.conf"
+          - name: "nifi-properties"
+            mountPath: /opt/nifi/nifi-current/conf/nifi.temp
+            subPath: "nifi.temp"
+          - name: "authorizers-temp"
+            mountPath: /opt/nifi/nifi-current/conf/authorizers.temp
+            subPath: "authorizers.temp"
+          - name: "bootstrap-notification-services-xml"
+            mountPath: /opt/nifi/nifi-current/conf/bootstrap-notification-services.xml
+            subPath: "bootstrap-notification-services.xml"
+          - name: "login-identity-providers-ldap-xml"
+            mountPath: /opt/nifi/nifi-current/conf/login-identity-providers-ldap.xml
+            subPath: "login-identity-providers-ldap.xml"
+          - name: "state-management-xml"
+            mountPath: /opt/nifi/nifi-current/conf/state-management.xml
+            subPath: "state-management.xml"
+          - name: "zookeeper-properties"
+            mountPath: /opt/nifi/nifi-current/conf/zookeeper.properties
+            subPath: "zookeeper.properties"
+          - name: "flow-content"
+            mountPath: /opt/nifi/data/flow.xml
+            subPath: "flow.xml"
+      - name: app-log
+        imagePullPolicy: "IfNotPresent"
+        image: "busybox:1.32.0"
+        args: 
+          - /bin/sh
+          - -c
+          - trap "exit 0" TERM; tail -n+1 -F /var/log/nifi-app.log & wait $!
+        resources:
+          limits:
+            cpu: 50m
+            memory: 50Mi
+          requests:
+            cpu: 10m
+            memory: 10Mi
+        volumeMounts:
+        - mountPath: /var/log
+          name: "logs"
+      - name: bootstrap-log
+        imagePullPolicy: "IfNotPresent"
+        image: "busybox:1.32.0"
+        args:
+          - /bin/sh
+          - -c
+          - trap "exit 0" TERM; tail -n+1 -F /var/log/nifi-bootstrap.log & wait $!
+        resources:
+          limits:
+            cpu: 50m
+            memory: 50Mi
+          requests:
+            cpu: 10m
+            memory: 10Mi
+        volumeMounts:
+        - mountPath: /var/log
+          name: "logs"
+      - name: user-log
+        imagePullPolicy: "IfNotPresent"
+        image: "busybox:1.32.0"
+        args:
+          - /bin/sh
+          - -c
+          - trap "exit 0" TERM; tail -n+1 -F /var/log/nifi-user.log & wait $!
+        resources:
+          limits:
+            cpu: 50m
+            memory: 50Mi
+          requests:
+            cpu: 10m
+            memory: 10Mi
+        volumeMounts:
+        - mountPath: /var/log
+          name: "logs"
+      volumes:
+      - name: "bootstrap-conf"
+        configMap:
+          name: my-nifi-config
+          items:
+            - key: "bootstrap.conf"
+              path: "bootstrap.conf"
+      - name: "nifi-properties"
+        configMap:
+          name: my-nifi-config
+          items:
+            - key: "nifi.properties"
+              path: "nifi.temp"
+      - name: "authorizers-temp"
+        configMap:
+          name: my-nifi-config
+          items:
+            - key: "authorizers.xml"
+              path: "authorizers.temp"
+      - name: "bootstrap-notification-services-xml"
+        configMap:
+          name: my-nifi-config
+          items:
+            - key: "bootstrap-notification-services.xml"
+              path: "bootstrap-notification-services.xml"
+      - name: "login-identity-providers-ldap-xml"
+        configMap:
+          name: my-nifi-config
+          items:
+            - key: "login-identity-providers-ldap.xml"
+              path: "login-identity-providers-ldap.xml"
+      - name: "state-management-xml"
+        configMap:
+          name: my-nifi-config
+          items:
+            - key: "state-management.xml"
+              path: "state-management.xml"
+      - name: "zookeeper-properties"
+        configMap:
+          name: my-nifi-config
+          items:
+            - key: "zookeeper.properties"
+              path: "zookeeper.properties"
+      - name: "flow-content"
+        configMap:
+          name: my-nifi-config
+          items:
+            - key: "flow.xml"
+              path: "flow.xml"
+      - name: config-data
+        emptyDir: {}
+      - name: auth-conf
+        emptyDir: {}
+      - name: data
+        emptyDir: {}
+      - name: flowfile-repository
+        emptyDir: {}
+      - name: content-repository
+        emptyDir: {}
+      - name: provenance-repository
+        emptyDir: {}
+      - name: logs
+        emptyDir: {}

@@ -1,0 +1,493 @@
+---
+# Source: p4/templates/mongodb.yml
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: mongo-pv
+  labels:
+    type: local
+spec:
+  storageClassName: mongo-class
+  accessModes:
+    - ReadWriteOnce
+  capacity:
+    storage: 3Gi
+  hostPath:
+    path: "/db/mongo"
+---
+# Source: p4/templates/mysql.yml
+kind: PersistentVolume
+apiVersion: v1
+metadata:
+  name: mysql-pv
+  labels:
+    type: local
+spec:
+  storageClassName: mysql-class
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/db/mysql"
+---
+# Source: p4/templates/mongodb.yml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mongo-pvc
+spec:
+  storageClassName: mongo-class
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 3Gi
+---
+# Source: p4/templates/mysql.yml
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: mysql-pvc
+spec:
+  storageClassName: mysql-class
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 3Gi
+---
+# Source: p4/templates/mongodb.yml
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongodb
+  labels:
+    app: mongodb
+spec:
+  ports:
+  - port: 27017
+    targetPort: 27017
+    protocol: TCP
+    name: mongodb-port-27017
+  - port: 27018
+    targetPort: 27018
+    protocol: TCP
+    name: mongodb-port-27018
+  - port: 27019
+    targetPort: 27019
+    protocol: TCP
+    name: mongodb-port-27019
+  selector:
+    app: mongodb
+  type: ClusterIP
+---
+# Source: p4/templates/mysql.yml
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql
+  labels:
+    app: mysql
+spec:
+  ports:
+  - port: 3306
+    targetPort: 3306
+    protocol: TCP
+    name: mysql-port
+  selector:
+    app: mysql
+  type: ClusterIP
+---
+# Source: p4/templates/rabbitmq.yml
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbitmq
+  labels:
+    app: rabbitmq
+spec:
+  ports:
+  - port: 5672
+    targetPort: 5672
+    protocol: TCP
+    name: rabbitmq-port-5672
+  - port: 15672
+    targetPort: 15672
+    protocol: TCP
+    name: rabbitmq-port-15672
+  selector:
+    app: rabbitmq
+  type: ClusterIP
+---
+# Source: p4/templates/server.yml
+apiVersion: v1
+kind: Service
+metadata:
+  name: serverservice
+  labels:
+    app: serverservice
+spec:
+  ports:
+  - port: 8080
+    targetPort: 8080
+    
+    protocol: TCP
+    name: serverservice-port
+  selector:
+    app: serverservice
+  
+  type: ClusterIP
+---
+# Source: p4/templates/toposervice.yml
+apiVersion: v1
+kind: Service
+metadata:
+  name: toposervice
+  labels:
+    app: toposervice
+spec:
+  ports:
+  - port: 8181
+    targetPort: 8181
+    
+    protocol: TCP
+    name: toposervice-port
+  selector:
+    app: toposervice
+  
+  type: ClusterIP
+---
+# Source: p4/templates/weatherservice.yml
+apiVersion: v1
+kind: Service
+metadata:
+  name: weatherservice
+  labels:
+    app: weatherservice
+spec:
+  ports:
+  - port: 9090
+    targetPort: 9090
+    protocol: TCP
+    name: weatherservice-port
+  selector:
+    app: weatherservice
+  type: ClusterIP
+---
+# Source: p4/templates/mongodb.yml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongodb
+spec:
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: mongodb
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: mongodb
+    spec:
+      containers:
+      - name: mongodb
+        image: mongo:5.0-focal
+        env:
+        - name: MONGO_INITDB_DATABASE
+          value: topoDB
+        - name: MONGO_INITDB_ROOT_USERNAME
+          value: root
+        - name: MONGO_INITDB_ROOT_PASSWORD
+          value: password
+        ports:
+        - containerPort: 27017
+        - containerPort: 27018
+        - containerPort: 27019
+        volumeMounts:
+        - name: mongo-persistent-storage
+          mountPath: /data/db
+      volumes:
+      - name: mongo-persistent-storage
+        persistentVolumeClaim:
+          claimName: mongo-pvc
+---
+# Source: p4/templates/mysql.yml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mysql
+spec:
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: mysql
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: mysql
+    spec:
+      containers:
+      - name: mysql
+        image: mysql:8
+        env:
+        - name: MYSQL_DATABASE
+          value: eoloplantsDB
+        - name: MYSQL_ROOT_PASSWORD
+          value: password
+        ports:
+        - containerPort: 3306
+        volumeMounts:
+        - name: mysql-persistent-storage
+          mountPath: /var/lib/mysql
+      volumes:
+      - name: mysql-persistent-storage
+        persistentVolumeClaim:
+          claimName: mysql-pvc
+---
+# Source: p4/templates/planner.yml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: planner
+spec:
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: planner
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: planner
+    spec:
+      securityContext:
+        runAsUser: 1001
+        runAsGroup: 3000
+        fsGroup: 2000
+      restartPolicy: Always
+      containers:
+      - name: planner
+        image: mastercloudapps/planner:v1.23
+        command: ["/bin/bash", "-c"]
+        args:
+        - "./wait-for-it.sh weatherservice:9090 -t 500 -- ./wait-for-it.sh toposervice:8181 -t 500 -- ./wait-for-it.sh rabbitmq:5672 -t 500 -- java -jar planner.jar"
+        env:
+        # Environment variables for TopoService connection
+        - name: TOPO_HOST
+          value: toposervice
+        - name: TOPO_PORT
+          value: "8181"
+        # Environment variables for WeatherService connection
+        - name: GRPC_CLIENT_WEATHERSERVER_ADDRESS
+          value: static://weatherservice:9090
+        # Environment variables for RabbitMQ connection
+        - name: SPRING_CLOUD_STREAM_RABBIT_BINDER_NODES
+          value: rabbitmq:5672
+        - name: SPRING_RABBITMQ_HOST
+          value: rabbitmq
+        - name: SPRING_RABBITMQ_PORT
+          value: "5672"
+        - name: SPRING_RABBITMQ_USERNAME
+          value: root
+        - name: SPRING_RABBITMQ_PASSWORD
+          value: password
+---
+# Source: p4/templates/rabbitmq.yml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rabbitmq
+spec:
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: rabbitmq
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: rabbitmq
+    spec:
+      containers:
+      - name: rabbitmq
+        image: rabbitmq:3.11-management
+        env:
+        - name: RABBITMQ_DEFAULT_USER
+          value: root
+        - name: RABBITMQ_DEFAULT_PASS
+          value: password
+        ports:
+        - containerPort: 5672
+        - containerPort: 15672
+---
+# Source: p4/templates/server.yml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: serverservice
+spec:
+  selector:
+    matchLabels:
+      app: serverservice
+  strategy:
+    type: Recreate
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: serverservice
+    spec:
+      securityContext:
+        runAsUser: 1001
+        runAsGroup: 3000
+        fsGroup: 2000
+      restartPolicy: Always
+      containers:
+      - name: serverservice
+        image: mastercloudapps/server:v2.23
+        env:
+        # Environment variables for MySQL connection
+        - name: QUARKUS_DATASOURCE_DB_KIND
+          value: mysql
+        - name: QUARKUS_DATASOURCE_JDBC_URL
+          value: jdbc:mysql://mysql/eoloplantsDB
+        - name: QUARKUS_DATASOURCE_USERNAME
+          value: root
+        - name: QUARKUS_DATASOURCE_PASSWORD
+          value: password
+        - name: RABBITMQ_URL
+          value: amqp://root:password@rabbitmq
+        # Environment variables for RabbitMQ connection
+        - name: RABBITMQ_HOST
+          value: rabbitmq
+        - name: RABBITMQ_PORT
+          value: "5672"
+        - name: RABBITMQ_USERNAME
+          value: root
+        - name: RABBITMQ_PASSWORD
+          value: password
+        ports:
+        - containerPort: 8080
+---
+# Source: p4/templates/toposervice.yml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: toposervice
+spec:
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: toposervice
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: toposervice
+    spec:
+      securityContext:
+        runAsUser: 1001
+        runAsGroup: 3000
+        fsGroup: 2000
+      restartPolicy: Always
+      containers:
+      - name: toposervice
+        image: mastercloudapps/toposervice:v1.23
+        env:
+        # Environment variables for MongoDB connection
+        - name: SPRING_DATA_MONGODB_HOST
+          value: mongodb
+        - name: SPRING_DATA_MONGODB_PORT
+          value: "27017"
+        - name: SPRING_DATA_MONGODB_DATABASE
+          value: topoDB
+        - name: SPRING_DATA_MONGODB_AUTHENTICATION-DATABASE
+          value: admin
+        - name: SPRING_DATA_MONGODB_USERNAME
+          value: root
+        - name: SPRING_DATA_MONGODB_PASSWORD
+          value: password
+        ports:
+        - containerPort: 8181
+---
+# Source: p4/templates/weatherservice.yml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: weatherservice
+spec:
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: weatherservice
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: weatherservice
+    spec:
+      securityContext:
+        runAsUser: 1001
+        runAsGroup: 3000
+        fsGroup: 2000
+      restartPolicy: Always
+      containers:
+      - name: weatherservice
+        image: mastercloudapps/weatherservice:v1.23
+        env:
+        # Environment variables for configuring gRPC listening
+        - name: QUARKUS_GRPC_SERVER_HOST
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: QUARKUS_GRPC_SERVER_PORT
+          value: "9090"
+        ports:
+        - containerPort: 9090
+---
+# Source: p4/templates/ingress-server.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress  
+metadata:  
+  name: practicaserver
+spec:
+  rules:
+   - host:  p4.com 
+     http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: serverservice
+            port:
+              number: 8080
+---
+# Source: p4/templates/ingress-toposervice.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress  
+metadata:  
+  name: practicatoposervice
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$1
+spec:
+  rules:
+   - host:  p4.com 
+     http:
+      paths:
+      - path: /toposervice/(.+)
+        pathType: Prefix
+        backend:
+          service:
+            name: toposervice
+            port:
+              number: 8181

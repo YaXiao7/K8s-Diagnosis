@@ -1,0 +1,103 @@
+---
+# Source: namespace-controller/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-namespace-controller
+  labels:
+    helm.sh/chart: namespace-controller-0.0.2
+    app.kubernetes.io/name: namespace-controller
+    app.kubernetes.io/instance: my-namespace-controller
+    app.kubernetes.io/version: "0.0.1"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: namespace-controller/templates/clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-namespace-controller
+  labels:
+    helm.sh/chart: namespace-controller-0.0.2
+    app.kubernetes.io/name: namespace-controller
+    app.kubernetes.io/instance: my-namespace-controller
+    app.kubernetes.io/version: "0.0.1"
+    app.kubernetes.io/managed-by: Helm
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - namespaces
+      - endpoints
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - networking.k8s.io
+    resources:
+      - networkpolicies
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+---
+# Source: namespace-controller/templates/clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-namespace-controller
+  labels:
+    helm.sh/chart: namespace-controller-0.0.2
+    app.kubernetes.io/name: namespace-controller
+    app.kubernetes.io/instance: my-namespace-controller
+    app.kubernetes.io/version: "0.0.1"
+    app.kubernetes.io/managed-by: Helm
+subjects:
+- kind: ServiceAccount
+  name: my-namespace-controller
+  namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-namespace-controller
+---
+# Source: namespace-controller/templates/deployment-network.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-namespace-controller-network
+  labels:
+    helm.sh/chart: namespace-controller-0.0.2
+    app.kubernetes.io/name: namespace-controller
+    app.kubernetes.io/instance: my-namespace-controller
+    app.kubernetes.io/version: "0.0.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: namespace-controller
+      app.kubernetes.io/instance: my-namespace-controller
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: namespace-controller
+        app.kubernetes.io/instance: my-namespace-controller
+    spec:
+      serviceAccountName: my-namespace-controller
+      securityContext:
+        {}
+      containers:
+        - name: namespace-controller
+          securityContext:
+            {}
+          image: "statcan/namespace-controller:0.0.1"
+          imagePullPolicy: IfNotPresent
+          args:
+            - network
+          resources:
+            {}

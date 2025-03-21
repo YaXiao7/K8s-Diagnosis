@@ -1,0 +1,85 @@
+---
+# Source: spot-termination-exporter/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-spot-termination-exporter-spot-termination-exporter
+  labels:
+    app: my-spot-termination-exporter-spot-termination-exporter
+    chart: "spot-termination-exporter-0.0.11"
+    release: "my-spot-termination-exporter"
+    heritage: "Helm"
+spec:
+  type: ClusterIP
+  clusterIP: "None"
+  ports:
+  - name: http
+    port: 9189
+    targetPort: http
+  selector:
+    app: "my-spot-termination-exporter-spot-termination-exporter"
+---
+# Source: spot-termination-exporter/templates/daemonset.yaml
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: "my-spot-termination-exporter-spot-termination-exporter"
+  labels:
+    app: "my-spot-termination-exporter-spot-termination-exporter"
+    chart: "spot-termination-exporter-0.0.11"
+    release: "my-spot-termination-exporter"
+    heritage: "Helm"
+spec:
+  selector:
+    matchLabels:
+      app: my-spot-termination-exporter-spot-termination-exporter
+      component: "my-spot-termination-exporter-spot-termination-exporter"
+  template:
+    metadata:
+      labels:
+        heritage: "Helm"
+        release: "my-spot-termination-exporter"
+        app: my-spot-termination-exporter-spot-termination-exporter
+        component: "my-spot-termination-exporter-spot-termination-exporter"
+      annotations:
+        prometheus.io/scrape: "true"
+
+    spec:
+      containers:
+      - name: spot-termination-exporter
+        image: "banzaicloud/spot-termination-exporter:0.0.1"
+        imagePullPolicy: "IfNotPresent"
+
+        command:
+        - "/bin/sh"
+        - "-ecx"
+        - |
+          spot-termination-exporter \
+          --bind-addr :9189 \
+          --metrics-path /metrics \
+          --metadata-endpoint http://169.254.169.254/latest/meta-data/ \
+          --log-level debug
+
+        ports:
+        - name: http
+          containerPort: 9189
+          hostPort: 9189
+        livenessProbe:
+          httpGet:
+            path: /
+            port: http
+          initialDelaySeconds: 120
+          timeoutSeconds: 5
+          failureThreshold: 6
+        readinessProbe:
+          httpGet:
+            path: /
+            port: http
+            httpHeaders:
+          initialDelaySeconds: 30
+          timeoutSeconds: 3
+          periodSeconds: 5
+        resources:
+          requests:
+            cpu: 120m
+            memory: 256Mi

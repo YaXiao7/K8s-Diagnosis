@@ -1,0 +1,98 @@
+---
+# Source: starrocks/templates/beconfigmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kube-starrocks-be-cm
+  namespace: default
+  labels:
+    cluster: kube-starrocks
+    app: "be"
+data:
+  be.conf: |
+    be_port = 9060
+    webserver_port = 8040
+    heartbeat_service_port = 9050
+    brpc_port = 8060
+    sys_log_level = INFO
+    default_rowset_type = beta
+---
+# Source: starrocks/templates/feconfigmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kube-starrocks-fe-cm
+  namespace: default
+  labels:
+    cluster: kube-starrocks
+    app: "fe"
+data:
+  fe.conf: |
+    LOG_DIR = ${STARROCKS_HOME}/log
+    DATE = "$(date +%Y%m%d-%H%M%S)"
+    JAVA_OPTS="-Dlog4j2.formatMsgNoLookups=true -Xmx8192m -XX:+UseG1GC -Xlog:gc*:${LOG_DIR}/fe.gc.log.$DATE:time"
+    http_port = 8030
+    rpc_port = 9020
+    query_port = 9030
+    edit_log_port = 9010
+    mysql_service_nio_enabled = true
+    sys_log_level = INFO
+---
+# Source: starrocks/templates/configmaps.yaml
+---
+---
+# Source: starrocks/templates/starrockscluster.yaml
+apiVersion: starrocks.com/v1
+kind: StarRocksCluster
+metadata:
+  name: kube-starrocks
+  namespace: default
+  labels:
+    cluster: kube-starrocks
+    app.kubernetes.io/instance: my-starrocks
+    app.kubernetes.io/managed-by: Helm
+spec:
+  starRocksFeSpec:
+    image: "starrocks/fe-ubuntu:3.3-latest"
+    replicas: 1
+    imagePullPolicy: IfNotPresent
+    requests:
+      cpu: 4
+      memory: 4Gi
+    limits:
+      cpu: 8
+      memory: 8Gi
+    service:
+      type: ClusterIP
+    annotations:
+      app.starrocks.io/fe-config-hash: "99e4a506"
+    runAsNonRoot: 
+    feEnvVars:
+      - name: TZ
+        value: Asia/Shanghai
+    terminationGracePeriodSeconds: 120
+    configMapInfo:
+      configMapName: kube-starrocks-fe-cm
+      resolveKey: fe.conf
+  starRocksBeSpec:
+    image: "starrocks/be-ubuntu:3.3-latest"
+    replicas: 1
+    imagePullPolicy: IfNotPresent
+    requests:
+      cpu: 4
+      memory: 4Gi
+    limits:
+      cpu: 8
+      memory: 8Gi
+    service:
+      type: ClusterIP
+    annotations:
+      app.starrocks.io/be-config-hash: "951886d3"
+    runAsNonRoot: 
+    beEnvVars:
+      - name: TZ
+        value: Asia/Shanghai
+    terminationGracePeriodSeconds: 120
+    configMapInfo:
+      configMapName: kube-starrocks-be-cm
+      resolveKey: be.conf

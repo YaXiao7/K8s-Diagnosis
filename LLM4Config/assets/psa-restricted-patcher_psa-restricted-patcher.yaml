@@ -1,0 +1,314 @@
+---
+# Source: psa-restricted-patcher/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-psa-restricted-patcher
+  labels:
+    helm.sh/chart: psa-restricted-patcher-0.10.1
+    app.kubernetes.io/name: psa-restricted-patcher
+    app.kubernetes.io/instance: my-psa-restricted-patcher
+    app.kubernetes.io/version: "0.4.1"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: psa-restricted-patcher/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-psa-restricted-patcher-config
+  namespace: default
+data:
+  production.json: |
+    {
+      "log": {
+        "level": "info"
+      },
+      "tls": {
+        "enabled": true,
+        "secretName": "psa-restricted-patcher"
+      },
+      "hookName": "my-psa-restricted-patcher-hooks",
+      "hookNamespace": "default",
+      "addSeccompProfile": true,
+      "seccompProfile": "RuntimeDefault",
+      "namespaces": [],
+      "defaultGid": 1001,
+      "defaultUid": 1001,
+      "defaultFsGroup": 1001,
+      "passthrough": [],
+      "ignoredAnnotations": [],
+      "targettedAnnotations": []
+    }
+---
+# Source: psa-restricted-patcher/templates/rbac.yaml
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-psa-restricted-patcher-ca-injector
+rules:
+- apiGroups: ["admissionregistration.k8s.io"]
+  resources: ["mutatingwebhookconfigurations"]
+  resourceNames: ["my-psa-restricted-patcher-hooks"]
+  verbs: ["get", "update", "patch"]
+---
+# Source: psa-restricted-patcher/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-psa-restricted-patcher-hook-read-secrets-binding
+subjects:
+- kind: ServiceAccount
+  name:  my-psa-restricted-patcher
+  namespace: default
+roleRef:
+  kind: ClusterRole 
+  name: my-psa-restricted-patcher-ca-injector
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: psa-restricted-patcher/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: default
+  name: my-psa-restricted-patcher-tls-reader
+rules:
+- apiGroups: [""]
+  resourceNames: ["psa-restricted-patcher"]
+  resources: ["secrets"]
+  verbs: ["get"]
+---
+# Source: psa-restricted-patcher/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: my-psa-restricted-patcher-hook-read-secrets-binding
+  namespace: default
+subjects:
+- kind: ServiceAccount
+  name: my-psa-restricted-patcher
+  namespace: default
+roleRef:
+  kind: Role 
+  name: my-psa-restricted-patcher-tls-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: psa-restricted-patcher/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-psa-restricted-patcher
+  labels:
+    helm.sh/chart: psa-restricted-patcher-0.10.1
+    app.kubernetes.io/name: psa-restricted-patcher
+    app.kubernetes.io/instance: my-psa-restricted-patcher
+    app.kubernetes.io/version: "0.4.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 443
+      targetPort: https
+      protocol: TCP
+      name: https
+  selector:
+    app.kubernetes.io/name: psa-restricted-patcher
+    app.kubernetes.io/instance: my-psa-restricted-patcher
+---
+# Source: psa-restricted-patcher/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-psa-restricted-patcher
+  labels:
+    helm.sh/chart: psa-restricted-patcher-0.10.1
+    app.kubernetes.io/name: psa-restricted-patcher
+    app.kubernetes.io/instance: my-psa-restricted-patcher
+    app.kubernetes.io/version: "0.4.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: psa-restricted-patcher
+      app.kubernetes.io/instance: my-psa-restricted-patcher
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: psa-restricted-patcher
+        app.kubernetes.io/instance: my-psa-restricted-patcher
+    spec:
+      serviceAccountName: my-psa-restricted-patcher
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+        - name: tls
+          secret:
+            secretName: psa-restricted-patcher
+            optional: false
+        - name: config-volume
+          configMap:
+            name: my-psa-restricted-patcher-config
+            items:
+              - key: production.json
+                path: production.json
+      containers:
+        - volumeMounts:
+          - name: tls
+            mountPath: '/var/run/secrets/tls'
+            readOnly: true
+          - name: config-volume
+            mountPath: /var/run/config/
+            readOnly: true
+          name: psa-restricted-patcher
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+            runAsGroup: 1000
+            runAsNonRoot: true
+            runAsUser: 1000
+          image: "ghcr.io/bryopsida/psa-restricted-patcher:main"
+          imagePullPolicy: Always
+          env:
+          - name: NODE_CONFIG_DIR
+            value: /var/run/config:/usr/src/app/config
+          ports:
+            - name: https
+              containerPort: 3000
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /status
+              port: https
+              scheme: HTTPS
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /status
+              port: https
+              scheme: HTTPS
+            periodSeconds: 5
+            failureThreshold: 2
+          resources:
+            limits:
+              cpu: "0.5"
+              memory: 256Mi
+            requests:
+              cpu: "0.25"
+              memory: 128Mi
+---
+# Source: psa-restricted-patcher/templates/hpa.yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: my-psa-restricted-patcher
+  labels:
+    helm.sh/chart: psa-restricted-patcher-0.10.1
+    app.kubernetes.io/name: psa-restricted-patcher
+    app.kubernetes.io/instance: my-psa-restricted-patcher
+    app.kubernetes.io/version: "0.4.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: my-psa-restricted-patcher
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 80
+---
+# Source: psa-restricted-patcher/templates/certificates.yaml
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: my-psa-restricted-patcher-ca-certificate
+  namespace: default
+spec:
+  isCA: true
+  commonName: my-psa-restricted-patcher-self-signed-ca
+  secretName: my-psa-restricted-patcher-root-ca-secret
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: my-psa-restricted-patcher-root-issuer
+    kind: Issuer
+    group: cert-manager.io
+---
+# Source: psa-restricted-patcher/templates/certificates.yaml
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: my-psa-restricted-patcher-tls-certificate-psa-restricted-patcher
+spec:
+  secretName: psa-restricted-patcher
+  commonName: "my-psa-restricted-patcher.default.svc"
+  dnsNames:
+    - "my-psa-restricted-patcher"
+    - "my-psa-restricted-patcher.default"
+    - "my-psa-restricted-patcher.default.svc"
+    - "my-psa-restricted-patcher.default.svc.cluster.local"
+  usages:
+    - server auth
+  issuerRef:
+    name: my-psa-restricted-patcher-issuer
+    kind: Issuer
+    group: cert-manager.io
+---
+# Source: psa-restricted-patcher/templates/certificates.yaml
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: my-psa-restricted-patcher-root-issuer
+  namespace: default
+spec:
+  selfSigned: {}
+---
+# Source: psa-restricted-patcher/templates/certificates.yaml
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: my-psa-restricted-patcher-issuer
+  namespace: default
+spec:
+  ca:
+    secretName: my-psa-restricted-patcher-root-ca-secret
+---
+# Source: psa-restricted-patcher/templates/mutating-webhook.yaml
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: my-psa-restricted-patcher-hooks
+webhooks:
+- name:  my-psa-restricted-patcher.default.svc
+  admissionReviewVersions: ["v1"]
+  sideEffects: None
+  timeoutSeconds: 1
+  failurePolicy: "Ignore"
+  reinvocationPolicy: "IfNeeded"
+  namespaceSelector:
+    {}
+  objectSelector:
+    {}
+  rules:
+  - operations: ["CREATE"]
+    apiGroups: [""]
+    apiVersions: ["v1"]
+    resources: ["pods"]
+    scope: "*"
+  clientConfig:
+    service:
+      namespace: default
+      name: my-psa-restricted-patcher
+      path: /api/v1/admission

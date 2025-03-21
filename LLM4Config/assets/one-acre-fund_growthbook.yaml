@@ -1,0 +1,462 @@
+---
+# Source: growthbook/charts/mongodb/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-growthbook-mongodb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: mongodb
+    helm.sh/chart: mongodb-13.6.8
+    app.kubernetes.io/instance: my-growthbook
+    app.kubernetes.io/managed-by: Helm
+secrets:
+  - name: my-growthbook-mongodb
+automountServiceAccountToken: true
+---
+# Source: growthbook/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-growthbook
+  labels:
+    helm.sh/chart: growthbook-0.1.15
+    app.kubernetes.io/name: growthbook
+    app.kubernetes.io/instance: my-growthbook
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: growthbook/charts/mongodb/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-growthbook-mongodb
+  namespace: default
+  labels:
+    app.kubernetes.io/name: mongodb
+    helm.sh/chart: mongodb-13.6.8
+    app.kubernetes.io/instance: my-growthbook
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: mongodb
+type: Opaque
+data:
+  mongodb-root-password: "cGFzc3dvcmQ="
+  mongodb-passwords: "Z3Jvd3RoYm9vaw=="
+---
+# Source: growthbook/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-growthbook
+  labels:
+    helm.sh/chart: growthbook-0.1.15
+    app.kubernetes.io/name: growthbook
+    app.kubernetes.io/instance: my-growthbook
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  MONGODB_URI: "bW9uZ29kYjovL2dyb3d0aGJvb2s6Z3Jvd3RoYm9va0BteS1ncm93dGhib29rLW1vbmdvZGI6MjcwMTcvZ3Jvd3RoYm9vay1kYg=="
+  JWT_SECRET: "and0U2VjcmV0U3RyaW5n"
+  ENCRYPTION_KEY: "ZW5jcnlwdGlvbktleVN0cmluZw=="
+stringData:
+---
+# Source: growthbook/charts/mongodb/templates/common-scripts-cm.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-growthbook-mongodb-common-scripts
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: mongodb
+    helm.sh/chart: mongodb-13.6.8
+    app.kubernetes.io/instance: my-growthbook
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: mongodb
+data:
+  startup-probe.sh: |
+    #!/bin/bash
+    mongosh  $TLS_OPTIONS --port $MONGODB_PORT_NUMBER --eval 'db.hello().isWritablePrimary || db.hello().secondary' | grep 'true'
+  readiness-probe.sh: |
+    #!/bin/bash
+    # Run the proper check depending on the version
+    [[ $(mongod -version | grep "db version") =~ ([0-9]+\.[0-9]+\.[0-9]+) ]] && VERSION=${BASH_REMATCH[1]}
+    . /opt/bitnami/scripts/libversion.sh
+    VERSION_MAJOR="$(get_sematic_version "$VERSION" 1)"
+    VERSION_MINOR="$(get_sematic_version "$VERSION" 2)"
+    VERSION_PATCH="$(get_sematic_version "$VERSION" 3)"
+    if [[ ( "$VERSION_MAJOR" -ge 5 ) || ( "$VERSION_MAJOR" -ge 4 && "$VERSION_MINOR" -ge 4 && "$VERSION_PATCH" -ge 2 ) ]]; then
+        mongosh $TLS_OPTIONS --port $MONGODB_PORT_NUMBER --eval 'db.hello().isWritablePrimary || db.hello().secondary' | grep 'true'
+    else
+        mongosh  $TLS_OPTIONS --port $MONGODB_PORT_NUMBER --eval 'db.isMaster().ismaster || db.isMaster().secondary' | grep 'true'
+    fi
+  ping-mongodb.sh: |
+    #!/bin/bash
+    mongosh  $TLS_OPTIONS --port $MONGODB_PORT_NUMBER --eval "db.adminCommand('ping')"
+---
+# Source: growthbook/charts/mongodb/templates/initialization-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-growthbook-mongodb-init-scripts
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: mongodb
+    helm.sh/chart: mongodb-13.6.8
+    app.kubernetes.io/instance: my-growthbook
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: mongodb
+data:
+  grant-role.js: |
+    db = db.getSiblingDB('growthbook-db')
+    db.grantRolesToUser("growthbook", [{ role: 'readWrite', db: "growthbook-db" }])
+---
+# Source: growthbook/templates/configmap.yaml
+apiVersion: v1
+data:
+  livenessprobe-exec.sh: |
+    #!/bin/bash
+    CURL_HTTP=$(curl -s -o /dev/null -w "%{http_code}" -XPOST http://localhost:3100/auth/refresh)
+    CURL_EXIT=$?
+    if [ $CURL_EXIT -eq 0 ] && [ $CURL_HTTP -eq 200 ]; then
+      echo "Liveness check probe OK"
+      exit 0
+    else
+      echo "Liveness check probe ERROR - curl exit code $CURL_EXIT, API HTTP code $CURL_HTTP"
+      exit 1
+    fi
+
+kind: ConfigMap
+metadata:
+  name: my-growthbook-livenessprobe-exec
+---
+# Source: growthbook/charts/mongodb/templates/standalone/pvc.yaml
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: my-growthbook-mongodb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: mongodb
+    helm.sh/chart: mongodb-13.6.8
+    app.kubernetes.io/instance: my-growthbook
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: mongodb
+spec:
+  accessModes:
+    - "ReadWriteOnce"
+  resources:
+    requests:
+      storage: "8Gi"
+---
+# Source: growthbook/templates/pvc.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: my-growthbook
+spec:
+  accessModes:
+    - "ReadWriteMany"
+  volumeMode: Filesystem
+  resources:
+    requests:
+      storage: 3Gi
+---
+# Source: growthbook/charts/mongodb/templates/standalone/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-growthbook-mongodb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: mongodb
+    helm.sh/chart: mongodb-13.6.8
+    app.kubernetes.io/instance: my-growthbook
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: mongodb
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+    - name: "mongodb"
+      port: 27017
+      targetPort: mongodb
+      nodePort: null
+  selector:
+    app.kubernetes.io/name: mongodb
+    app.kubernetes.io/instance: my-growthbook
+    app.kubernetes.io/component: mongodb
+---
+# Source: growthbook/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-growthbook
+  labels:
+    helm.sh/chart: growthbook-0.1.15
+    app.kubernetes.io/name: growthbook
+    app.kubernetes.io/instance: my-growthbook
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3000
+      targetPort: 3000
+      protocol: TCP
+      name: frontend-port
+    - port: 3100
+      targetPort: 3100
+      protocol: TCP
+      name: backend-port
+  selector:
+    app.kubernetes.io/name: growthbook
+    app.kubernetes.io/instance: my-growthbook
+---
+# Source: growthbook/charts/mongodb/templates/standalone/dep-sts.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-growthbook-mongodb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: mongodb
+    helm.sh/chart: mongodb-13.6.8
+    app.kubernetes.io/instance: my-growthbook
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: mongodb
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mongodb
+      app.kubernetes.io/instance: my-growthbook
+      app.kubernetes.io/component: mongodb
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mongodb
+        helm.sh/chart: mongodb-13.6.8
+        app.kubernetes.io/instance: my-growthbook
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/component: mongodb
+    spec:
+      
+      serviceAccountName: my-growthbook-mongodb
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: mongodb
+                    app.kubernetes.io/instance: my-growthbook
+                    app.kubernetes.io/component: mongodb
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+        sysctls: []
+      
+      containers:
+        - name: mongodb
+          image: docker.io/bitnami/mongodb:6.0.4-debian-11-r10
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: MONGODB_EXTRA_USERNAMES
+              value: "growthbook"
+            - name: MONGODB_EXTRA_DATABASES
+              value: "growthbook-db"
+            - name: MONGODB_EXTRA_PASSWORDS
+              valueFrom:
+                secretKeyRef:
+                  name: my-growthbook-mongodb
+                  key: mongodb-passwords
+            - name: MONGODB_ROOT_USER
+              value: "root"
+            - name: MONGODB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-growthbook-mongodb
+                  key: mongodb-root-password
+            - name: ALLOW_EMPTY_PASSWORD
+              value: "no"
+            - name: MONGODB_SYSTEM_LOG_VERBOSITY
+              value: "0"
+            - name: MONGODB_DISABLE_SYSTEM_LOG
+              value: "no"
+            - name: MONGODB_DISABLE_JAVASCRIPT
+              value: "no"
+            - name: MONGODB_ENABLE_JOURNAL
+              value: "yes"
+            - name: MONGODB_PORT_NUMBER
+              value: "27017"
+            - name: MONGODB_ENABLE_IPV6
+              value: "no"
+            - name: MONGODB_ENABLE_DIRECTORY_PER_DB
+              value: "no"
+          ports:
+            - name: mongodb
+              containerPort: 27017
+          livenessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            successThreshold: 1
+            timeoutSeconds: 10
+            exec:
+              command:
+                - /bitnami/scripts/ping-mongodb.sh
+          readinessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+            exec:
+              command:
+                - /bitnami/scripts/readiness-probe.sh
+          resources:
+            limits: {}
+            requests: {}
+          volumeMounts:
+            - name: datadir
+              mountPath: /bitnami/mongodb
+              subPath: 
+            - name: common-scripts
+              mountPath: /bitnami/scripts
+            - name: custom-init-scripts
+              mountPath: /docker-entrypoint-initdb.d
+      volumes:
+        - name: common-scripts
+          configMap:
+            name: my-growthbook-mongodb-common-scripts
+            defaultMode: 0550
+        - name: custom-init-scripts
+          configMap:
+            name: my-growthbook-mongodb-init-scripts
+        - name: datadir
+          persistentVolumeClaim:
+            claimName: my-growthbook-mongodb
+---
+# Source: growthbook/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-growthbook
+  labels:
+    helm.sh/chart: growthbook-0.1.15
+    app.kubernetes.io/name: growthbook
+    app.kubernetes.io/instance: my-growthbook
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: growthbook
+      app.kubernetes.io/instance: my-growthbook
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: growthbook
+        app.kubernetes.io/instance: my-growthbook
+    spec:
+      serviceAccountName: my-growthbook
+      securityContext:
+        null
+      initContainers:
+        # Wait for MongoDB
+        - name: wait-db
+          image: jwilder/dockerize
+          # We don't care about having latest...
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - dockerize -timeout=120s -wait tcp://${MONGODB_HOST}:${MONGODB_PORT}
+          env:
+            - name: MONGODB_PORT
+              value: '27017'
+            - name: MONGODB_HOST
+              value: my-growthbook-mongodb
+      containers:
+        - name: growthbook
+          securityContext:
+            null
+          image: "growthbook/growthbook:latest"
+          imagePullPolicy: Always
+          lifecycle:
+            postStart:
+              exec:
+                command: ["/bin/sh", "-c", "apt-get update && apt-get install curl -y"]
+          livenessProbe:
+            exec:
+              command:
+              - bash
+              - /usr/local/src/growthbook-helm/livenessprobe-exec.sh
+            initialDelaySeconds: 30
+            periodSeconds: 5
+          env:
+            
+            - name: API_HOST
+              value: |-
+                https://my-api-host.io:443
+            - name: APP_ORIGIN
+              value: |-
+                https://my-app-origin.io:443
+            - name: NODE_ENV
+              value: |-
+                production
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: my-growthbook
+                  key: JWT_SECRET
+            - name: ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: my-growthbook
+                  key: ENCRYPTION_KEY
+            - name: MONGODB_URI
+              valueFrom:
+                secretKeyRef:
+                  name: my-growthbook
+                  key: MONGODB_URI
+            - name: EMAIL_ENABLED
+              value: "false"
+            
+            
+          volumeMounts:
+            - name: my-growthbook-livenessprobe-exec
+              mountPath: /usr/local/src/growthbook-helm
+            - name: my-growthbook
+              mountPath: /usr/local/src/app/packages/back-end/uploads
+          ports:
+            - name: frontend-port
+              containerPort: 3000
+              protocol: TCP
+            - name: backend-port
+              containerPort: 3100
+              protocol: TCP
+          resources:
+            null
+      nodeSelector:
+        {}
+      volumes:
+        - name: my-growthbook-livenessprobe-exec
+          configMap:
+            name: my-growthbook-livenessprobe-exec
+        - name: my-growthbook
+          emptyDir: {}

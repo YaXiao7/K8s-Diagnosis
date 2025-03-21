@@ -1,0 +1,66 @@
+---
+# Source: planton-cloud-kube-agent/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: planton-cloud-machine-account
+  namespace: default
+  labels:
+    app: planton-cloud-kube-agent
+    company: example-planton-cloud-company-id
+    hosting-env-id: example-planton-cloud-hosting-env-id
+type: Opaque
+data:
+  client-secret: "ZXhhbXBsZS1wbGFudG9uLWNsb3VkLXNlcnZpY2UtY2xpZW50LXNlY3JldD4="
+---
+# Source: planton-cloud-kube-agent/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: planton-cloud-kube-agent
+  namespace: default
+  labels:
+    app: planton-cloud-kube-agent
+    company: example-planton-cloud-company-id
+    hosting-env-id: example-planton-cloud-hosting-env-id
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: planton-cloud-kube-agent
+      company: example-planton-cloud-company-id
+      hosting-env-id: example-planton-cloud-hosting-env-id
+  template:
+    metadata:
+      labels:
+        app: planton-cloud-kube-agent
+        company: example-planton-cloud-company-id
+        hosting-env-id: example-planton-cloud-hosting-env-id
+    spec:
+      containers:
+      - name: planton-cloud-kube-agent
+        image: us-central1-docker.pkg.dev/planton-shared-services-jx/afs-planton-pos-uc1-ext-docker/gitlab.com/plantoncode/planton/pcs/lib/mod/planton-cloud-kube-agent:v0.0.9
+        ports:
+        - containerPort: 8080
+        env:
+          - name: PLANTON_CLOUD_KUBE_AGENT_MACHINE_ACCOUNT_EMAIL
+            value: example-planton-cloud-service-machine-account-email
+          - name: PLANTON_CLOUD_KUBE_AGENT_CLIENT_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: planton-cloud-machine-account
+                key: client-secret
+          - name: PLANTON_CLOUD_KUBE_AGENT_HOSTING_CLUSTER_ID
+            value: example-planton-cloud-hosting-env-id
+          - name: PLANTON_CLOUD_SERVICE_API_ENDPOINT
+            value: api.prod.planton.cloud:443
+          - name: OPEN_COST_API_ENDPOINT
+            value: http://kubecost-cost-analyzer.kubecost:9003
+          - name: OPEN_COST_POLLING_INTERVAL_SECONDS
+            value: "60"
+          - name: TOKEN_EXPIRATION_BUFFER_MINUTES
+            value: "5"
+          - name: TOKEN_EXPIRATION_CHECK_INTERVAL_SECONDS
+            value: "60"
+          - name: LOG_LEVEL
+            value: info

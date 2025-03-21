@@ -1,0 +1,103 @@
+---
+# Source: chatapp/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-chatapp
+  labels:
+    helm.sh/chart: chatapp-0.1.0
+    app.kubernetes.io/name: chatapp
+    app.kubernetes.io/instance: my-chatapp
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: chatapp/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-chatapp
+  labels:
+    helm.sh/chart: chatapp-0.1.0
+    app.kubernetes.io/name: chatapp
+    app.kubernetes.io/instance: my-chatapp
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: LoadBalancer
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: chatapp
+    app.kubernetes.io/instance: my-chatapp
+---
+# Source: chatapp/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-chatapp
+  labels:
+    helm.sh/chart: chatapp-0.1.0
+    app.kubernetes.io/name: chatapp
+    app.kubernetes.io/instance: my-chatapp
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: chatapp
+      app.kubernetes.io/instance: my-chatapp
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: chatapp
+        app.kubernetes.io/instance: my-chatapp
+    spec:
+      serviceAccountName: my-chatapp
+      securityContext:
+        {}
+      containers:
+        - name: chatapp
+          securityContext:
+            {}
+          image: "176517965207.dkr.ecr.us-west-2.amazonaws.com/demo-repo:latest"
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 5000
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+          resources:
+            {}
+---
+# Source: chatapp/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-chatapp-test-connection"
+  labels:
+    helm.sh/chart: chatapp-0.1.0
+    app.kubernetes.io/name: chatapp
+    app.kubernetes.io/instance: my-chatapp
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-chatapp:80']
+  restartPolicy: Never

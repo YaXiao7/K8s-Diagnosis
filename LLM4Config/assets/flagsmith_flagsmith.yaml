@@ -1,0 +1,661 @@
+---
+# Source: flagsmith/charts/influxdb2/templates/pdb.yaml
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: my-flagsmith-influxdb2
+  labels:
+    app.kubernetes.io/name: influxdb2
+    app.kubernetes.io/instance: my-flagsmith
+    app.kubernetes.io/version: "2.3.0"
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: influxdb2-2.1.1
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: influxdb2
+      app.kubernetes.io/instance: my-flagsmith
+---
+# Source: flagsmith/charts/devPostgresql/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-flagsmith-dev-postgresql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: dev-postgresql
+    helm.sh/chart: devPostgresql-12.5.8
+    app.kubernetes.io/instance: my-flagsmith
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+automountServiceAccountToken: true
+---
+# Source: flagsmith/charts/influxdb2/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-flagsmith-influxdb2
+  labels:
+    app.kubernetes.io/name: influxdb2
+    app.kubernetes.io/instance: my-flagsmith
+    app.kubernetes.io/version: "2.3.0"
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: influxdb2-2.1.1
+---
+# Source: flagsmith/charts/devPostgresql/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-flagsmith-dev-postgresql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: dev-postgresql
+    helm.sh/chart: devPostgresql-12.5.8
+    app.kubernetes.io/instance: my-flagsmith
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  postgres-password: "ZmxhZ3NtaXRo"
+  # We don't auto-generate LDAP password when it's not provided as we do for other passwords
+---
+# Source: flagsmith/charts/influxdb2/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  labels:
+    app.kubernetes.io/name: influxdb2
+    app.kubernetes.io/instance: my-flagsmith
+    app.kubernetes.io/version: "2.3.0"
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: influxdb2-2.1.1
+  name: my-flagsmith-influxdb2-auth
+data:
+  admin-token: "eUxBTG56M1NQNDBVaTd4eGlJQndMS0dqaUJTMGU1VWk="
+  admin-password: "dHdmWmpaTVE4cUN6R3ZsNzVacmJjS05UY29NZlJNV24="
+---
+# Source: flagsmith/templates/secrets-api.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-flagsmith
+  labels:
+    helm.sh/chart: flagsmith-0.58.0
+    app.kubernetes.io/name: flagsmith
+    app.kubernetes.io/instance: my-flagsmith
+    app.kubernetes.io/version: "2.139.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: api
+type: Opaque
+data:
+  DATABASE_URL: "cG9zdGdyZXM6Ly9wb3N0Z3JlczpmbGFnc21pdGhAbXktZmxhZ3NtaXRoLWRldi1wb3N0Z3Jlc3FsLmRlZmF1bHQuc3ZjLmNsdXN0ZXIubG9jYWw6NTQzMi9mbGFnc21pdGg="
+  DJANGO_SECRET_KEY: "eGF3U3p0RUgwMTVuN0NteFZJaFlaU1ZaZ0pkQU1NU1Jud2d0TDJQM2dFSmFLM3JjYWE="
+---
+# Source: flagsmith/charts/devPostgresql/templates/primary/svc-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-flagsmith-dev-postgresql-hl
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: dev-postgresql
+    helm.sh/chart: devPostgresql-12.5.8
+    app.kubernetes.io/instance: my-flagsmith
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: primary
+    # Use this annotation in addition to the actual publishNotReadyAddresses
+    # field below because the annotation will stop being respected soon but the
+    # field is broken in some versions of Kubernetes:
+    # https://github.com/kubernetes/kubernetes/issues/58662
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+spec:
+  type: ClusterIP
+  clusterIP: None
+  # We want all pods in the StatefulSet to have their addresses published for
+  # the sake of the other Postgresql pods even before they're ready, since they
+  # have to be able to talk to each other in order to become ready.
+  publishNotReadyAddresses: true
+  ports:
+    - name: tcp-postgresql
+      port: 5432
+      targetPort: tcp-postgresql
+  selector:
+    app.kubernetes.io/name: dev-postgresql
+    app.kubernetes.io/instance: my-flagsmith
+    app.kubernetes.io/component: primary
+---
+# Source: flagsmith/charts/devPostgresql/templates/primary/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-flagsmith-dev-postgresql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: dev-postgresql
+    helm.sh/chart: devPostgresql-12.5.8
+    app.kubernetes.io/instance: my-flagsmith
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: primary
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+    - name: tcp-postgresql
+      port: 5432
+      targetPort: tcp-postgresql
+      nodePort: null
+  selector:
+    app.kubernetes.io/name: dev-postgresql
+    app.kubernetes.io/instance: my-flagsmith
+    app.kubernetes.io/component: primary
+---
+# Source: flagsmith/charts/influxdb2/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-flagsmith-influxdb2
+  labels:
+    app.kubernetes.io/name: influxdb2
+    app.kubernetes.io/instance: my-flagsmith
+    app.kubernetes.io/version: "2.3.0"
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: influxdb2-2.1.1
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      protocol: TCP
+      targetPort: 8086
+  selector:
+    app.kubernetes.io/name: influxdb2
+    app.kubernetes.io/instance: my-flagsmith
+---
+# Source: flagsmith/templates/service-api.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-flagsmith-api
+  labels:
+    helm.sh/chart: flagsmith-0.58.0
+    app.kubernetes.io/name: flagsmith
+    app.kubernetes.io/instance: my-flagsmith
+    app.kubernetes.io/version: "2.139.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: api
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8000
+      targetPort: 8000
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: flagsmith
+    app.kubernetes.io/instance: my-flagsmith
+    app.kubernetes.io/component: api
+---
+# Source: flagsmith/templates/service-frontend.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-flagsmith-frontend
+  labels:
+    helm.sh/chart: flagsmith-0.58.0
+    app.kubernetes.io/name: flagsmith
+    app.kubernetes.io/instance: my-flagsmith
+    app.kubernetes.io/version: "2.139.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: frontend
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: flagsmith
+    app.kubernetes.io/instance: my-flagsmith
+    app.kubernetes.io/component: frontend
+---
+# Source: flagsmith/templates/deployment-api.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-flagsmith-api
+  labels:
+    helm.sh/chart: flagsmith-0.58.0
+    app.kubernetes.io/name: flagsmith
+    app.kubernetes.io/instance: my-flagsmith
+    app.kubernetes.io/version: "2.139.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: api
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: flagsmith
+      app.kubernetes.io/instance: my-flagsmith
+      app.kubernetes.io/component: api
+  replicas: 1
+  template:
+    metadata:
+      annotations:
+        checksum/secrets-api: 4728b5f635d5b237c29d82ef90fb6d18dde3409cf3e5ade6b8e4a2184ef7e002
+      labels:
+        app.kubernetes.io/name: flagsmith
+        app.kubernetes.io/instance: my-flagsmith
+        app.kubernetes.io/component: api
+    spec:
+      securityContext:
+        {}
+      initContainers:
+      - name: migrate-db
+        image: flagsmith.docker.scarf.sh/flagsmith/flagsmith-api:2.139.0
+        imagePullPolicy: IfNotPresent
+        args: ["migrate"]
+        env: 
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: my-flagsmith
+              key: DATABASE_URL
+        - name: DJANGO_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: my-flagsmith
+              key: DJANGO_SECRET_KEY
+        - name: INFLUXDB_URL
+          value: http://my-flagsmith-influxdb2.default.svc.cluster.local:80
+        - name: INFLUXDB_BUCKET
+          value: default
+        - name: INFLUXDB_ORG
+          value: influxdata
+        - name: INFLUXDB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: my-flagsmith-influxdb2-auth
+              key: admin-token
+        - name: DJANGO_ALLOWED_HOSTS
+          value: '*'
+        - name: USE_X_FORWARDED_HOST
+          value: 'true'
+        - name: LOG_FORMAT
+          value: generic
+        
+      containers:
+      - name: flagsmith-api
+        image: flagsmith.docker.scarf.sh/flagsmith/flagsmith-api:2.139.0
+        imagePullPolicy: IfNotPresent
+        args: ["serve"]
+        ports:
+        - containerPort: 8000
+        env: 
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: my-flagsmith
+              key: DATABASE_URL
+        - name: DJANGO_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: my-flagsmith
+              key: DJANGO_SECRET_KEY
+        - name: INFLUXDB_URL
+          value: http://my-flagsmith-influxdb2.default.svc.cluster.local:80
+        - name: INFLUXDB_BUCKET
+          value: default
+        - name: INFLUXDB_ORG
+          value: influxdata
+        - name: INFLUXDB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: my-flagsmith-influxdb2-auth
+              key: admin-token
+        - name: DJANGO_ALLOWED_HOSTS
+          value: '*'
+        - name: USE_X_FORWARDED_HOST
+          value: 'true'
+        - name: LOG_FORMAT
+          value: generic
+        
+        livenessProbe:
+          failureThreshold: 5
+          httpGet:
+            path: /health
+            port: 8000
+            scheme: HTTP
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 2
+        readinessProbe:
+          failureThreshold: 10
+          httpGet:
+            path: /health
+            port: 8000
+            scheme: HTTP
+          initialDelaySeconds: 1
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 2
+        resources:
+          {}
+      volumes:
+---
+# Source: flagsmith/templates/deployment-frontend.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-flagsmith
+  labels:
+    helm.sh/chart: flagsmith-0.58.0
+    app.kubernetes.io/name: flagsmith
+    app.kubernetes.io/instance: my-flagsmith
+    app.kubernetes.io/version: "2.139.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: frontend
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: flagsmith
+      app.kubernetes.io/instance: my-flagsmith
+      app.kubernetes.io/component: frontend
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: flagsmith
+        app.kubernetes.io/instance: my-flagsmith
+        app.kubernetes.io/component: frontend
+    spec:
+      securityContext:
+        {}
+      containers:
+      - name: flagsmith-frontend
+        image: flagsmith.docker.scarf.sh/flagsmith/flagsmith-frontend:2.139.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+        env:
+        - name: ASSET_URL
+          value: '/'
+        - name: PROXY_API_URL
+          value: http://my-flagsmith-api.default:8000
+        - name: FLAGSMITH_PROXY_API_URL
+          value: http://my-flagsmith-api.default:8000
+        livenessProbe:
+          failureThreshold: 20
+          httpGet:
+            path: /health
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 20
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 10
+        readinessProbe:
+          failureThreshold: 20
+          httpGet:
+            path: /health
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 20
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 10
+        resources:
+          {}
+      volumes:
+---
+# Source: flagsmith/charts/devPostgresql/templates/primary/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-flagsmith-dev-postgresql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: dev-postgresql
+    helm.sh/chart: devPostgresql-12.5.8
+    app.kubernetes.io/instance: my-flagsmith
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: primary
+spec:
+  replicas: 1
+  serviceName: my-flagsmith-dev-postgresql-hl
+  updateStrategy:
+    rollingUpdate: {}
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: dev-postgresql
+      app.kubernetes.io/instance: my-flagsmith
+      app.kubernetes.io/component: primary
+  template:
+    metadata:
+      name: my-flagsmith-dev-postgresql
+      labels:
+        app.kubernetes.io/name: dev-postgresql
+        helm.sh/chart: devPostgresql-12.5.8
+        app.kubernetes.io/instance: my-flagsmith
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/component: primary
+    spec:
+      serviceAccountName: my-flagsmith-dev-postgresql
+      
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: dev-postgresql
+                    app.kubernetes.io/instance: my-flagsmith
+                    app.kubernetes.io/component: primary
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+      hostNetwork: false
+      hostIPC: false
+      containers:
+        - name: postgresql
+          image: docker.io/bitnami/postgresql:15.3.0-debian-11-r7
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            runAsUser: 1001
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: POSTGRESQL_PORT_NUMBER
+              value: "5432"
+            - name: POSTGRESQL_VOLUME_DIR
+              value: "/bitnami/postgresql"
+            - name: PGDATA
+              value: "/bitnami/postgresql/data"
+            # Authentication
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-flagsmith-dev-postgresql
+                  key: postgres-password
+            - name: POSTGRES_DB
+              value: "flagsmith"
+            # Replication
+            # Initdb
+            # Standby
+            # LDAP
+            - name: POSTGRESQL_ENABLE_LDAP
+              value: "no"
+            # TLS
+            - name: POSTGRESQL_ENABLE_TLS
+              value: "no"
+            # Audit
+            - name: POSTGRESQL_LOG_HOSTNAME
+              value: "false"
+            - name: POSTGRESQL_LOG_CONNECTIONS
+              value: "false"
+            - name: POSTGRESQL_LOG_DISCONNECTIONS
+              value: "false"
+            - name: POSTGRESQL_PGAUDIT_LOG_CATALOG
+              value: "off"
+            # Others
+            - name: POSTGRESQL_CLIENT_MIN_MESSAGES
+              value: "error"
+            - name: POSTGRESQL_SHARED_PRELOAD_LIBRARIES
+              value: "pgaudit"
+          ports:
+            - name: tcp-postgresql
+              containerPort: 5432
+          livenessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - exec pg_isready -U "postgres" -d "dbname=flagsmith" -h 127.0.0.1 -p 5432
+          readinessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - -e
+                
+                - |
+                  exec pg_isready -U "postgres" -d "dbname=flagsmith" -h 127.0.0.1 -p 5432
+                  [ -f /opt/bitnami/postgresql/tmp/.initialized ] || [ -f /bitnami/postgresql/.initialized ]
+          resources:
+            limits: {}
+            requests:
+              cpu: 250m
+              memory: 256Mi
+          volumeMounts:
+            - name: dshm
+              mountPath: /dev/shm
+            - name: data
+              mountPath: /bitnami/postgresql
+      volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+  volumeClaimTemplates:
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: data
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "8Gi"
+---
+# Source: flagsmith/charts/influxdb2/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-flagsmith-influxdb2
+  labels:
+    app.kubernetes.io/name: influxdb2
+    app.kubernetes.io/instance: my-flagsmith
+    app.kubernetes.io/version: "2.3.0"
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: influxdb2-2.1.1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: influxdb2
+      app.kubernetes.io/instance: my-flagsmith
+  serviceName: "my-flagsmith-influxdb2"
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: influxdb2
+        app.kubernetes.io/instance: my-flagsmith
+    spec:
+      volumes:
+        - name: data
+          emptyDir: {}
+      serviceAccountName: my-flagsmith-influxdb2
+      containers:
+        - name: influxdb2
+          image: "influxdb:2.3.0-alpine"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8086
+              protocol: TCP
+          env:
+            # Automated setup will not run if an existing boltdb file is found at the configured path.
+            # This behavior allows for the InfluxDB container to reboot post-setup without encountering "DB is already set up" errors.
+            - name: DOCKER_INFLUXDB_INIT_MODE
+              value: setup
+            # The username to set for the system's initial super-user (Required).
+            - name: DOCKER_INFLUXDB_INIT_USERNAME
+              value: admin
+            # The password to set for the system's inital super-user (Required).
+            - name: DOCKER_INFLUXDB_INIT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-flagsmith-influxdb2-auth
+                  key: admin-password
+            # The name to set for the system's initial organization (Required).
+            - name: DOCKER_INFLUXDB_INIT_ORG
+              value: influxdata
+            # The name to set for the system's initial bucket (Required).
+            - name: DOCKER_INFLUXDB_INIT_BUCKET
+              value: default
+            # The duration the system's initial bucket should retain data. If not set, the initial bucket will retain data forever.
+            - name: DOCKER_INFLUXDB_INIT_RETENTION
+              value: 0s
+            # The authentication token to associate with the system's initial super-user. If not set, a token will be auto-generated by the system.
+            - name: DOCKER_INFLUXDB_INIT_ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: my-flagsmith-influxdb2-auth
+                  key: admin-token
+            # Path to the BoltDB database.
+            - name: INFLUXD_BOLT_PATH
+              value: /var/lib/influxdb2/influxd.bolt
+            # Path to persistent storage engine files where InfluxDB stores all Time-Structure Merge Tree (TSM) data on disk.
+            - name: INFLUXD_ENGINE_PATH
+              value: /var/lib/influxdb2
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 0
+            periodSeconds: 10
+            timeoutSeconds: 1
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 0
+            periodSeconds: 10
+            timeoutSeconds: 1
+            successThreshold: 1
+            failureThreshold: 3
+          volumeMounts:
+          - name: data
+            mountPath: /var/lib/influxdb2
+            subPath: 
+          resources:
+            {}

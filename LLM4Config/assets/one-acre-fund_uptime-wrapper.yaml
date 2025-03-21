@@ -1,0 +1,126 @@
+---
+# Source: uptime-wrapper/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-uptime-wrapper
+  labels:
+    helm.sh/chart: uptime-wrapper-1.0.1
+    app.kubernetes.io/name: uptime-wrapper
+    app.kubernetes.io/instance: my-uptime-wrapper
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+automountServiceAccountToken: true
+---
+# Source: uptime-wrapper/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+    name:  my-uptime-wrapper-secret
+type: Opaque
+data:
+    ADMIN_PASSWORD: Y2hhbmdlX21l
+    KUMA_PASSWORD: Y2hhbmdlX21l
+    SECRET_KEY: MzJfY2hhcmFjdGVyX3NlY3JldF9rZXk=
+---
+# Source: uptime-wrapper/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-uptime-wrapper
+  labels:
+    helm.sh/chart: uptime-wrapper-1.0.1
+    app.kubernetes.io/name: uptime-wrapper
+    app.kubernetes.io/instance: my-uptime-wrapper
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8000
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: uptime-wrapper
+    app.kubernetes.io/instance: my-uptime-wrapper
+---
+# Source: uptime-wrapper/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-uptime-wrapper
+  labels:
+    helm.sh/chart: uptime-wrapper-1.0.1
+    app.kubernetes.io/name: uptime-wrapper
+    app.kubernetes.io/instance: my-uptime-wrapper
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: uptime-wrapper
+      app.kubernetes.io/instance: my-uptime-wrapper
+  template:
+    metadata:
+      labels:
+        helm.sh/chart: uptime-wrapper-1.0.1
+        app.kubernetes.io/name: uptime-wrapper
+        app.kubernetes.io/instance: my-uptime-wrapper
+        app.kubernetes.io/version: "1.16.0"
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      serviceAccountName: my-uptime-wrapper
+      securityContext:
+        {}
+      containers:
+        - name: uptime-wrapper
+          securityContext:
+            {}
+          image: "oaftech.azurecr.io/oneacrefund/uptime-wrapper-api:latest"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          env:
+            - name: KUMA_SERVER
+              value: http://uptime-kuma-web:3001
+            - name: KUMA_USERNAME
+              value: admin
+          envFrom:
+            - secretRef:
+                name: my-uptime-wrapper-secret
+              
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+            {}
+---
+# Source: uptime-wrapper/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-uptime-wrapper-test-connection"
+  labels:
+    helm.sh/chart: uptime-wrapper-1.0.1
+    app.kubernetes.io/name: uptime-wrapper
+    app.kubernetes.io/instance: my-uptime-wrapper
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-uptime-wrapper:8000']
+  restartPolicy: Never

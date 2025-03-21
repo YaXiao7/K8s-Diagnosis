@@ -1,0 +1,522 @@
+---
+# Source: huginn/charts/mysql/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-huginn-mysql
+  namespace: default
+  labels:
+    app.kubernetes.io/name: mysql
+    helm.sh/chart: mysql-8.4.4
+    app.kubernetes.io/instance: my-huginn
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+secrets:
+  - name: my-huginn-mysql
+---
+# Source: huginn/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-huginn
+  labels:
+    helm.sh/chart: huginn-2.2.1
+    app.kubernetes.io/name: huginn
+    app.kubernetes.io/instance: my-huginn
+    app.kubernetes.io/version: "4d17829cf6b15b004ad3f4be196303dca4944810"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: huginn/charts/mysql/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-huginn-mysql
+  namespace: default
+  labels:
+    app.kubernetes.io/name: mysql
+    helm.sh/chart: mysql-8.4.4
+    app.kubernetes.io/instance: my-huginn
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  mysql-root-password: "RGVmaW5pdGVseUNoYW5nZU1lIQ=="
+  mysql-password: "Q2hhbmdlTWUh"
+---
+# Source: huginn/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-huginn
+  labels:
+    helm.sh/chart: huginn-2.2.1
+    app.kubernetes.io/name: huginn
+    app.kubernetes.io/instance: my-huginn
+    app.kubernetes.io/version: "4d17829cf6b15b004ad3f4be196303dca4944810"
+    app.kubernetes.io/managed-by: Helm
+data:
+  HUGINN_SEED_USERNAME: "YWRtaW4="
+  HUGINN_SEED_PASSWORD: "Q2hhbmdlTWUh"
+  HUGINN_DATABASE_USERNAME: "aHVnaW5u"
+  HUGINN_DATABASE_PASSWORD: "Q2hhbmdlTWUh"
+---
+# Source: huginn/charts/mysql/templates/primary/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-huginn-mysql
+  namespace: default
+  labels:
+    app.kubernetes.io/name: mysql
+    helm.sh/chart: mysql-8.4.4
+    app.kubernetes.io/instance: my-huginn
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: primary
+data:
+  my.cnf: |-
+    
+    [mysqld]
+    default_authentication_plugin=mysql_native_password
+    skip-name-resolve
+    explicit_defaults_for_timestamp
+    basedir=/opt/bitnami/mysql
+    plugin_dir=/opt/bitnami/mysql/plugin
+    port=3306
+    socket=/opt/bitnami/mysql/tmp/mysql.sock
+    datadir=/bitnami/mysql/data
+    tmpdir=/opt/bitnami/mysql/tmp
+    max_allowed_packet=16M
+    bind-address=0.0.0.0
+    pid-file=/opt/bitnami/mysql/tmp/mysqld.pid
+    log-error=/opt/bitnami/mysql/logs/mysqld.log
+    character-set-server=UTF8
+    collation-server=utf8_general_ci
+    
+    [client]
+    port=3306
+    socket=/opt/bitnami/mysql/tmp/mysql.sock
+    default-character-set=UTF8
+    plugin_dir=/opt/bitnami/mysql/plugin
+    
+    [manager]
+    port=3306
+    socket=/opt/bitnami/mysql/tmp/mysql.sock
+    pid-file=/opt/bitnami/mysql/tmp/mysqld.pid
+---
+# Source: huginn/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-huginn
+  labels:
+    helm.sh/chart: huginn-2.2.1
+    app.kubernetes.io/name: huginn
+    app.kubernetes.io/instance: my-huginn
+    app.kubernetes.io/version: "4d17829cf6b15b004ad3f4be196303dca4944810"
+    app.kubernetes.io/managed-by: Helm
+data:
+  HUGINN_PORT: "3000"
+  HUGINN_DATABASE_NAME: "huginn"
+  HUGINN_DATABASE_HOST: my-huginn-mysql
+  HUGINN_DATABASE_PORT: "3306"
+  HUGINN_DATABASE_ADAPTER: mysql2
+---
+# Source: huginn/charts/mysql/templates/primary/svc-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-huginn-mysql-headless
+  namespace: default
+  labels:
+    app.kubernetes.io/name: mysql
+    helm.sh/chart: mysql-8.4.4
+    app.kubernetes.io/instance: my-huginn
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: primary
+  annotations:
+spec:
+  type: ClusterIP
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+    - name: mysql
+      port: 3306
+      targetPort: mysql
+  selector: 
+    app.kubernetes.io/name: mysql
+    app.kubernetes.io/instance: my-huginn
+    app.kubernetes.io/component: primary
+---
+# Source: huginn/charts/mysql/templates/primary/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-huginn-mysql
+  namespace: default
+  labels:
+    app.kubernetes.io/name: mysql
+    helm.sh/chart: mysql-8.4.4
+    app.kubernetes.io/instance: my-huginn
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: primary
+  annotations:
+spec:
+  type: ClusterIP
+  ports:
+    - name: mysql
+      port: 3306
+      protocol: TCP
+      targetPort: mysql
+      nodePort: null
+  selector: 
+    app.kubernetes.io/name: mysql
+    app.kubernetes.io/instance: my-huginn
+    app.kubernetes.io/component: primary
+---
+# Source: huginn/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-huginn
+  labels:
+    helm.sh/chart: huginn-2.2.1
+    app.kubernetes.io/name: huginn
+    app.kubernetes.io/instance: my-huginn
+    app.kubernetes.io/version: "4d17829cf6b15b004ad3f4be196303dca4944810"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: huginn
+    app.kubernetes.io/instance: my-huginn
+    app.kubernetes.io/component: web
+---
+# Source: huginn/templates/deployment-web.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-huginn-web
+  labels:
+    helm.sh/chart: huginn-2.2.1
+    app.kubernetes.io/name: huginn
+    app.kubernetes.io/instance: my-huginn
+    app.kubernetes.io/version: "4d17829cf6b15b004ad3f4be196303dca4944810"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: web
+spec:
+  strategy:
+    type: Recreate
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: huginn
+      app.kubernetes.io/instance: my-huginn
+      app.kubernetes.io/component: web
+  template:
+    metadata:
+      annotations:
+        checksum/configmap: 450f6d1c0107ee1258380c339b86e6c95bd20a992f97f7b89f68041055eca868
+        checksum/secret: c272c5d2f526d4dd2063fe977244b9dd761e14680bc1a2b58718bc50b45f95d9
+      labels:
+        app.kubernetes.io/name: huginn
+        app.kubernetes.io/instance: my-huginn
+        app.kubernetes.io/component: web
+    spec:
+      serviceAccountName: my-huginn
+      securityContext:
+        {}
+      initContainers:
+        - name: huginn-init
+          image: "busybox:stable"
+          envFrom:
+          - configMapRef:
+              name: my-huginn
+          resources:
+            {}
+          securityContext:
+            {}
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z -v -w30 ${HUGINN_DATABASE_HOST} ${HUGINN_DATABASE_PORT}
+              do
+                echo "Waiting for database connection..."
+                sleep 5
+              done
+      containers:
+        - name: huginn-web
+          securityContext:
+            {}
+          image: "huginn/huginn-single-process:4d17829cf6b15b004ad3f4be196303dca4944810"
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: my-huginn
+            - secretRef:
+                name: my-huginn
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 60
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+            {}
+---
+# Source: huginn/templates/deployment-worker.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-huginn-worker
+  labels:
+    helm.sh/chart: huginn-2.2.1
+    app.kubernetes.io/name: huginn
+    app.kubernetes.io/instance: my-huginn
+    app.kubernetes.io/version: "4d17829cf6b15b004ad3f4be196303dca4944810"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: worker
+spec:
+  strategy:
+    type: Recreate
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: huginn
+      app.kubernetes.io/instance: my-huginn
+      app.kubernetes.io/component: worker
+  template:
+    metadata:
+      annotations:
+        checksum/configmap: 450f6d1c0107ee1258380c339b86e6c95bd20a992f97f7b89f68041055eca868
+        checksum/secret: c272c5d2f526d4dd2063fe977244b9dd761e14680bc1a2b58718bc50b45f95d9
+      labels:
+        app.kubernetes.io/name: huginn
+        app.kubernetes.io/instance: my-huginn
+        app.kubernetes.io/component: worker
+    spec:
+      serviceAccountName: my-huginn
+      securityContext:
+        {}
+      initContainers:
+        - name: huginn-init
+          image: "busybox:stable"
+          envFrom:
+          - configMapRef:
+              name: my-huginn
+          resources:
+            {}
+          securityContext:
+            {}
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z -v -w30 my-huginn 80
+              do
+                echo "Waiting for the main instance to start..."
+                sleep 5
+              done
+      containers:
+        - name: huginn-worker
+          command:
+            - /scripts/init
+            - bin/threaded.rb
+          securityContext:
+            {}
+          image: "huginn/huginn-single-process:4d17829cf6b15b004ad3f4be196303dca4944810"
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: my-huginn
+            - secretRef:
+                name: my-huginn
+          resources:
+            {}
+---
+# Source: huginn/charts/mysql/templates/primary/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-huginn-mysql
+  namespace: default
+  labels:
+    app.kubernetes.io/name: mysql
+    helm.sh/chart: mysql-8.4.4
+    app.kubernetes.io/instance: my-huginn
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: primary
+spec:
+  replicas: 1
+  selector:
+    matchLabels: 
+      app.kubernetes.io/name: mysql
+      app.kubernetes.io/instance: my-huginn
+      app.kubernetes.io/component: primary
+  serviceName: my-huginn-mysql
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations:
+        checksum/configuration: 5e8258d52fe4e53dc133a84d9e03ea136bccda9f161ffe4d12286dce4e814aef
+      labels:
+        app.kubernetes.io/name: mysql
+        helm.sh/chart: mysql-8.4.4
+        app.kubernetes.io/instance: my-huginn
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/component: primary
+    spec:
+      
+      serviceAccountName: my-huginn-mysql
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: mysql
+                    app.kubernetes.io/instance: my-huginn
+                    app.kubernetes.io/component: primary
+                namespaces:
+                  - "default"
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+      initContainers:
+        - name: volume-permissions
+          image: docker.io/bitnami/bitnami-shell:10
+          imagePullPolicy: "Always"
+          command:
+            - /bin/bash
+            - -ec
+            - |
+              chown -R 1001:1001 /bitnami/mysql
+          securityContext:
+            runAsUser: 0
+          volumeMounts:
+            - name: data
+              mountPath: /bitnami/mysql
+      containers:
+        - name: mysql
+          image: docker.io/bitnami/mysql:8.0.23-debian-10-r28
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            runAsUser: 1001
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-huginn-mysql
+                  key: mysql-root-password
+            - name: MYSQL_USER
+              value: "huginn"
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-huginn-mysql
+                  key: mysql-password
+            - name: MYSQL_DATABASE
+              value: "huginn"
+          ports:
+            - name: mysql
+              containerPort: 3306
+          livenessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 120
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+            exec:
+              command:
+                - /bin/bash
+                - -ec
+                - |
+                  password_aux="${MYSQL_ROOT_PASSWORD:-}"
+                  if [[ -f "${MYSQL_ROOT_PASSWORD_FILE:-}" ]]; then
+                      password_aux=$(cat "$MYSQL_ROOT_PASSWORD_FILE")
+                  fi
+                  mysqladmin status -uroot -p"${password_aux}"
+          readinessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+            exec:
+              command:
+                - /bin/bash
+                - -ec
+                - |
+                  password_aux="${MYSQL_ROOT_PASSWORD:-}"
+                  if [[ -f "${MYSQL_ROOT_PASSWORD_FILE:-}" ]]; then
+                      password_aux=$(cat "$MYSQL_ROOT_PASSWORD_FILE")
+                  fi
+                  mysqladmin status -uroot -p"${password_aux}"
+          resources: 
+            limits: {}
+            requests: {}
+          volumeMounts:
+            - name: data
+              mountPath: /bitnami/mysql
+            - name: config
+              mountPath: /opt/bitnami/mysql/conf/my.cnf
+              subPath: my.cnf
+      volumes:
+        - name: config
+          configMap:
+            name: my-huginn-mysql
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels: 
+          app.kubernetes.io/name: mysql
+          app.kubernetes.io/instance: my-huginn
+          app.kubernetes.io/component: primary
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "8Gi"
+---
+# Source: huginn/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-huginn-test-connection"
+  labels:
+    helm.sh/chart: huginn-2.2.1
+    app.kubernetes.io/name: huginn
+    app.kubernetes.io/instance: my-huginn
+    app.kubernetes.io/version: "4d17829cf6b15b004ad3f4be196303dca4944810"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox:stable
+      command:
+        - wget
+      args:
+        - "my-huginn:80"
+  restartPolicy: Never

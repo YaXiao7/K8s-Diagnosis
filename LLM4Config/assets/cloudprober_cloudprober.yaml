@@ -1,0 +1,156 @@
+---
+# Source: cloudprober/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-cloudprober
+  labels:
+    helm.sh/chart: cloudprober-1.13.15
+    app.kubernetes.io/name: cloudprober
+    app.kubernetes.io/instance: my-cloudprober
+    app.kubernetes.io/version: "v0.13.7"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: cloudprober/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-cloudprober
+data:
+  cloudprober.cfg: |
+    surfacer {
+      type: PROMETHEUS
+    }
+---
+# Source: cloudprober/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-cloudprober
+  annotations:
+    rbac.authorization.kubernetes.io/autoupdate: 'true'
+rules:
+  - apiGroups: ['']
+    resources: ['*']
+    verbs: ['get', 'list']
+  - apiGroups:
+      - extensions
+      - 'networking.k8s.io' # k8s 1.14+
+    resources:
+      - ingresses
+      - ingresses/status
+    verbs: ['get', 'list']
+---
+# Source: cloudprober/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-cloudprober
+roleRef:
+  kind: ClusterRole
+  name: my-cloudprober
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+  - kind: ServiceAccount
+    name: my-cloudprober
+    namespace: default
+---
+# Source: cloudprober/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-cloudprober
+  labels:
+    helm.sh/chart: cloudprober-1.13.15
+    app.kubernetes.io/name: cloudprober
+    app.kubernetes.io/instance: my-cloudprober
+    app.kubernetes.io/version: "v0.13.7"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: cloudprober
+    app.kubernetes.io/instance: my-cloudprober
+---
+# Source: cloudprober/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-cloudprober
+  labels:
+    helm.sh/chart: cloudprober-1.13.15
+    app.kubernetes.io/name: cloudprober
+    app.kubernetes.io/instance: my-cloudprober
+    app.kubernetes.io/version: "v0.13.7"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cloudprober
+      app.kubernetes.io/instance: my-cloudprober
+  template:
+    metadata:
+      annotations:
+        checksum/config: cd785d51ec85e8735ff6ffd6efbcda9fd069bd3cd0f6960680d3f6b1950a0cce
+      labels:
+        app.kubernetes.io/name: cloudprober
+        app.kubernetes.io/instance: my-cloudprober
+    spec:
+      serviceAccountName: my-cloudprober
+      securityContext:
+        {}
+      volumes:
+        - name: cloudprober-config
+          configMap:
+            name: my-cloudprober
+      containers:
+        - name: cloudprober
+          securityContext:
+            {}
+          image: "ghcr.io/cloudprober/cloudprober:v0.13.7"
+          imagePullPolicy: IfNotPresent
+          args: ['--config_file', '/cfg/cloudprober.cfg', '--logtostderr']
+          volumeMounts:
+            - name: cloudprober-config
+              mountPath: /cfg
+          ports:
+            - name: http
+              containerPort: 9313
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+          resources:
+            {}
+---
+# Source: cloudprober/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-cloudprober-test-connection"
+  labels:
+    helm.sh/chart: cloudprober-1.13.15
+    app.kubernetes.io/name: cloudprober
+    app.kubernetes.io/instance: my-cloudprober
+    app.kubernetes.io/version: "v0.13.7"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-cloudprober:8080']
+  restartPolicy: Never

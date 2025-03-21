@@ -1,0 +1,87 @@
+---
+# Source: xbvr/templates/common.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-xbvr
+  labels:
+    app.kubernetes.io/instance: my-xbvr
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: xbvr
+    app.kubernetes.io/version: 0.3.17
+    helm.sh/chart: xbvr-1.4.2
+  annotations:
+spec:
+  type: ClusterIP
+  ports:
+  - port: 9999
+    targetPort: http
+    protocol: TCP
+    name: http
+  selector:
+    app.kubernetes.io/name: xbvr
+    app.kubernetes.io/instance: my-xbvr
+---
+# Source: xbvr/templates/common.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-xbvr
+  labels:
+    app.kubernetes.io/instance: my-xbvr
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: xbvr
+    app.kubernetes.io/version: 0.3.17
+    helm.sh/chart: xbvr-1.4.2
+spec:
+  revisionHistoryLimit: 3
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: xbvr
+      app.kubernetes.io/instance: my-xbvr
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: xbvr
+        app.kubernetes.io/instance: my-xbvr
+    spec:
+      
+      serviceAccountName: default
+      automountServiceAccountToken: true
+      dnsPolicy: ClusterFirst
+      enableServiceLinks: true
+      containers:
+        - name: my-xbvr
+          image: "xbapps/xbvr:0.3.17"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: TZ
+              value: UTC
+          ports:
+            - name: http
+              containerPort: 9999
+              protocol: TCP
+          livenessProbe:
+            tcpSocket:
+              port: 9999
+            initialDelaySeconds: 0
+            failureThreshold: 3
+            timeoutSeconds: 1
+            periodSeconds: 10
+          readinessProbe:
+            tcpSocket:
+              port: 9999
+            initialDelaySeconds: 0
+            failureThreshold: 3
+            timeoutSeconds: 1
+            periodSeconds: 10
+          startupProbe:
+            tcpSocket:
+              port: 9999
+            initialDelaySeconds: 0
+            failureThreshold: 30
+            timeoutSeconds: 1
+            periodSeconds: 5

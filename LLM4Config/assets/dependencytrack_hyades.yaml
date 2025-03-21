@@ -1,0 +1,589 @@
+---
+# Source: hyades/templates/serviceaccount.yml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-hyades
+  labels:
+    helm.sh/chart: hyades-0.7.0
+    app.kubernetes.io/part-of: hyades
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    {}
+automountServiceAccountToken: false
+---
+# Source: hyades/templates/api-server/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-hyades-api-server
+  namespace: default
+  labels:
+    helm.sh/chart: hyades-0.7.0
+    app.kubernetes.io/part-of: hyades
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/instance: my-hyades
+    app.kubernetes.io/name: hyades-api-server
+    app.kubernetes.io/component: api-server
+    app.kubernetes.io/version: 0.6.0-SNAPSHOT
+spec:
+  type: "ClusterIP"
+  ports:
+  - name: web
+    port: 8080
+    targetPort: web
+  selector:
+    app.kubernetes.io/instance: my-hyades
+    app.kubernetes.io/name: hyades-api-server
+    app.kubernetes.io/component: api-server
+---
+# Source: hyades/templates/frontend/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-hyades-frontend
+  namespace: default
+  labels:
+    helm.sh/chart: hyades-0.7.0
+    app.kubernetes.io/part-of: hyades
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/instance: my-hyades
+    app.kubernetes.io/name: hyades-frontend
+    app.kubernetes.io/component: frontend
+    app.kubernetes.io/version: 0.6.0-SNAPSHOT
+spec:
+  type: "ClusterIP"
+  ports:
+  - name: web
+    port: 8080
+    targetPort: web
+  selector:
+    app.kubernetes.io/instance: my-hyades
+    app.kubernetes.io/name: hyades-frontend
+    app.kubernetes.io/component: frontend
+---
+# Source: hyades/templates/api-server/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-hyades-api-server
+  namespace: default
+  labels:
+    helm.sh/chart: hyades-0.7.0
+    app.kubernetes.io/part-of: hyades
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/instance: my-hyades
+    app.kubernetes.io/name: hyades-api-server
+    app.kubernetes.io/component: api-server
+    app.kubernetes.io/version: 0.6.0-SNAPSHOT
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: my-hyades
+      app.kubernetes.io/name: hyades-api-server
+      app.kubernetes.io/component: api-server
+  template:
+    metadata:
+      labels: 
+        app.kubernetes.io/instance: my-hyades
+        app.kubernetes.io/name: hyades-api-server
+        app.kubernetes.io/component: api-server
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /metrics
+    spec:
+      initContainers:
+      serviceAccountName: my-hyades
+      terminationGracePeriodSeconds: 60
+      containers:
+      - name: hyades-api-server
+        image: ghcr.io/dependencytrack/hyades-apiserver:snapshot
+        imagePullPolicy: Always
+        securityContext: 
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+        resources:
+          limits:
+            cpu: "4"
+            memory: 2Gi
+          requests:
+            cpu: "2"
+            memory: 2Gi
+        env:
+        - name: ALPINE_METRICS_ENABLED
+          value: "true"
+        - name: KAFKA_BOOTSTRAP_SERVERS
+          value: ""
+        ports:
+        - name: web
+          containerPort: 8080
+          protocol: TCP
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        - name: tmp
+          mountPath: /tmp
+        livenessProbe:
+          httpGet:
+            scheme: HTTP
+            port: web
+            path: /health/live
+          failureThreshold: 3
+          initialDelaySeconds: 10
+          periodSeconds: 15
+          successThreshold: 1
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            scheme: HTTP
+            port: web
+            path: /health/ready
+          failureThreshold: 3
+          initialDelaySeconds: 10
+          periodSeconds: 15
+          successThreshold: 1
+          timeoutSeconds: 5
+      volumes:
+      - name: data
+        emptyDir: {}
+      - name: tmp
+        emptyDir: {}
+---
+# Source: hyades/templates/frontend/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-hyades-frontend
+  namespace: default
+  labels:
+    helm.sh/chart: hyades-0.7.0
+    app.kubernetes.io/part-of: hyades
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/instance: my-hyades
+    app.kubernetes.io/name: hyades-frontend
+    app.kubernetes.io/component: frontend
+    app.kubernetes.io/version: 0.6.0-SNAPSHOT
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: my-hyades
+      app.kubernetes.io/name: hyades-frontend
+      app.kubernetes.io/component: frontend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: my-hyades
+        app.kubernetes.io/name: hyades-frontend
+        app.kubernetes.io/component: frontend
+    spec:
+      initContainers:
+      serviceAccountName: my-hyades
+      containers:
+      - name: hyades-frontend
+        image: ghcr.io/dependencytrack/hyades-frontend:snapshot
+        imagePullPolicy: Always
+        securityContext: 
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+        resources:
+          limits:
+            cpu: 500m
+            memory: 128Mi
+          requests:
+            cpu: 150m
+            memory: 64Mi
+        env:
+        - name: API_BASE_URL
+          value: ""
+        ports:
+        - name: web
+          containerPort: 8080
+          protocol: TCP
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        livenessProbe:
+          httpGet:
+            scheme: HTTP
+            port: web
+            path: /
+          failureThreshold: 3
+          initialDelaySeconds: 5
+          periodSeconds: 15
+          successThreshold: 1
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            scheme: HTTP
+            port: web
+            path: /
+          failureThreshold: 3
+          initialDelaySeconds: 5
+          periodSeconds: 15
+          successThreshold: 1
+          timeoutSeconds: 5
+      volumes:
+      - name: tmp
+        emptyDir: {}
+---
+# Source: hyades/templates/mirror-service/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-hyades-mirror-service
+  namespace: default
+  labels:
+    helm.sh/chart: hyades-0.7.0
+    app.kubernetes.io/part-of: hyades
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/instance: my-hyades
+    app.kubernetes.io/name: hyades-mirror-service
+    app.kubernetes.io/component: mirror-service
+    app.kubernetes.io/version: 0.6.0-SNAPSHOT
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: my-hyades
+      app.kubernetes.io/name: hyades-mirror-service
+      app.kubernetes.io/component: mirror-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: my-hyades
+        app.kubernetes.io/name: hyades-mirror-service
+        app.kubernetes.io/component: mirror-service
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /q/metrics
+    spec:
+      initContainers:
+      serviceAccountName: my-hyades
+      containers:
+      - name: hyades-mirror-service
+        image: ghcr.io/dependencytrack/hyades-mirror-service:snapshot-native
+        imagePullPolicy: Always
+        securityContext: 
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+        resources:
+          limits:
+            cpu: "2"
+            memory: 2Gi
+          requests:
+            cpu: 500m
+            memory: 512Mi
+        env:
+        - name: KAFKA_BOOTSTRAP_SERVERS
+          value: ""
+        ports:
+        - name: web
+          containerPort: 8093
+          protocol: TCP
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        livenessProbe:
+          httpGet:
+            scheme: HTTP
+            port: web
+            path: /q/health/live
+          failureThreshold: 3
+          initialDelaySeconds: 10
+          periodSeconds: 15
+          successThreshold: 1
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            scheme: HTTP
+            port: web
+            path: /q/health/ready
+          failureThreshold: 3
+          initialDelaySeconds: 10
+          periodSeconds: 15
+          successThreshold: 1
+          timeoutSeconds: 5
+      volumes:
+      - name: tmp
+        emptyDir: {}
+---
+# Source: hyades/templates/notification-publisher/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-hyades-notification-publisher
+  namespace: default
+  labels:
+    helm.sh/chart: hyades-0.7.0
+    app.kubernetes.io/part-of: hyades
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/instance: my-hyades
+    app.kubernetes.io/name: hyades-notification-publisher
+    app.kubernetes.io/component: notification-publisher
+    app.kubernetes.io/version: 0.6.0-SNAPSHOT
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: my-hyades
+      app.kubernetes.io/name: hyades-notification-publisher
+      app.kubernetes.io/component: notification-publisher
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: my-hyades
+        app.kubernetes.io/name: hyades-notification-publisher
+        app.kubernetes.io/component: notification-publisher
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /q/metrics
+    spec:
+      initContainers:
+      serviceAccountName: my-hyades
+      containers:
+      - name: hyades-notification-publisher
+        image: ghcr.io/dependencytrack/hyades-notification-publisher:snapshot-native
+        imagePullPolicy: Always
+        securityContext: 
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+        resources:
+          limits:
+            cpu: "2"
+            memory: 2Gi
+          requests:
+            cpu: 500m
+            memory: 512Mi
+        env:
+        - name: KAFKA_BOOTSTRAP_SERVERS
+          value: ""
+        ports:
+        - name: web
+          containerPort: 8090
+          protocol: TCP
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        livenessProbe:
+          httpGet:
+            scheme: HTTP
+            port: web
+            path: /q/health/live
+          failureThreshold: 3
+          initialDelaySeconds: 10
+          periodSeconds: 15
+          successThreshold: 1
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            scheme: HTTP
+            port: web
+            path: /q/health/ready
+          failureThreshold: 3
+          initialDelaySeconds: 10
+          periodSeconds: 15
+          successThreshold: 1
+          timeoutSeconds: 5
+      volumes:
+      - name: tmp
+        emptyDir: {}
+---
+# Source: hyades/templates/repo-meta-analyzer/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-hyades-repository-meta-analyzer
+  namespace: default
+  labels:
+    helm.sh/chart: hyades-0.7.0
+    app.kubernetes.io/part-of: hyades
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/instance: my-hyades
+    app.kubernetes.io/name: hyades-repository-meta-analyzer
+    app.kubernetes.io/component: repository-meta-analyzer
+    app.kubernetes.io/version: 0.6.0-SNAPSHOT
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: my-hyades
+      app.kubernetes.io/name: hyades-repository-meta-analyzer
+      app.kubernetes.io/component: repository-meta-analyzer
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: my-hyades
+        app.kubernetes.io/name: hyades-repository-meta-analyzer
+        app.kubernetes.io/component: repository-meta-analyzer
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /q/metrics
+    spec:
+      initContainers:
+      serviceAccountName: my-hyades
+      containers:
+      - name: hyades-repository-meta-analyzer
+        image: ghcr.io/dependencytrack/hyades-repository-meta-analyzer:snapshot-native
+        imagePullPolicy: Always
+        securityContext: 
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+        resources:
+          limits:
+            cpu: "2"
+            memory: 2Gi
+          requests:
+            cpu: 500m
+            memory: 512Mi
+        env:
+        - name: KAFKA_BOOTSTRAP_SERVERS
+          value: ""
+        ports:
+        - name: web
+          containerPort: 8091
+          protocol: TCP
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        livenessProbe:
+          httpGet:
+            scheme: HTTP
+            port: web
+            path: /q/health/live
+          failureThreshold: 3
+          initialDelaySeconds: 10
+          periodSeconds: 15
+          successThreshold: 1
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            scheme: HTTP
+            port: web
+            path: /q/health/ready
+          failureThreshold: 3
+          initialDelaySeconds: 10
+          periodSeconds: 15
+          successThreshold: 1
+          timeoutSeconds: 5
+      volumes:
+      - name: tmp
+        emptyDir: {}
+---
+# Source: hyades/templates/vuln-analyzer/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-hyades-vulnerability-analyzer
+  namespace: default
+  labels:
+    helm.sh/chart: hyades-0.7.0
+    app.kubernetes.io/part-of: hyades
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/instance: my-hyades
+    app.kubernetes.io/name: hyades-vulnerability-analyzer
+    app.kubernetes.io/component: vulnerability-analyzer
+    app.kubernetes.io/version: 0.6.0-SNAPSHOT
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: my-hyades
+      app.kubernetes.io/name: hyades-vulnerability-analyzer
+      app.kubernetes.io/component: vulnerability-analyzer
+  template:
+    metadata:
+      labels: 
+        app.kubernetes.io/instance: my-hyades
+        app.kubernetes.io/name: hyades-vulnerability-analyzer
+        app.kubernetes.io/component: vulnerability-analyzer
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /q/metrics
+    spec:
+      initContainers:
+      serviceAccountName: my-hyades
+      containers:
+      - name: hyades-vulnerability-analyzer
+        image: ghcr.io/dependencytrack/hyades-vulnerability-analyzer:snapshot-native
+        imagePullPolicy: Always
+        securityContext: 
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+        resources:
+          limits:
+            cpu: "2"
+            memory: 2Gi
+          requests:
+            cpu: 500m
+            memory: 512Mi
+        env:
+        - name: KAFKA_BOOTSTRAP_SERVERS
+          value: ""
+        ports:
+        - name: web
+          containerPort: 8092
+          protocol: TCP
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        livenessProbe:
+          httpGet:
+            scheme: HTTP
+            port: web
+            path: /q/health/live
+          failureThreshold: 3
+          initialDelaySeconds: 10
+          periodSeconds: 15
+          successThreshold: 1
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            scheme: HTTP
+            port: web
+            path: /q/health/ready
+          failureThreshold: 3
+          initialDelaySeconds: 10
+          periodSeconds: 15
+          successThreshold: 1
+          timeoutSeconds: 5
+      volumes:
+      - name: tmp
+        emptyDir: {}

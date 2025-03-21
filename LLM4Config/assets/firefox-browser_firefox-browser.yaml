@@ -1,0 +1,81 @@
+---
+# Source: firefox-browser/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-firefox-browser
+  labels:
+    helm.sh/chart: firefox-browser-1.0.0
+    app.kubernetes.io/name: firefox-browser
+    app.kubernetes.io/instance: my-firefox-browser
+    app.kubernetes.io/version: "v24.04.1"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: firefox-browser/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-firefox-browser
+  labels:
+    helm.sh/chart: firefox-browser-1.0.0
+    app.kubernetes.io/name: firefox-browser
+    app.kubernetes.io/instance: my-firefox-browser
+    app.kubernetes.io/version: "v24.04.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5800
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: firefox-browser
+    app.kubernetes.io/instance: my-firefox-browser
+---
+# Source: firefox-browser/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-firefox-browser
+  labels:
+    helm.sh/chart: firefox-browser-1.0.0
+    app.kubernetes.io/name: firefox-browser
+    app.kubernetes.io/instance: my-firefox-browser
+    app.kubernetes.io/version: "v24.04.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: firefox-browser
+      app.kubernetes.io/instance: my-firefox-browser
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: firefox-browser
+        app.kubernetes.io/instance: my-firefox-browser
+    spec:
+      serviceAccountName: my-firefox-browser
+      securityContext:
+        {}
+      containers:
+        - name: firefox-browser
+          securityContext:
+            {}
+          image: "jlesage/firefox:v24.04.1"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 5800
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+            {}

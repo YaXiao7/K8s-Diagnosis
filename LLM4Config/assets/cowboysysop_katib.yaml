@@ -1,0 +1,1161 @@
+---
+# Source: katib/charts/mariadb/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-katib-mariadb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: mariadb
+    helm.sh/chart: mariadb-11.5.4
+    app.kubernetes.io/instance: my-katib
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+automountServiceAccountToken: false
+---
+# Source: katib/templates/controller/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-katib-controller
+  labels:
+    helm.sh/chart: katib-2.4.2
+    app.kubernetes.io/name: katib
+    app.kubernetes.io/instance: my-katib
+    app.kubernetes.io/version: "0.12.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: controller
+---
+# Source: katib/templates/db-manager/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-katib-db-manager
+  labels:
+    helm.sh/chart: katib-2.4.2
+    app.kubernetes.io/name: katib
+    app.kubernetes.io/instance: my-katib
+    app.kubernetes.io/version: "0.12.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: db-manager
+---
+# Source: katib/templates/ui/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-katib-ui
+  labels:
+    helm.sh/chart: katib-2.4.2
+    app.kubernetes.io/name: katib
+    app.kubernetes.io/instance: my-katib
+    app.kubernetes.io/version: "0.12.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: ui
+---
+# Source: katib/charts/mariadb/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-katib-mariadb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: mariadb
+    helm.sh/chart: mariadb-11.5.4
+    app.kubernetes.io/instance: my-katib
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  mariadb-root-password: "b0ZuTnlDZWtEbg=="
+  mariadb-password: "a2F0aWI="
+---
+# Source: katib/charts/mariadb/templates/primary/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-katib-mariadb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: mariadb
+    helm.sh/chart: mariadb-11.5.4
+    app.kubernetes.io/instance: my-katib
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: primary
+data:
+  my.cnf: |-
+    [mysqld]
+    skip-name-resolve
+    explicit_defaults_for_timestamp
+    basedir=/opt/bitnami/mariadb
+    plugin_dir=/opt/bitnami/mariadb/plugin
+    port=3306
+    socket=/opt/bitnami/mariadb/tmp/mysql.sock
+    tmpdir=/opt/bitnami/mariadb/tmp
+    max_allowed_packet=16M
+    bind-address=*
+    pid-file=/opt/bitnami/mariadb/tmp/mysqld.pid
+    log-error=/opt/bitnami/mariadb/logs/mysqld.log
+    character-set-server=UTF8
+    collation-server=utf8_general_ci
+    slow_query_log=0
+    slow_query_log_file=/opt/bitnami/mariadb/logs/mysqld.log
+    long_query_time=10.0
+    
+    [client]
+    port=3306
+    socket=/opt/bitnami/mariadb/tmp/mysql.sock
+    default-character-set=UTF8
+    plugin_dir=/opt/bitnami/mariadb/plugin
+    
+    [manager]
+    port=3306
+    socket=/opt/bitnami/mariadb/tmp/mysql.sock
+    pid-file=/opt/bitnami/mariadb/tmp/mysqld.pid
+---
+# Source: katib/templates/configmap-trial-templates.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: trial-templates
+  labels:
+    katib.kubeflow.org/component: trial-templates
+    helm.sh/chart: katib-2.4.2
+    app.kubernetes.io/name: katib
+    app.kubernetes.io/instance: my-katib
+    app.kubernetes.io/version: "0.12.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+  defaultTrialTemplate: |
+    apiVersion: batch/v1
+    kind: Job
+    spec:
+      template:
+        spec:
+          containers:
+            - name: training-container
+              image: kubeflowkatib/mxnet-mnist:v1beta1-45c5727
+              command:
+                - python3
+                - /opt/mxnet-mnist/mnist.py
+                - --batch-size=64
+                - --lr=${trialParameters.learningRate}
+                - --num-layers=${trialParameters.numberLayers}
+                - --optimizer=${trialParameters.optimizer}
+          restartPolicy: Never
+  enasCPUTemplate: |
+    apiVersion: batch/v1
+    kind: Job
+    spec:
+      template:
+        spec:
+          containers:
+            - name: training-container
+              image: kubeflowkatib/enas-cnn-cifar10-cpu:v1beta1-45c5727
+              command:
+                - python3
+                - -u
+                - RunTrial.py
+                - --num_epochs=1
+                - "--architecture=\"${trialParameters.neuralNetworkArchitecture}\""
+                - "--nn_config=\"${trialParameters.neuralNetworkConfig}\""
+          restartPolicy: Never
+  pytorchJobTemplate: |
+    apiVersion: kubeflow.org/v1
+    kind: PyTorchJob
+    spec:
+      pytorchReplicaSpecs:
+        Master:
+          replicas: 1
+          restartPolicy: OnFailure
+          template:
+            spec:
+              containers:
+                - name: pytorch
+                  image: kubeflowkatib/pytorch-mnist:v1beta1-45c5727
+                  command:
+                    - python3
+                    - /opt/pytorch-mnist/mnist.py
+                    - --epochs=1
+                    - --lr=${trialParameters.learningRate}
+                    - --momentum=${trialParameters.momentum}
+        Worker:
+          replicas: 2
+          restartPolicy: OnFailure
+          template:
+            spec:
+              containers:
+                - name: pytorch
+                  image: kubeflowkatib/pytorch-mnist:v1beta1-45c5727
+                  command:
+                    - python3
+                    - /opt/pytorch-mnist/mnist.py
+                    - --epochs=1
+                    - --lr=${trialParameters.learningRate}
+                    - --momentum=${trialParameters.momentum}
+---
+# Source: katib/templates/controller/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  # name: my-katib-controller
+  name: katib-config
+  labels:
+    helm.sh/chart: katib-2.4.2
+    app.kubernetes.io/name: katib
+    app.kubernetes.io/instance: my-katib
+    app.kubernetes.io/version: "0.12.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: controller
+data:
+  metrics-collector-sidecar: |
+    {
+      "StdOut": {
+        "image": "kubeflowkatib/file-metrics-collector:v0.12.0"
+      },
+      "File": {
+        "image": "kubeflowkatib/file-metrics-collector:v0.12.0"
+      },
+      "TensorFlowEvent": {
+        "image": "kubeflowkatib/tfevent-metrics-collector:v0.12.0",
+        "resources": {
+          "limits": {
+            "memory": "1Gi"
+          }
+        }
+      }
+    }
+  suggestion: |
+    {
+      "random": {
+        "image": "kubeflowkatib/suggestion-hyperopt:v0.12.0"
+      },
+      "tpe": {
+        "image": "kubeflowkatib/suggestion-hyperopt:v0.12.0"
+      },
+      "grid": {
+        "image": "kubeflowkatib/suggestion-chocolate:v0.12.0"
+      },
+      "hyperband": {
+        "image": "kubeflowkatib/suggestion-hyperband:v0.12.0"
+      },
+      "bayesianoptimization": {
+        "image": "kubeflowkatib/suggestion-skopt:v0.12.0"
+      },
+      "cmaes": {
+        "image": "kubeflowkatib/suggestion-goptuna:v0.12.0"
+      },
+      "sobol": {
+        "image": "kubeflowkatib/suggestion-goptuna:v0.12.0"
+      },
+      "multivariate-tpe": {
+        "image": "kubeflowkatib/suggestion-optuna:v0.12.0"
+      },
+      "enas": {
+        "image": "kubeflowkatib/suggestion-enas:v0.12.0",
+        "resources": {
+          "limits": {
+            "memory": "200Mi"
+          }
+        }
+      },
+      "darts": {
+        "image": "kubeflowkatib/suggestion-darts:v0.12.0"
+      }
+    }
+  early-stopping: |
+    {
+      "medianstop": {
+        "image": "kubeflowkatib/earlystopping-medianstop:v0.12.0"
+      }
+    }
+---
+# Source: katib/templates/controller/clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-katib-controller
+  labels:
+    helm.sh/chart: katib-2.4.2
+    app.kubernetes.io/name: katib
+    app.kubernetes.io/instance: my-katib
+    app.kubernetes.io/version: "0.12.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: controller
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+      - serviceaccounts
+      - services
+      - events
+      - namespaces
+      - persistentvolumes
+      - persistentvolumeclaims
+      - pods
+      - pods/log
+      - pods/status
+    verbs:
+      - "*"
+  - apiGroups:
+      - apps
+    resources:
+      - deployments
+    verbs:
+      - "*"
+  - apiGroups:
+      - rbac.authorization.k8s.io
+    resources:
+      - roles
+      - rolebindings
+    verbs:
+      - "*"
+  - apiGroups:
+      - batch
+    resources:
+      - jobs
+      - cronjobs
+    verbs:
+      - "*"
+  - apiGroups:
+      - kubeflow.org
+    resources:
+      - experiments
+      - experiments/status
+      - experiments/finalizers
+      - trials
+      - trials/status
+      - trials/finalizers
+      - suggestions
+      - suggestions/status
+      - suggestions/finalizers
+      - tfjobs
+      - pytorchjobs
+      - mpijobs
+      - xgboostjobs
+    verbs:
+      - "*"
+---
+# Source: katib/templates/ui/clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-katib-ui
+  labels:
+    helm.sh/chart: katib-2.4.2
+    app.kubernetes.io/name: katib
+    app.kubernetes.io/instance: my-katib
+    app.kubernetes.io/version: "0.12.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: ui
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+      - namespaces
+    verbs:
+      - "*"
+  - apiGroups:
+      - kubeflow.org
+    resources:
+      - experiments
+      - trials
+      - suggestions
+    verbs:
+      - "*"
+---
+# Source: katib/templates/controller/clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-katib-controller
+  labels:
+    helm.sh/chart: katib-2.4.2
+    app.kubernetes.io/name: katib
+    app.kubernetes.io/instance: my-katib
+    app.kubernetes.io/version: "0.12.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: controller
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-katib-controller
+subjects:
+  - kind: ServiceAccount
+    name: my-katib-controller
+    namespace: default
+---
+# Source: katib/templates/ui/clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-katib-ui
+  labels:
+    helm.sh/chart: katib-2.4.2
+    app.kubernetes.io/name: katib
+    app.kubernetes.io/instance: my-katib
+    app.kubernetes.io/version: "0.12.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: ui
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-katib-ui
+subjects:
+  - kind: ServiceAccount
+    name: my-katib-ui
+    namespace: default
+---
+# Source: katib/charts/mariadb/templates/primary/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-katib-mariadb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: mariadb
+    helm.sh/chart: mariadb-11.5.4
+    app.kubernetes.io/instance: my-katib
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: primary
+  annotations:
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+    - name: mysql
+      port: 3306
+      protocol: TCP
+      targetPort: mysql
+      nodePort: null
+  selector: 
+    app.kubernetes.io/name: mariadb
+    app.kubernetes.io/instance: my-katib
+    app.kubernetes.io/component: primary
+---
+# Source: katib/templates/controller/metrics-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-katib-controller-metrics
+  labels:
+    helm.sh/chart: katib-2.4.2
+    app.kubernetes.io/name: katib
+    app.kubernetes.io/instance: my-katib
+    app.kubernetes.io/version: "0.12.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: controller
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: http-metrics
+      protocol: TCP
+      name: http-metrics
+  selector:
+    app.kubernetes.io/name: katib
+    app.kubernetes.io/instance: my-katib
+    app.kubernetes.io/component: controller
+---
+# Source: katib/templates/controller/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-katib-controller
+  labels:
+    helm.sh/chart: katib-2.4.2
+    app.kubernetes.io/name: katib
+    app.kubernetes.io/instance: my-katib
+    app.kubernetes.io/version: "0.12.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: controller
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8443
+      targetPort: https
+      protocol: TCP
+      name: https
+  selector:
+    app.kubernetes.io/name: katib
+    app.kubernetes.io/instance: my-katib
+    app.kubernetes.io/component: controller
+---
+# Source: katib/templates/db-manager/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-katib-db-manager
+  labels:
+    helm.sh/chart: katib-2.4.2
+    app.kubernetes.io/name: katib
+    app.kubernetes.io/instance: my-katib
+    app.kubernetes.io/version: "0.12.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: db-manager
+spec:
+  type: ClusterIP
+  ports:
+    - port: 6789
+      targetPort: grpc
+      protocol: TCP
+      name: grpc
+  selector:
+    app.kubernetes.io/name: katib
+    app.kubernetes.io/instance: my-katib
+    app.kubernetes.io/component: db-manager
+---
+# Source: katib/templates/ui/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-katib-ui
+  labels:
+    helm.sh/chart: katib-2.4.2
+    app.kubernetes.io/name: katib
+    app.kubernetes.io/instance: my-katib
+    app.kubernetes.io/version: "0.12.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: ui
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: katib
+    app.kubernetes.io/instance: my-katib
+    app.kubernetes.io/component: ui
+---
+# Source: katib/templates/controller/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-katib-controller
+  labels:
+    helm.sh/chart: katib-2.4.2
+    app.kubernetes.io/name: katib
+    app.kubernetes.io/instance: my-katib
+    app.kubernetes.io/version: "0.12.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: controller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: katib
+      app.kubernetes.io/instance: my-katib
+      app.kubernetes.io/component: controller
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: katib
+        app.kubernetes.io/instance: my-katib
+        app.kubernetes.io/component: controller
+    spec:
+      serviceAccountName: my-katib-controller
+      securityContext:
+        {}
+      containers:
+        - name: controller
+          securityContext:
+            {}
+          image: "kubeflowkatib/katib-controller:v0.12.0"
+          imagePullPolicy: IfNotPresent
+          command:
+            - ./katib-controller
+          args:
+            - --trial-resources=Job.v1.batch
+            - --trial-resources=MPIJob.v1.kubeflow.org
+            - --trial-resources=PyTorchJob.v1.kubeflow.org
+            - --trial-resources=TFJob.v1.kubeflow.org
+            - --trial-resources=XGBoostJob.v1.kubeflow.org
+          env:
+            - name: KATIB_CORE_NAMESPACE
+              value: default
+            - name: KATIB_DB_MANAGER_SERVICE_NAMESPACE
+              value: default
+            - name: KATIB_DB_MANAGER_SERVICE_IP
+              value: my-katib-db-manager
+            - name: KATIB_DB_MANAGER_SERVICE_PORT
+              value: "6789"
+          ports:
+            - name: https
+              containerPort: 8443
+              protocol: TCP
+            - name: http-metrics
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: http-metrics
+            initialDelaySeconds: 0
+            periodSeconds: 10
+            timeoutSeconds: 1
+            failureThreshold: 3
+            successThreshold: 1
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: http-metrics
+            initialDelaySeconds: 0
+            periodSeconds: 10
+            timeoutSeconds: 1
+            failureThreshold: 3
+            successThreshold: 1
+          resources:
+            {}
+          volumeMounts:
+            - name: tls-secret
+              mountPath: /tmp/cert
+              readOnly: true
+      volumes:
+        - name: tls-secret
+          secret:
+            secretName: my-katib-controller-tls
+---
+# Source: katib/templates/db-manager/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-katib-db-manager
+  labels:
+    helm.sh/chart: katib-2.4.2
+    app.kubernetes.io/name: katib
+    app.kubernetes.io/instance: my-katib
+    app.kubernetes.io/version: "0.12.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: db-manager
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: katib
+      app.kubernetes.io/instance: my-katib
+      app.kubernetes.io/component: db-manager
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: katib
+        app.kubernetes.io/instance: my-katib
+        app.kubernetes.io/component: db-manager
+      annotations:
+        checksum/mariadb-secret: 01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b
+    spec:
+      serviceAccountName: my-katib-db-manager
+      securityContext:
+        {}
+      containers:
+        - name: db-manager
+          securityContext:
+            {}
+          image: "kubeflowkatib/katib-db-manager:v0.12.0"
+          imagePullPolicy: IfNotPresent
+          command:
+            - ./katib-db-manager
+          env:
+            - name: DB_NAME
+              value: mysql
+            - name: KATIB_MYSQL_DB_HOST
+              value: "my-katib-mariadb"
+            - name: KATIB_MYSQL_DB_PORT
+              value: "3306"
+            - name: DB_USER
+              value: "katib"
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-katib-mariadb
+                  key: mariadb-password
+            - name: KATIB_MYSQL_DB_DATABASE
+              value: "katib"
+          ports:
+            - name: grpc
+              containerPort: 6789
+              protocol: TCP
+          livenessProbe:
+            exec:
+              command:
+                - /bin/grpc_health_probe
+                - -addr=:6789
+            initialDelaySeconds: 0
+            periodSeconds: 10
+            timeoutSeconds: 1
+            failureThreshold: 3
+            successThreshold: 1
+          readinessProbe:
+            exec:
+              command:
+                - /bin/grpc_health_probe
+                - -addr=:6789
+            initialDelaySeconds: 0
+            periodSeconds: 10
+            timeoutSeconds: 1
+            failureThreshold: 3
+            successThreshold: 1
+          resources:
+            {}
+---
+# Source: katib/templates/ui/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-katib-ui
+  labels:
+    helm.sh/chart: katib-2.4.2
+    app.kubernetes.io/name: katib
+    app.kubernetes.io/instance: my-katib
+    app.kubernetes.io/version: "0.12.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: ui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: katib
+      app.kubernetes.io/instance: my-katib
+      app.kubernetes.io/component: ui
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: katib
+        app.kubernetes.io/instance: my-katib
+        app.kubernetes.io/component: ui
+    spec:
+      serviceAccountName: my-katib-ui
+      securityContext:
+        {}
+      containers:
+        - name: ui
+          securityContext:
+            {}
+          image: "kubeflowkatib/katib-ui:v0.12.0"
+          imagePullPolicy: IfNotPresent
+          command:
+            - ./katib-ui
+          env:
+            - name: KATIB_CORE_NAMESPACE
+              value: default
+            - name: KATIB_DB_MANAGER_SERVICE_NAMESPACE
+              value: default
+            - name: KATIB_DB_MANAGER_SERVICE_IP
+              value: my-katib-db-manager
+            - name: KATIB_DB_MANAGER_SERVICE_PORT
+              value: "6789"
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /katib/
+              port: http
+            initialDelaySeconds: 0
+            periodSeconds: 10
+            timeoutSeconds: 1
+            failureThreshold: 3
+            successThreshold: 1
+          readinessProbe:
+            httpGet:
+              path: /katib/
+              port: http
+            initialDelaySeconds: 0
+            periodSeconds: 10
+            timeoutSeconds: 1
+            failureThreshold: 3
+            successThreshold: 1
+          resources:
+            {}
+---
+# Source: katib/charts/mariadb/templates/primary/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-katib-mariadb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: mariadb
+    helm.sh/chart: mariadb-11.5.4
+    app.kubernetes.io/instance: my-katib
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: primary
+spec:
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels: 
+      app.kubernetes.io/name: mariadb
+      app.kubernetes.io/instance: my-katib
+      app.kubernetes.io/component: primary
+  serviceName: my-katib-mariadb
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations:
+        checksum/configuration: ed1b0f01ef88047609e4d6aed33d4809f3f768ce210c0d50e1fb892fed88c177
+        sidecar.istio.io/inject: "false"
+      labels:
+        app.kubernetes.io/name: mariadb
+        helm.sh/chart: mariadb-11.5.4
+        app.kubernetes.io/instance: my-katib
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/component: primary
+    spec:
+      
+      serviceAccountName: my-katib-mariadb
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: mariadb
+                    app.kubernetes.io/instance: my-katib
+                    app.kubernetes.io/component: primary
+                namespaces:
+                  - "default"
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+      containers:
+        - name: mariadb
+          image: docker.io/bitnami/mariadb:10.6.12-debian-11-r13
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            allowPrivilegeEscalation: false
+            privileged: false
+            runAsNonRoot: true
+            runAsUser: 1001
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: MARIADB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-katib-mariadb
+                  key: mariadb-root-password
+            - name: MARIADB_USER
+              value: "katib"
+            - name: MARIADB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-katib-mariadb
+                  key: mariadb-password
+            - name: MARIADB_DATABASE
+              value: "katib"
+          ports:
+            - name: mysql
+              containerPort: 3306
+          livenessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 120
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+            exec:
+              command:
+                - /bin/bash
+                - -ec
+                - |
+                  password_aux="${MARIADB_ROOT_PASSWORD:-}"
+                  if [[ -f "${MARIADB_ROOT_PASSWORD_FILE:-}" ]]; then
+                      password_aux=$(cat "$MARIADB_ROOT_PASSWORD_FILE")
+                  fi
+                  mysqladmin status -uroot -p"${password_aux}"
+          readinessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+            exec:
+              command:
+                - /bin/bash
+                - -ec
+                - |
+                  password_aux="${MARIADB_ROOT_PASSWORD:-}"
+                  if [[ -f "${MARIADB_ROOT_PASSWORD_FILE:-}" ]]; then
+                      password_aux=$(cat "$MARIADB_ROOT_PASSWORD_FILE")
+                  fi
+                  mysqladmin status -uroot -p"${password_aux}"
+          resources: 
+            limits: {}
+            requests: {}
+          volumeMounts:
+            - name: data
+              mountPath: /bitnami/mariadb
+            - name: config
+              mountPath: /opt/bitnami/mariadb/conf/my.cnf
+              subPath: my.cnf
+      volumes:
+        - name: config
+          configMap:
+            name: my-katib-mariadb
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels: 
+          app.kubernetes.io/name: mariadb
+          app.kubernetes.io/instance: my-katib
+          app.kubernetes.io/component: primary
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "8Gi"
+---
+# Source: katib/templates/controller/certificate.yaml
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: my-katib-controller
+  labels:
+    helm.sh/chart: katib-2.4.2
+    app.kubernetes.io/name: katib
+    app.kubernetes.io/instance: my-katib
+    app.kubernetes.io/version: "0.12.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: controller
+spec:
+  commonName: my-katib-controller.default.svc
+  dnsNames:
+    - my-katib-controller.default.svc
+  secretName: my-katib-controller-tls
+  issuerRef:
+    kind: Issuer
+    name: my-katib-controller
+  isCA: true
+---
+# Source: katib/templates/controller/issuer.yaml
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: my-katib-controller
+  labels:
+    helm.sh/chart: katib-2.4.2
+    app.kubernetes.io/name: katib
+    app.kubernetes.io/instance: my-katib
+    app.kubernetes.io/version: "0.12.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: controller
+spec:
+  selfSigned: {}
+---
+# Source: katib/templates/controller/mutatingwebhookconfiguration.yaml
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: my-katib-controller
+  labels:
+    helm.sh/chart: katib-2.4.2
+    app.kubernetes.io/name: katib
+    app.kubernetes.io/instance: my-katib
+    app.kubernetes.io/version: "0.12.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: controller
+  annotations:
+    cert-manager.io/inject-ca-from: default/my-katib-controller
+webhooks:
+  - admissionReviewVersions:
+      - v1beta1
+    clientConfig:
+      service:
+        name: my-katib-controller
+        namespace: default
+        path: /mutate-experiment
+        port: 8443
+    name: mutate-experiment.katib.kubeflow.org
+    rules:
+      - apiGroups:
+          - kubeflow.org
+        apiVersions:
+          - v1beta1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - experiments
+    sideEffects: None
+  - admissionReviewVersions:
+      - v1beta1
+    clientConfig:
+      service:
+        name: my-katib-controller
+        namespace: default
+        path: /mutate-pod
+        port: 8443
+    name: mutate-pod.katib.kubeflow.org
+    namespaceSelector:
+      matchLabels:
+        katib-metricscollector-injection: enabled
+    rules:
+      - apiGroups:
+          - ""
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+        resources:
+          - pods
+    sideEffects: None
+---
+# Source: katib/templates/controller/validatingwebhookconfiguration.yaml
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: my-katib-controller
+  labels:
+    helm.sh/chart: katib-2.4.2
+    app.kubernetes.io/name: katib
+    app.kubernetes.io/instance: my-katib
+    app.kubernetes.io/version: "0.12.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: controller
+  annotations:
+    cert-manager.io/inject-ca-from: default/my-katib-controller
+webhooks:
+  - admissionReviewVersions:
+      - v1beta1
+    clientConfig:
+      service:
+        name: my-katib-controller
+        namespace: default
+        path: /validate-experiment
+        port: 8443
+    name: validate-experiment.katib.kubeflow.org
+    rules:
+      - apiGroups:
+          - kubeflow.org
+        apiVersions:
+          - v1beta1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - experiments
+    sideEffects: None
+---
+# Source: katib/templates/tests/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-katib-tests
+  labels:
+    helm.sh/chart: katib-2.4.2
+    app.kubernetes.io/name: katib
+    app.kubernetes.io/instance: my-katib
+    app.kubernetes.io/version: "0.12.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: tests
+  annotations:
+    helm.sh/hook: test
+data:
+  test_all.py: |
+    import os
+
+    import grpc
+    import mariadb
+    import requests
+    from grpc_health.v1 import health_pb2, health_pb2_grpc
+
+
+    def test_controller_service_connection():
+        url = "https://my-katib-controller.default.svc:8443/"
+        verify = "/controller-tls-secret/ca.crt"
+
+        response = requests.get(url, verify=verify)
+
+        assert response.status_code == 404
+
+
+    def test_controller_metrics_service_connection():
+        url = "http://my-katib-controller-metrics:8080/metrics"
+
+        response = requests.get(url)
+
+        assert response.status_code == 200
+
+
+    def test_db_manager_service_connection():
+        target = "my-katib-db-manager:6789"
+
+        channel = grpc.insecure_channel(target)
+        stub = health_pb2_grpc.HealthStub(channel)
+
+        request = health_pb2.HealthCheckRequest()
+        response = stub.Check(request)
+
+        assert response.status == health_pb2.HealthCheckResponse.SERVING
+
+
+    def test_ui_service_connection():
+        url = "http://my-katib-ui:8080/katib/"
+
+        response = requests.get(url)
+
+        assert response.status_code == 200
+
+
+    def test_mariadb_service_connection():
+        options = {
+            "host": "my-katib-mariadb",
+            "port": 3306,
+            "user": "katib",
+            "password": os.environ.get("MARIADB_PASSWORD"),
+            "database": "katib",
+        }
+
+        with mariadb.connect(**options) as connection:
+            assert connection.warnings == 0
+---
+# Source: katib/templates/tests/pod.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-katib-tests
+  labels:
+    helm.sh/chart: katib-2.4.2
+    app.kubernetes.io/name: katib
+    app.kubernetes.io/instance: my-katib
+    app.kubernetes.io/version: "0.12.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: tests
+  annotations:
+    helm.sh/hook: test
+spec:
+  containers:
+    - name: tests
+      image: "ghcr.io/cowboysysop/pytest:1.0.35"
+      imagePullPolicy: IfNotPresent
+      env:
+        - name: MARIADB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: my-katib-mariadb
+              key: mariadb-password
+      volumeMounts:
+        - name: tests
+          mountPath: /tests
+          readOnly: true
+        - name: controller-tls-secret
+          mountPath: /controller-tls-secret
+          readOnly: true
+      workingDir: /tests
+  restartPolicy: Never
+  volumes:
+    - name: tests
+      configMap:
+        name: my-katib-tests
+    - name: controller-tls-secret
+      secret:
+        secretName: my-katib-controller-tls

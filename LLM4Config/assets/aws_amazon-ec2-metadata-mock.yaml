@@ -1,0 +1,162 @@
+---
+# Source: amazon-ec2-metadata-mock/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: amazon-ec2-metadata-mock-service-account
+  namespace: default
+  labels:
+    app.kubernetes.io/name: amazon-ec2-metadata-mock
+    helm.sh/chart: amazon-ec2-metadata-mock-1.11.2
+    app.kubernetes.io/instance: my-amazon-ec2-metadata-mock
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: amazon-ec2-metadata-mock/templates/clusterrole.yaml
+# ClusterRole without any permissions for AEMM
+
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-amazon-ec2-metadata-mock
+rules: [] # empty rules array to disallow all permissions for AEMM
+---
+# Source: amazon-ec2-metadata-mock/templates/clusterrolebinding.yaml
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-amazon-ec2-metadata-mock
+subjects:
+- kind: ServiceAccount
+  name: amazon-ec2-metadata-mock-service-account
+  namespace: default
+roleRef:
+  kind: ClusterRole
+  name: my-amazon-ec2-metadata-mock
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: amazon-ec2-metadata-mock/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: amazon-ec2-metadata-mock-service
+  namespace: default
+  labels:
+    app.kubernetes.io/name: amazon-ec2-metadata-mock
+    helm.sh/chart: amazon-ec2-metadata-mock-1.11.2
+    app.kubernetes.io/instance: my-amazon-ec2-metadata-mock
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: "ClusterIP"
+  selector:
+    app.kubernetes.io/instance: my-amazon-ec2-metadata-mock
+  ports:
+  - protocol: TCP
+    port: 1338
+    targetPort: 1338
+---
+# Source: amazon-ec2-metadata-mock/templates/deployment.linux.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-amazon-ec2-metadata-mock
+  namespace: default
+  labels:
+    app.kubernetes.io/name: amazon-ec2-metadata-mock
+    helm.sh/chart: amazon-ec2-metadata-mock-1.11.2
+    app.kubernetes.io/instance: my-amazon-ec2-metadata-mock
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: amazon-ec2-metadata-mock
+      app.kubernetes.io/instance: my-amazon-ec2-metadata-mock
+      kubernetes.io/os: linux
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: amazon-ec2-metadata-mock
+        app.kubernetes.io/instance: my-amazon-ec2-metadata-mock
+        kubernetes.io/os: linux
+    spec:
+      nodeSelector:
+        kubernetes.io/os: linux
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: "kubernetes.io/os"
+                operator: In
+                values:
+                - linux
+              - key: "kubernetes.io/arch"
+                operator: In
+                values:
+                - amd64
+                - arm
+                - arm64
+      tolerations:
+      serviceAccountName: amazon-ec2-metadata-mock-service-account
+      hostNetwork: false # turn off host network to prevent undesired exposure of AEMM web server
+      containers:
+      - name: amazon-ec2-metadata-mock
+        image: public.ecr.aws/aws-ec2/amazon-ec2-metadata-mock:v1.11.2
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1000
+          runAsGroup: 1000
+          allowPrivilegeEscalation: false
+        env:
+        - name: AEMM_SERVER_HOSTNAME # override hostname in order to listen on all available interfaces e.g. ClusterIP
+          value: ""
+        - name: AEMM_MOCK_IP_COUNT
+          value: "2"
+        resources:
+            limits:
+              cpu: 100m
+              memory: 128Mi
+            requests:
+              cpu: 50m
+              memory: 64Mi
+---
+# Source: amazon-ec2-metadata-mock/templates/tests/test-config-map.yaml
+# Configmap used for E2E testing
+# The tests are run for each *values.yaml file in helm/amazon-ec2-metadata-mock/ci folder.
+---
+# Source: amazon-ec2-metadata-mock/templates/tests/test-aemm-service.yaml
+# E2E tests to test the following post Helm chart installation:
+## a simple http request to the service
+## configmap setup, if set in the values file
+
+# The tests are run for each *values.yaml file in helm/amazon-ec2-metadata-mock/ci folder.
+# https://github.com/helm/charts/blob/master/test/README.md#providing-custom-test-values
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-amazon-ec2-metadata-mock-helm-e2e-test"
+  annotations:
+    "helm.sh/hook": "test"
+    "helm.sh/hook-delete-policy": "before-hook-creation"
+    "helm.sh/hook-weight": "1" # create config-map first
+spec:
+  restartPolicy: Never
+  containers:
+  - name: simple-service-test
+    imagePullPolicy: "IfNotPresent"
+    image: "centos:latest"
+    command:
+    - "bash"
+    - "-c"
+    - |
+      SERVICE_NAME=$(echo amazon-ec2-metadata-mock-service | tr '-' '_' | tr [:lower:] [:upper:])
+      HOST_VAR=$(echo "${SERVICE_NAME}_SERVICE_HOST")
+      PORT_VAR=$(echo "${SERVICE_NAME}_SERVICE_PORT")
+      ACTUAL=$(curl http://${!HOST_VAR}:${!PORT_VAR}/latest/meta-data/services/domain)
+      EXPECTED="amazonaws.com"
+      [[ "$ACTUAL" == "$EXPECTED" ]] && exit 0 || exit 1

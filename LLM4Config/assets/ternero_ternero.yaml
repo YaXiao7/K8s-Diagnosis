@@ -1,0 +1,79 @@
+---
+# Source: ternero/templates/admin-user.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ternero
+  labels:
+    app: ternero
+---
+# Source: ternero/templates/admin-user-role.yaml
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: ternero
+  labels:
+    app: ternero
+roleRef:
+  kind: ClusterRole
+  name: cluster-admin
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+- kind: ServiceAccount
+  name: ternero
+  namespace: kube-system
+---
+# Source: ternero/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-ternero
+  labels:
+    app: ternero
+    helm.sh/chart: ternero-0.1.6
+    app.kubernetes.io/instance: my-ternero
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 8989
+    targetPort: 8989
+    protocol: TCP
+    name: http
+  selector:
+    app: ternero
+    app.kubernetes.io/instance: my-ternero
+---
+# Source: ternero/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-ternero
+  labels:
+    app: ternero
+    helm.sh/chart: ternero-0.1.6
+    app.kubernetes.io/instance: my-ternero
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ternero
+      app.kubernetes.io/instance: my-ternero
+  template:
+    metadata:
+      labels:
+        app: ternero
+        app.kubernetes.io/instance: my-ternero
+    spec:
+      serviceAccountName: ternero
+      containers:
+      - image: "cnrancher/kube-explorer:v0.2.13"
+        imagePullPolicy: IfNotPresent
+        name: ternero
+        ports:
+        - containerPort: 8989
+          protocol: TCP
+        args:
+        - "--https-listen-port=0"
+        - "--http-listen-port=8989"

@@ -1,0 +1,265 @@
+---
+# Source: gremlin/templates/chao-service-account.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: chao
+  namespace: default
+  annotations:
+---
+# Source: gremlin/templates/gremlin-service-account.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: gremlin
+  namespace: default
+  annotations:
+---
+# Source: gremlin/templates/chao-service-account.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: gremlin-watcher
+rules:
+  - apiGroups: ["apps"]
+    resources: ["replicasets", "deployments", "statefulsets", "daemonsets"]
+    verbs: ["get", "watch", "list"]
+  - apiGroups: [""]
+    resources: ["pods", "nodes", "services", "namespaces", "replicationcontrollers"]
+    verbs: ["get", "watch", "list"]
+  - apiGroups: ["apps.openshift.io"]
+    resources: ["deploymentconfigs"]
+    verbs: ["get", "watch", "list"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["get", "watch", "list"]
+---
+# Source: gremlin/templates/gremlin-service-account.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: gremlin-node-metadata-reader
+rules:
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get"]
+---
+# Source: gremlin/templates/chao-service-account.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: chao
+subjects:
+  - kind: ServiceAccount
+    name: chao
+    namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: gremlin-watcher
+---
+# Source: gremlin/templates/gremlin-service-account.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: gremlin
+subjects:
+  - kind: ServiceAccount
+    name: gremlin
+    namespace: gremlin
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: gremlin-node-metadata-reader
+---
+# Source: gremlin/templates/daemonset.yaml
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: my-gremlin
+  namespace: default
+  labels:
+    app.kubernetes.io/name: gremlin
+    helm.sh/chart: gremlin-0.18.0
+    app.kubernetes.io/instance: my-gremlin
+    app.kubernetes.io/managed-by: Helm
+    version: v1
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: gremlin
+  updateStrategy:
+    rollingUpdate:
+      maxUnavailable: 1
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: gremlin
+        helm.sh/chart: gremlin-0.18.0
+        app.kubernetes.io/instance: my-gremlin
+        app.kubernetes.io/managed-by: Helm
+        version: v1
+      annotations:
+    spec:
+      serviceAccountName: gremlin
+      hostPID: true
+      hostNetwork: true
+      containers:
+      - name: gremlin
+        image: gremlin/gremlin:latest
+        args: [ "daemon" ]
+        imagePullPolicy: Always
+        securityContext:
+          privileged: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            add: 
+              - KILL
+              - NET_ADMIN
+              - SYS_BOOT
+              - SYS_TIME
+              - DAC_READ_SEARCH
+              - SYS_RESOURCE
+              - SYS_ADMIN
+              - SYS_PTRACE
+              - SETFCAP
+              - AUDIT_WRITE
+              - MKNOD
+              - SYS_CHROOT
+              - NET_RAW
+        env:
+          - name: GREMLIN_TEAM_ID
+            valueFrom:
+              secretKeyRef:
+                name:  gremlin-team-cert
+                key: GREMLIN_TEAM_ID
+          - name: GREMLIN_TEAM_CERTIFICATE_OR_FILE
+            value: file:///var/lib/gremlin/cert/gremlin.cert
+          - name: GREMLIN_TEAM_PRIVATE_KEY_OR_FILE
+            value: file:///var/lib/gremlin/cert/gremlin.key
+          - name: GREMLIN_IDENTIFIER
+            valueFrom:
+              fieldRef:
+                fieldPath: spec.nodeName
+          - name: GREMLIN_CLIENT_TAGS
+            value: 
+          - name: GREMLIN_DOCKER_IMAGE
+            value: gremlin/gremlin:latest
+          - name: GREMLIN_COLLECT_DNS
+            value: "true"
+          - name: GREMLIN_SERVICE_URL
+            value: https://api.gremlin.com/v1
+        volumeMounts:
+          - name: gremlin-state
+            mountPath: /var/lib/gremlin
+            readOnly: false
+          - name: gremlin-logs
+            mountPath: /var/log/gremlin
+            readOnly: false
+          - name: cgroup-root
+            mountPath: /sys/fs/cgroup
+            readOnly: false
+          
+          - name: containerd-sock
+            mountPath: /run/containerd/containerd.sock
+            readOnly: true
+          - name: crio-sock
+            mountPath: /run/crio/crio.sock
+            readOnly: true
+          - name: docker-sock
+            mountPath: /var/run/docker.sock
+            readOnly: true
+          - name: gremlin-cert
+            mountPath: /var/lib/gremlin/cert
+            readOnly: true
+      volumes:
+        - name: cgroup-root
+          hostPath:
+            path: /sys/fs/cgroup
+        
+        - name: containerd-sock
+          hostPath:
+            path: /run/containerd/containerd.sock
+        - name: crio-sock
+          hostPath:
+            path: /run/crio/crio.sock
+        - name: docker-sock
+          hostPath:
+            path: /var/run/docker.sock
+        # The Gremlin daemon communicates with Gremlin sidecars via its state directory.
+        # This should be shared with the Kubernetes host
+        - name: gremlin-state
+          hostPath:
+            path: /var/lib/gremlin
+        # The Gremlin daemon forwards logs from the Gremlin sidecars to the Gremlin control plane
+        # These logs should be shared with the host
+        - name: gremlin-logs
+          hostPath:
+            path: /var/log/gremlin
+        - name: gremlin-cert
+          secret:
+            secretName: gremlin-team-cert
+---
+# Source: gremlin/templates/chao-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/instance: chao
+    app.kubernetes.io/name: chao
+    helm.sh/chart: gremlin-0.18.0
+    app.kubernetes.io/version: "1"
+  name: chao
+  namespace: default
+spec:
+  replicas: 1
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: chao
+      app.kubernetes.io/name: chao
+      app.kubernetes.io/version: "1"
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: chao
+        app.kubernetes.io/name: chao
+        helm.sh/chart: gremlin-0.18.0
+        app.kubernetes.io/version: "1"
+    spec:
+      serviceAccountName: chao
+      containers:
+        - image: gremlin/chao:latest
+          env:
+            - name: GREMLIN_TEAM_ID
+              valueFrom:
+                secretKeyRef:
+                  name:  gremlin-team-cert
+                  key: GREMLIN_TEAM_ID
+            - name: GREMLIN_CLUSTER_ID
+              valueFrom:
+                secretKeyRef:
+                  name:  gremlin-team-cert
+                  key: GREMLIN_CLUSTER_ID
+          args:
+            - "-api_url"
+            - "https://api.gremlin.com/v1/kubernetes"
+            - "-cert_path"
+            - "/var/lib/gremlin/cert/gremlin.cert"
+            - "-key_path"
+            - "/var/lib/gremlin/cert/gremlin.key"
+          imagePullPolicy: Always
+          name: chao
+          volumeMounts:
+          - name: gremlin-cert
+            mountPath: /var/lib/gremlin/cert
+            readOnly: true
+      volumes:
+      - name: gremlin-cert
+        secret:
+          secretName: gremlin-team-cert

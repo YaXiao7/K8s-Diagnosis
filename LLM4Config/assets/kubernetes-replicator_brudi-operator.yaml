@@ -1,0 +1,184 @@
+---
+# Source: brudi-operator/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-brudi-operator
+  labels:
+    helm.sh/chart: brudi-operator-0.1.6
+    app.kubernetes.io/name: brudi-operator
+    app.kubernetes.io/instance: my-brudi-operator
+    app.kubernetes.io/version: "0.1.6"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: brudi-operator/templates/role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: my-brudi-operator
+  labels:
+    helm.sh/chart: brudi-operator-0.1.6
+    app.kubernetes.io/name: brudi-operator
+    app.kubernetes.io/instance: my-brudi-operator
+    app.kubernetes.io/version: "0.1.6"
+    app.kubernetes.io/managed-by: Helm
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - namespaces
+    verbs:
+      - get
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+      - secrets
+    verbs:
+      - '*'
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - create
+  - apiGroups:
+      - ""
+    resources:
+      - serviceaccounts
+      - services
+    verbs:
+      - '*'
+  - apiGroups:
+      - apps
+    resources:
+      - deployments
+    verbs:
+      - '*'
+  - apiGroups:
+      - batch
+    resources:
+      - cronjobs
+      - jobs
+    verbs:
+      - '*'
+  - apiGroups:
+      - monitoring.coreos.com
+    resources:
+      - servicemonitors
+    verbs:
+      - get
+      - create
+  - apiGroups:
+      - apps
+    resourceNames:
+      - brudi-operator
+    resources:
+      - deployments/finalizers
+    verbs:
+      - update
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+    verbs:
+      - get
+  - apiGroups:
+      - apps
+    resources:
+      - replicasets
+      - deployments
+    verbs:
+      - get
+  - apiGroups:
+      - mittwald.systems
+    resources:
+      - '*'
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+---
+# Source: brudi-operator/templates/rolebinding.yaml
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-brudi-operator
+  labels:
+    helm.sh/chart: brudi-operator-0.1.6
+    app.kubernetes.io/name: brudi-operator
+    app.kubernetes.io/instance: my-brudi-operator
+    app.kubernetes.io/version: "0.1.6"
+    app.kubernetes.io/managed-by: Helm
+subjects:
+    - kind: ServiceAccount
+      name: my-brudi-operator
+roleRef:
+    kind: Role
+    name: my-brudi-operator
+    apiGroup: rbac.authorization.k8s.io
+---
+# Source: brudi-operator/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-brudi-operator
+  annotations:
+    timestamp: "2024-09-16 18:32:32.473891955 +0930 ACST m=+1.025241252"
+  labels:
+    helm.sh/chart: brudi-operator-0.1.6
+    app.kubernetes.io/name: brudi-operator
+    app.kubernetes.io/instance: my-brudi-operator
+    app.kubernetes.io/version: "0.1.6"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: brudi-operator
+      app.kubernetes.io/instance: my-brudi-operator
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: brudi-operator
+        app.kubernetes.io/instance: my-brudi-operator
+    spec:
+      serviceAccountName: my-brudi-operator
+      securityContext:
+        {}
+      containers:
+        - name: brudi-operator
+          securityContext:
+            {}
+          image: "quay.io/mittwald/brudi-operator:0.1.6"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: WATCH_NAMESPACE
+              value: default
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: OPERATOR_NAME
+              value: my-brudi-operator
+          # https://github.com/operator-framework/operator-sdk/issues/1234
+          # For now, there is no liveness- or readiness-probe for the operator-sdk
+          # Therefore we don't need any ports, services or probes
+          #ports:
+          #  - name: http
+          #    containerPort: 80
+          #    protocol: TCP
+          #livenessProbe:
+          #  httpGet:
+          #    path: /
+          #    port: http
+          #readinessProbe:
+          #  httpGet:
+          #    path: /
+          #    port: http
+          resources:
+            {}

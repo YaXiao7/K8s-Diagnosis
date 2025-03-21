@@ -1,0 +1,94 @@
+---
+# Source: locationcode/templates/common.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-locationcode
+  labels:
+    helm.sh/chart: locationcode-1.0.7
+    app.kubernetes.io/name: locationcode
+    app.kubernetes.io/instance: my-locationcode
+    app.kubernetes.io/version: "1.0.3"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 8000
+    protocol: TCP
+    name: http
+  selector:
+    app.kubernetes.io/name: locationcode
+    app.kubernetes.io/instance: my-locationcode
+---
+# Source: locationcode/templates/common.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-locationcode
+  labels:
+    helm.sh/chart: locationcode-1.0.7
+    app.kubernetes.io/name: locationcode
+    app.kubernetes.io/instance: my-locationcode
+    app.kubernetes.io/version: "1.0.3"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  revisionHistoryLimit: 3
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: locationcode
+      app.kubernetes.io/instance: my-locationcode
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: locationcode
+        app.kubernetes.io/instance: my-locationcode
+    spec:
+      
+      serviceAccountName: default
+      automountServiceAccountToken: true
+      dnsPolicy: ClusterFirst
+      enableServiceLinks: true
+      containers:
+        - name: my-locationcode
+          image: "harbor.ntppool.org/library/locationcode:1.0.3"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: "TZ"
+              value: "UTC"
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          livenessProbe:
+            tcpSocket:
+              port: 8000
+            initialDelaySeconds: 0
+            failureThreshold: 3
+            timeoutSeconds: 1
+            periodSeconds: 10
+          readinessProbe:
+            tcpSocket:
+              port: 8000
+            initialDelaySeconds: 0
+            failureThreshold: 3
+            timeoutSeconds: 1
+            periodSeconds: 10
+          startupProbe:
+            tcpSocket:
+              port: 8000
+            initialDelaySeconds: 0
+            failureThreshold: 30
+            timeoutSeconds: 1
+            periodSeconds: 5
+          resources:
+            limits:
+              cpu: 750m
+              memory: 128Mi
+            requests:
+              cpu: 20m
+              memory: 10Mi

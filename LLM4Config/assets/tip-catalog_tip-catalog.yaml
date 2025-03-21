@@ -1,0 +1,625 @@
+---
+# Source: tip-catalog/charts/postgresql/templates/primary/networkpolicy.yaml
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: my-tip-catalog-postgresql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-tip-catalog
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/version: 16.4.0
+    helm.sh/chart: postgresql-15.5.24
+    app.kubernetes.io/component: primary
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: my-tip-catalog
+      app.kubernetes.io/name: postgresql
+      app.kubernetes.io/component: primary
+  policyTypes:
+    - Ingress
+    - Egress
+  egress:
+    - {}
+  ingress:
+    - ports:
+        - port: 5432
+---
+# Source: tip-catalog/charts/postgresql/templates/primary/pdb.yaml
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: my-tip-catalog-postgresql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-tip-catalog
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/version: 16.4.0
+    helm.sh/chart: postgresql-15.5.24
+    app.kubernetes.io/component: primary
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: my-tip-catalog
+      app.kubernetes.io/name: postgresql
+      app.kubernetes.io/component: primary
+---
+# Source: tip-catalog/charts/postgresql/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-tip-catalog-postgresql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-tip-catalog
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/version: 16.4.0
+    helm.sh/chart: postgresql-15.5.24
+automountServiceAccountToken: false
+---
+# Source: tip-catalog/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-tip-catalog
+  labels:
+    helm.sh/chart: tip-catalog-0.2.0
+    app.kubernetes.io/name: tip-catalog
+    app.kubernetes.io/instance: my-tip-catalog
+    app.kubernetes.io/version: "0.2.1"
+    app.kubernetes.io/managed-by: Helm
+automountServiceAccountToken: true
+---
+# Source: tip-catalog/charts/postgresql/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-tip-catalog-postgresql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-tip-catalog
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/version: 16.4.0
+    helm.sh/chart: postgresql-15.5.24
+type: Opaque
+data:
+  postgres-password: "bDQ2cmJINmhLVQ=="
+  password: "RkJkSkVmRkV4bg=="
+  # We don't auto-generate LDAP password when it's not provided as we do for other passwords
+---
+# Source: tip-catalog/templates/config/db-encryption-secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-tip-catalog-postgres-encryption
+  annotations:
+    helm.sh/resource-policy: "keep"
+type: Opaque
+data:
+  encryptionKey: "bGdpdERlTmJsT0cwaHBxU3hiNlp5OHpLZ3JtbGhUb1FjUzh0cXBZaw=="
+---
+# Source: tip-catalog/templates/config/secret-config-envs.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-tip-catalog-config-envs
+  labels:
+    helm.sh/chart: tip-catalog-0.2.0
+    app.kubernetes.io/name: tip-catalog
+    app.kubernetes.io/instance: my-tip-catalog
+    app.kubernetes.io/version: "0.2.1"
+    app.kubernetes.io/managed-by: Helm
+data:
+  # Database Configs
+  ICEBERG_REST__PG_HOST_R: "bXktdGlwLWNhdGFsb2ctcG9zdGdyZXNxbC5kZWZhdWx0LnN2Yy5jbHVzdGVyLmxvY2Fs"
+  ICEBERG_REST__PG_HOST_W: "bXktdGlwLWNhdGFsb2ctcG9zdGdyZXNxbC5kZWZhdWx0LnN2Yy5jbHVzdGVyLmxvY2Fs"
+  ICEBERG_REST__PG_PORT: "NTQzMg=="
+  ICEBERG_REST__PG_DATABASE: "Y2F0YWxvZw=="
+
+  # Auth Configs
+
+  ICEBERG_REST__BASE_URI: "aHR0cDovL215LXRpcC1jYXRhbG9nLmRlZmF1bHQuc3ZjLmNsdXN0ZXIubG9jYWw6ODA4MA=="
+
+  # Secret store configs
+  ICEBERG_REST__SECRET_BACKEND: "UG9zdGdyZXM="
+  # ICEBERG_REST__PG_ENCRYPTION_KEY is mounted as secret
+
+  # User Configs
+---
+# Source: tip-catalog/charts/postgresql/templates/primary/svc-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-tip-catalog-postgresql-hl
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-tip-catalog
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/version: 16.4.0
+    helm.sh/chart: postgresql-15.5.24
+    app.kubernetes.io/component: primary
+  annotations:
+spec:
+  type: ClusterIP
+  clusterIP: None
+  # We want all pods in the StatefulSet to have their addresses published for
+  # the sake of the other Postgresql pods even before they're ready, since they
+  # have to be able to talk to each other in order to become ready.
+  publishNotReadyAddresses: true
+  ports:
+    - name: tcp-postgresql
+      port: 5432
+      targetPort: tcp-postgresql
+  selector:
+    app.kubernetes.io/instance: my-tip-catalog
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/component: primary
+---
+# Source: tip-catalog/charts/postgresql/templates/primary/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-tip-catalog-postgresql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-tip-catalog
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/version: 16.4.0
+    helm.sh/chart: postgresql-15.5.24
+    app.kubernetes.io/component: primary
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+    - name: tcp-postgresql
+      port: 5432
+      targetPort: tcp-postgresql
+      nodePort: null
+  selector:
+    app.kubernetes.io/instance: my-tip-catalog
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/component: primary
+---
+# Source: tip-catalog/templates/catalog/catalog-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-tip-catalog
+  labels:
+    helm.sh/chart: tip-catalog-0.2.0
+    app.kubernetes.io/name: tip-catalog
+    app.kubernetes.io/instance: my-tip-catalog
+    app.kubernetes.io/version: "0.2.1"
+    app.kubernetes.io/managed-by: Helm
+    component: catalog
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+    - port: 8080
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: tip-catalog
+    app.kubernetes.io/instance: my-tip-catalog
+    component: catalog
+---
+# Source: tip-catalog/templates/catalog/catalog-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-tip-catalog
+  labels:
+    helm.sh/chart: tip-catalog-0.2.0
+    app.kubernetes.io/name: tip-catalog
+    app.kubernetes.io/instance: my-tip-catalog
+    app.kubernetes.io/version: "0.2.1"
+    app.kubernetes.io/managed-by: Helm
+    component: catalog
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: tip-catalog
+      app.kubernetes.io/instance: my-tip-catalog
+      component: catalog
+  template:
+    metadata:
+      annotations:
+        checksum/secret-config-envs: 860250c8388cc4d2ba8e52e2f47317122cc6ec174dc4edfe38cdf359d690f0b3
+        cluster-autoscaler.kubernetes.io/safe-to-evict: "true"
+      labels:
+        helm.sh/chart: tip-catalog-0.2.0
+        app.kubernetes.io/name: tip-catalog
+        app.kubernetes.io/instance: my-tip-catalog
+        app.kubernetes.io/version: "0.2.1"
+        app.kubernetes.io/managed-by: Helm
+        component: catalog
+    spec:
+      restartPolicy: Always
+      serviceAccountName: my-tip-catalog
+      initContainers:        
+        - name: check-db  
+          image: quay.io/hansetag/tip-catalog:v0.2.1
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsUser: 65532
+            runAsGroup: 65534
+          resources:
+            {}
+          envFrom:    
+            - secretRef:
+                name: my-tip-catalog-config-envs
+          env:    
+            - name: ICEBERG_REST__PG_USER
+              value: "catalog"
+            - name: ICEBERG_REST__PG_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-tip-catalog-postgresql
+                  key: password
+            - name: ICEBERG_REST__PG_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: my-tip-catalog-postgres-encryption
+                  key: encryptionKey
+            
+            - name: ICEBERG_REST__PLACEHOLDER
+              value: "placeholder"
+          args:
+            - wait-for-db
+            - -dm
+            - -r
+            - "100"
+            - -b
+            - "2"
+      containers:
+        - name: tip-catalog          
+          image: quay.io/hansetag/tip-catalog:v0.2.1
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsUser: 65532
+            runAsGroup: 65534
+          env:            
+            - name: ICEBERG_REST__PG_USER
+              value: "catalog"
+            - name: ICEBERG_REST__PG_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-tip-catalog-postgresql
+                  key: password
+            - name: ICEBERG_REST__PG_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: my-tip-catalog-postgres-encryption
+                  key: encryptionKey
+            
+            - name: ICEBERG_REST__PLACEHOLDER
+              value: "placeholder"
+          envFrom:            
+            - secretRef:
+                name: my-tip-catalog-config-envs
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          args:
+            - serve
+          livenessProbe:
+            initialDelaySeconds: 1
+            periodSeconds: 5
+            failureThreshold: 5
+            timeoutSeconds: 5
+            httpGet:
+              path: /health
+              port: 8080
+          readinessProbe:
+            initialDelaySeconds: 1
+            periodSeconds: 5
+            failureThreshold: 5
+            timeoutSeconds: 5
+            httpGet:
+              path: /health
+              port: 8080        
+          resources:
+            {}
+---
+# Source: tip-catalog/charts/postgresql/templates/primary/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-tip-catalog-postgresql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-tip-catalog
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/version: 16.4.0
+    helm.sh/chart: postgresql-15.5.24
+    app.kubernetes.io/component: primary
+spec:
+  replicas: 1
+  serviceName: my-tip-catalog-postgresql-hl
+  updateStrategy:
+    rollingUpdate: {}
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: my-tip-catalog
+      app.kubernetes.io/name: postgresql
+      app.kubernetes.io/component: primary
+  template:
+    metadata:
+      name: my-tip-catalog-postgresql
+      labels:
+        app.kubernetes.io/instance: my-tip-catalog
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: postgresql
+        app.kubernetes.io/version: 16.4.0
+        helm.sh/chart: postgresql-15.5.24
+        app.kubernetes.io/component: primary
+    spec:
+      serviceAccountName: my-tip-catalog-postgresql
+      
+      automountServiceAccountToken: false
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/instance: my-tip-catalog
+                    app.kubernetes.io/name: postgresql
+                    app.kubernetes.io/component: primary
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+        fsGroupChangePolicy: Always
+        supplementalGroups: []
+        sysctls: []
+      hostNetwork: false
+      hostIPC: false
+      containers:
+        - name: postgresql
+          image: docker.io/bitnami/postgresql:16.4.0-debian-12-r2
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsGroup: 1001
+            runAsNonRoot: true
+            runAsUser: 1001
+            seLinuxOptions: {}
+            seccompProfile:
+              type: RuntimeDefault
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: POSTGRESQL_PORT_NUMBER
+              value: "5432"
+            - name: POSTGRESQL_VOLUME_DIR
+              value: "/bitnami/postgresql"
+            - name: PGDATA
+              value: "/bitnami/postgresql/data"
+            # Authentication
+            - name: POSTGRES_USER
+              value: "catalog"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-tip-catalog-postgresql
+                  key: password
+            - name: POSTGRES_POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-tip-catalog-postgresql
+                  key: postgres-password
+            - name: POSTGRES_DATABASE
+              value: "catalog"
+            # LDAP
+            - name: POSTGRESQL_ENABLE_LDAP
+              value: "no"
+            # TLS
+            - name: POSTGRESQL_ENABLE_TLS
+              value: "no"
+            # Audit
+            - name: POSTGRESQL_LOG_HOSTNAME
+              value: "false"
+            - name: POSTGRESQL_LOG_CONNECTIONS
+              value: "false"
+            - name: POSTGRESQL_LOG_DISCONNECTIONS
+              value: "false"
+            - name: POSTGRESQL_PGAUDIT_LOG_CATALOG
+              value: "off"
+            # Others
+            - name: POSTGRESQL_CLIENT_MIN_MESSAGES
+              value: "error"
+            - name: POSTGRESQL_SHARED_PRELOAD_LIBRARIES
+              value: "pgaudit"
+          ports:
+            - name: tcp-postgresql
+              containerPort: 5432
+          livenessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - exec pg_isready -U "catalog" -d "dbname=catalog" -h 127.0.0.1 -p 5432
+          readinessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - -e
+                - |
+                  exec pg_isready -U "catalog" -d "dbname=catalog" -h 127.0.0.1 -p 5432
+                  [ -f /opt/bitnami/postgresql/tmp/.initialized ] || [ -f /bitnami/postgresql/.initialized ]
+          resources:
+            limits:
+              cpu: 150m
+              ephemeral-storage: 2Gi
+              memory: 192Mi
+            requests:
+              cpu: 100m
+              ephemeral-storage: 50Mi
+              memory: 128Mi
+          volumeMounts:
+            - name: empty-dir
+              mountPath: /tmp
+              subPath: tmp-dir
+            - name: empty-dir
+              mountPath: /opt/bitnami/postgresql/conf
+              subPath: app-conf-dir
+            - name: empty-dir
+              mountPath: /opt/bitnami/postgresql/tmp
+              subPath: app-tmp-dir
+            - name: dshm
+              mountPath: /dev/shm
+            - name: data
+              mountPath: /bitnami/postgresql
+      volumes:
+        - name: empty-dir
+          emptyDir: {}
+        - name: dshm
+          emptyDir:
+            medium: Memory
+  volumeClaimTemplates:
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: data
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "8Gi"
+---
+# Source: tip-catalog/templates/db-migration.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: my-tip-catalog-db-migration-1
+  labels:
+    helm.sh/chart: tip-catalog-0.2.0
+    app.kubernetes.io/name: tip-catalog
+    app.kubernetes.io/instance: my-tip-catalog
+    app.kubernetes.io/version: "0.2.1"
+    app.kubernetes.io/managed-by: Helm
+    component: db-migration
+  annotations:
+    helm-hook-enabled: "false"
+spec:
+  template:
+    metadata:
+      name: "my-tip-catalog-migration"
+      annotations:
+        checksum/secret-config-envs: 860250c8388cc4d2ba8e52e2f47317122cc6ec174dc4edfe38cdf359d690f0b3
+      labels:
+        helm.sh/chart: tip-catalog-0.2.0
+        app.kubernetes.io/name: tip-catalog
+        app.kubernetes.io/instance: my-tip-catalog
+        app.kubernetes.io/version: "0.2.1"
+        app.kubernetes.io/managed-by: Helm
+        component: db-migration
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: my-tip-catalog
+      initContainers:        
+        - name: check-db  
+          image: quay.io/hansetag/tip-catalog:v0.2.1
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsUser: 65532
+            runAsGroup: 65534
+          resources:
+            {}
+          envFrom:    
+            - secretRef:
+                name: my-tip-catalog-config-envs
+          env:    
+            - name: ICEBERG_REST__PG_USER
+              value: "catalog"
+            - name: ICEBERG_REST__PG_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-tip-catalog-postgresql
+                  key: password
+            - name: ICEBERG_REST__PG_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: my-tip-catalog-postgres-encryption
+                  key: encryptionKey
+            
+            - name: ICEBERG_REST__PLACEHOLDER
+              value: "placeholder"
+          args:
+            - wait-for-db
+            - -d
+            - -r
+            - "100"
+            - -b
+            - "2"
+      containers:
+        - name: migration          
+          image: quay.io/hansetag/tip-catalog:v0.2.1
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsUser: 65532
+            runAsGroup: 65534
+          env:            
+            - name: ICEBERG_REST__PG_USER
+              value: "catalog"
+            - name: ICEBERG_REST__PG_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-tip-catalog-postgresql
+                  key: password
+            - name: ICEBERG_REST__PG_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: my-tip-catalog-postgres-encryption
+                  key: encryptionKey
+            
+            - name: ICEBERG_REST__PLACEHOLDER
+              value: "placeholder"
+          envFrom:            
+            - secretRef:
+                name: my-tip-catalog-config-envs
+          args:
+            - migrate
+          resources:
+            {}

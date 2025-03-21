@@ -1,0 +1,106 @@
+---
+# Source: kafka-proxy/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-kafka-proxy
+  labels:
+    app.kubernetes.io/name: kafka-proxy
+    helm.sh/chart: kafka-proxy-0.2.11
+    app.kubernetes.io/instance: my-kafka-proxy
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: NodePort
+  ports:
+  - name: kafka-0
+    nodePort: 32400
+    port: 32400
+    targetPort: 32400
+  - name: kafka-1
+    nodePort: 32401
+    port: 32401
+    targetPort: 32401
+  - name: metrics
+    nodePort: 32480
+    port: 9080
+    targetPort: 9080
+  selector:
+    app.kubernetes.io/name: kafka-proxy
+    app.kubernetes.io/instance: my-kafka-proxy
+---
+# Source: kafka-proxy/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+
+metadata:
+  name: my-kafka-proxy
+  labels:
+    app.kubernetes.io/name: kafka-proxy
+    helm.sh/chart: kafka-proxy-0.2.11
+    app.kubernetes.io/instance: my-kafka-proxy
+    app.kubernetes.io/managed-by: Helm
+    release: production
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kafka-proxy
+      app.kubernetes.io/instance: my-kafka-proxy
+  replicas: 1
+  serviceName: kafka-proxy
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kafka-proxy
+        app.kubernetes.io/instance: my-kafka-proxy
+      annotations:
+        prometheus.io/port: "9399"
+        prometheus.io/scrape: "true"
+    spec:
+      containers:
+        - name:  kafka-proxy
+          image: "grepplabs/kafka-proxy:v0.3.1"
+          args:
+            - 'server'
+            - '--log-format=json'
+            - '--bootstrap-server-mapping=kafka-0:9092,0.0.0.0:32400'
+            - '--bootstrap-server-mapping=kafka-1:9092,0.0.0.0:32401,$(MY_POD_IP):32401'
+            - '--tls-enable'
+            - '--proxy-request-buffer-size=32768'
+            - '--proxy-response-buffer-size=32768'
+            - '--proxy-listener-read-buffer-size=32768'
+            - '--proxy-listener-write-buffer-size=131072'
+            - '--kafka-connection-read-buffer-size=131072'
+            - '--kafka-connection-write-buffer-size=32768'
+
+          env:
+          - name: MY_POD_IP
+            valueFrom:
+              fieldRef:
+                apiVersion: v1
+                fieldPath: status.podIP
+          volumeMounts:
+          ports:
+          - name: metrics
+            containerPort: 9080
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 9080
+            initialDelaySeconds: 5
+            periodSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 9080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 2
+            failureThreshold: 5
+          resources:
+            {}
+      restartPolicy: Always
+      volumes:
+      - name: proxy-config
+        secret:
+          secretName: my-kafka-proxy-secret

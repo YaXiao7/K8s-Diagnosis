@@ -1,0 +1,148 @@
+---
+# Source: sidekick/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-sidekick
+  namespace: default
+  labels:
+    helm.sh/chart: sidekick-v2024.2.6
+    app.kubernetes.io/name: sidekick
+    app.kubernetes.io/instance: my-sidekick
+    app.kubernetes.io/version: "v0.0.5"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: sidekick/templates/cluster-role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-sidekick
+  labels:
+    helm.sh/chart: sidekick-v2024.2.6
+    app.kubernetes.io/name: sidekick
+    app.kubernetes.io/instance: my-sidekick
+    app.kubernetes.io/version: "v0.0.5"
+    app.kubernetes.io/managed-by: Helm
+rules:
+- apiGroups:
+    - apps.k8s.appscode.com
+  resources: ["*"]
+  verbs: ["*"]
+- apiGroups:
+  - apiextensions.k8s.io
+  resources:
+  - customresourcedefinitions
+  verbs: ["*"]
+- apiGroups: [""]
+  resources: ["nodes"]
+  verbs: ["list","watch"]
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["*"]
+---
+# Source: sidekick/templates/cluster-role-binding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-sidekick
+  labels:
+    helm.sh/chart: sidekick-v2024.2.6
+    app.kubernetes.io/name: sidekick
+    app.kubernetes.io/instance: my-sidekick
+    app.kubernetes.io/version: "v0.0.5"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-sidekick
+subjects:
+- kind: ServiceAccount
+  name: my-sidekick
+  namespace: default
+---
+# Source: sidekick/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-sidekick
+  namespace: default
+  labels:
+    helm.sh/chart: sidekick-v2024.2.6
+    app.kubernetes.io/name: sidekick
+    app.kubernetes.io/instance: my-sidekick
+    app.kubernetes.io/version: "v0.0.5"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  ports:
+  # Port used to expose admission webhook apiserver
+  - name: api
+    port: 80
+    targetPort: 8081
+  - name: metrics
+    port: 8080
+    targetPort: 8080
+  selector:
+    app.kubernetes.io/name: sidekick
+    app.kubernetes.io/instance: my-sidekick
+---
+# Source: sidekick/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-sidekick
+  namespace: default
+  labels:
+    helm.sh/chart: sidekick-v2024.2.6
+    app.kubernetes.io/name: sidekick
+    app.kubernetes.io/instance: my-sidekick
+    app.kubernetes.io/version: "v0.0.5"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sidekick
+      app.kubernetes.io/instance: my-sidekick
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: sidekick
+        app.kubernetes.io/instance: my-sidekick
+    spec:
+      
+      serviceAccountName: my-sidekick
+      securityContext:
+        {}
+      containers:
+        - name: sidekick
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65534
+            seccompProfile:
+              type: RuntimeDefault
+          image: ghcr.io/appscode/sidekick:v0.0.5
+          imagePullPolicy: Always
+          args:
+            - run
+          ports:
+            - name: metrics
+              containerPort: 8080
+              protocol: TCP
+            - name: http
+              containerPort: 8081
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+          resources:
+            {}

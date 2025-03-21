@@ -1,0 +1,1572 @@
+---
+# Source: workadventure/charts/redis/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+automountServiceAccountToken: true
+metadata:
+  name: my-workadventure-redis
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: redis
+    helm.sh/chart: redis-17.11.7
+    app.kubernetes.io/instance: my-workadventure
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: workadventure/templates/back-secret-env.yaml
+kind: Secret
+apiVersion: v1
+metadata:
+  name: my-workadventure-secret-env-back
+  labels:
+    helm.sh/chart: workadventure-1.1.0
+    app.kubernetes.io/name: workadventure
+    app.kubernetes.io/instance: my-workadventure
+    app.kubernetes.io/version: "v1.17.7"
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  SECRET_KEY: "bXlTZWNyZXRLZXk="
+  EJABBERD_PASSWORD: bXlTZWNyZXRQYXNzd29yZA==
+---
+# Source: workadventure/templates/chat-secret-env.yaml
+kind: Secret
+apiVersion: v1
+metadata:
+  name: my-workadventure-secret-env-chat
+  labels:
+    helm.sh/chart: workadventure-1.1.0
+    app.kubernetes.io/name: workadventure
+    app.kubernetes.io/instance: my-workadventure
+    app.kubernetes.io/version: "v1.17.7"
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  EJABBERD_PASSWORD: bXlTZWNyZXRQYXNzd29yZA==
+---
+# Source: workadventure/templates/ejabberd-secret-env.yaml
+kind: Secret
+apiVersion: v1
+metadata:
+  name: my-workadventure-secret-env-ejabberd
+  labels:
+    helm.sh/chart: workadventure-1.1.0
+    app.kubernetes.io/name: workadventure
+    app.kubernetes.io/instance: my-workadventure
+    app.kubernetes.io/version: "v1.17.7"
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  JWT_SECRET: "bXlFamFiYmVyZEp3dFNlY3JldA=="
+  EJABBERD_PASSWORD: bXlTZWNyZXRQYXNzd29yZA==
+---
+# Source: workadventure/templates/mapstorage-secret-env.yaml
+kind: Secret
+apiVersion: v1
+metadata:
+  name: my-workadventure-secret-env-mapstorage
+  labels:
+    helm.sh/chart: workadventure-1.1.0
+    app.kubernetes.io/name: workadventure
+    app.kubernetes.io/instance: my-workadventure
+    app.kubernetes.io/version: "v1.17.7"
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  EJABBERD_PASSWORD: bXlTZWNyZXRQYXNzd29yZA==
+  AUTHENTICATION_PASSWORD: bXlNYXBTdG9yYWdlUGFzc3dvcmQ=
+---
+# Source: workadventure/templates/play-secret-env.yaml
+kind: Secret
+apiVersion: v1
+metadata:
+  name: my-workadventure-secret-env-play
+  labels:
+    helm.sh/chart: workadventure-1.1.0
+    app.kubernetes.io/name: workadventure
+    app.kubernetes.io/instance: my-workadventure
+    app.kubernetes.io/version: "v1.17.7"
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  SECRET_KEY: "bXlTZWNyZXRLZXk="
+  EJABBERD_JWT_SECRET: "bXlFamFiYmVyZEp3dFNlY3JldA=="
+  EJABBERD_PASSWORD: bXlTZWNyZXRQYXNzd29yZA==
+  ROOM_API_SECRET_KEY: bXlSb29tQXBpU2VjcmV0S2V5
+---
+# Source: workadventure/templates/uploader-secret-env.yaml
+kind: Secret
+apiVersion: v1
+metadata:
+  name: my-workadventure-secret-env-uploader
+  labels:
+    helm.sh/chart: workadventure-1.1.0
+    app.kubernetes.io/name: workadventure
+    app.kubernetes.io/instance: my-workadventure
+    app.kubernetes.io/version: "v1.17.7"
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  EJABBERD_PASSWORD: bXlTZWNyZXRQYXNzd29yZA==
+---
+# Source: workadventure/charts/redis/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-workadventure-redis-configuration
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: redis
+    helm.sh/chart: redis-17.11.7
+    app.kubernetes.io/instance: my-workadventure
+    app.kubernetes.io/managed-by: Helm
+data:
+  redis.conf: |-
+    # User-supplied common configuration:
+    # Enable AOF https://redis.io/topics/persistence#append-only-file
+    appendonly yes
+    # Disable RDB persistence, AOF persistence already enabled.
+    save ""
+    # End of common configuration
+  master.conf: |-
+    dir /data
+    # User-supplied master configuration:
+    rename-command FLUSHDB ""
+    rename-command FLUSHALL ""
+    # End of master configuration
+  replica.conf: |-
+    dir /data
+    # User-supplied replica configuration:
+    rename-command FLUSHDB ""
+    rename-command FLUSHALL ""
+    # End of replica configuration
+---
+# Source: workadventure/charts/redis/templates/health-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-workadventure-redis-health
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: redis
+    helm.sh/chart: redis-17.11.7
+    app.kubernetes.io/instance: my-workadventure
+    app.kubernetes.io/managed-by: Helm
+data:
+  ping_readiness_local.sh: |-
+    #!/bin/bash
+
+    [[ -f $REDIS_PASSWORD_FILE ]] && export REDIS_PASSWORD="$(< "${REDIS_PASSWORD_FILE}")"
+    [[ -n "$REDIS_PASSWORD" ]] && export REDISCLI_AUTH="$REDIS_PASSWORD"
+    response=$(
+      timeout -s 15 $1 \
+      redis-cli \
+        -h localhost \
+        -p $REDIS_PORT \
+        ping
+    )
+    if [ "$?" -eq "124" ]; then
+      echo "Timed out"
+      exit 1
+    fi
+    if [ "$response" != "PONG" ]; then
+      echo "$response"
+      exit 1
+    fi
+  ping_liveness_local.sh: |-
+    #!/bin/bash
+
+    [[ -f $REDIS_PASSWORD_FILE ]] && export REDIS_PASSWORD="$(< "${REDIS_PASSWORD_FILE}")"
+    [[ -n "$REDIS_PASSWORD" ]] && export REDISCLI_AUTH="$REDIS_PASSWORD"
+    response=$(
+      timeout -s 15 $1 \
+      redis-cli \
+        -h localhost \
+        -p $REDIS_PORT \
+        ping
+    )
+    if [ "$?" -eq "124" ]; then
+      echo "Timed out"
+      exit 1
+    fi
+    responseFirstWord=$(echo $response | head -n1 | awk '{print $1;}')
+    if [ "$response" != "PONG" ] && [ "$responseFirstWord" != "LOADING" ] && [ "$responseFirstWord" != "MASTERDOWN" ]; then
+      echo "$response"
+      exit 1
+    fi
+  ping_readiness_master.sh: |-
+    #!/bin/bash
+
+    [[ -f $REDIS_MASTER_PASSWORD_FILE ]] && export REDIS_MASTER_PASSWORD="$(< "${REDIS_MASTER_PASSWORD_FILE}")"
+    [[ -n "$REDIS_MASTER_PASSWORD" ]] && export REDISCLI_AUTH="$REDIS_MASTER_PASSWORD"
+    response=$(
+      timeout -s 15 $1 \
+      redis-cli \
+        -h $REDIS_MASTER_HOST \
+        -p $REDIS_MASTER_PORT_NUMBER \
+        ping
+    )
+    if [ "$?" -eq "124" ]; then
+      echo "Timed out"
+      exit 1
+    fi
+    if [ "$response" != "PONG" ]; then
+      echo "$response"
+      exit 1
+    fi
+  ping_liveness_master.sh: |-
+    #!/bin/bash
+
+    [[ -f $REDIS_MASTER_PASSWORD_FILE ]] && export REDIS_MASTER_PASSWORD="$(< "${REDIS_MASTER_PASSWORD_FILE}")"
+    [[ -n "$REDIS_MASTER_PASSWORD" ]] && export REDISCLI_AUTH="$REDIS_MASTER_PASSWORD"
+    response=$(
+      timeout -s 15 $1 \
+      redis-cli \
+        -h $REDIS_MASTER_HOST \
+        -p $REDIS_MASTER_PORT_NUMBER \
+        ping
+    )
+    if [ "$?" -eq "124" ]; then
+      echo "Timed out"
+      exit 1
+    fi
+    responseFirstWord=$(echo $response | head -n1 | awk '{print $1;}')
+    if [ "$response" != "PONG" ] && [ "$responseFirstWord" != "LOADING" ]; then
+      echo "$response"
+      exit 1
+    fi
+  ping_readiness_local_and_master.sh: |-
+    script_dir="$(dirname "$0")"
+    exit_status=0
+    "$script_dir/ping_readiness_local.sh" $1 || exit_status=$?
+    "$script_dir/ping_readiness_master.sh" $1 || exit_status=$?
+    exit $exit_status
+  ping_liveness_local_and_master.sh: |-
+    script_dir="$(dirname "$0")"
+    exit_status=0
+    "$script_dir/ping_liveness_local.sh" $1 || exit_status=$?
+    "$script_dir/ping_liveness_master.sh" $1 || exit_status=$?
+    exit $exit_status
+---
+# Source: workadventure/charts/redis/templates/scripts-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-workadventure-redis-scripts
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: redis
+    helm.sh/chart: redis-17.11.7
+    app.kubernetes.io/instance: my-workadventure
+    app.kubernetes.io/managed-by: Helm
+data:
+  start-master.sh: |
+    #!/bin/bash
+
+    [[ -f $REDIS_PASSWORD_FILE ]] && export REDIS_PASSWORD="$(< "${REDIS_PASSWORD_FILE}")"
+    if [[ -f /opt/bitnami/redis/mounted-etc/master.conf ]];then
+        cp /opt/bitnami/redis/mounted-etc/master.conf /opt/bitnami/redis/etc/master.conf
+    fi
+    if [[ -f /opt/bitnami/redis/mounted-etc/redis.conf ]];then
+        cp /opt/bitnami/redis/mounted-etc/redis.conf /opt/bitnami/redis/etc/redis.conf
+    fi
+    ARGS=("--port" "${REDIS_PORT}")
+    ARGS+=("--protected-mode" "no")
+    ARGS+=("--include" "/opt/bitnami/redis/etc/redis.conf")
+    ARGS+=("--include" "/opt/bitnami/redis/etc/master.conf")
+    exec redis-server "${ARGS[@]}"
+---
+# Source: workadventure/templates/back-env.yaml
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: my-workadventure-env-back
+  labels:
+    helm.sh/chart: workadventure-1.1.0
+    app.kubernetes.io/name: workadventure
+    app.kubernetes.io/instance: my-workadventure
+    app.kubernetes.io/version: "v1.17.7"
+    app.kubernetes.io/managed-by: Helm
+data:
+  PLAY_URL: https://wa.example.com
+  REDIS_HOST: my-workadventure-redis-master
+  MAP_STORAGE_URL: my-workadventure-mapstorage:50053
+  INTERNAL_MAP_STORAGE_URL: http://my-workadventure-mapstorage:3000
+  PUBLIC_MAP_STORAGE_URL: https://wa.example.com/map-storage
+  PLAYER_VARIABLES_MAX_TTL: "-1"
+  EJABBERD_API_URI: http://my-workadventure-ejabberd:5443/api
+  EJABBERD_DOMAIN: ejabberd.example.com
+  EJABBERD_USER: "admin"
+  ENABLE_CHAT: "true"
+  ENABLE_CHAT_UPLOAD: "true"
+  ENABLE_MAP_EDITOR: "true"
+  JITSI_URL: "https://meet.jit.si"
+  MAX_PER_GROUP: "4"
+  UPLOAD_MAX_FILESIZE: "1.048576e+07"
+  STORE_VARIABLES_FOR_LOCAL_MAPS: "true"
+---
+# Source: workadventure/templates/chat-env.yaml
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: my-workadventure-env-chat
+  labels:
+    helm.sh/chart: workadventure-1.1.0
+    app.kubernetes.io/name: workadventure
+    app.kubernetes.io/instance: my-workadventure
+    app.kubernetes.io/version: "v1.17.7"
+    app.kubernetes.io/managed-by: Helm
+data:
+  PUSHER_URL: /
+  UPLOADER_URL: /uploader
+  EJABBERD_WS_URI: wss://wa.example.com/xmpp/ws
+  EJABBERD_DOMAIN: ejabberd.example.com
+  EJABBERD_USER: "admin"
+  ENABLE_CHAT: "true"
+  ENABLE_CHAT_UPLOAD: "true"
+  ENABLE_MAP_EDITOR: "true"
+  JITSI_URL: "https://meet.jit.si"
+  MAX_PER_GROUP: "4"
+  UPLOAD_MAX_FILESIZE: "1.048576e+07"
+---
+# Source: workadventure/templates/ejabberd-env.yaml
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: my-workadventure-env-ejabberd
+  labels:
+    helm.sh/chart: workadventure-1.1.0
+    app.kubernetes.io/name: workadventure
+    app.kubernetes.io/instance: my-workadventure
+    app.kubernetes.io/version: "v1.17.7"
+    app.kubernetes.io/managed-by: Helm
+data:
+  CTL_ON_CREATE: "register admin  mySecretPassword"
+  EJABBERD_DOMAIN: ejabberd.example.com
+  EJABBERD_USER: "admin"
+  ENABLE_CHAT: "true"
+  ENABLE_CHAT_UPLOAD: "true"
+  ENABLE_MAP_EDITOR: "true"
+  JITSI_URL: "https://meet.jit.si"
+  MAX_PER_GROUP: "4"
+  UPLOAD_MAX_FILESIZE: "1.048576e+07"
+---
+# Source: workadventure/templates/ejabberd-template.yaml
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: my-workadventure-ejabberd-template
+  labels:
+    helm.sh/chart: workadventure-1.1.0
+    app.kubernetes.io/name: workadventure
+    app.kubernetes.io/instance: my-workadventure
+    app.kubernetes.io/version: "v1.17.7"
+    app.kubernetes.io/managed-by: Helm
+
+data:
+  ejabberd.template.yml: |-
+    ###
+    ###              ejabberd configuration file
+    ###
+    ### The parameters used in this configuration file are explained at
+    ###
+    ###       https://docs.ejabberd.im/admin/configuration
+    ###
+    hosts:
+      - ${EJABBERD_DOMAIN}
+
+    loglevel: 3
+    log_rotate_size: 10485760
+    log_rotate_count: 1
+
+    certfiles:
+      - /opt/ejabberd/conf/server.pem
+
+    ca_file: "/opt/ejabberd/conf/cacert.pem"
+
+    ## When using let's encrypt to generate certificates
+    ##certfiles:
+    ##  - /etc/letsencrypt/live/localhost/fullchain.pem
+    ##  - /etc/letsencrypt/live/localhost/privkey.pem
+    ##
+    ##ca_file: "/etc/letsencrypt/live/localhost/fullchain.pem"
+
+    auth_method:
+      - jwt
+      - internal
+    allow_multiple_connections: true
+    auth_use_cache: false
+    jwt_key: /opt/ejabberd/conf/jwt_key
+    disable_sasl_mechanisms: ["X-OAUTH2"]
+
+    #jwt_jid_field: "identifier"
+    #jwt_key: "/opt/ejabberd/conf/jwtKey"
+
+    listen:
+      -
+        port: 5222
+        ip: "::"
+        module: ejabberd_c2s
+        max_stanza_size: 262144
+        shaper: c2s_shaper
+        access: c2s
+        starttls_required: true
+      -
+        port: 5269
+        ip: "::"
+        module: ejabberd_s2s_in
+        max_stanza_size: 524288
+      -
+        port: 5443
+        ip: "::"
+        module: ejabberd_http
+        #tls: true
+        request_handlers:
+          "/admin": ejabberd_web_admin
+          "/api": mod_http_api
+          "/bosh": mod_bosh
+          "/captcha": ejabberd_captcha
+          "/upload": mod_http_upload
+          "/ws": ejabberd_http_ws
+          "/oauth": ejabberd_oauth
+      -
+        port: 5280
+        ip: "::"
+        module: ejabberd_http
+        request_handlers:
+          #"/admin": ejabberd_web_admin
+          "/api": mod_http_api
+          "/bosh": mod_bosh
+          "/captcha": ejabberd_captcha
+          "/upload": mod_http_upload
+          "/ws": ejabberd_http_ws
+          "/oauth": ejabberd_oauth
+      -
+        port: 5380
+        ip: "::"
+        module: ejabberd_http
+        request_handlers:
+          "/": ejabberd_web_admin
+      -
+        port: 1883
+        ip: "::"
+        module: mod_mqtt
+        backlog: 1000
+
+    s2s_use_starttls: optional
+
+    acl:
+      local:
+        user_regexp: ""
+      loopback:
+        ip:
+          - 127.0.0.0/8
+          - ::1/128
+          - ::FFFF:127.0.0.1/128
+          - ::FFFF:172.19.0.0/16
+      admin:
+        user:
+          - "${EJABBERD_USER}@${EJABBERD_DOMAIN}"
+          - "${EJABBERD_USER}"
+        ip:
+          - ::FFFF:172.19.0.0/16
+
+    access_rules:
+      local:
+        allow: local
+      c2s:
+        deny: blocked
+        allow: all
+      announce:
+        allow: admin
+      configure:
+        allow: admin
+      muc_create:
+        - allow: local
+        - deny: blocked
+      pubsub_createnode:
+        allow: local
+      trusted_network:
+        allow: loopback
+
+    api_permissions:
+      "console commands":
+        from:
+          - ejabberd_ctl
+        who: all
+        what: "*"
+      "admin access":
+        who:
+          - access:
+            - allow:
+              - acl: loopback
+              - acl: admin
+          - oauth:
+            - scope:
+              - "${EJABBERD_DOMAIN}:admin"
+            - access:
+              - allow:
+                - acl: loopback
+                - acl: admin
+        what:
+          - "*"
+          - "!stop"
+          - "!start"
+      "public commands":
+        who:
+          - ip: 127.0.0.1/8
+        what:
+          - status
+          - connected_users_number
+
+    shaper:
+      normal: 1000
+      fast: 50000
+
+    shaper_rules:
+      max_user_sessions: 10
+      max_user_offline_messages:
+        5000: admin
+        100: all
+      c2s_shaper:
+        none: admin
+        normal: all
+      s2s_shaper: fast
+
+    max_fsm_queue: 10000
+
+    acme:
+      contact: "mailto:example-admin@example.com"
+      ca_url: "https://acme-staging-v02.api.letsencrypt.org/directory"
+
+    modules:
+      mod_adhoc: {}
+      mod_admin_extra: {}
+      mod_announce:
+        access: announce
+      mod_avatar: {}
+      mod_blocking: {}
+      mod_bosh: {}
+      mod_caps: {}
+      mod_carboncopy: {}
+      mod_client_state: {}
+      mod_configure: {}
+      mod_disco: {}
+      mod_fail2ban: {}
+      mod_http_api: {}
+      ##mod_restful_admin:
+      ##  api:
+      ##    - path: [ "admin" ]
+      ##      module: mod_restful_admin
+      ##      params:
+      ##        key: "secret"
+      ##        allowed_commands: [ register, unregister,status, add_rosteritem, create_room, send_direct_invitation, set_room_affiliation ]
+      ##    - path: [ "register" ]
+      ##      module: mod_restful_register
+      ##      params:
+      ##        key: "secret"
+      mod_http_upload:
+        put_url: https://@HOST@:5443/upload
+      mod_last: {}
+      mod_mam:
+        ## Mnesia is limited to 2GB, better to use an SQL backend
+        ## For small servers SQLite is a good fit and is very easy
+        ## to configure. Uncomment this when you have SQL configured:
+        ## db_type: sql
+        assume_mam_usage: true
+        default: never
+      mod_mqtt: {}
+      mod_muc:
+        hosts:
+          - conference.${EJABBERD_DOMAIN}
+        access:
+          - allow
+        access_admin:
+          - allow: admin
+        access_create: muc_create
+        access_persistent: muc_create
+        access_mam:
+          - allow
+        default_room_options:
+          allow_subscription: true  # enable MucSub
+          mam: true
+          persistent: true
+          anonymous: false
+      mod_muc_admin: {}
+      mod_offline:
+        access_max_user_messages: max_user_offline_messages
+      mod_ping: {}
+      mod_privacy: {}
+      mod_private: {}
+      mod_proxy65:
+        access: local
+        max_connections: 5
+      mod_pubsub:
+        access_createnode: pubsub_createnode
+        plugins:
+          - flat
+          - pep
+        force_node_config:
+          ## Avoid buggy clients to make their bookmarks public
+          storage:bookmarks:
+            access_model: whitelist
+      mod_push: {}
+      mod_push_keepalive:
+        resume_timeout: 72
+        wake_on_start: false
+        wake_on_timeout: true
+      mod_register:
+        ## Only accept registration requests from the "trusted"
+        ## network (see access_rules section above).
+        ## Think twice before enabling registration from any
+        ## address. See the Jabber SPAM Manifesto for details:
+        ## https://github.com/ge0rg/jabber-spam-fighting-manifesto
+        ip_access: trusted_network
+      mod_roster:
+        versioning: true
+        store_current_id: false
+      mod_sip: {}
+      mod_s2s_dialback: {}
+      mod_shared_roster: {}
+      mod_stream_mgmt:
+        ack_timeout: infinity
+        resend_on_timeout: if_offline
+        resume_timeout: 0
+      mod_vcard: {}
+      mod_vcard_xupdate: {}
+      mod_version:
+        show_os: false
+
+    websocket_ping_interval: 300
+    websocket_timeout: 900
+    ### Local Variables:
+    ### mode: yaml
+    ### End:
+    ### vim: set filetype=yaml tabstop=8
+---
+# Source: workadventure/templates/mapstorage-env.yaml
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: my-workadventure-env-mapstorage
+  labels:
+    helm.sh/chart: workadventure-1.1.0
+    app.kubernetes.io/name: workadventure
+    app.kubernetes.io/instance: my-workadventure
+    app.kubernetes.io/version: "v1.17.7"
+    app.kubernetes.io/managed-by: Helm
+data:
+  API_URL: my-workadventure-back:50051
+  PATH_PREFIX: "/map-storage"
+  EJABBERD_USER: "admin"
+  ENABLE_CHAT: "true"
+  ENABLE_CHAT_UPLOAD: "true"
+  ENABLE_MAP_EDITOR: "true"
+  JITSI_URL: "https://meet.jit.si"
+  MAX_PER_GROUP: "4"
+  UPLOAD_MAX_FILESIZE: "1.048576e+07"
+  AUTHENTICATION_STRATEGY: "Basic"
+  AUTHENTICATION_USER: "admin"
+---
+# Source: workadventure/templates/play-env.yaml
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: my-workadventure-env-play
+  labels:
+    helm.sh/chart: workadventure-1.1.0
+    app.kubernetes.io/name: workadventure
+    app.kubernetes.io/instance: my-workadventure
+    app.kubernetes.io/version: "v1.17.7"
+    app.kubernetes.io/managed-by: Helm
+data:
+  API_URL: my-workadventure-back-0:50051
+  CHAT_URL: /chat/
+  ICON_URL: /icon
+  UPLOADER_URL: /uploader
+  PUSHER_URL: /
+  FRONT_URL: /
+  PUBLIC_MAP_STORAGE_URL: https://wa.example.com/map-storage
+  EJABBERD_API_URI: my-workadventure-back:5443
+  ENABLE_OPENAPI_ENDPOINT: "true"
+  ROOM_API_PORT: "50051"
+  MAP_STORAGE_PATH_PREFIX: /map-storage
+  EJABBERD_DOMAIN: ejabberd.example.com
+  EJABBERD_USER: "admin"
+  ENABLE_CHAT: "true"
+  ENABLE_CHAT_UPLOAD: "true"
+  ENABLE_MAP_EDITOR: "true"
+  JITSI_URL: "https://meet.jit.si"
+  MAX_PER_GROUP: "4"
+  UPLOAD_MAX_FILESIZE: "1.048576e+07"
+  DISABLE_ANONYMOUS: "false"
+  DISABLE_NOTIFICATIONS: "false"
+  ENABLE_CHAT_DISCONNECTED_LIST: "true"
+  ENABLE_CHAT_ONLINE_LIST: "true"
+  ENABLE_REPORT_ISSUES_MENU: "false"
+  GRPC_TRACE: "all"
+  GRPC_VERBOSITY: "DEBUG"
+  JITSI_PRIVATE_MODE: "false"
+  MAX_HISTORY_CHAT: "0"
+  MAX_USERNAME_LENGTH: "10"
+  START_ROOM_URL: "/_/global/raw.githubusercontent.com/workadventure/map-starter-kit/master/map.tmj"
+---
+# Source: workadventure/templates/uploader-env.yaml
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: my-workadventure-env-uploader
+  labels:
+    helm.sh/chart: workadventure-1.1.0
+    app.kubernetes.io/name: workadventure
+    app.kubernetes.io/instance: my-workadventure
+    app.kubernetes.io/version: "v1.17.7"
+    app.kubernetes.io/managed-by: Helm
+data:
+  UPLOADER_URL: https://wa.example.com/uploader
+  EJABBERD_USER: "admin"
+  ENABLE_CHAT: "true"
+  ENABLE_CHAT_UPLOAD: "true"
+  ENABLE_MAP_EDITOR: "true"
+  JITSI_URL: "https://meet.jit.si"
+  MAX_PER_GROUP: "4"
+  UPLOAD_MAX_FILESIZE: "1.048576e+07"
+---
+# Source: workadventure/charts/redis/templates/headless-svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-workadventure-redis-headless
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: redis
+    helm.sh/chart: redis-17.11.7
+    app.kubernetes.io/instance: my-workadventure
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: tcp-redis
+      port: 6379
+      targetPort: redis
+  selector:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/instance: my-workadventure
+---
+# Source: workadventure/charts/redis/templates/master/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-workadventure-redis-master
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: redis
+    helm.sh/chart: redis-17.11.7
+    app.kubernetes.io/instance: my-workadventure
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: master
+spec:
+  type: ClusterIP
+  internalTrafficPolicy: Cluster
+  sessionAffinity: None
+  ports:
+    - name: tcp-redis
+      port: 6379
+      targetPort: redis
+      nodePort: null
+  selector:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/instance: my-workadventure
+    app.kubernetes.io/component: master
+---
+# Source: workadventure/templates/back-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-workadventure-back-0
+  labels:
+    helm.sh/chart: workadventure-1.1.0
+    app.kubernetes.io/name: workadventure
+    app.kubernetes.io/instance: my-workadventure
+    app.kubernetes.io/version: "v1.17.7"
+    app.kubernetes.io/managed-by: Helm
+    role: back
+    statefulset.kubernetes.io/pod-name: my-workadventure-back-0
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: http
+      protocol: TCP
+      name: http
+    - port: 50051
+      targetPort: grpc
+      protocol: TCP
+      name: grpc
+  selector:
+    app.kubernetes.io/name: workadventure
+    app.kubernetes.io/instance: my-workadventure
+    role: back
+    statefulset.kubernetes.io/pod-name: my-workadventure-back-0
+---
+# Source: workadventure/templates/chat-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-workadventure-chat
+  labels:
+    helm.sh/chart: workadventure-1.1.0
+    app.kubernetes.io/name: workadventure
+    app.kubernetes.io/instance: my-workadventure
+    app.kubernetes.io/version: "v1.17.7"
+    app.kubernetes.io/managed-by: Helm
+    role: chat
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: workadventure
+    app.kubernetes.io/instance: my-workadventure
+    role: chat
+---
+# Source: workadventure/templates/ejabberd-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-workadventure-ejabberd
+  labels:
+    helm.sh/chart: workadventure-1.1.0
+    app.kubernetes.io/name: workadventure
+    app.kubernetes.io/instance: my-workadventure
+    app.kubernetes.io/version: "v1.17.7"
+    app.kubernetes.io/managed-by: Helm
+    role: ejabberd
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5443
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: workadventure
+    app.kubernetes.io/instance: my-workadventure
+    role: ejabberd
+---
+# Source: workadventure/templates/icon-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-workadventure-icon
+  labels:
+    helm.sh/chart: workadventure-1.1.0
+    app.kubernetes.io/name: workadventure
+    app.kubernetes.io/instance: my-workadventure
+    app.kubernetes.io/version: "v1.17.7"
+    app.kubernetes.io/managed-by: Helm
+    role: icon
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: workadventure
+    app.kubernetes.io/instance: my-workadventure
+    role: icon
+---
+# Source: workadventure/templates/mapstorage-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-workadventure-mapstorage
+  labels:
+    helm.sh/chart: workadventure-1.1.0
+    app.kubernetes.io/name: workadventure
+    app.kubernetes.io/instance: my-workadventure
+    app.kubernetes.io/version: "v1.17.7"
+    app.kubernetes.io/managed-by: Helm
+    role: mapstorage
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3000
+      targetPort: http
+      protocol: TCP
+      name: http
+    - port: 50053
+      targetPort: grpc
+      protocol: TCP
+      name: grpc
+  selector:
+    app.kubernetes.io/name: workadventure
+    app.kubernetes.io/instance: my-workadventure
+    role: mapstorage
+---
+# Source: workadventure/templates/play-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-workadventure-play
+  labels:
+    helm.sh/chart: workadventure-1.1.0
+    app.kubernetes.io/name: workadventure
+    app.kubernetes.io/instance: my-workadventure
+    app.kubernetes.io/version: "v1.17.7"
+    app.kubernetes.io/managed-by: Helm
+    role: play
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3000
+      targetPort: http
+      protocol: TCP
+      name: http
+    - port: 50051
+      targetPort: grpc
+      protocol: TCP
+      name: grpc
+  selector:
+    app.kubernetes.io/name: workadventure
+    app.kubernetes.io/instance: my-workadventure
+    role: play
+---
+# Source: workadventure/templates/uploader-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-workadventure-uploader
+  labels:
+    helm.sh/chart: workadventure-1.1.0
+    app.kubernetes.io/name: workadventure
+    app.kubernetes.io/instance: my-workadventure
+    app.kubernetes.io/version: "v1.17.7"
+    app.kubernetes.io/managed-by: Helm
+    role: uploader
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: workadventure
+    app.kubernetes.io/instance: my-workadventure
+    role: uploader
+---
+# Source: workadventure/templates/chat-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-workadventure-chat
+  labels:
+    helm.sh/chart: workadventure-1.1.0
+    app.kubernetes.io/name: workadventure
+    app.kubernetes.io/instance: my-workadventure
+    app.kubernetes.io/version: "v1.17.7"
+    app.kubernetes.io/managed-by: Helm
+    role: chat
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: workadventure
+      app.kubernetes.io/instance: my-workadventure
+      role: chat
+  template:
+    metadata:
+      annotations:
+        checksum/config: 70218e9b3b33d2d7f26d3dab17de49b0f2db4c5c9e7d69afbce5210d008821a1
+        checksum/secret: 92cf9411861ec924714dab2c0ac19541568f15ed184274b54956dc4177fb5430
+      labels:
+        app.kubernetes.io/name: workadventure
+        app.kubernetes.io/instance: my-workadventure
+        role: chat
+    spec:
+      serviceAccountName: default
+      securityContext:
+        {}
+      containers:
+        - name: workadventure-chat
+          securityContext:
+            {}
+          image: "thecodingmachine/workadventure-chat:v1.17.7"
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: my-workadventure-env-chat
+            - secretRef:
+                name: my-workadventure-secret-env-chat
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+            {}
+---
+# Source: workadventure/templates/ejabberd-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-workadventure-ejabberd
+  labels:
+    helm.sh/chart: workadventure-1.1.0
+    app.kubernetes.io/name: workadventure
+    app.kubernetes.io/instance: my-workadventure
+    app.kubernetes.io/version: "v1.17.7"
+    app.kubernetes.io/managed-by: Helm
+    role: ejabberd
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: workadventure
+      app.kubernetes.io/instance: my-workadventure
+      role: ejabberd
+  template:
+    metadata:
+      annotations:
+        checksum/config: 3093f8cf760bdc96f3edc01db04d1112b05ffeac59f53d904638eace2e86bbaf
+        checksum/secret: 64283874052a4ec5f4823be4b28777c9c1ec9c1ffcf3fd467dc5302b58d61f1a
+      labels:
+        app.kubernetes.io/name: workadventure
+        app.kubernetes.io/instance: my-workadventure
+        role: ejabberd
+    spec:
+      serviceAccountName: default
+      securityContext:
+        {}
+      volumes:
+        - name: ejabberd-template
+          configMap:
+            name: my-workadventure-ejabberd-template
+      containers:
+        - name: workadventure-ejabberd
+          securityContext:
+            {}
+          image: "thecodingmachine/workadventure-ejabberd:v1.17.7"
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: my-workadventure-env-ejabberd
+            - secretRef:
+                name: my-workadventure-secret-env-ejabberd
+          ports:
+            - name: http
+              containerPort: 5443
+              protocol: TCP
+          # livenessProbe:
+          #   httpGet:
+          #     path: /
+          #     port: http
+          # readinessProbe:
+          #   httpGet:
+          #     path: /
+          #     port: http
+          resources:
+            {}
+          volumeMounts:
+            - name: ejabberd-template
+              mountPath: /tmp/ejabberd.template.yml
+              subPath: ejabberd.template.yml
+          lifecycle:
+            postStart:
+              exec:
+                command:
+                  - sh
+                  - -c
+                  - |
+                    cp /tmp/ejabberd.template.yml /opt/ejabberd/conf/ejabberd.template.yml
+---
+# Source: workadventure/templates/icon-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-workadventure-icon
+  labels:
+    helm.sh/chart: workadventure-1.1.0
+    app.kubernetes.io/name: workadventure
+    app.kubernetes.io/instance: my-workadventure
+    app.kubernetes.io/version: "v1.17.7"
+    app.kubernetes.io/managed-by: Helm
+    role: icon
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: workadventure
+      app.kubernetes.io/instance: my-workadventure
+      role: icon
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: workadventure
+        app.kubernetes.io/instance: my-workadventure
+        role: icon
+    spec:
+      serviceAccountName: default
+      securityContext:
+        {}
+      containers:
+        - name: workadventure-icon
+          securityContext:
+            {}
+          image: "matthiasluedtke/iconserver:v3.16.0"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+            {}
+---
+# Source: workadventure/templates/mapstorage-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-workadventure-mapstorage
+  labels:
+    helm.sh/chart: workadventure-1.1.0
+    app.kubernetes.io/name: workadventure
+    app.kubernetes.io/instance: my-workadventure
+    app.kubernetes.io/version: "v1.17.7"
+    app.kubernetes.io/managed-by: Helm
+    role: mapstorage
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: workadventure
+      app.kubernetes.io/instance: my-workadventure
+      role: mapstorage
+  template:
+    metadata:
+      annotations:
+        checksum/config: 48e927d5b085621eee9e24a0317cdc486f6464d18bbddc7ace592aca152b2954
+        checksum/secret: ddc71be3fea6c052322333b6849284edb38c2ce769cc17f718470e92421c8dbb
+      labels:
+        app.kubernetes.io/name: workadventure
+        app.kubernetes.io/instance: my-workadventure
+        role: mapstorage
+    spec:
+      serviceAccountName: default
+      securityContext:
+        {}
+      volumes:
+        - name: mapstorage
+          emptyDir: {}
+      initContainers:
+        - name: mapstorage-init
+          image: busybox
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              chown -R 1000:1000 /maps
+          volumeMounts:
+            - name: mapstorage
+              mountPath: /maps
+      containers:
+        - name: workadventure-mapstorage
+          securityContext:
+            {}
+          image: "thecodingmachine/workadventure-map-storage:v1.17.7"
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: my-workadventure-env-mapstorage
+            - secretRef:
+                name: my-workadventure-secret-env-mapstorage
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+            - name: grpc
+              containerPort: 50053
+              protocol: TCP
+          # livenessProbe:
+          #   httpGet:
+          #     path: /
+          #     port: http
+          # readinessProbe:
+          #   httpGet:
+          #     path: /
+          #     port: http
+          volumeMounts:
+            - name: mapstorage
+              mountPath: /maps
+          resources:
+            {}
+          # lifecycle:
+          #   postStart:
+          #     exec:
+          #       command:
+          #         - sh
+          #         - -c
+          #         - |
+          #           chown -R node:node /maps
+---
+# Source: workadventure/templates/play-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-workadventure-play
+  labels:
+    helm.sh/chart: workadventure-1.1.0
+    app.kubernetes.io/name: workadventure
+    app.kubernetes.io/instance: my-workadventure
+    app.kubernetes.io/version: "v1.17.7"
+    app.kubernetes.io/managed-by: Helm
+    role: play
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: workadventure
+      app.kubernetes.io/instance: my-workadventure
+      role: play
+  template:
+    metadata:
+      annotations:
+        checksum/config: 8f53dc46d35505afaf1df05323fea09edf8dc23b2d763361f6168164bb0c8d59
+        checksum/secret: 40e5f7a3396f3db977ae2f5d260624cadc5ca75043605d8cc4ec0f2ffcd7fbdc
+      labels:
+        app.kubernetes.io/name: workadventure
+        app.kubernetes.io/instance: my-workadventure
+        role: play
+    spec:
+      serviceAccountName: default
+      securityContext:
+        {}
+      containers:
+        - name: workadventure-play
+          securityContext:
+            {}
+          image: "thecodingmachine/workadventure-play:v1.17.7"
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: my-workadventure-env-play
+            - secretRef:
+                name: my-workadventure-secret-env-play
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+            - name: grpc
+              containerPort: 50051
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+            {}
+---
+# Source: workadventure/templates/uploader-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-workadventure-uploader
+  labels:
+    helm.sh/chart: workadventure-1.1.0
+    app.kubernetes.io/name: workadventure
+    app.kubernetes.io/instance: my-workadventure
+    app.kubernetes.io/version: "v1.17.7"
+    app.kubernetes.io/managed-by: Helm
+    role: uploader
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: workadventure
+      app.kubernetes.io/instance: my-workadventure
+      role: uploader
+  template:
+    metadata:
+      annotations:
+        checksum/config: 9b9cae42b4453bdd50b1c5bcefb84abb36bf99f6fbfa8720785786949d66208e
+        checksum/secret: 670a1b6c802e08e383045c1f9de9a38ad9c196ccaba8b499dfc4426c336012b1
+      labels:
+        app.kubernetes.io/name: workadventure
+        app.kubernetes.io/instance: my-workadventure
+        role: uploader
+    spec:
+      serviceAccountName: default
+      securityContext:
+        {}
+      containers:
+        - name: workadventure-uploader
+          securityContext:
+            {}
+          image: "thecodingmachine/workadventure-uploader:v1.17.7"
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: my-workadventure-env-uploader
+            - secretRef:
+                name: my-workadventure-secret-env-uploader
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          # livenessProbe:
+          #   httpGet:
+          #     path: /
+          #     port: http
+          # readinessProbe:
+          #   httpGet:
+          #     path: /
+          #     port: http
+          resources:
+            {}
+---
+# Source: workadventure/charts/redis/templates/master/application.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-workadventure-redis-master
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: redis
+    helm.sh/chart: redis-17.11.7
+    app.kubernetes.io/instance: my-workadventure
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: master
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: redis
+      app.kubernetes.io/instance: my-workadventure
+      app.kubernetes.io/component: master
+  serviceName: my-workadventure-redis-headless
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: redis
+        helm.sh/chart: redis-17.11.7
+        app.kubernetes.io/instance: my-workadventure
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/component: master
+      annotations:
+        checksum/configmap: 87dc4bee012db48918ec4c2e01feba499db057b3f6f43524f7288b19ff0ec689
+        checksum/health: 184f763df61625a46cb8a48e40e6d670e0fc349e8b566050974c6b0cb699bb49
+        checksum/scripts: c21682e1611670cb261aec883a4f6275afd43b3cb508587a730f17861eea1ef5
+        checksum/secret: 01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b
+    spec:
+      
+      securityContext:
+        fsGroup: 1001
+      serviceAccountName: my-workadventure-redis
+      automountServiceAccountToken: true
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: redis
+                    app.kubernetes.io/instance: my-workadventure
+                    app.kubernetes.io/component: master
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: redis
+          image: docker.io/bitnami/redis:7.0.11-debian-11-r20
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            runAsUser: 1001
+          command:
+            - /bin/bash
+          args:
+            - -c
+            - /opt/bitnami/scripts/start-scripts/start-master.sh
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: REDIS_REPLICATION_MODE
+              value: master
+            - name: ALLOW_EMPTY_PASSWORD
+              value: "yes"
+            - name: REDIS_TLS_ENABLED
+              value: "no"
+            - name: REDIS_PORT
+              value: "6379"
+          ports:
+            - name: redis
+              containerPort: 6379
+          livenessProbe:
+            initialDelaySeconds: 20
+            periodSeconds: 5
+            # One second longer than command timeout should prevent generation of zombie processes.
+            timeoutSeconds: 6
+            successThreshold: 1
+            failureThreshold: 5
+            exec:
+              command:
+                - sh
+                - -c
+                - /health/ping_liveness_local.sh 5
+          readinessProbe:
+            initialDelaySeconds: 20
+            periodSeconds: 5
+            timeoutSeconds: 2
+            successThreshold: 1
+            failureThreshold: 5
+            exec:
+              command:
+                - sh
+                - -c
+                - /health/ping_readiness_local.sh 1
+          resources:
+            limits: {}
+            requests: {}
+          volumeMounts:
+            - name: start-scripts
+              mountPath: /opt/bitnami/scripts/start-scripts
+            - name: health
+              mountPath: /health
+            - name: redis-data
+              mountPath: /data
+            - name: config
+              mountPath: /opt/bitnami/redis/mounted-etc
+            - name: redis-tmp-conf
+              mountPath: /opt/bitnami/redis/etc/
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: start-scripts
+          configMap:
+            name: my-workadventure-redis-scripts
+            defaultMode: 0755
+        - name: health
+          configMap:
+            name: my-workadventure-redis-health
+            defaultMode: 0755
+        - name: config
+          configMap:
+            name: my-workadventure-redis-configuration
+        - name: redis-tmp-conf
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+  volumeClaimTemplates:
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: redis-data
+        labels:
+          app.kubernetes.io/name: redis
+          app.kubernetes.io/instance: my-workadventure
+          app.kubernetes.io/component: master
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "8Gi"
+---
+# Source: workadventure/templates/back-statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-workadventure-back
+  labels:
+    helm.sh/chart: workadventure-1.1.0
+    app.kubernetes.io/name: workadventure
+    app.kubernetes.io/instance: my-workadventure
+    app.kubernetes.io/version: "v1.17.7"
+    app.kubernetes.io/managed-by: Helm
+    role: back
+spec:
+  replicas: 1
+  podManagementPolicy: Parallel
+  updateStrategy:
+    type: RollingUpdate
+    # Back servers are independent, so we can update all at once
+    # See https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#maximum-unavailable-pods
+    maxUnavailable: "100%"
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: workadventure
+      app.kubernetes.io/instance: my-workadventure
+      role: back
+  template:
+    metadata:
+      annotations:
+        checksum/config: 658317bb5cbd31dad7bd22d7c7c284a8b780321e231e1f352a7b04ec10d902e2
+        checksum/secret: a236c324a0903d99a11e1467610ab3067cbb2212e7b9dfd2a99e333d0fd799fc
+      labels:
+        app.kubernetes.io/name: workadventure
+        app.kubernetes.io/instance: my-workadventure
+        role: back
+    spec:
+      serviceAccountName: default
+      securityContext:
+        {}
+      containers:
+        - name: workadventure-back
+          securityContext:
+            {}
+          image: "thecodingmachine/workadventure-back:v1.17.7"
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: my-workadventure-env-back
+            - secretRef:
+                name: my-workadventure-secret-env-back
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: grpc
+              containerPort: 50051
+              protocol: TCP
+          # livenessProbe:
+          #   httpGet:
+          #     path: /
+          #     port: http
+          # readinessProbe:
+          #   httpGet:
+          #     path: /
+          #     port: http
+          resources:
+            {}

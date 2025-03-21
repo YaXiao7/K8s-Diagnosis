@@ -1,0 +1,87 @@
+---
+# Source: petio/templates/common.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-petio
+  labels:
+    app.kubernetes.io/instance: my-petio
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: petio
+    app.kubernetes.io/version: new-ui
+    helm.sh/chart: petio-1.0.2
+  annotations:
+spec:
+  type: ClusterIP
+  ports:
+  - port: 7777
+    targetPort: http
+    protocol: TCP
+    name: http
+  selector:
+    app.kubernetes.io/name: petio
+    app.kubernetes.io/instance: my-petio
+---
+# Source: petio/templates/common.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-petio
+  labels:
+    app.kubernetes.io/instance: my-petio
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: petio
+    app.kubernetes.io/version: new-ui
+    helm.sh/chart: petio-1.0.2
+spec:
+  revisionHistoryLimit: 3
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: petio
+      app.kubernetes.io/instance: my-petio
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: petio
+        app.kubernetes.io/instance: my-petio
+    spec:
+      
+      serviceAccountName: default
+      automountServiceAccountToken: true
+      dnsPolicy: ClusterFirst
+      enableServiceLinks: true
+      containers:
+        - name: my-petio
+          image: "ghcr.io/petio-team/petio:new-ui"
+          imagePullPolicy: Always
+          env:
+            - name: TZ
+              value: UTC
+          ports:
+            - name: http
+              containerPort: 7777
+              protocol: TCP
+          livenessProbe:
+            tcpSocket:
+              port: 7777
+            initialDelaySeconds: 0
+            failureThreshold: 3
+            timeoutSeconds: 1
+            periodSeconds: 10
+          readinessProbe:
+            tcpSocket:
+              port: 7777
+            initialDelaySeconds: 0
+            failureThreshold: 3
+            timeoutSeconds: 1
+            periodSeconds: 10
+          startupProbe:
+            tcpSocket:
+              port: 7777
+            initialDelaySeconds: 0
+            failureThreshold: 30
+            timeoutSeconds: 1
+            periodSeconds: 5

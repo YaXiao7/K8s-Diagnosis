@@ -1,0 +1,111 @@
+---
+# Source: requestbin/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-requestbin
+  labels:
+    app.kubernetes.io/name: requestbin
+    helm.sh/chart: requestbin-0.1.0
+    app.kubernetes.io/instance: my-requestbin
+    app.kubernetes.io/version: "0.2.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: requestbin/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-requestbin
+  labels:
+    app.kubernetes.io/name: requestbin
+    helm.sh/chart: requestbin-0.1.0
+    app.kubernetes.io/instance: my-requestbin
+    app.kubernetes.io/version: "0.2.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9999
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: requestbin
+    app.kubernetes.io/instance: my-requestbin
+---
+# Source: requestbin/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-requestbin
+  labels:
+    app.kubernetes.io/name: requestbin
+    helm.sh/chart: requestbin-0.1.0
+    app.kubernetes.io/instance: my-requestbin
+    app.kubernetes.io/version: "0.2.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: requestbin
+      app.kubernetes.io/instance: my-requestbin
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: requestbin
+        app.kubernetes.io/instance: my-requestbin
+    spec:
+      serviceAccountName: my-requestbin
+      securityContext:
+        {}
+      containers:
+        - name: requestbin
+          securityContext:
+            {}
+          image: "rbino/mfpb:0.2.0"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: SECRET_KEY_BASE
+              value: ""
+            - name: MFPB_HOST
+              value: "localhost"
+            - name: MFPB_SCHEME
+              value: "http"
+            - name: MFPB_PORT
+              value: "80"
+          ports:
+            - name: http
+              containerPort: 4000
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+            {}
+---
+# Source: requestbin/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-requestbin-test-connection"
+  labels:
+    app.kubernetes.io/name: requestbin
+    helm.sh/chart: requestbin-0.1.0
+    app.kubernetes.io/instance: my-requestbin
+    app.kubernetes.io/version: "0.2.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args:  ['my-requestbin:9999']
+  restartPolicy: Never

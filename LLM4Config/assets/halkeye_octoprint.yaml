@@ -1,0 +1,121 @@
+---
+# Source: octoprint/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-octoprint
+  labels:
+    app.kubernetes.io/name: octoprint
+    helm.sh/chart: octoprint-0.1.1
+    app.kubernetes.io/instance: my-octoprint
+    app.kubernetes.io/version: "1.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: octoprint/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-octoprint
+  labels:
+    app.kubernetes.io/name: octoprint
+    helm.sh/chart: octoprint-0.1.1
+    app.kubernetes.io/instance: my-octoprint
+    app.kubernetes.io/version: "1.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5000
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: octoprint
+    app.kubernetes.io/instance: my-octoprint
+---
+# Source: octoprint/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-octoprint
+  labels:
+    app.kubernetes.io/name: octoprint
+    helm.sh/chart: octoprint-0.1.1
+    app.kubernetes.io/instance: my-octoprint
+    app.kubernetes.io/version: "1.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+    rollingUpdate: null
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: octoprint
+      app.kubernetes.io/instance: my-octoprint
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: octoprint
+        app.kubernetes.io/instance: my-octoprint
+    spec:
+      serviceAccountName: my-octoprint
+      securityContext:
+        {}
+      containers:
+        - name: octoprint
+          securityContext:
+            privileged: true
+          image: "octoprint/octoprint:1.4.0"
+          imagePullPolicy: IfNotPresent
+          #command: ["/bin/sh"]
+          #args: ["-c", "sleep 99d"]
+          env:
+            # need to override the one that services provides
+            - { name: "OCTOPRINT_PORT", value: "5000" }
+          ports:
+            - name: http
+              containerPort: 5000
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+            {}
+          volumeMounts:
+            - name: data
+              mountPath: /home/octoprint/.octoprint
+            - name: ttyacm0
+              mountPath: /dev/ttyACM0
+      volumes:
+        - name: data
+          emptyDir: {}
+        - name: ttyacm0
+          hostPath:
+            path: "/dev/ttyACM0"
+---
+# Source: octoprint/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-octoprint-test-connection"
+  labels:
+    app.kubernetes.io/name: octoprint
+    helm.sh/chart: octoprint-0.1.1
+    app.kubernetes.io/instance: my-octoprint
+    app.kubernetes.io/version: "1.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args:  ['my-octoprint:5000']
+  restartPolicy: Never

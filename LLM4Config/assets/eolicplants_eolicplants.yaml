@@ -1,0 +1,716 @@
+---
+# Source: eolicplants/templates/global-np.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-my-eolicplants
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+# Source: eolicplants/templates/global-np.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: dns-egress-my-eolicplants
+spec:
+  podSelector:
+    matchLabels:
+      dns-policy: enabled
+  egress:
+    - ports:
+        - port: 53
+          protocol: TCP
+        - port: 53
+          protocol: UDP
+---
+# Source: eolicplants/templates/mongodb.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mongodb-from-topo-my-eolicplants
+spec:
+  podSelector:
+    matchLabels:
+      app: mongodb-my-eolicplants
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: toposervice-my-eolicplants
+      ports:
+        - port: 27017
+          protocol: TCP
+---
+# Source: eolicplants/templates/mysql.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mysql-from-server-my-eolicplants
+spec:
+  podSelector:
+    matchLabels:
+      app: mysql-my-eolicplants
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: server-my-eolicplants
+      ports:
+        - port: 3306
+          protocol: TCP
+---
+# Source: eolicplants/templates/planner.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: planner-to-rabbit-weather-topo-my-eolicplants
+spec:
+  podSelector:
+    matchLabels:
+      app: planner-my-eolicplants
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: rabbitmq-my-eolicplants
+      ports:
+        - port: 5672
+          protocol: TCP
+    - to:
+        - podSelector:
+            matchLabels:
+              app: weatherservice-my-eolicplants
+      ports:
+        - port: 9090
+          protocol: TCP
+    - to:
+        - podSelector:
+            matchLabels:
+              app: toposervice-my-eolicplants
+      ports:
+        - port: 8080
+          protocol: TCP
+---
+# Source: eolicplants/templates/rabbitmq.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: rabbitmq-from-planner-server-my-eolicplants
+spec:
+  podSelector:
+    matchLabels:
+      app: rabbitmq-my-eolicplants
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: planner-my-eolicplants
+        - podSelector:
+            matchLabels:
+              app: server-my-eolicplants
+      ports:
+        - port: 5672
+          protocol: TCP
+---
+# Source: eolicplants/templates/server.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: server-to-mysql-rabbit-my-eolicplants
+spec:
+  podSelector:
+    matchLabels:
+      app: server-my-eolicplants
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: mysql-my-eolicplants
+      ports:
+        - port: 3306
+          protocol: TCP
+    - to:
+        - podSelector:
+            matchLabels:
+              app: rabbitmq-my-eolicplants
+      ports:
+        - port: 5672
+          protocol: TCP
+---
+# Source: eolicplants/templates/server.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: server-from-ingress-my-eolicplants
+spec:
+  podSelector:
+    matchLabels:
+      app: server-my-eolicplants
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 3000
+---
+# Source: eolicplants/templates/toposervice.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: topo-to-mongodb-my-eolicplants
+spec:
+  podSelector:
+    matchLabels:
+      app: toposervice-my-eolicplants
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: mongodb-my-eolicplants
+      ports:
+        - port: 27017
+          protocol: TCP
+---
+# Source: eolicplants/templates/toposervice.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: topo-from-planner-ingress-my-eolicplants
+spec:
+  podSelector:
+    matchLabels:
+      app: toposervice-my-eolicplants
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: planner-my-eolicplants
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8080
+---
+# Source: eolicplants/templates/weatherservice.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: weather-from-planner-my-eolicplants
+spec:
+  podSelector:
+    matchLabels:
+      app: weatherservice-my-eolicplants
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: planner-my-eolicplants
+      ports:
+        - port: 9090
+          protocol: TCP
+---
+# Source: eolicplants/templates/mongo-pv.yaml
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: mongo-pv-my-eolicplants
+spec:
+  storageClassName: mongodb
+  accessModes:
+    - ReadWriteOnce
+  capacity:
+    storage: 1Gi
+  hostPath:
+    path: /db/mongo
+---
+# Source: eolicplants/templates/mysql-pv.yaml
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: mysql-pv-my-eolicplants
+spec:
+  storageClassName: mysql
+  accessModes:
+    - ReadWriteOnce
+  capacity:
+    storage: 1Gi
+  hostPath:
+    path: /db/mysql
+---
+# Source: eolicplants/templates/rabbitmq-pv.yaml
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: rabbit-pv-my-eolicplants
+spec:
+  storageClassName: rabbit
+  accessModes:
+    - ReadWriteOnce
+  capacity:
+    storage: 1Gi
+  hostPath:
+    path: /db/rabbitmq
+---
+# Source: eolicplants/templates/mongodb.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mongo-pvc-my-eolicplants
+spec:
+  storageClassName: mongodb
+  
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+# Source: eolicplants/templates/mysql.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mysql-pvc-my-eolicplants
+spec:
+  storageClassName: mysql
+  
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+# Source: eolicplants/templates/rabbitmq.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: rabbit-pvc-my-eolicplants
+spec:
+  storageClassName: rabbit
+  
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+# Source: eolicplants/templates/mongodb.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongodb-service-my-eolicplants
+  labels:
+    app: mongodb-my-eolicplants
+spec:
+  ports:
+    - port: 27017
+      targetPort: 27017
+      protocol: TCP
+      name: mongodb-port-27017
+    - port: 27018
+      targetPort: 27018
+      protocol: TCP
+      name: mongodb-port-27018
+    - port: 27019
+      targetPort: 27019
+      protocol: TCP
+      name: mongodb-port-27019
+  selector:
+    app: mongodb-my-eolicplants
+  type: ClusterIP
+---
+# Source: eolicplants/templates/mysql.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql-service-my-eolicplants
+  labels:
+    app: mysql-my-eolicplants
+spec:
+  ports:
+    - port: 3306
+      targetPort: 3306
+      protocol: TCP
+      name: mysql-port
+  selector:
+    app: mysql-my-eolicplants
+  type: ClusterIP
+---
+# Source: eolicplants/templates/rabbitmq.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbitmq-service-my-eolicplants
+  labels:
+    app: rabbitmq-my-eolicplants
+spec:
+  ports:
+    - port: 5672
+      targetPort: 5672
+      protocol: TCP
+      name: rabbitmq-port-5672
+    - port: 15672
+      targetPort: 15672
+      protocol: TCP
+      name: rabbitmq-port-15672
+  selector:
+    app: rabbitmq-my-eolicplants
+  type: ClusterIP
+---
+# Source: eolicplants/templates/server.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: server-service-my-eolicplants
+  labels:
+    app: server-my-eolicplants
+spec:
+  ports:
+    - port: 3000
+      targetPort: 3000
+      protocol: TCP
+      name: server-port
+  selector:
+    app: server-my-eolicplants
+  type: NodePort
+---
+# Source: eolicplants/templates/toposervice.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: toposervice-service-my-eolicplants
+  labels:
+    app: toposervice-my-eolicplants
+spec:
+  ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
+      name: topo-port
+  selector:
+    app: toposervice-my-eolicplants
+  type: ClusterIP
+---
+# Source: eolicplants/templates/weatherservice.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: weatherservice-service-my-eolicplants
+  labels:
+    app: weatherservice-my-eolicplants
+spec:
+  ports:
+    - port: 9090
+      targetPort: 9090
+      protocol: TCP
+      name: weatherservice-port
+  selector:
+    app: weatherservice-my-eolicplants
+  type: ClusterIP
+---
+# Source: eolicplants/templates/mongodb.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongodb-deploy-my-eolicplants
+spec:
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: mongodb-my-eolicplants
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: mongodb-my-eolicplants
+    spec:
+      containers:
+        - name: mongodb-my-eolicplants
+          image: mongo:4.2.12-bionic
+          env:
+            - name: MONGO_INITDB_DATABASE
+              value: "topoDB"
+            - name: MONGO_INITDB_ROOT_USERNAME
+              value: "root"
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              value: "password"
+          ports:
+            - containerPort: 27017
+            - containerPort: 27018
+            - containerPort: 27019
+          volumeMounts:
+            - mountPath: /data/db
+              name: datadb
+      volumes:
+        - name: datadb
+          persistentVolumeClaim:
+            claimName: mongo-pvc-my-eolicplants
+---
+# Source: eolicplants/templates/mysql.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mysql-deploy-my-eolicplants
+spec:
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: mysql-my-eolicplants
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: mysql-my-eolicplants
+    spec:
+      containers:
+        - name: mysql-my-eolicplants
+          image: mysql:8.0.22
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              value: "password"
+            - name: MYSQL_DATABASE
+              value: "eoloplantsDB"
+          ports:
+            - containerPort: 3306
+          volumeMounts:
+            - mountPath: /var/lib/mysql
+              name: datadb
+      volumes:
+        - name: datadb
+          persistentVolumeClaim:
+            claimName: mysql-pvc-my-eolicplants
+---
+# Source: eolicplants/templates/planner.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: planner-deploy-my-eolicplants
+spec:
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: planner-my-eolicplants
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: planner-my-eolicplants
+        dns-policy: enabled
+    spec:
+      securityContext:
+        runAsUser: 1001
+      restartPolicy: Always
+      containers:
+        - name: planner-my-eolicplants
+          image: oscarsotosanchez/planner:v1.0
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              value: "password"
+            - name: MYSQL_DATABASE
+              value: "eoloplantsDB"
+---
+# Source: eolicplants/templates/rabbitmq.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rabbitmq-deploy-my-eolicplants
+spec:
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: rabbitmq-my-eolicplants
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: rabbitmq-my-eolicplants
+    spec:
+      containers:
+        - name: rabbitmq
+          image: rabbitmq:3-management
+          env:
+            - name: RABBITMQ_DEFAULT_USER
+              value: "root"
+            - name: RABBITMQ_DEFAULT_PASS
+              value: "password"
+          ports:
+            - containerPort: 5672
+            - containerPort: 15672
+          volumeMounts:
+            - mountPath: /var/lib/rabbitmq/mnesia
+              name: datarabbit
+      volumes:
+        - name: datarabbit
+          persistentVolumeClaim:
+            claimName: rabbit-pvc-my-eolicplants
+---
+# Source: eolicplants/templates/server.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: server-deploy-my-eolicplants
+spec:
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: server-my-eolicplants
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: server-my-eolicplants
+        dns-policy: enabled
+    spec:
+      securityContext:
+        runAsUser: 1001
+      restartPolicy: Always
+      containers:
+        - name: server-my-eolicplants
+          image: oscarsotosanchez/server:v1.0
+          command: [ "bash" ]
+          args:
+            - "-c"
+            - "./wait-for-it.sh mysql-service-my-eolicplants:3306 -t 500 -- ./wait-for-it.sh rabbitmq-service-my-eolicplants:5672 -t 500 -- node src/server.js"
+          env:
+            - name: MYSQL_HOST
+              value: "mysql-service"
+            - name: MYSQL_DB
+              value: "eoloplantsDB"
+            - name: MYSQL_USER
+              value: "root"
+            - name: MYSQL_PASS
+              value: "password"
+            - name: RABBITMQ_URL
+              value: "amqp://root:password@rabbitmq-service"
+          ports:
+            - containerPort: 3000
+---
+# Source: eolicplants/templates/toposervice.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: toposervice-deploy-my-eolicplants
+spec:
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: toposervice-my-eolicplants
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: toposervice-my-eolicplants
+        dns-policy: enabled
+    spec:
+      securityContext:
+        runAsUser: 1001
+      restartPolicy: Always
+      containers:
+        - name: toposervice-my-eolicplants
+          image: oscarsotosanchez/toposervice:v1.0
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              value: "password"
+            - name: MYSQL_DATABASE
+              value: "eoloplantsDB"
+          ports:
+            - containerPort: 8080
+---
+# Source: eolicplants/templates/weatherservice.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: weatherservice-deploy-my-eolicplants
+spec:
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: weatherservice-my-eolicplants
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: weatherservice-my-eolicplants
+    spec:
+      securityContext:
+        runAsUser: 1001
+      restartPolicy: Always
+      containers:
+        - name: weatherservice-my-eolicplants
+          image: oscarsotosanchez/weatherservice:v1.0
+          env:
+            - name: GRPC_HOST
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: GRPC_PORT
+              value: "9090"
+          ports:
+            - containerPort: 9090
+---
+# Source: eolicplants/templates/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: multi-ingress-my-eolicplants
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$1
+    dev.okteto.com/generate-host: "true"
+spec:
+  rules:
+  - host: mastercloudapps.host
+    http:
+      paths:
+      - path: /(.*)
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: server-service
+            port:
+              name: server-port
+      - path: /toposervice/(.*)
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: toposervice-service
+            port:
+              name: topo-port
+---
+# Source: eolicplants/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-eolicplants-test-connection"
+  labels:
+    helm.sh/chart: eolicplants-0.1.0
+    app.kubernetes.io/name: eolicplants
+    app.kubernetes.io/instance: my-eolicplants
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-eolicplants:80']
+  restartPolicy: Never

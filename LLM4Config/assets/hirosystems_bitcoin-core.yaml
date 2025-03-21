@@ -1,0 +1,178 @@
+---
+# Source: bitcoin-core/templates/service-account.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-bitcoin-core
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: bitcoin-core
+    helm.sh/chart: bitcoin-core-2.1.5
+    app.kubernetes.io/instance: my-bitcoin-core
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "25.1"
+    app.kubernetes.io/component: bitcoin-core
+automountServiceAccountToken: true
+---
+# Source: bitcoin-core/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-bitcoin-core
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: bitcoin-core
+    helm.sh/chart: bitcoin-core-2.1.5
+    app.kubernetes.io/instance: my-bitcoin-core
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "25.1"
+    app.kubernetes.io/component: bitcoin-core
+data:
+  bitcoin.conf:
+    |
+      server=1
+      txindex=1
+    
+      chain=main
+      # chain=test
+      # chain=regtest
+      # chain=signet
+    
+      rpcserialversion=0
+      rpcuser=hirosystems
+      rpcpassword=hirosystems
+    
+      rpcallowip=192.168.0.0/20
+      rpcallowip=10.0.0.0/16
+      whitelist=192.168.0.0/20
+      whitelist=10.0.0.0/16
+      rpcbind=0.0.0.0
+    
+      dbcache=75
+      maxorphantx=10
+      maxmempool=150
+      nodebuglogfile=1
+---
+# Source: bitcoin-core/templates/service-set.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-bitcoin-core-0
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: bitcoin-core
+    helm.sh/chart: bitcoin-core-2.1.5
+    app.kubernetes.io/instance: my-bitcoin-core
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "25.1"
+    app.kubernetes.io/component: bitcoin-core
+    pod: my-bitcoin-core-0
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+    - name: http-rpc
+      port: 8332
+      protocol: TCP
+      nodePort: null
+    - name: tcp-p2p
+      port: 8333
+      protocol: TCP
+      nodePort: null
+  selector:
+    app.kubernetes.io/name: bitcoin-core
+    app.kubernetes.io/instance: my-bitcoin-core
+    app.kubernetes.io/component: bitcoin-core
+    statefulset.kubernetes.io/pod-name: my-bitcoin-core-0
+---
+# Source: bitcoin-core/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-bitcoin-core
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: bitcoin-core
+    helm.sh/chart: bitcoin-core-2.1.5
+    app.kubernetes.io/instance: my-bitcoin-core
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "25.1"
+    app.kubernetes.io/component: bitcoin-core
+spec:
+  replicas: 1
+  podManagementPolicy: "OrderedReady"
+  selector:
+    matchLabels: 
+      app.kubernetes.io/name: bitcoin-core
+      app.kubernetes.io/instance: my-bitcoin-core
+      app.kubernetes.io/component: bitcoin-core
+  serviceName: my-bitcoin-core
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: bitcoin-core
+        helm.sh/chart: bitcoin-core-2.1.5
+        app.kubernetes.io/instance: my-bitcoin-core
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/version: "25.1"
+        app.kubernetes.io/component: bitcoin-core
+    spec:
+      serviceAccountName: my-bitcoin-core
+      
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/instance: my-bitcoin-core
+                    app.kubernetes.io/name: bitcoin-core
+                    app.kubernetes.io/component: bitcoin-core
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      initContainers:
+      containers:
+        - name: bitcoin-core
+          image: docker.io/dobtc/bitcoin:25.1
+          imagePullPolicy: IfNotPresent
+          args:
+            - -conf=/hirosystems/config/bitcoin.conf
+          env:
+            - name: BITCOIN_DATA
+              value: /hirosystems/data/.bitcoin
+          envFrom:
+          resources:
+            limits: {}
+            requests: {}
+          ports:
+            - name: http-rpc
+              containerPort: 8332
+            - name: tcp-p2p
+              containerPort: 8333
+          volumeMounts:
+            - name: data
+              mountPath: /hirosystems/data
+              readOnly: false
+            - name: config
+              mountPath: /hirosystems/config
+      volumes:
+        - name: config
+          configMap:
+            name: my-bitcoin-core
+        - name: data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        annotations:
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "600Gi"

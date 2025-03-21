@@ -1,0 +1,206 @@
+---
+# Source: kured/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-kured
+  namespace: default
+  labels:
+    app.kubernetes.io/name: kured
+    helm.sh/chart: kured-5.5.0
+    app.kubernetes.io/instance: my-kured
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: kured/templates/clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-kured
+  labels:
+    app.kubernetes.io/name: kured
+    helm.sh/chart: kured-5.5.0
+    app.kubernetes.io/instance: my-kured
+    app.kubernetes.io/managed-by: Helm
+rules:
+# Allow kured to read spec.unschedulable
+# Allow kubectl to drain/uncordon
+#
+# NB: These permissions are tightly coupled to the bundled version of kubectl; the ones below
+# match https://github.com/kubernetes/kubernetes/blob/v1.19.4/staging/src/k8s.io/kubectl/pkg/cmd/drain/drain.go
+#
+- apiGroups: [""]
+  resources: ["nodes"]
+  verbs:     ["get", "patch"]
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs:     ["list","delete","get"]
+- apiGroups: ["extensions"]
+  resources: ["daemonsets"]
+  verbs:     ["get"]
+- apiGroups: ["apps"]
+  resources: ["daemonsets"]
+  verbs:     ["get"]
+- apiGroups: [""]
+  resources: ["pods/eviction"]
+  verbs:     ["create"]
+---
+# Source: kured/templates/clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-kured
+  labels:
+    app.kubernetes.io/name: kured
+    helm.sh/chart: kured-5.5.0
+    app.kubernetes.io/instance: my-kured
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-kured
+subjects:
+- kind: ServiceAccount
+  name: my-kured
+  namespace: default
+---
+# Source: kured/templates/role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: default
+  name: my-kured
+  labels:
+    app.kubernetes.io/name: kured
+    helm.sh/chart: kured-5.5.0
+    app.kubernetes.io/instance: my-kured
+    app.kubernetes.io/managed-by: Helm
+rules:
+  # Allow kured to lock/unlock itself
+  - apiGroups:     ["extensions"]
+    resources:     ["daemonsets"]
+    resourceNames: ["my-kured"]
+    verbs:         ["update", "patch"]
+  - apiGroups:     ["apps"]
+    resources:     ["daemonsets"]
+    resourceNames: ["my-kured"]
+    verbs:         ["update", "patch"]
+---
+# Source: kured/templates/rolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  namespace: default
+  name: my-kured
+  labels:
+    app.kubernetes.io/name: kured
+    helm.sh/chart: kured-5.5.0
+    app.kubernetes.io/instance: my-kured
+    app.kubernetes.io/managed-by: Helm
+subjects:
+- kind: ServiceAccount
+  namespace: default
+  name: my-kured
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: my-kured
+---
+# Source: kured/templates/daemonset.yaml
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: my-kured
+  namespace: default
+  labels:
+    app.kubernetes.io/name: kured
+    helm.sh/chart: kured-5.5.0
+    app.kubernetes.io/instance: my-kured
+    app.kubernetes.io/managed-by: Helm
+spec:
+  revisionHistoryLimit: 10
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kured
+      app.kubernetes.io/instance: my-kured
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kured
+        helm.sh/chart: kured-5.5.0
+        app.kubernetes.io/instance: my-kured
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      serviceAccountName: my-kured
+      hostNetwork: false
+      hostPID: true
+      restartPolicy: Always
+      containers:
+        - name: kured
+          image: "ghcr.io/kubereboot/kured:1.16.0"
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            privileged: true
+            readOnlyRootFilesystem: true
+          resources:
+            {}
+          command:
+            - /usr/bin/kured
+          args:
+            - --ds-name=my-kured
+            - --ds-namespace=default
+            - --metrics-port=8080
+            - --reboot-sentinel=/sentinel/reboot-required
+            
+            - --reboot-command=/bin/systemctl reboot
+            - --log-format=text
+            - --concurrency=1
+          volumeMounts:
+          - mountPath: /sentinel
+            name: sentinel
+            readOnly: true
+          ports:
+            - containerPort: 8080
+              name: metrics
+          env:
+            # Pass in the name of the node on which this pod is scheduled
+            # for use with drain/uncordon operations and lock acquisition
+            - name: KURED_NODE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          livenessProbe:
+            failureThreshold: 5
+            httpGet:
+              path: /metrics
+              port: metrics
+              scheme: HTTP
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            successThreshold: 1
+            timeoutSeconds: 5
+          readinessProbe:
+            failureThreshold: 5
+            httpGet:
+              path: /metrics
+              port: metrics
+              scheme: HTTP
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            successThreshold: 1
+            timeoutSeconds: 5
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          effect: NoSchedule
+        - key: node-role.kubernetes.io/master
+          effect: NoSchedule
+      nodeSelector:
+        kubernetes.io/os: linux
+      volumes:
+        - name: sentinel
+          hostPath:
+            path: /var/run
+            type: Directory

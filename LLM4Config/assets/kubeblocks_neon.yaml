@@ -1,0 +1,191 @@
+---
+# Source: neon/templates/clusterdefinition.yaml
+apiVersion: apps.kubeblocks.io/v1alpha1
+kind: ClusterDefinition
+metadata:
+  name: neon
+  labels:
+    helm.sh/chart: neon-0.9.0
+    app.kubernetes.io/name: neon
+    app.kubernetes.io/instance: my-neon
+    app.kubernetes.io/version: "pg14-1.0.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: postgresql
+  connectionCredential:
+    username: cloud_admin
+    password: "$(RANDOM_PASSWD)"
+    endpoint: "$(SVC_FQDN):$(SVC_PORT_postgresql)"
+    host: "$(SVC_FQDN)"
+    port: "$(SVC_PORT_postgresql)"
+  componentDefs:
+    - name: neon-compute
+      workloadType: Stateful
+      characterType: postgresql
+      service:
+        ports:
+        - name: postgresql
+          protocol: TCP
+          port: 55432
+      componentDefRef:
+        - componentDefName: neon-pageserver
+          componentRefEnv:
+            - name: PAGESERVER
+              valueFrom:
+                type: HeadlessServiceRef
+                format: $(POD_FQDN).cluster.local
+                joinWith: ","
+        - componentDefName: neon-safekeeper
+          componentRefEnv:
+            - name: SAFEKEEPERS
+              valueFrom:
+                type: HeadlessServiceRef
+                format: $(POD_FQDN).cluster.local:5454
+                joinWith: ","
+      volumeTypes:
+        - name: data
+          type: data
+      podSpec:
+        containers:
+          - name: postgresql
+            volumeMounts:
+              - name: data
+                mountPath: /data
+            env:
+              - name: PGPORT
+                valueFrom:
+                  secretKeyRef:
+                    name: $(CONN_CREDENTIAL_SECRET_NAME)
+                    key: port
+                    optional: false
+              - name: PGDATA
+                value: /data
+              - name: PGUSER
+                valueFrom:
+                  secretKeyRef:
+                    name: $(CONN_CREDENTIAL_SECRET_NAME)
+                    key: username
+                    optional: false
+              - name: PGPASSWORD
+                valueFrom:
+                  secretKeyRef:
+                    name: $(CONN_CREDENTIAL_SECRET_NAME)
+                    key: password
+                    optional: false
+            ports:
+              - name: postgresql
+                containerPort: 55432
+            command:
+              - /bin/bash
+              - -c
+              - |
+                set -ex
+                trap : TERM INT
+                /compute.sh
+
+    - name: neon-storagebroker
+      workloadType: Stateful
+      characterType: storagebroker
+      podSpec:
+        containers:
+          - name: neon-storagebroker
+            volumeMounts:
+              - mountPath: /usr/local/neon/storagebroker
+                name: neon-storagebroker
+            command:
+              - "storage_broker"
+              - "-l"
+              - "0.0.0.0:50051"
+    - name: neon-safekeeper
+      workloadType: Stateful
+      characterType: safekeeper
+      componentDefRef:
+        - &storagebrokerRef
+          componentDefName: neon-storagebroker
+          componentRefEnv:
+            - name: NEON_BROKER_SVC
+              valueFrom:
+                type: HeadlessServiceRef
+                format: $(POD_FQDN).cluster.local
+                joinWith: ","
+      service:
+        ports:
+        - name: safekeeper
+          protocol: TCP
+          port: 5454
+      podSpec:
+        containers:
+          - name: neon-safekeeper
+            volumeMounts:
+              - mountPath: /usr/local/neon/safekeeper
+                name: neon-safekeeper
+            env:
+              - name: POD_IP
+                valueFrom:
+                  fieldRef:
+                    fieldPath: status.podIP
+            command:
+              - /bin/bash
+              - -c
+              - |
+                set -ex
+                trap : TERM INT
+                exec safekeeper --id=1 -D /data --broker-endpoint=http://$NEON_BROKER_SVC:50051 -l ${POD_IP}:5454 --listen-http=0.0.0.0:7676
+    - name: neon-pageserver
+      workloadType: Stateful
+      characterType: pageserver
+      componentDefRef:
+        - *storagebrokerRef
+      service:
+        ports:
+        - name: pageserver
+          protocol: TCP
+          port: 6400
+      podSpec:
+        containers:
+          - name: neon-pageserver
+            volumeMounts:
+              - mountPath: /usr/local/neon/pageserver
+                name: neon-pageserver
+            command:
+              - /bin/bash
+              - -c
+              - |
+                set -ex
+                trap : TERM INT
+                exec pageserver -D /data -c "id=1" -c "broker_endpoint='http://$NEON_BROKER_SVC:50051'" -c "listen_pg_addr='0.0.0.0:6400'" -c "listen_http_addr='0.0.0.0:9898'" -c "pg_distrib_dir='/opt/neondatabase-neon/pg_install'"
+---
+# Source: neon/templates/clusterversion.yaml
+apiVersion: apps.kubeblocks.io/v1alpha1
+kind: ClusterVersion
+metadata:
+  name: neon-pg14-1.0.0
+  labels:
+    helm.sh/chart: neon-0.9.0
+    app.kubernetes.io/name: neon
+    app.kubernetes.io/instance: my-neon
+    app.kubernetes.io/version: "pg14-1.0.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  clusterDefinitionRef: neon
+  componentVersions:
+    - componentDefRef: neon-compute
+      versionsContext:
+        containers:
+        - name: postgresql
+          image: docker.io/apecloud/neon:pg14-1.0.0
+    - componentDefRef: neon-storagebroker
+      versionsContext:
+        containers:
+        - name: neon-storagebroker
+          image: docker.io/apecloud/neon:pg14-1.0.0
+    - componentDefRef: neon-safekeeper
+      versionsContext:
+        containers:
+        - name: neon-safekeeper
+          image: docker.io/apecloud/neon:pg14-1.0.0
+    - componentDefRef: neon-pageserver
+      versionsContext:
+        containers:
+        - name: neon-pageserver
+          image: docker.io/apecloud/neon:pg14-1.0.0

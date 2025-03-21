@@ -1,0 +1,223 @@
+---
+# Source: wiremock/templates/configmap-config.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-wiremock-config
+  labels:
+    helm.sh/chart: wiremock-1.4.1
+    app.kubernetes.io/name: wiremock
+    app.kubernetes.io/instance: my-wiremock
+    app.kubernetes.io/version: "2.26.0"
+    app.kubernetes.io/managed-by: Helm
+    heritage: "Helm"
+    release: "my-wiremock"
+    chart: "wiremock-1.4.1"
+    consumer: "example"
+data:
+  init.sh: |
+    #!/bin/sh
+    
+    set -eu
+    
+    mkdir -p /working/mappings
+    mkdir -p /working/__files
+    
+    cp -L /config/status.json /working/mappings/status.json
+    
+    for mount_path in $(env | grep '^WMSTUBS' | cut -d'=' -f2)
+    do
+      cp -rL "${mount_path}/mappings" /working
+      cp -rL "${mount_path}/__files" /working
+    done
+  status.json: |
+    // provides the status endpoint for k8s readyness and liveness probes
+    {
+      "request" : {
+        "url" : "/status",
+        "method" : "GET"
+      },
+      "response" : {
+        "status" : "200",
+        "headers": {
+          "Content-Type": "application/json; charset=utf-8"
+        },
+        "jsonBody": {
+          "status": "ok"
+        }
+      }
+    }
+  log4j2.xml: |
+    <?xml version="1.0" encoding="UTF-8"?>
+    <Configuration status="ERROR">
+        <Properties>
+            <Property name="logLevel">${sys:wm.logging.level:-${env.WM_LOGGING_LEVEL:-info}}</Property>
+        </Properties>
+        <Appenders>
+            <Console name="console" target="SYSTEM_OUT">
+    			<PatternLayout pattern="%d{HH:mm:ss,SSS} %-5p [%mdc{RQID}] [%c{1}] %mdc{CTP}%mdc{EIID}%mdc{ESID}%mdc{EOID}%mdc{CID}- %m%n" />
+            </Console>
+        </Appenders>
+        <Loggers>
+            <Logger name="com.ninecookies.wiremock.extensions" level="${logLevel}" />
+            <Root level="info">
+                <AppenderRef ref="console" />
+            </Root>
+        </Loggers>
+    </Configuration>
+---
+# Source: wiremock/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-wiremock
+  labels:
+    helm.sh/chart: wiremock-1.4.1
+    app.kubernetes.io/name: wiremock
+    app.kubernetes.io/instance: my-wiremock
+    app.kubernetes.io/version: "2.26.0"
+    app.kubernetes.io/managed-by: Helm
+    heritage: "Helm"
+    release: "my-wiremock"
+    chart: "wiremock-1.4.1"
+    consumer: "example"
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 8080
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: wiremock
+    app.kubernetes.io/instance: my-wiremock
+    consumer: "example"
+---
+# Source: wiremock/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-wiremock
+  labels:
+    helm.sh/chart: wiremock-1.4.1
+    app.kubernetes.io/name: wiremock
+    app.kubernetes.io/instance: my-wiremock
+    app.kubernetes.io/version: "2.26.0"
+    app.kubernetes.io/managed-by: Helm
+    heritage: "Helm"
+    release: "my-wiremock"
+    chart: "wiremock-1.4.1"
+    consumer: "example"
+spec:
+  revisionHistoryLimit: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: wiremock
+      app.kubernetes.io/instance: my-wiremock
+      consumer: "example"
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        helm.sh/chart: wiremock-1.4.1
+        app.kubernetes.io/name: wiremock
+        app.kubernetes.io/instance: my-wiremock
+        app.kubernetes.io/version: "2.26.0"
+        app.kubernetes.io/managed-by: Helm
+        heritage: "Helm"
+        release: "my-wiremock"
+        chart: "wiremock-1.4.1"
+        consumer: "example"
+      annotations:
+        checksum/config: 153279983e0a91a64266710cbe628749d6607d2462934a59927b5336207d2fd6
+    spec:
+      initContainers:
+      - name: copy-stubs
+        image: "busybox:latest"
+        command: ['sh', '/config/init.sh']
+        volumeMounts:
+        - mountPath: /working
+          name: working
+        - mountPath: /config/init.sh
+          name: config
+          subPath: init.sh
+        - mountPath: /config/status.json
+          name: config
+          subPath: status.json
+      containers:
+      - name: wiremock
+        resources:
+          limits:
+            cpu: 2
+            memory: 3Gi
+          requests:
+            cpu: 1
+            memory: 3Gi
+        image: "rodolpheche/wiremock:2.26.0"
+        imagePullPolicy: IfNotPresent
+        ports:
+          - containerPort: 8080
+          - containerPort: 7091
+        env:
+          - name: JAVA_OPTS
+            value: "-Xms2G -Xmx2G -XX:MaxMetaspaceSize=256M -Dcom.sun.management.jmxremote.port=7091 -Dcom.sun.management.jmxremote.rmi.port=7091 -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false -Djava.rmi.server.hostname=127.0.0.1"
+        args:
+          - --disable-banner
+          - --no-request-journal
+          - --container-threads=300
+          - --async-response-enabled
+          - --async-response-threads=300
+          - --global-response-templating
+        readinessProbe:
+          httpGet:
+            path: /status
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        livenessProbe:
+          tcpSocket:
+            port: 8080
+          initialDelaySeconds: 80
+          periodSeconds: 20
+          timeoutSeconds: 5
+          failureThreshold: 2
+
+        volumeMounts:
+        - mountPath: /home/wiremock
+          name: working
+        - mountPath: /var/wiremock/lib/log4j2.xml
+          name: config
+          subPath: log4j2.xml
+      volumes:
+      - name: working
+        emptyDir: {}
+      - name: config
+        configMap:
+          name: my-wiremock-config
+---
+# Source: wiremock/templates/hpa.yaml
+apiVersion: autoscaling/v1
+kind: HorizontalPodAutoscaler
+metadata:
+  name: my-wiremock
+  labels:
+    helm.sh/chart: wiremock-1.4.1
+    app.kubernetes.io/name: wiremock
+    app.kubernetes.io/instance: my-wiremock
+    app.kubernetes.io/version: "2.26.0"
+    app.kubernetes.io/managed-by: Helm
+    heritage: "Helm"
+    release: "my-wiremock"
+    chart: "wiremock-1.4.1"
+    consumer: "example"
+spec:
+  scaleTargetRef:
+    kind: Deployment
+    apiVersion: apps/v1
+    name: my-wiremock
+  minReplicas: 1
+  maxReplicas: 40
+  targetCPUUtilizationPercentage: 40

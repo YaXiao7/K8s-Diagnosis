@@ -1,0 +1,462 @@
+---
+# Source: clair/charts/postgresql/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-clair-postgresql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-clair
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/version: 16.1.0
+    helm.sh/chart: postgresql-13.4.4
+automountServiceAccountToken: false
+---
+# Source: clair/charts/postgresql/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-clair-postgresql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-clair
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/version: 16.1.0
+    helm.sh/chart: postgresql-13.4.4
+type: Opaque
+data:
+  postgres-password: "ZE5Fb2N3QlJYcA=="
+  password: "Y2xhaXI="
+  # We don't auto-generate LDAP password when it's not provided as we do for other passwords
+---
+# Source: clair/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-clair-clair
+  labels:
+    app.kubernetes.io/name: clair
+    helm.sh/chart: clair-0.3.0
+    app.kubernetes.io/instance: my-clair
+    app.kubernetes.io/managed-by: Helm
+data:
+  config.yaml: |
+    clair:
+      database:
+        # Database driver
+        type: pgsql
+        options:
+          # PostgreSQL Connection string
+          # https://www.postgresql.org/docs/current/static/libpq-connect.html#LIBPQ-CONNSTRING
+          # This should be done using secrets or Vault, but for now this will also work
+          source: "postgres://clair:clair@my-clair-postgresql:5432/clair?sslmode=disable"
+          
+
+          # Number of elements kept in the cache
+          # Values unlikely to change (e.g. namespaces) are cached in order to save prevent needless roundtrips to the database.
+          cachesize: 16384
+
+          # 32-bit URL-safe base64 key used to encrypt pagination tokens
+          # If one is not provided, it will be generated.
+          # Multiple clair instances in the same cluster need the same value.
+          paginationkey: ""
+      api:
+        # v3 grpc/RESTful API server address
+        addr: "0.0.0.0:6060"
+
+        # Health server address
+        # This is an unencrypted endpoint useful for load balancers to check to healthiness of the clair server.
+        healthaddr: "0.0.0.0:6061"
+
+        # Deadline before an API request will respond with a 503
+        timeout: 900s
+
+        # Optional PKI configuration
+        # If you want to easily generate client certificates and CAs, try the following projects:
+        # https://github.com/coreos/etcd-ca
+        # https://github.com/cloudflare/cfssl
+        servername:
+        cafile:
+        keyfile:
+        certfile:
+
+      worker:
+        namespace_detectors:
+        - os-release
+        - lsb-release
+        - apt-sources
+        - alpine-release
+        - redhat-release
+
+        feature_listers:
+        - apk
+        - dpkg
+        - rpm
+
+      updater:
+        # Frequency the database will be updated with vulnerabilities from the default data sources
+        # The value 0 disables the updater entirely.
+        interval: "2h"
+        enabledupdaters:
+        - debian
+        - ubuntu
+        - rhel
+        - oracle
+        - alpine
+
+      notifier:
+        # Number of attempts before the notification is marked as failed to be sent
+        attempts: 3
+
+        # Duration before a failed notification is retried
+        renotifyinterval: 2h
+
+        http:
+          # Optional endpoint that will receive notifications via POST requests
+          endpoint: ""
+
+          # Optional PKI configuration
+          # If you want to easily generate client certificates and CAs, try the following projects:
+          # https://github.com/cloudflare/cfssl
+          # https://github.com/coreos/etcd-ca
+          servername:
+          cafile:
+          keyfile:
+          certfile:
+
+          # Optional HTTP Proxy: must be a valid URL (including the scheme).
+          proxy:
+---
+# Source: clair/charts/postgresql/templates/primary/svc-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-clair-postgresql-hl
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-clair
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/version: 16.1.0
+    helm.sh/chart: postgresql-13.4.4
+    app.kubernetes.io/component: primary
+  annotations:
+    # Use this annotation in addition to the actual publishNotReadyAddresses
+    # field below because the annotation will stop being respected soon but the
+    # field is broken in some versions of Kubernetes:
+    # https://github.com/kubernetes/kubernetes/issues/58662
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+spec:
+  type: ClusterIP
+  clusterIP: None
+  # We want all pods in the StatefulSet to have their addresses published for
+  # the sake of the other Postgresql pods even before they're ready, since they
+  # have to be able to talk to each other in order to become ready.
+  publishNotReadyAddresses: true
+  ports:
+    - name: tcp-postgresql
+      port: 5432
+      targetPort: tcp-postgresql
+  selector:
+    app.kubernetes.io/instance: my-clair
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/component: primary
+---
+# Source: clair/charts/postgresql/templates/primary/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-clair-postgresql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-clair
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/version: 16.1.0
+    helm.sh/chart: postgresql-13.4.4
+    app.kubernetes.io/component: primary
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+    - name: tcp-postgresql
+      port: 5432
+      targetPort: tcp-postgresql
+      nodePort: null
+  selector:
+    app.kubernetes.io/instance: my-clair
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/component: primary
+---
+# Source: clair/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-clair-clair
+  labels:
+    app.kubernetes.io/name: clair
+    helm.sh/chart: clair-0.3.0
+    app.kubernetes.io/instance: my-clair
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - name: api
+      port: 6060
+      protocol: TCP
+      targetPort: api
+    - name: health
+      port: 6061
+      protocol: TCP
+      targetPort: health
+  selector:
+    app.kubernetes.io/name: clair
+    app.kubernetes.io/instance: my-clair
+---
+# Source: clair/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-clair-clair
+  labels:
+    app.kubernetes.io/name: clair
+    helm.sh/chart: clair-0.3.0
+    app.kubernetes.io/instance: my-clair
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: clair
+      app.kubernetes.io/instance: my-clair
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: clair
+        helm.sh/chart: clair-0.3.0
+        app.kubernetes.io/instance: my-clair
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      volumes:
+        - name: "clair-config"
+          configMap:
+            name: my-clair-clair
+      containers:
+        - name: clair
+          image: "quay.io/coreos/clair:v2.1.8"
+          imagePullPolicy: IfNotPresent
+          args:
+            - "-log-level=debug"
+          ports:
+            - name: api
+              containerPort: 6060
+              protocol: TCP
+            - name: health
+              containerPort: 6061
+              protocol: TCP
+          livenessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+            httpGet:
+              path: /health
+              port: 6061
+          readinessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+            httpGet:
+              path: /health
+              port: 6061
+          volumeMounts:
+            - name: "clair-config"
+              mountPath: /etc/clair
+          resources:
+            limits:
+              cpu: 2
+              memory: 3Gi
+            requests:
+              cpu: 50m
+              memory: 2Gi
+---
+# Source: clair/charts/postgresql/templates/primary/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-clair-postgresql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-clair
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/version: 16.1.0
+    helm.sh/chart: postgresql-13.4.4
+    app.kubernetes.io/component: primary
+spec:
+  replicas: 1
+  serviceName: my-clair-postgresql-hl
+  updateStrategy:
+    rollingUpdate: {}
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: my-clair
+      app.kubernetes.io/name: postgresql
+      app.kubernetes.io/component: primary
+  template:
+    metadata:
+      name: my-clair-postgresql
+      labels:
+        app.kubernetes.io/instance: my-clair
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: postgresql
+        app.kubernetes.io/version: 16.1.0
+        helm.sh/chart: postgresql-13.4.4
+        app.kubernetes.io/component: primary
+    spec:
+      serviceAccountName: my-clair-postgresql
+      
+      automountServiceAccountToken: false
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/instance: my-clair
+                    app.kubernetes.io/name: postgresql
+                    app.kubernetes.io/component: primary
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+        fsGroupChangePolicy: Always
+        supplementalGroups: []
+        sysctls: []
+      hostNetwork: false
+      hostIPC: false
+      containers:
+        - name: postgresql
+          image: docker.io/bitnami/postgresql:11.14.0-debian-10-r57
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 1001
+            seccompProfile:
+              type: RuntimeDefault
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: POSTGRESQL_PORT_NUMBER
+              value: "5432"
+            - name: POSTGRESQL_VOLUME_DIR
+              value: "/bitnami/postgresql"
+            - name: PGDATA
+              value: "/bitnami/postgresql/data"
+            # Authentication
+            - name: POSTGRES_USER
+              value: "clair"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-clair-postgresql
+                  key: password
+            - name: POSTGRES_POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-clair-postgresql
+                  key: postgres-password
+            - name: POSTGRES_DATABASE
+              value: "clair"
+            # Replication
+            # Initdb
+            # Standby
+            # LDAP
+            - name: POSTGRESQL_ENABLE_LDAP
+              value: "no"
+            # TLS
+            - name: POSTGRESQL_ENABLE_TLS
+              value: "no"
+            # Audit
+            - name: POSTGRESQL_LOG_HOSTNAME
+              value: "false"
+            - name: POSTGRESQL_LOG_CONNECTIONS
+              value: "false"
+            - name: POSTGRESQL_LOG_DISCONNECTIONS
+              value: "false"
+            - name: POSTGRESQL_PGAUDIT_LOG_CATALOG
+              value: "off"
+            # Others
+            - name: POSTGRESQL_CLIENT_MIN_MESSAGES
+              value: "error"
+            - name: POSTGRESQL_SHARED_PRELOAD_LIBRARIES
+              value: "pgaudit"
+          ports:
+            - name: tcp-postgresql
+              containerPort: 5432
+          livenessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - exec pg_isready -U "clair" -d "dbname=clair" -h 127.0.0.1 -p 5432
+          readinessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - -e
+                - |
+                  exec pg_isready -U "clair" -d "dbname=clair" -h 127.0.0.1 -p 5432
+                  [ -f /opt/bitnami/postgresql/tmp/.initialized ] || [ -f /bitnami/postgresql/.initialized ]
+          resources:
+            limits: {}
+            requests:
+              cpu: 250m
+              memory: 256Mi
+          volumeMounts:
+            - name: dshm
+              mountPath: /dev/shm
+            - name: data
+              mountPath: /bitnami/postgresql
+      volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+  volumeClaimTemplates:
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: data
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "1Gi"

@@ -1,0 +1,103 @@
+---
+# Source: koherence/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-koherence-provider-env
+type: Opaque
+data:
+---
+# Source: koherence/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-koherence-script
+data:
+  main.sh: |
+    #!/bin/sh
+  
+    set -x
+    set -e
+  
+    # Copy binaries to host
+    /bin/cp /usr/bin/koherence /usr/bin/jq -t /run/koherence/
+  
+    /bin/nsenter -m/proc/1/ns/mnt /run/koherence/koherence serve
+---
+# Source: koherence/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-koherence-env
+data:
+---
+# Source: koherence/templates/daemonset.yaml
+kind: DaemonSet
+apiVersion: apps/v1
+metadata:
+  name: my-koherence
+  namespace: default
+  labels:
+    helm.sh/chart: koherence-0.3.2
+    app.kubernetes.io/name: koherence
+    app.kubernetes.io/instance: my-koherence
+    app.kubernetes.io/version: "0.2.3"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: koherence
+      app.kubernetes.io/instance: my-koherence
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: koherence
+        app.kubernetes.io/instance: my-koherence
+    spec:
+      volumes:
+        - name: my-koherence-script
+          configMap :
+            name: my-koherence-script
+            defaultMode: 0744
+        - name: host-run-my-koherence
+          hostPath:
+            path: /run/koherence
+            type: DirectoryOrCreate
+        - name: my-koherence-config
+          configMap:
+            name: my-koherence-config
+            defaultMode: 420
+      containers:
+        - name: koherence
+          image: ghcr.io/wiremind/koherence:v0.2.3
+          imagePullPolicy: IfNotPresent
+          command:
+            - /tmp/script/main.sh
+          volumeMounts:
+            - name: my-koherence-script
+              mountPath: /tmp/script
+            - name: host-run-my-koherence
+              mountPath: /run/koherence
+          env:
+            - name: NO_COLOR
+              value: "true"
+            - name: KUBE_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          envFrom:
+            - configMapRef:
+                name: my-koherence-env
+            - secretRef:
+                name: my-koherence-provider-env
+          securityContext:
+            allowPrivilegeEscalation: true
+            privileged: true
+            readOnlyRootFilesystem: true
+      hostPID: true
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 10
+      maxSurge: 0
+  revisionHistoryLimit: 10

@@ -1,0 +1,75 @@
+---
+# Source: argocd-ecr-updater/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-argocd-ecr-updater
+  labels:
+    chart: argocd-ecr-updater-4.1.0
+    app: argocd-ecr-updater
+    release: "my-argocd-ecr-updater"
+    heritage: "Helm"
+---
+# Source: argocd-ecr-updater/templates/cluster-role-binding.yml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-argocd-ecr-updater-configure-rbac
+subjects:
+  - kind: ServiceAccount
+    name: my-argocd-ecr-updater # we are just giving our deafult account more access OR  you can Reference to upper's `metadata.name`
+    namespace: default 
+roleRef:
+  kind: ClusterRole
+  name: cluster-admin
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: argocd-ecr-updater/templates/cronjob.yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  annotations:
+  name: argocd-ecr-updater-cronjob
+spec:
+  concurrencyPolicy: Allow
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+        spec:
+          serviceAccountName: my-argocd-ecr-updater
+          containers:
+          - command:
+            - /bin/sh
+            - -c
+            - |-
+              ARGO_NAMESPACES="default"
+              AWS_TOKEN=`aws ecr get-login --region default --registry-ids default | cut -d' ' -f6`
+              echo "ENV variables setup done."
+              
+              for namespace in $ARGO_NAMESPACES
+              do
+                  kubectl get secrets -n $namespace -l argocd.argoproj.io/secret-type=repository -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' | grep "^default" | \
+                xargs -I {} kubectl patch secret {} -n $namespace -p '{"data":{"password":"'`echo $AWS_TOKEN | base64 | tr -d '\n'`'"}}'
+              done
+
+              echo "All done."
+            image: odaniait/aws-kubectl:latest
+            imagePullPolicy: IfNotPresent
+            name: ecr-cred-helper
+            resources: {}
+            securityContext:
+              capabilities: {}
+            terminationMessagePath: /dev/termination-log
+            terminationMessagePolicy: File
+          dnsPolicy: Default
+          hostNetwork: true
+          restartPolicy: Never
+          schedulerName: default-scheduler
+          securityContext: {}
+          terminationGracePeriodSeconds: 30
+  schedule: "0 0/6 * * *"
+  successfulJobsHistoryLimit: 3
+  suspend: false

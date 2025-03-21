@@ -1,0 +1,180 @@
+---
+# Source: apiping/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-apiping
+data:
+  ADDR: :8080
+  HEALTH_ADDR: :8888
+  HEALTH_PATH: /health
+  INTERVAL: 20s
+  METRICS_ADDR: :3000
+  METRICS_BUCKETS_LATENCY_CLIENT: 0.0001, 0.00025, 0.0005, 0.001, 0.0025, 0.005, 0.01,
+    0.025, 0.05, 0.1, 0.25, .5, 1
+  METRICS_BUCKETS_LATENCY_SERVER: 0.000005, 0.00001, 0.000025, 0.00005, 0.0001, 0.00025,
+    0.0005, 0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1
+  METRICS_NAMESPACE: ""
+  METRICS_PATH: /metrics
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger-collector:14268
+  OTEL_PROPAGATORS: b3multi
+  OTEL_TRACES_EXPORTER: jaeger
+  OTEL_TRACES_SAMPLER: parentbased_traceidratio
+  OTEL_TRACES_SAMPLER_ARG: "0.01"
+  OTELCONFIG_EXPORTER: jaeger
+  ROUTE: /ping
+  TARGETS: '["http://localhost:8080/ping"]'
+  TIMEOUT: 15s
+---
+# Source: apiping/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-apiping
+  labels:
+    helm.sh/chart: apiping-1.3.7
+    app.kubernetes.io/name: apiping
+    app.kubernetes.io/instance: my-apiping
+    app.kubernetes.io/version: "1.3.7"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: apiping
+    app.kubernetes.io/instance: my-apiping
+---
+# Source: apiping/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-apiping
+  labels:
+    helm.sh/chart: apiping-1.3.7
+    app.kubernetes.io/name: apiping
+    app.kubernetes.io/instance: my-apiping
+    app.kubernetes.io/version: "1.3.7"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: apiping
+      app.kubernetes.io/instance: my-apiping
+  template:
+    metadata:
+      annotations:
+        rollme: "92nc5"
+        prometheus.io/path: /metrics
+        prometheus.io/port: "3000"
+        prometheus.io/scrape: "true"
+        sidecar.istio.io/inject: "true"
+      labels:
+        app.kubernetes.io/name: apiping
+        app.kubernetes.io/instance: my-apiping
+        app: apiping
+    spec:
+      serviceAccountName: default
+      securityContext:
+        {}
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      containers:
+        - name: my-apiping
+          securityContext:
+            {}
+          image: "udhos/apiping:1.3.7"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          envFrom:
+          - configMapRef:
+              name: my-apiping
+          startupProbe:
+            # must initialize within 3*100=300 seconds
+            httpGet:
+              path: /health
+              port: 8888
+            periodSeconds: 3
+            failureThreshold: 100
+          readinessProbe:
+            # not ready after 10*6=60 seconds without success
+            httpGet:
+              path: /health
+              port: 8888
+              scheme: HTTP
+            periodSeconds: 10
+            failureThreshold: 6
+            successThreshold: 1
+            timeoutSeconds: 5
+          livenessProbe:
+            # kill after 20*6=120 seconds without success
+            httpGet:
+              path: /health
+              port: 8888
+              scheme: HTTP
+            periodSeconds: 20
+            failureThreshold: 6
+            successThreshold: 1
+            timeoutSeconds: 10            
+          resources:
+            limits:
+              cpu: 2000m
+              ephemeral-storage: 200Mi
+              memory: 300Mi
+            requests:
+              cpu: 300m
+              ephemeral-storage: 100Mi
+              memory: 100Mi
+---
+# Source: apiping/templates/hpa.yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: my-apiping
+  labels:
+    helm.sh/chart: apiping-1.3.7
+    app.kubernetes.io/name: apiping
+    app.kubernetes.io/instance: my-apiping
+    app.kubernetes.io/version: "1.3.7"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: my-apiping
+  minReplicas: 1
+  maxReplicas: 100
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        averageUtilization: 80
+        type: Utilization
+---
+# Source: apiping/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-apiping-test-connection"
+  labels:
+    helm.sh/chart: apiping-1.3.7
+    app.kubernetes.io/name: apiping
+    app.kubernetes.io/instance: my-apiping
+    app.kubernetes.io/version: "1.3.7"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-apiping:8080/ping']
+  restartPolicy: Never

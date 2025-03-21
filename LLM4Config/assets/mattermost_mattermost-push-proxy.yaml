@@ -1,0 +1,226 @@
+---
+# Source: mattermost-push-proxy/templates/secrets.yaml
+# Conditionally create the Apple certs secret if externalSecrets are not enabled
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-mattermost-push-proxy-apple-certs
+  labels:
+    app.kubernetes.io/name: mattermost-push-proxy
+    app.kubernetes.io/instance: my-mattermost-push-proxy
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: mattermost-push-proxy-0.13.0
+data:
+  apple_auth_key: ""
+  apple_cert: ""
+  apple_rn_cert: ""
+  apple_rnbeta_cert: ""
+---
+# Source: mattermost-push-proxy/templates/secrets.yaml
+# Conditionally create the Android service files secret if externalSecrets are not enabled
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-mattermost-push-proxy-android-service-files
+  labels:
+    app.kubernetes.io/name: mattermost-push-proxy
+    app.kubernetes.io/instance: my-mattermost-push-proxy
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: mattermost-push-proxy-0.13.0
+data:
+  android_serviceFile: "IiI="
+  android_rn_serviceFile: "IiI="
+---
+# Source: mattermost-push-proxy/templates/configmap-mattermost-push-proxy.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-mattermost-push-proxy-push-config-template
+  labels:
+    app.kubernetes.io/name: mattermost-push-proxy
+    app.kubernetes.io/instance: my-mattermost-push-proxy
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: mattermost-push-proxy-0.13.0
+data:
+  push-config.json: |
+    {
+        "ListenAddress":":8066",
+        "ThrottlePerSec":300,
+        "ThrottleMemoryStoreSize":50000,
+        "ThrottleVaryByHeader":"X-Forwarded-For",
+        "EnableMetrics": true,
+        "SendTimeoutSec": 30,
+        "ApplePushSettings":[
+            {
+                "Type":"apple",
+                "ApplePushUseDevelopment":false,
+                "ApplePushCertPrivate":"",
+                "AppleAuthKeyFile":"",
+                "AppleAuthKeyID":"",
+                "AppleTeamID":"",
+                "ApplePushCertPassword":"",
+                "ApplePushTopic":"com.mattermost.Mattermost"
+            },
+            {
+                "Type":"apple_rn",
+                "ApplePushUseDevelopment":false,
+                "ApplePushCertPrivate":"",
+                "AppleAuthKeyFile":"",
+                "AppleAuthKeyID":"",
+                "AppleTeamID":"",
+                "ApplePushCertPassword":"",
+                "ApplePushTopic":"com.mattermost.react.native"
+            },
+            {
+                "Type":"apple_rnbeta",
+                "ApplePushUseDevelopment":false,
+                "ApplePushCertPrivate":"",
+                "AppleAuthKeyFile":"",
+                "AppleAuthKeyID":"",
+                "AppleTeamID":"",
+                "ApplePushCertPassword":"",
+                "ApplePushTopic":""
+            }
+        ],
+        "AndroidPushSettings":[
+            {
+                "Type":"android",
+                "ServiceFileLocation":""
+            },
+            {
+                "Type":"android_rn",
+                "ServiceFileLocation":""
+            }
+        ]
+    }
+---
+# Source: mattermost-push-proxy/templates/tests/mattermost-push-proxy-config-test.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-mattermost-push-proxy-app-tests
+  labels:
+    app.kubernetes.io/name: mattermost-push-proxy
+    app.kubernetes.io/instance: my-mattermost-push-proxy
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: mattermost-push-proxy-0.13.0
+data:
+  run.sh: |-
+    #!/usr/bin/env bats
+    @test "Testing Mattermost Push Proxy is accessible" {
+      url="http://my-mattermost-push-proxy.default.svc.cluster.local:8066"
+      code=$(wget --server-response --spider --timeout 10 --tries 1 ${url} 2>&1 | awk '/^  HTTP/{print $2}')
+      [ "$code" == "200" ]
+    }
+---
+# Source: mattermost-push-proxy/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-mattermost-push-proxy
+  labels:
+    app.kubernetes.io/name: mattermost-push-proxy
+    app.kubernetes.io/instance: my-mattermost-push-proxy
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart:  mattermost-push-proxy-0.13.0
+spec:
+  type: ClusterIP
+  ports:
+    - name: mattermost-push-proxy
+      port: 8066
+      targetPort: 8066
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: mattermost-push-proxy
+    app.kubernetes.io/instance: my-mattermost-push-proxy
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: server
+---
+# Source: mattermost-push-proxy/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-mattermost-push-proxy
+  labels:
+    app.kubernetes.io/name: mattermost-push-proxy
+    app.kubernetes.io/instance: my-mattermost-push-proxy
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: server
+    helm.sh/chart: mattermost-push-proxy-0.13.0
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mattermost-push-proxy
+      app.kubernetes.io/instance: my-mattermost-push-proxy
+      app.kubernetes.io/managed-by: Helm
+      app.kubernetes.io/component: server
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8066"
+        prometheus.io/path: "/metrics"
+      labels:
+        app.kubernetes.io/name: mattermost-push-proxy
+        app.kubernetes.io/instance: my-mattermost-push-proxy
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/component: server
+        helm.sh/chart: mattermost-push-proxy-0.13.0
+    spec:
+      containers:
+        - name: mattermost-push-proxy
+          image: "mattermost/mattermost-push-proxy:6.2.0"
+          imagePullPolicy: Always
+          args:
+            - "--config"
+            - "/mattermost-push-proxy/config/config.json"
+          ports:
+            - containerPort: 8066
+          volumeMounts:
+            - mountPath: "/mattermost-push-proxy/config/config.json"
+              name: "push-config-template"
+              subPath: "push-config.json"
+          resources:
+            
+            {}
+      volumes:
+        - name: "push-config-template"
+          configMap:
+            name: my-mattermost-push-proxy-push-config-template
+            items:
+              - key: "push-config.json"
+                path: "push-config.json"
+---
+# Source: mattermost-push-proxy/templates/tests/mattermost-push-proxy-test.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-mattermost-push-proxy-app-test-si5gh"
+  labels:
+    app.kubernetes.io/name: mattermost-push-proxy
+    app.kubernetes.io/instance: my-mattermost-push-proxy
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: mattermost-push-proxy-0.13.0
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  containers:
+  - name: my-mattermost-push-proxy-app-test
+    image: bats/bats:v1.1.0
+    imagePullPolicy: Always
+    command: ["/opt/bats/bin/bats", "-t", "/tests/run.sh"]
+    volumeMounts:
+    - mountPath: /tests
+      name: tests
+      readOnly: true
+    - mountPath: /tools
+      name: tools
+  volumes:
+  - name: tests
+    configMap:
+      name: my-mattermost-push-proxy-app-tests
+  - name: tools
+    emptyDir: {}
+  restartPolicy: Never

@@ -1,0 +1,1625 @@
+---
+# Source: cernbox/charts/ocis/templates/configmap-configfiles.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-cernbox-ocis-configfiles
+  labels:
+    helm.sh/chart: ocis-0.0.9
+    app.kubernetes.io/name: ocis
+    app.kubernetes.io/instance: my-cernbox
+    app.kubernetes.io/version: "1.20.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+  # indentifier_registration.yaml - used by IDP to register the oidc clients
+  identifier_registration.yaml: |-
+      clients:
+        - id: swan
+          secret: 4a045535-6b99-49d3-bf41-8b410cd965a6
+          name: SWAN
+          application_type: native
+        - id: web
+          name: ownCloud web app
+          trusted: yes
+          redirect_uris:
+            - https://https://ocis-idp.local/
+            - https://https://ocis-idp.local//oidc-callback.html
+            - https://https://ocis-idp.local//oidc-silent-redirect.html
+          origins:
+            - https://https://ocis-idp.local/
+  # proxy.yaml - routing configuration for ocis proxy
+  proxy.yaml:  |-
+    policies:  
+    - name: ocis
+      routes:
+      - type: ""
+        endpoint: /
+        backend: http://my-cernbox-cernbox-web
+        service: ""
+        apache-vhost: false
+      - type: ""
+        endpoint: /.well-known/
+        backend: http://localhost:9130
+        service: ""
+        apache-vhost: false
+      - type: ""
+        endpoint: /konnect/
+        backend: http://localhost:9130
+        service: ""
+        apache-vhost: false
+      - type: ""
+        endpoint: /signin/
+        backend: http://localhost:9130
+        service: ""
+        apache-vhost: false
+      - type: ""
+        endpoint: /archiver # gateway
+        backend: http://localhost:9140
+        service: ""
+        apache-vhost: false
+      - type: ""
+        endpoint: /ocs/
+        backend: http://my-cernbox-gateway:9143
+        service: ""
+        apache-vhost: false
+      - type: query
+        endpoint: /remote.php/?preview=1 # gateway
+        backend: http://my-cernbox-gateway:9143
+        service: ""
+        apache-vhost: false
+      - type: ""
+        endpoint: /remote.php/ # gateway
+        backend: http://my-cernbox-gateway:9143
+        service: ""
+        apache-vhost: false
+      - type: ""
+        endpoint: /dav/ # gateway
+        backend: http://my-cernbox-gateway:9143
+        service: ""
+        apache-vhost: false
+      - type: ""
+        endpoint: /webdav/ # gateway
+        backend: http://my-cernbox-gateway:9143 
+        service: ""
+        apache-vhost: false
+      - type: ""
+        endpoint: /status.php # gateway
+        backend: http://my-cernbox-gateway:9143
+        service: ""
+        apache-vhost: false
+      - type: ""
+        endpoint: /index.php/
+        backend: http://my-cernbox-gateway:9143
+        service: ""
+        apache-vhost: false
+      - type: ""
+        endpoint: /apps/
+        backend: http://my-cernbox-gateway:9143
+        service: ""
+        apache-vhost: false
+      - type: ""
+        endpoint: /data
+        backend: http://localhost:9140
+        service: ""
+        apache-vhost: false
+      - type: ""
+        endpoint: /app/
+        backend: http://localhost:9140
+        service: ""
+        apache-vhost: false
+      - type: ""
+        endpoint: /graph/
+        backend: http://localhost:9120
+        service: ""
+        apache-vhost: false
+      - type: ""
+        endpoint: /graph-explorer
+        backend: http://localhost:9135
+        service: ""
+        apache-vhost: false
+      - type: ""
+        endpoint: /api/v0/accounts
+        backend: http://localhost:9181
+        service: ""
+        apache-vhost: false
+      - type: ""
+        endpoint: /accounts.js
+        backend: http://localhost:9181
+        service: ""
+        apache-vhost: false
+      - type: ""
+        endpoint: /api/v0/settings
+        backend: http://localhost:9190
+        service: ""
+        apache-vhost: false
+      - type: ""
+        endpoint: /settings.js
+        backend: http://localhost:9190
+        service: ""
+        apache-vhost: false
+      ingress:
+        enabled: true
+        hosts:
+        exposeIdp: true
+---
+# Source: cernbox/charts/ocis/templates/configmap-supervisord.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-cernbox-ocis-supervisord-conf
+  labels:
+    helm.sh/chart: ocis-0.0.9
+    app.kubernetes.io/name: ocis
+    app.kubernetes.io/instance: my-cernbox
+    app.kubernetes.io/version: "1.20.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+  supervisord.conf: |
+    ; Directives for supervisord
+    [supervisord]
+    ;logfile=/var/log/supervisor/supervisord.log ; (main log file;default $CWD/supervisord.log)
+    ;logfile_maxbytes=50MB                       ; (max main logfile bytes b4 rotation;default 50MB)
+    ;logfile_backups=10                          ; (num of main logfile rotation backups;default 10)
+    loglevel=info                                ; (log level;default info; others: debug,warn,trace)
+    pidfile=/var/run/supervisord.pid             ; (supervisord pidfile;default supervisord.pid)
+    nodaemon=true                                ; (start in foreground if true;default false)
+    minfds=1024                                  ; (min. avail startup file descriptors;default 1024)
+    minprocs=200                                 ; (min. avail process descriptors;default 200)
+    ;umask=022                                   ; (process file creation umask;default 022)
+    user=root                                    ; (default is current user, required if root)
+    ;identifier=supervisor                       ; (supervisord identifier, default is 'supervisor')
+    ;directory=/tmp                              ; (default is not to cd during start)
+    ;nocleanup=true                              ; (don't clean up tempfiles at start;default false)
+    ;childlogdir=/tmp                            ; ('AUTO' child log dir, default $TEMP)
+    ;environment=KEY=value                       ; (key value pairs to add to environment)
+    ;strip_ansi=false                            ; (strip ansi escape codes in logs; def. false)
+
+    ; Allow using supervisorctl to interact with supervisord
+    [unix_http_server]
+    file=/var/run/supervisor.sock                ; (the path to the socket file)
+    ;chmod=0700                                  ; sockef file mode (default 0700)
+    ;chown=nobody:nogroup                        ; socket file uid:gid owner
+    username=admin                               ; (default is no username (open server))
+    password=admin                               ; (default is no password (open server))
+    [rpcinterface:supervisor]
+    supervisor.rpcinterface_factory=supervisor.rpcinterface:make_main_rpcinterface
+    [supervisorctl]
+    serverurl=unix:///var/run/supervisor.sock    ; use a unix:// URL  for a unix socket
+    username=admin                               ; should be same as http_username if set
+    password=admin                               ; should be same as http_password if set
+    ;prompt=mysupervisor                         ; cmd line prompt (default "supervisor")
+    ;history_file=~/.sc_history                  ; use readline history if available
+
+    ; Load additional configuration files
+    [include]
+    files = /etc/supervisord.d/*.ini
+
+    ; Quit supervisord if all controlled processes enter a failed state
+    [eventlistener:watch_processes]
+    command=sh -c "printf 'READY\n' && while read line; do kill -SIGQUIT $PPID; done < /dev/stdin"
+    events=PROCESS_STATE_EXITED,PROCESS_STATE_FATAL
+---
+# Source: cernbox/charts/ocis/templates/configmap-supervisord.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-cernbox-ocis-supervisord-procs
+  labels:
+    helm.sh/chart: ocis-0.0.9
+    app.kubernetes.io/name: ocis
+    app.kubernetes.io/instance: my-cernbox
+    app.kubernetes.io/version: "1.20.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+  ocis-proxy.ini: |
+    [program:ocis-proxy]
+    command=/usr/bin/ocis proxy server
+    startsecs=10
+    startretries=5
+    ;exitcodes=0,2
+    ;stopsignal=QUIT
+    ;stopwaitsecs=10
+    user=root
+    redirect_stderr=true
+    stdout_logfile=/var/log/ocis-proxy.log
+    stdout_logfile_maxbytes=10MB
+    ;stdout_logfile_backups=10
+    ;environment=A=1,B=2
+  ocis-idp.ini: |
+    [program:ocis-idp]
+    command=/usr/bin/ocis idp server
+    startsecs=10
+    startretries=5
+    ;exitcodes=0,2
+    ;stopsignal=QUIT
+    ;stopwaitsecs=10
+    user=root
+    redirect_stderr=true
+    stdout_logfile=/var/log/ocis-idp.log
+    stdout_logfile_maxbytes=10MB
+    ;stdout_logfile_backups=10
+    ;environment=A=1,B=2
+---
+# Source: cernbox/templates/authprovider-bearer.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: authprovider-bearer-config
+  labels:
+    helm.sh/chart: cernbox-0.0.4
+    app.kubernetes.io/name: cernbox
+    app.kubernetes.io/instance: my-cernbox
+    app.kubernetes.io/version: "1.4.1"
+    app.kubernetes.io/managed-by: Helm
+data:
+  revad.toml: |-
+    [shared]
+    gatewaysvc = "my-cernbox-gateway:9142"
+    jwt_secret = "POZSOrlP7AgnTxH7MJebWV8ohvsApgbd4u3Joen30c"
+
+    [grpc]
+    address = "0.0.0.0:9158"
+
+    [grpc.services.authprovider]
+    auth_manager = "oidc"
+
+    [grpc.services.authprovider.auth_managers.oidc]
+    insecure = true
+    issuer = 
+    id_claim = "name"
+    uid_claim = "uid"
+    gid_claim = "gid"
+    gatewaysvc = "my-cernbox-gateway:9142"
+---
+# Source: cernbox/templates/authprovider-machine.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: authprovider-machine-config
+  labels:
+    helm.sh/chart: cernbox-0.0.4
+    app.kubernetes.io/name: cernbox
+    app.kubernetes.io/instance: my-cernbox
+    app.kubernetes.io/version: "1.4.1"
+    app.kubernetes.io/managed-by: Helm
+data:
+  revad.toml: |-
+    [shared]
+    gatewaysvc = "localhost:9142"
+    jwt_secret = "POZSOrlP7AgnTxH7MJebWV8ohvsApgbd4u3Joen30c"
+
+    [grpc]
+    address = "0.0.0.0:9166"
+
+    [grpc.services.authprovider]
+    auth_manager = "machine"
+
+    [grpc.services.authprovider.auth_managers.machine]
+    api_key = "random_api_key"
+    gateway_addr = "my-cernbox-gateway:9142"
+---
+# Source: cernbox/templates/gateway.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gateway-config
+  labels:
+    helm.sh/chart: cernbox-0.0.4
+    app.kubernetes.io/name: cernbox
+    app.kubernetes.io/instance: my-cernbox
+    app.kubernetes.io/version: "1.4.1"
+    app.kubernetes.io/managed-by: Helm
+data:
+  revad.toml: |-
+    [shared]
+    gatewaysvc = "localhost:9142"
+    jwt_secret = "POZSOrlP7AgnTxH7MJebWV8ohvsApgbd4u3Joen30c"
+
+    [grpc]
+    address = "0.0.0.0:9142"
+
+    [grpc.services.gateway]
+    commit_share_to_storage_grant = true
+    commit_share_to_storage_ref = true
+    disable_home_creation_on_login = false
+    transfer_shared_secret = "replace-me-with-a-transfer-secret"
+    transfer_expires = 86400
+    share_folder = "MyShares"
+    usershareprovidersvc = "localhost:9142"
+    publicshareprovidersvc = "localhost:9142"
+    datagateway = "http://localhost:9143/data"
+
+    [grpc.services.authprovider]
+    auth_manager = "ldap"
+
+    [grpc.services.authprovider.auth_managers.ldap]
+    hostname = "my-cernbox-ldap"
+    port = 636
+    insecure = true
+    base_dn = "dc=owncloud,dc=com"
+    loginfilter = "(&(objectclass=inetOrgPerson)(objectclass=owncloud)(|(uid={{login}})(mail={{login}})))"
+    bind_username = "cn=readuser,dc=owncloud,dc=com"
+    bind_password = "readuser"
+    schema = { dn = "dn", uid = "cn", mail = "mail", displayName = "displayname", cn = "cn" }
+    gatewaysvc = "localhost:9142"
+
+    [grpc.services.authregistry]
+    driver = "static"
+
+    [grpc.services.authregistry.drivers.static.rules]
+    basic = "localhost:9142"
+    publicshares = "my-cernbox-storageproviderpublic:9278"
+    machine = "my-cernbox-authprovidermachine:9166"
+    bearer = "my-cernbox-authproviderbearer:9158"
+
+    [grpc.services.userprovider]
+    driver = "ldap"
+
+    [grpc.services.userprovider.drivers.ldap]
+    hostname="my-cernbox-ldap"
+    port = 636
+    insecure = true
+    base_dn = "dc=owncloud,dc=com"
+    userfilter="(&(objectclass=owncloud)(cn=%s))"
+    findfilter="(&(objectclass=owncloud)(|(uid={{query}}*)(cn={{query}}*)(displayname={{query}}*)(mail={{query}}*)(description={{query}}*)))"
+    attributefilter="(&(objectclass=owncloud)({{attr}}={{value}}))"
+    groupfilter="(objectclass=owncloud)"
+    bind_username = "cn=readuser,dc=owncloud,dc=com"
+    bind_password = "readuser"
+
+    [grpc.services.userprovider.drivers.ldap.schema]
+    uid="uid"
+    displayName="displayName"
+    dn="dn"
+    cn="cn"
+    mail="mail"
+
+    [grpc.services.groupprovider]
+    driver = "ldap"
+
+    [grpc.services.groupprovider.drivers.ldap]
+    hostname="my-cernbox-ldap"
+    port = 636
+    insecure = true
+    base_dn = "dc=owncloud,dc=com"
+    groupfilter="(objectclass=owncloud)"
+    findfilter="(&(objectclass=posixGroup)(|(cn={{query}}*)(displayname={{query}}*)(mail={{query}}*)))"
+    attributefilter="(&(objectclass=posixGroup)({{attr}}={{value}}))"
+    memberfilter="(&(objectclass=posixAccount)(cn={{.OpaqueId}}))"
+    bind_username = "cn=readuser,dc=owncloud,dc=com"
+    # needs to be templated (for local dev purposes, idp should be ${HOSTNAME})
+    bind_password = "readuser"
+
+    [grpc.services.groupprovider.drivers.ldap.schema]
+    gid="cn"
+    displayName="cn"
+    dn="dn"
+    cn="cn"
+
+    [grpc.services.storageregistry]
+    driver = "static"
+
+    [grpc.services.storageregistry.drivers.static]
+    home_provider = "/home"
+
+    [grpc.services.storageregistry.drivers.static.rules]
+    "/home" = { address = "my-cernbox-storageproviderhome:18000" }
+    "/eos/user" = { address = "my-cernbox-storageprovideruser:16000" }
+    "eos" = { address = "my-cernbox-storageprovideruser:16000" }
+    "/public" = { address = "my-cernbox-storageproviderpublic:9278" }
+    "public-storage" = { address = "my-cernbox-storageproviderpublic:9278" }
+
+    [grpc.services.publicshareprovider]
+    driver = "sql"
+    allowed_paths_for_shares = ["^/eos/user/[a-z]/[0-9a-z\\-]+/.+", "^/eos/project/[a-z]/[0-9a-z\\-]+/.+"]
+
+    [grpc.services.publicshareprovider.drivers.sql]
+    db_username = "root"
+    db_password = "reva"
+    db_host = "my-cernbox-mariadb"
+    db_port = 3306
+    db_name = "my_database"
+    password_hash_cost = 11
+    enable_expired_shares_cleanup = false
+    janitor_run_interval = 60
+
+    [grpc.services.usershareprovider]
+    driver = "sql"
+    allowed_paths_for_shares = ["^/eos/user/[a-z]/[0-9a-z\\-]+/.+", "^/eos/project/[a-z]/[0-9a-z\\-]+/.+"]
+
+    [grpc.services.usershareprovider.drivers.sql]
+    db_username = "root"
+    db_password = "reva"
+    db_host = "my-cernbox-mariadb"
+    db_port = 3306
+    db_name = "my_database"
+    password_hash_cost = 11
+    enable_expired_shares_cleanup = false
+    janitor_run_interval = 60
+
+    [http]
+    address = "0.0.0.0:9143"
+
+    [http.services.datagateway]
+    transfer_shared_secret = "replace-me-with-a-transfer-secret"
+    timeout = 86400
+    insecure = true
+    prefix = "data"
+
+    [http.services.ocdav]
+    files_namespace = "/eos/{{substr 0 1 .Username}}"
+    timeout = 86400
+    insecure = true
+
+    [http.services.ocs]
+    share_prefix = "/"
+    home_namespace = "/"
+
+    [http.services.ocs.config]
+    version = "1.8"
+    website = "reva"
+    # needs to templated
+    # host = "https://jimil-nuc.dyndns.cern.ch"
+    host = ""
+    contact = "admin@localhost"
+    ssl = "false"
+
+    [http.services.ocs.capabilities.capabilities.core]
+    poll_interval = 60
+    webdav_root = "remote.php/webdav"
+    status = { installed = true, maintenance = false, nwwsaDbUpgrade = false, version = "10.0.11.5", versionstring = "10.0.11", edition = "community", productname = "reva", hostname = "" }
+    support_url_signing = false
+
+    [http.services.ocs.capabilities.capabilities.checksums]
+    supported_types = ["sha1", "md5", "adler32"]
+
+    [http.services.ocs.capabilities.capabilities.files]
+    private_links = false
+    bigfilechunking = false
+    blacklisted_files = []
+    undelete = true
+    versioning = false
+    favorites = true
+
+    [http.services.ocs.capabilities.capabilities.dav]
+
+    [http.services.ocs.capabilities.capabilities.files_sharing]
+    api_enabled = true
+    resharing = false
+    group_sharing = true
+    auto_accept_share = true
+    share_with_group_members_only = true
+    share_with_membership_groups_only = true
+    default_permissions = 22
+    search_min_length = 3
+
+    [http.services.ocs.capabilities.capabilities.files_sharing.public]
+    enabled = true
+    send_mail = true
+    social_share = true
+    upload = true
+    multiple = true
+    supports_upload_only = true
+    password = { enforced = false, enforced_for = { read_only = false, read_write = false, upload_only = false } }
+    expire_date = { enabled = true }
+    can_edit = true
+
+    [http.services.ocs.capabilities.capabilities.files_sharing.user]
+    send_mail = true
+    profile_picture = false
+    settings = [{ enabled = true, version = "1.0.0" }]
+
+    [http.services.ocs.capabilities.capabilities.files_sharing.user_enumeration]
+    enabled = true
+    group_members_only = true
+---
+# Source: cernbox/templates/storageprovider-home.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: storageprovider-home-config
+  labels:
+    helm.sh/chart: cernbox-0.0.4
+    app.kubernetes.io/name: cernbox
+    app.kubernetes.io/instance: my-cernbox
+    app.kubernetes.io/version: "1.4.1"
+    app.kubernetes.io/managed-by: Helm
+data:
+  revad.toml: |-
+    [shared]
+    gatewaysvc = "my-cernbox-gateway:9142"
+    jwt_secret = "POZSOrlP7AgnTxH7MJebWV8ohvsApgbd4u3Joen30c"
+
+    [grpc]
+    address = "0.0.0.0:18000"
+
+    [grpc.services.storageprovider]
+    driver = "eoshome"
+    mount_path = "/home"
+    mount_id = "eos"
+    data_server_url = "http://my-cernbox-storageproviderhome:17000/data"
+
+    [grpc.services.storageprovider.drivers.eoshome]
+    namespace = "/eos/user/"
+    quota_node = "/eos/user/"
+    master_url = "root://my-cernbox-mgm.default.svc.cluster.local:1094"
+    slave_url = "root://my-cernbox-mgm.default.svc.cluster.local:1094"
+    user_layout = "{{substr 0 1 .Username}}/{{.Username}}"
+    xrdcopy_binary = "/opt/eos/xrootd/bin/xrdcopy"
+    cache_directory = "/tmp/reva"
+    use_keytab = true
+    keytab = "/etc/eos.keytab"
+    sec_protocol = "sss"
+
+    [http]
+    address = "0.0.0.0:17000"
+
+    [http.services.dataprovider]
+    driver = "eoshome"
+
+    [http.services.dataprovider.drivers.eoshome]
+    namespace = "/eos/user/"
+    quota_node = "/eos/user/"
+    master_url = "root://my-cernbox-mgm.default.svc.cluster.local:1094"
+    slave_url = "root://my-cernbox-mgm.default.svc.cluster.local:1094"
+    user_layout = "{{substr 0 1 .Username}}/{{.Username}}"
+    xrdcopy_binary = "/opt/eos/xrootd/bin/xrdcopy"
+    cache_directory = "/tmp/reva"
+    use_keytab = true
+    keytab = "/etc/eos.keytab"
+    sec_protocol = "sss"
+---
+# Source: cernbox/templates/storageprovider-public.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: storageprovider-public-config
+  labels:
+    helm.sh/chart: cernbox-0.0.4
+    app.kubernetes.io/name: cernbox
+    app.kubernetes.io/instance: my-cernbox
+    app.kubernetes.io/version: "1.4.1"
+    app.kubernetes.io/managed-by: Helm
+data:
+  revad.toml: |-
+    [shared]
+    gatewaysvc = "my-cernbox-gateway:9142"
+    jwt_secret = "POZSOrlP7AgnTxH7MJebWV8ohvsApgbd4u3Joen30c"
+
+    [grpc]
+    address = "0.0.0.0:9278"
+
+    [grpc.services.publicstorageprovider]
+    mount_path = "/public"
+    mount_id = "public-storage"
+    gateway_addr = "my-cernbox-gateway:9142"
+
+    [grpc.services.authprovider]
+    auth_manager = "publicshares"
+
+    [grpc.services.authprovider.auth_managers.publicshares]
+    gateway_addr = "my-cernbox-gateway:9142"
+---
+# Source: cernbox/templates/storageprovider-user.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: storageprovider-user-config
+  labels:
+    helm.sh/chart: cernbox-0.0.4
+    app.kubernetes.io/name: cernbox
+    app.kubernetes.io/instance: my-cernbox
+    app.kubernetes.io/version: "1.4.1"
+    app.kubernetes.io/managed-by: Helm
+data:
+  revad.toml: |-
+    [shared]
+    gatewaysvc = "my-cernbox-gateway:9142"
+    jwt_secret = "POZSOrlP7AgnTxH7MJebWV8ohvsApgbd4u3Joen30c"
+
+    [grpc]
+    address = "0.0.0.0:16000"
+
+    [grpc.services.storageprovider]
+    driver = "eos"
+    mount_path = "/eos/user"
+    mount_id = "eos"
+    data_server_url = "http://my-cernbox-storageprovideruser:15000/data"
+
+    [grpc.services.storageprovider.drivers.eos]
+    namespace = "/eos/user/"
+    quota_node = "/eos/user/"
+    master_url = "root://my-cernbox-mgm.default.svc.cluster.local:1094"
+    slave_url = "root://my-cernbox-mgm.default.svc.cluster.local:1094"
+    user_layout = "{{substr 0 1 .Username}}/{{.Username}}"
+    xrdcopy_binary = "/opt/eos/xrootd/bin/xrdcopy"
+    cache_directory = "/tmp/reva"
+    use_keytab = true
+    keytab = "/etc/eos.keytab"
+    sec_protocol = "sss"
+
+    [http]
+    address = "0.0.0.0:15000"
+
+    [http.services.dataprovider]
+    driver = "eos"
+
+    [http.services.dataprovider.drivers.eos]
+    namespace = "/eos/user/"
+    quota_node = "/eos/user/"
+    master_url = "root://my-cernbox-mgm.default.svc.cluster.local:1094"
+    slave_url = "root://my-cernbox-mgm.default.svc.cluster.local:1094"
+    user_layout = "{{substr 0 1 .Username}}/{{.Username}}"
+    xrdcopy_binary = "/opt/eos/xrootd/bin/xrdcopy"
+    cache_directory = "/tmp/reva"
+    use_keytab = true
+    keytab = "/etc/eos.keytab"
+    sec_protocol = "sss"
+---
+# Source: cernbox/templates/web-config.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cernbox-web-config
+data:
+  config.json: |-
+    {
+      "server": ,
+      "version": "0.1.0",
+      "theme": "/theme.json",
+      "openIdConnect": {
+        "metadata_url": "/.well-known/openid-configuration",
+        "authority": ,
+        "client_id": "web",
+        "response_type": "code",
+        "scope":  "openid profile email"
+      },
+      "apps": ["files"],
+      "external_apps": [
+      ],
+      "options": {
+        "hideSearchBar": true,
+        "homeFolder": "/eos/user/{{substr 0 1 .Id}}/{{.Id}}"
+      }
+    }
+---
+# Source: cernbox/templates/web-init.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cernbox-web-init
+data:
+  cbox_init.sh: |
+    #!/bin/bash
+    set -x
+
+    wget -O /var/www/web/web-tar.gz $WEB_ASSET
+    tar -xf /var/www/web/web-tar.gz -C /var/www/web/
+    rm -r /var/www/web/web-tar.gz
+
+    wget -O /var/www/web/theme-cernbox.tar.gz $WEB_THEME
+    tar -xf /var/www/web/theme-cernbox.tar.gz -C /var/www/web/
+    rm -f /var/www/web/theme-cernbox.tar.gz
+
+    mkdir -p /var/www/web/cernbox/theme-cernbox/
+    mv /var/www/web/assets /var/www/web/cernbox/theme-cernbox/assets
+---
+# Source: cernbox/templates/web-nginx.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cernbox-web-nginx
+data:
+  nginx.conf: |-
+    daemon off;
+    worker_processes  auto;
+
+    error_log  /opt/bitnami/nginx/logs/error.log debug;
+    pid        /opt/bitnami/nginx/tmp/nginx.pid;
+
+    events {
+        worker_connections  1024;
+    }
+
+    http {
+        include       /opt/bitnami/nginx/conf/mime.types;
+        default_type  application/octet-stream;
+        log_format    main '$remote_addr - $remote_user [$time_local] '
+                           '"$request" $status  $body_bytes_sent "$http_referer" '
+                           '"$http_user_agent" "$http_x_forwarded_for"';
+        access_log    "/opt/bitnami/nginx/logs/access.log" main;
+        add_header    X-Frame-Options SAMEORIGIN;
+
+        client_body_temp_path  "/opt/bitnami/nginx/tmp/client_body" 1 2;
+        proxy_temp_path        "/opt/bitnami/nginx/tmp/proxy" 1 2;
+        fastcgi_temp_path      "/opt/bitnami/nginx/tmp/fastcgi" 1 2;
+        scgi_temp_path         "/opt/bitnami/nginx/tmp/scgi" 1 2;
+        uwsgi_temp_path        "/opt/bitnami/nginx/tmp/uwsgi" 1 2;
+
+        sendfile             on;
+        tcp_nopush           on;
+        tcp_nodelay          off;
+        gzip                 on;
+        gzip_http_version    1.0;
+        gzip_comp_level      2;
+        gzip_proxied         any;
+        gzip_types           text/plain text/css application/javascript text/xml application/xml+rss;
+        keepalive_timeout    65;
+        ssl_protocols        TLSv1 TLSv1.1 TLSv1.2 TLSv1.3;
+        ssl_ciphers          HIGH:!aNULL:!MD5;
+        client_max_body_size 80M;
+        server_tokens        off;
+
+        absolute_redirect    off;
+        port_in_redirect     off;
+
+        server {
+            listen 8080;
+
+            location ~ ^/(js|css)/
+            {
+                root /var/www/web;
+                add_header Cache-Control "public, max-age=31536000, immutable";
+                etag off;
+                gzip_static on;
+            }
+
+            location /
+            {
+                root /var/www/web;
+                add_header Cache-Control "no-cache";
+                etag on;
+                gzip_static on;
+                try_files $uri /index.html;
+            }
+        }
+    }
+---
+# Source: cernbox/charts/authproviderbearer/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-cernbox-authproviderbearer
+  labels:
+    helm.sh/chart: authproviderbearer-1.4.1
+    app.kubernetes.io/name: authproviderbearer
+    app.kubernetes.io/instance: my-cernbox
+    app.kubernetes.io/version: "v1.18.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 19001
+      targetPort: http
+      protocol: TCP
+      name: http
+    - port: 9158
+      targetPort: grpc
+      protocol: TCP
+      name: grpc
+  selector:
+    app.kubernetes.io/name: authproviderbearer
+    app.kubernetes.io/instance: my-cernbox
+---
+# Source: cernbox/charts/authprovidermachine/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-cernbox-authprovidermachine
+  labels:
+    helm.sh/chart: authprovidermachine-1.4.1
+    app.kubernetes.io/name: authprovidermachine
+    app.kubernetes.io/instance: my-cernbox
+    app.kubernetes.io/version: "v1.18.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 19001
+      targetPort: http
+      protocol: TCP
+      name: http
+    - port: 9166
+      targetPort: grpc
+      protocol: TCP
+      name: grpc
+  selector:
+    app.kubernetes.io/name: authprovidermachine
+    app.kubernetes.io/instance: my-cernbox
+---
+# Source: cernbox/charts/cernbox-web/templates/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-cernbox-cernbox-web
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: cernbox-web
+    helm.sh/chart: cernbox-web-13.2.21
+    app.kubernetes.io/instance: my-cernbox
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+spec:
+  type: LoadBalancer
+  sessionAffinity: None
+  externalTrafficPolicy: "Cluster"
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+  selector:
+    app.kubernetes.io/name: cernbox-web
+    app.kubernetes.io/instance: my-cernbox
+---
+# Source: cernbox/charts/gateway/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-cernbox-gateway
+  labels:
+    helm.sh/chart: gateway-1.4.1
+    app.kubernetes.io/name: gateway
+    app.kubernetes.io/instance: my-cernbox
+    app.kubernetes.io/version: "v1.18.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9143
+      targetPort: http
+      protocol: TCP
+      name: http
+    - port: 9142
+      targetPort: grpc
+      protocol: TCP
+      name: grpc
+  selector:
+    app.kubernetes.io/name: gateway
+    app.kubernetes.io/instance: my-cernbox
+---
+# Source: cernbox/charts/ocis/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-cernbox-ocis
+  labels:
+    helm.sh/chart: ocis-0.0.9
+    app.kubernetes.io/name: ocis
+    app.kubernetes.io/instance: my-cernbox
+    app.kubernetes.io/version: "1.20.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9130
+      targetPort: 9130
+      protocol: TCP
+      name: idp
+    - port: 443
+      targetPort: 9200
+      protocol: TCP
+      name: proxy
+  selector:
+    app.kubernetes.io/name: ocis
+    app.kubernetes.io/instance: my-cernbox
+---
+# Source: cernbox/charts/storageproviderhome/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-cernbox-storageproviderhome
+  labels:
+    helm.sh/chart: storageproviderhome-1.4.1
+    app.kubernetes.io/name: storageproviderhome
+    app.kubernetes.io/instance: my-cernbox
+    app.kubernetes.io/version: "v1.18.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 17000
+      targetPort: http
+      protocol: TCP
+      name: http
+    - port: 18000
+      targetPort: grpc
+      protocol: TCP
+      name: grpc
+  selector:
+    app.kubernetes.io/name: storageproviderhome
+    app.kubernetes.io/instance: my-cernbox
+---
+# Source: cernbox/charts/storageproviderpublic/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-cernbox-storageproviderpublic
+  labels:
+    helm.sh/chart: storageproviderpublic-1.4.1
+    app.kubernetes.io/name: storageproviderpublic
+    app.kubernetes.io/instance: my-cernbox
+    app.kubernetes.io/version: "v1.18.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 19001
+      targetPort: http
+      protocol: TCP
+      name: http
+    - port: 9278
+      targetPort: grpc
+      protocol: TCP
+      name: grpc
+  selector:
+    app.kubernetes.io/name: storageproviderpublic
+    app.kubernetes.io/instance: my-cernbox
+---
+# Source: cernbox/charts/storageprovideruser/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-cernbox-storageprovideruser
+  labels:
+    helm.sh/chart: storageprovideruser-1.4.1
+    app.kubernetes.io/name: storageprovideruser
+    app.kubernetes.io/instance: my-cernbox
+    app.kubernetes.io/version: "v1.18.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 15000
+      targetPort: http
+      protocol: TCP
+      name: http
+    - port: 16000
+      targetPort: grpc
+      protocol: TCP
+      name: grpc
+  selector:
+    app.kubernetes.io/name: storageprovideruser
+    app.kubernetes.io/instance: my-cernbox
+---
+# Source: cernbox/charts/authproviderbearer/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-cernbox-authproviderbearer
+  labels:
+    helm.sh/chart: authproviderbearer-1.4.1
+    app.kubernetes.io/name: authproviderbearer
+    app.kubernetes.io/instance: my-cernbox
+    app.kubernetes.io/version: "v1.18.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: authproviderbearer
+      app.kubernetes.io/instance: my-cernbox
+  template:
+    metadata:
+      annotations:
+        checksum/config: 01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b
+      labels:
+        app.kubernetes.io/name: authproviderbearer
+        app.kubernetes.io/instance: my-cernbox
+    spec:
+      containers:
+        - name: authproviderbearer
+          image: "gitlab-registry.cern.ch/sciencebox/hotfixes/revad:latest-20220815"
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 19001
+              protocol: TCP
+            - name: grpc
+              containerPort: 9158
+              protocol: TCP
+          command:
+            - /usr/bin/revad
+          args:
+              - "-c"
+              - "/etc/revad/revad.toml"
+              - "-p"
+              - "/var/run/revad.pid"
+          volumeMounts:
+            - name: my-cernbox-authproviderbearer-configfiles
+              mountPath: /etc/revad/
+            - name: my-cernbox-authproviderbearer-datadir
+              mountPath: /var/tmp/reva
+              subPath: ""
+      volumes:
+        - name: my-cernbox-authproviderbearer-configfiles
+          configMap:
+            name: authprovider-bearer-config
+        - name: my-cernbox-authproviderbearer-datadir
+          emptyDir:
+            {}
+---
+# Source: cernbox/charts/authprovidermachine/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-cernbox-authprovidermachine
+  labels:
+    helm.sh/chart: authprovidermachine-1.4.1
+    app.kubernetes.io/name: authprovidermachine
+    app.kubernetes.io/instance: my-cernbox
+    app.kubernetes.io/version: "v1.18.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: authprovidermachine
+      app.kubernetes.io/instance: my-cernbox
+  template:
+    metadata:
+      annotations:
+        checksum/config: 01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b
+      labels:
+        app.kubernetes.io/name: authprovidermachine
+        app.kubernetes.io/instance: my-cernbox
+    spec:
+      containers:
+        - name: authprovidermachine
+          image: "gitlab-registry.cern.ch/sciencebox/hotfixes/revad:latest-20220815"
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 19001
+              protocol: TCP
+            - name: grpc
+              containerPort: 9166
+              protocol: TCP
+          command:
+            - /usr/bin/revad
+          args:
+              - "-c"
+              - "/etc/revad/revad.toml"
+              - "-p"
+              - "/var/run/revad.pid"
+          volumeMounts:
+            - name: my-cernbox-authprovidermachine-configfiles
+              mountPath: /etc/revad/
+            - name: my-cernbox-authprovidermachine-datadir
+              mountPath: /var/tmp/reva
+              subPath: ""
+      volumes:
+        - name: my-cernbox-authprovidermachine-configfiles
+          configMap:
+            name: authprovider-machine-config
+        - name: my-cernbox-authprovidermachine-datadir
+          emptyDir:
+            {}
+---
+# Source: cernbox/charts/cernbox-web/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-cernbox-cernbox-web
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: cernbox-web
+    helm.sh/chart: cernbox-web-13.2.21
+    app.kubernetes.io/instance: my-cernbox
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  strategy:
+    rollingUpdate: {}
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cernbox-web
+      app.kubernetes.io/instance: my-cernbox
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: cernbox-web
+        helm.sh/chart: cernbox-web-13.2.21
+        app.kubernetes.io/instance: my-cernbox
+        app.kubernetes.io/managed-by: Helm
+      annotations:
+    spec:
+      
+      automountServiceAccountToken: false
+      shareProcessNamespace: false
+      serviceAccountName: default
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: cernbox-web
+                    app.kubernetes.io/instance: my-cernbox
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      hostNetwork: false
+      hostIPC: false
+      initContainers:
+        - command:
+          - /bin/sh
+          - /root/cbox_init.sh
+          env:
+          - name: WEB_ASSET
+            value: https://github.com/cernbox/web-release/releases/download/v0.0.9/web.tar.gz
+          - name: WEB_THEME
+            value: https://github.com/cernbox/web-extensions/releases/download/theme-cernbox/v0.1.7/theme-cernbox.tar.gz
+          image: busybox:stable
+          name: cernbox-web-init
+          volumeMounts:
+          - mountPath: /root/cbox_init.sh
+            name: web-init
+            subPath: cbox_init.sh
+          - mountPath: /var/www/web/
+            name: web-content
+      containers:
+        - name: nginx
+          image: docker.io/bitnami/nginx:1.23.3-debian-11-r8
+          imagePullPolicy: "IfNotPresent"
+          command:
+            - /opt/bitnami/nginx/sbin/nginx
+          args:
+            - -c
+            - /etc/nginx/nginx.conf
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: NGINX_HTTP_PORT_NUMBER
+              value: "8080"
+          envFrom:
+          ports:
+            - name: http
+              containerPort: 8080
+          resources:
+            limits: {}
+            requests: {}
+          volumeMounts:
+            - mountPath: /etc/nginx/nginx.conf
+              name: web-nginx
+              subPath: nginx.conf
+            - mountPath: /var/www/web/config.json
+              name: web-config
+              subPath: config.json
+            - mountPath: /var/www/web/
+              name: web-content
+      volumes:
+        - configMap:
+            name: cernbox-web-nginx
+          name: web-nginx
+        - configMap:
+            name: cernbox-web-config
+          name: web-config
+        - configMap:
+            defaultMode: 493
+            name: cernbox-web-init
+          name: web-init
+        - emptyDir: {}
+          name: web-content
+---
+# Source: cernbox/charts/gateway/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-cernbox-gateway
+  labels:
+    helm.sh/chart: gateway-1.4.1
+    app.kubernetes.io/name: gateway
+    app.kubernetes.io/instance: my-cernbox
+    app.kubernetes.io/version: "v1.18.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: gateway
+      app.kubernetes.io/instance: my-cernbox
+  template:
+    metadata:
+      annotations:
+        checksum/config: 01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b
+      labels:
+        app.kubernetes.io/name: gateway
+        app.kubernetes.io/instance: my-cernbox
+    spec:
+      containers:
+        - name: gateway
+          image: "cs3org/revad:v1.19.0"
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 9143
+              protocol: TCP
+            - name: grpc
+              containerPort: 9142
+              protocol: TCP
+          command:
+            - /usr/bin/revad
+          args:
+              - "-c"
+              - "/etc/revad/revad.toml"
+              - "-p"
+              - "/var/run/revad.pid"
+          volumeMounts:
+            - name: my-cernbox-gateway-configfiles
+              mountPath: /etc/revad/
+            - name: my-cernbox-gateway-datadir
+              mountPath: /var/tmp/reva
+              subPath: ""
+          env:
+            - name: "XrdSecPROTOCOL"
+              value: "sss"
+      volumes:
+        - name: my-cernbox-gateway-configfiles
+          configMap:
+            name: gateway-config
+        - name: my-cernbox-gateway-datadir
+          emptyDir:
+            {}
+---
+# Source: cernbox/charts/ocis/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-cernbox-ocis
+  labels:
+    helm.sh/chart: ocis-0.0.9
+    app.kubernetes.io/name: ocis
+    app.kubernetes.io/instance: my-cernbox
+    app.kubernetes.io/version: "1.20.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ocis
+      app.kubernetes.io/instance: my-cernbox
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ocis
+        app.kubernetes.io/instance: my-cernbox
+    spec:
+      containers:
+        - name: ocis
+          image: "gitlab-registry.cern.ch/sciencebox/docker-images/ocis:1.20.0"
+          imagePullPolicy: Always
+          command: ["/usr/bin/supervisord", "-c", "/etc/supervisord.conf"]
+          volumeMounts:
+            - name: ocis-configfiles
+              mountPath: /etc/ocis/
+            - name: ocis-supervisord-conf
+              mountPath: /etc/supervisord.conf
+              subPath: supervisord.conf
+            - name: ocis-supervisord-procs
+              mountPath: /etc/supervisord.d
+            - name: ocis-data
+              mountPath: "/var/tmp"
+              subPath: ""
+          env:
+            - name: "ACCOUNTS_DEMO_USERS_AND_GROUPS"
+              value: "false"
+            - name: "IDM_CREATE_DEMO_USERS"
+              value: "false"
+            - name: "IDP_ACCESS_TOKEN_EXPIRATION"
+              value: "28800"
+            - name: "IDP_HTTP_ADDR"
+              value: "0.0.0.0:9130"
+            - name: "IDP_INSECURE"
+              value: "true"
+            - name: "IDP_ISS"
+              value: "https://sciencebox.local"
+            - name: "IDP_LDAP_LOGIN_ATTRIBUTE"
+              value: "uid"
+            - name: "IDP_LDAP_UUID_ATTRIBUTE"
+              value: "ownclouduuid"
+            - name: "IDP_LDAP_UUID_ATTRIBUTE_TYPE"
+              value: "binary"
+            - name: "LDAP_BIND_DN"
+              value: "cn=readuser,dc=owncloud,dc=com"
+            - name: "LDAP_BIND_PASSWORD"
+              value: "readuser"
+            - name: "LDAP_GROUPFILTER"
+              value: "(objectclass=owncloud)"
+            - name: "LDAP_GROUP_BASE_DN"
+              value: "dc=owncloud,dc=com"
+            - name: "LDAP_GROUP_OBJECTCLASS"
+              value: "groupOfUniqueNames"
+            - name: "LDAP_INSECURE"
+              value: "true"
+            - name: "LDAP_LOGIN_ATTRIBUTES"
+              value: "uid,mail"
+            - name: "LDAP_URI"
+              value: "ldaps://sciencebox-ldap:636"
+            - name: "LDAP_USERFILTER"
+              value: "(objectclass=owncloud)"
+            - name: "LDAP_USER_BASE_DN"
+              value: "dc=owncloud,dc=com"
+            - name: "LDAP_USER_OBEJECTCLASS"
+              value: "inetOrgPerson"
+            - name: "OCIS_INSECURE"
+              value: "true"
+            - name: "OCIS_JWT_SECRET"
+              value: "Pive-Fumkiu4"
+            - name: "OCIS_LOG_LEVEL"
+              value: "debug"
+            - name: "OCIS_MACHINE_AUTH_API_KEY"
+              value: "random_api_key"
+            - name: "PROXY_ACCOUNT_BACKEND_TYPE"
+              value: "cs3"
+            - name: "PROXY_ENABLE_BASIC_AUTH"
+              value: "false"
+            - name: "PROXY_TLS"
+              value: "true"
+            - name: "REVA_GATEWAY"
+              value: "sciencebox-gateway.default.svc.cluster.local:9142"
+            - name: "STORAGE_TRANSFER_SECRET"
+              value: "replace-me-with-a-transfer-secret"
+          resources:
+            {}
+      volumes:
+        - name: ocis-configfiles
+          configMap:
+            name: my-cernbox-ocis-configfiles
+            defaultMode: 0777
+        - name: ocis-supervisord-conf
+          configMap:
+            name: my-cernbox-ocis-supervisord-conf
+        - name: ocis-supervisord-procs
+          configMap:
+            name: my-cernbox-ocis-supervisord-procs
+        - name: ocis-data
+          emptyDir:
+            {}
+---
+# Source: cernbox/charts/storageproviderhome/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-cernbox-storageproviderhome
+  labels:
+    helm.sh/chart: storageproviderhome-1.4.1
+    app.kubernetes.io/name: storageproviderhome
+    app.kubernetes.io/instance: my-cernbox
+    app.kubernetes.io/version: "v1.18.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: storageproviderhome
+      app.kubernetes.io/instance: my-cernbox
+  template:
+    metadata:
+      annotations:
+        checksum/config: 01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b
+      labels:
+        app.kubernetes.io/name: storageproviderhome
+        app.kubernetes.io/instance: my-cernbox
+    spec:
+      containers:
+        - name: storageproviderhome
+          image: "cs3org/revad:v1.19.0-eos"
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 17000
+              protocol: TCP
+            - name: grpc
+              containerPort: 18000
+              protocol: TCP
+          command:
+            - /usr/bin/revad
+          args:
+              - "-c"
+              - "/etc/revad/revad.toml"
+              - "-p"
+              - "/var/run/revad.pid"
+          volumeMounts:
+            - name: my-cernbox-storageproviderhome-configfiles
+              mountPath: /etc/revad/
+            - name: my-cernbox-storageproviderhome-datadir
+              mountPath: /var/tmp/reva
+              subPath: ""
+          env:
+            - name: "XrdSecPROTOCOL"
+              value: "sss"
+      volumes:
+        - name: my-cernbox-storageproviderhome-configfiles
+          configMap:
+            name: storageprovider-home-config
+        - name: my-cernbox-storageproviderhome-datadir
+          emptyDir:
+            {}
+---
+# Source: cernbox/charts/storageproviderpublic/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-cernbox-storageproviderpublic
+  labels:
+    helm.sh/chart: storageproviderpublic-1.4.1
+    app.kubernetes.io/name: storageproviderpublic
+    app.kubernetes.io/instance: my-cernbox
+    app.kubernetes.io/version: "v1.18.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: storageproviderpublic
+      app.kubernetes.io/instance: my-cernbox
+  template:
+    metadata:
+      annotations:
+        checksum/config: 01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b
+      labels:
+        app.kubernetes.io/name: storageproviderpublic
+        app.kubernetes.io/instance: my-cernbox
+    spec:
+      containers:
+        - name: storageproviderpublic
+          image: "cs3org/revad:v1.19.0-eos"
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 19001
+              protocol: TCP
+            - name: grpc
+              containerPort: 9278
+              protocol: TCP
+          command:
+            - /usr/bin/revad
+          args:
+              - "-c"
+              - "/etc/revad/revad.toml"
+              - "-p"
+              - "/var/run/revad.pid"
+          volumeMounts:
+            - name: my-cernbox-storageproviderpublic-configfiles
+              mountPath: /etc/revad/
+            - name: my-cernbox-storageproviderpublic-datadir
+              mountPath: /var/tmp/reva
+              subPath: ""
+          env:
+            - name: "XrdSecPROTOCOL"
+              value: "sss"
+      volumes:
+        - name: my-cernbox-storageproviderpublic-configfiles
+          configMap:
+            name: storageprovider-public-config
+        - name: my-cernbox-storageproviderpublic-datadir
+          emptyDir:
+            {}
+---
+# Source: cernbox/charts/storageprovideruser/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-cernbox-storageprovideruser
+  labels:
+    helm.sh/chart: storageprovideruser-1.4.1
+    app.kubernetes.io/name: storageprovideruser
+    app.kubernetes.io/instance: my-cernbox
+    app.kubernetes.io/version: "v1.18.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: storageprovideruser
+      app.kubernetes.io/instance: my-cernbox
+  template:
+    metadata:
+      annotations:
+        checksum/config: 01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b
+      labels:
+        app.kubernetes.io/name: storageprovideruser
+        app.kubernetes.io/instance: my-cernbox
+    spec:
+      containers:
+        - name: storageprovideruser
+          image: "cs3org/revad:v1.19.0-eos"
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 15000
+              protocol: TCP
+            - name: grpc
+              containerPort: 16000
+              protocol: TCP
+          command:
+            - /usr/bin/revad
+          args:
+              - "-c"
+              - "/etc/revad/revad.toml"
+              - "-p"
+              - "/var/run/revad.pid"
+          volumeMounts:
+            - name: my-cernbox-storageprovideruser-configfiles
+              mountPath: /etc/revad/
+            - name: my-cernbox-storageprovideruser-datadir
+              mountPath: /var/tmp/reva
+              subPath: ""
+          env:
+            - name: "XrdSecPROTOCOL"
+              value: "sss"
+      volumes:
+        - name: my-cernbox-storageprovideruser-configfiles
+          configMap:
+            name: storageprovider-user-config
+        - name: my-cernbox-storageprovideruser-datadir
+          emptyDir:
+            {}
+---
+# Source: cernbox/charts/ocis/templates/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: my-cernbox-ocis
+  labels:
+    helm.sh/chart: ocis-0.0.9
+    app.kubernetes.io/name: ocis
+    app.kubernetes.io/instance: my-cernbox
+    app.kubernetes.io/version: "1.20.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  rules:
+    - host: ocis-idp.local
+      http:
+        paths:
+          - path: /.well-known
+            pathType: Prefix
+            backend:
+              service:
+                name: my-cernbox-ocis
+                port:
+                  number: 9130
+          - path: /konnect
+            pathType: Prefix
+            backend:
+              service:
+                name: my-cernbox-ocis
+                port:
+                  number: 9130
+          - path: /signin
+            pathType: Prefix
+            backend:
+              service:
+                name: my-cernbox-ocis
+                port:
+                  number: 9130
+---
+# Source: cernbox/charts/ocis/templates/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: my-cernbox-ocis-https
+  labels:
+    helm.sh/chart: ocis-0.0.9
+    app.kubernetes.io/name: ocis
+    app.kubernetes.io/instance: my-cernbox
+    app.kubernetes.io/version: "1.20.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+spec:
+  rules:
+    - host: ocis-idp.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: my-cernbox-ocis
+                port:
+                  number: 443

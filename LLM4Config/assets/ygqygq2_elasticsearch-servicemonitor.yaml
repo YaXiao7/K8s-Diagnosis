@@ -1,0 +1,46 @@
+---
+# Source: elasticsearch-servicemonitor/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-elasticsearch-servicemonitor
+  labels:
+    app: elasticsearch-servicemonitor
+    chart: "elasticsearch-servicemonitor-1.0.0"
+    release: my-elasticsearch-servicemonitor
+    heritage: Helm
+  namespace: monitoring
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9206
+      targetPort: 9206
+      protocol: TCP
+      name: "metrics"
+---
+# Source: elasticsearch-servicemonitor/templates/servicemonitor.yaml
+#apiVersion: monitoring.coreos.com/v1
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  labels:
+    app: elasticsearch-servicemonitor
+    chart: "elasticsearch-servicemonitor-1.0.0"
+    heritage: "Helm"
+    release: "my-elasticsearch-servicemonitor"
+    prometheus: my-elasticsearch-servicemonitor
+    release: prometheus-operator    
+  name: my-elasticsearch-servicemonitor
+spec:
+  selector:
+    matchLabels:
+      app: elasticsearch-servicemonitor
+      chart: "elasticsearch-servicemonitor-1.0.0"
+      release: my-elasticsearch-servicemonitor
+  namespaceSelector:
+    matchNames:
+      - monitoring
+  endpoints:
+  - port: "metrics"
+    interval: 15s
+    #bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token

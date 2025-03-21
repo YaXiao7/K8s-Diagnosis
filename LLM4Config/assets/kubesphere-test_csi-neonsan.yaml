@@ -1,0 +1,730 @@
+---
+# Source: csi-neonsan/templates/controller-rbac.yaml
+#  Copyright (C) 2018 Yunify, Inc.
+#
+#  Licensed under the Apache License, Version 2.0 (the "License");
+#  you may not use this work except in compliance with the License.
+#  You may obtain a copy of the License in the LICENSE file, or at:
+#
+#  http://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: csi-neonsan-controller
+  namespace: default
+  labels:
+    app: csi-neonsan
+    role: controller
+    owner: yunify
+    ver: v1.2.2
+---
+# Source: csi-neonsan/templates/node-rbac.yaml
+#  Copyright (C) 2018 Yunify, Inc.
+#
+#  Licensed under the Apache License, Version 2.0 (the "License");
+#  you may not use this work except in compliance with the License.
+#  You may obtain a copy of the License in the LICENSE file, or at:
+#
+#  http://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: csi-neonsan-node
+  namespace: default
+  labels:
+    app: csi-neonsan
+    role: node
+    owner: yunify
+    ver: v1.2.2
+---
+# Source: csi-neonsan/templates/sc.yaml
+#  Copyright (C) 2018 Yunify, Inc.
+#
+#  Licensed under the Apache License, Version 2.0 (the "License");
+#  you may not use this work except in compliance with the License.
+#  You may obtain a copy of the License in the LICENSE file, or at:
+#
+#  http://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: csi-neonsan
+  annotations:
+    storageclass.kubesphere.io/supported-access-modes: '["ReadWriteOnce"]'
+provisioner: neonsan.csi.qingstor.com
+parameters:
+  fsType: ext4
+  pool_name: kube
+  rep_count: "1"
+
+reclaimPolicy: Delete
+allowVolumeExpansion: true
+volumeBindingMode: Immediate
+---
+# Source: csi-neonsan/templates/controller-rbac.yaml
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: csi-neonsan-provisioner
+  labels:
+    app: csi-neonsan
+    role: controller
+    owner: yunify
+    ver: v1.2.2
+rules:
+  - apiGroups: [""]
+    resources: ["persistentvolumes"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list", "watch", "update"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["list", "watch", "create", "update", "patch"]
+  - apiGroups: ["snapshot.storage.k8s.io"]
+    resources: ["volumesnapshots"]
+    verbs: ["get", "list"]
+  - apiGroups: ["snapshot.storage.k8s.io"]
+    resources: ["volumesnapshotcontents"]
+    verbs: ["get", "list"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["csinodes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["volumeattachments"]
+    verbs: ["get", "list", "watch"]
+---
+# Source: csi-neonsan/templates/controller-rbac.yaml
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: csi-neonsan-attacher
+  labels:
+    app: csi-neonsan
+    role: controller
+    owner: yunify
+    ver: v1.2.2
+rules:
+  - apiGroups: [""]
+    resources: ["persistentvolumes"]
+    verbs: ["get", "list", "watch", "patch"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["csinodes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["volumeattachments"]
+    verbs: ["get", "list", "watch", "patch"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["volumeattachments/status"]
+    verbs: ["patch"]
+---
+# Source: csi-neonsan/templates/controller-rbac.yaml
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: csi-neonsan-resizer
+  labels:
+    app: csi-neonsan
+    role: controller
+    owner: yunify
+    ver: v1.2.2
+rules:
+  - apiGroups: [""]
+    resources: ["persistentvolumes"]
+    verbs: ["get", "list", "watch", "patch"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims/status"]
+    verbs: ["patch"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["list", "watch", "create", "update", "patch"]
+---
+# Source: csi-neonsan/templates/controller-rbac.yaml
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: csi-neonsan-snapshotter
+  labels:
+    app: csi-neonsan
+    role: controller
+    owner: yunify
+    ver: v1.2.2
+rules:
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["list", "watch", "create", "update", "patch"]
+  - apiGroups: ["snapshot.storage.k8s.io"]
+    resources: ["volumesnapshotclasses"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["snapshot.storage.k8s.io"]
+    resources: ["volumesnapshotcontents"]
+    verbs: ["create", "get", "list", "watch", "update", "delete"]
+  - apiGroups: ["snapshot.storage.k8s.io"]
+    resources: ["volumesnapshotcontents/status"]
+    verbs: ["update"]
+---
+# Source: csi-neonsan/templates/controller-rbac.yaml
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: csi-neonsan-controller
+  labels:
+    app: csi-neonsan
+    role: controller
+aggregationRule:
+  clusterRoleSelectors:
+  - matchLabels:
+      app: csi-neonsan
+      role: controller
+      owner: yunify
+      ver: v1.2.2
+rules: []
+---
+# Source: csi-neonsan/templates/node-rbac.yaml
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: csi-neonsan-node
+  labels:
+    app: csi-neonsan
+    role: node
+    owner: yunify
+    ver: v1.2.2
+rules:
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+---
+# Source: csi-neonsan/templates/controller-rbac.yaml
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: csi-neonsan-controller
+  labels:
+    app: csi-neonsan
+    role: controller
+    owner: yunify
+    ver: v1.2.2
+subjects:
+  - kind: ServiceAccount
+    name: csi-neonsan-controller
+    namespace: default
+roleRef:
+  kind: ClusterRole
+  name: csi-neonsan-controller
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: csi-neonsan/templates/node-rbac.yaml
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: csi-neonsan-node
+  labels:
+    app: csi-neonsan
+    role: node
+    owner: yunify
+    ver: v1.2.2
+subjects:
+  - kind: ServiceAccount
+    name: csi-neonsan-node
+    namespace: default
+roleRef:
+  kind: ClusterRole
+  name: csi-neonsan-node
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: csi-neonsan/templates/controller-rbac.yaml
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  namespace: default
+  name: csi-neonsan-provisioner
+  labels:
+    app: csi-neonsan
+    role: controller
+    owner: yunify
+    ver: v1.2.2
+rules:
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "watch", "list", "delete", "update", "create"]
+---
+# Source: csi-neonsan/templates/controller-rbac.yaml
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  namespace: default
+  name: csi-neonsan-attacher
+  labels:
+    app: csi-neonsan
+    role: controller
+    owner: yunify
+    ver: v1.2.2
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "watch", "list", "delete", "update", "create"]
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "watch", "list", "delete", "update", "create"]
+---
+# Source: csi-neonsan/templates/controller-rbac.yaml
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: csi-neonsan-snapshotter
+  namespace: default
+  labels:
+    app: csi-neonsan
+    role: controller
+    owner: yunify
+    ver: v1.2.2
+rules:
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "watch", "list", "delete", "update", "create"]
+---
+# Source: csi-neonsan/templates/controller-rbac.yaml
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: csi-neonsan-resizer
+  namespace: default
+  labels:
+    app: csi-neonsan
+    role: controller
+    owner: yunify
+    ver: v1.2.2
+rules:
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "watch", "list", "delete", "update", "create"]
+---
+# Source: csi-neonsan/templates/controller-rbac.yaml
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: csi-neonsan-provsioner
+  namespace: default
+  labels:
+    app: csi-neonsan
+    role: controller
+    owner: yunify
+    ver: v1.2.2
+subjects:
+  - kind: ServiceAccount
+    name: csi-neonsan-controller
+    namespace: default
+roleRef:
+  kind: Role
+  name: csi-neonsan-provisioner
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: csi-neonsan/templates/controller-rbac.yaml
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: csi-neonsan-attacher
+  namespace: default
+  labels:
+    app: csi-neonsan
+    role: controller
+    owner: yunify
+    ver: v1.2.2
+subjects:
+  - kind: ServiceAccount
+    name: csi-neonsan-controller
+    namespace: default
+roleRef:
+  kind: Role
+  name: csi-neonsan-attacher
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: csi-neonsan/templates/controller-rbac.yaml
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: csi-neonsan-snapshotter
+  namespace: default
+  labels:
+    app: csi-neonsan
+    role: controller
+    owner: yunify
+    ver: v1.2.2
+subjects:
+  - kind: ServiceAccount
+    name: csi-snapshotter
+    namespace: default
+roleRef:
+  kind: Role
+  name: csi-neonsan-snapshotter
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: csi-neonsan/templates/controller-rbac.yaml
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: csi-neonsan-resizer
+  namespace: default
+  labels:
+    app: csi-neonsan
+    role: controller
+    owner: yunify
+    ver: v1.2.2
+subjects:
+  - kind: ServiceAccount
+    name: csi-resizer
+    namespace: default
+roleRef:
+  kind: Role
+  name: csi-neonsan-resizer
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: csi-neonsan/templates/node-ds.yaml
+#  Copyright (C) 2018 Yunify, Inc.
+#
+#  Licensed under the Apache License, Version 2.0 (the "License");
+#  you may not use this work except in compliance with the License.
+#  You may obtain a copy of the License in the LICENSE file, or at:
+#
+#  http://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
+
+kind: DaemonSet
+apiVersion: apps/v1
+metadata:
+  name: csi-neonsan-node
+  namespace: default
+  labels:
+    app: csi-neonsan
+    role: node
+    owner: yunify
+    ver: v1.2.2
+spec:
+  selector:
+    matchLabels:
+      app: csi-neonsan
+      role: node
+      owner: yunify
+      ver: v1.2.2
+  template:
+    metadata:
+      labels:
+        app: csi-neonsan
+        role: node
+        owner: yunify
+        ver: v1.2.2
+    spec:
+      serviceAccount: csi-neonsan-node
+      tolerations:
+      - key: CriticalAddonsOnly
+        operator: Exists
+      - key: dedicated
+        operator: Exists
+      - effect: NoSchedule
+        key: node-role.kubernetes.io/master
+      - effect: NoSchedule
+        key: node.cloudprovider.kubernetes.io/uninitialized
+        value: "true"
+      hostNetwork: true
+      containers:
+      - name: csi-neonsan
+        image: "csiplugin/csi-neonsan:v1.2.2"
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          privileged: true
+        args:
+          - "--config=/etc/neonsan/qbd.conf"
+          - "--drivername=neonsan.csi.qingstor.com"
+          - "--endpoint=$(CSI_ENDPOINT)"
+          - "--maxvolume=100"
+          - "--nodeid=$(NODE_ID)"
+          - "--v=5"
+        env:
+          - name: NODE_ID
+            valueFrom:
+              fieldRef:
+                fieldPath: spec.nodeName
+          - name: CSI_ENDPOINT
+            value: unix://csi/csi.sock
+        volumeMounts:
+          - name: socket-dir
+            mountPath: /csi
+          - name: neonsan-config
+            mountPath: /etc/neonsan/qbd.conf
+          - name: dev-dir
+            mountPath: /dev
+          - name: plugin-dir
+            mountPath: /var/lib/kubelet/plugins
+            mountPropagation: "Bidirectional"
+          - name: mountpoint-dir
+            mountPath: /var/lib/kubelet/pods
+            mountPropagation: "Bidirectional"
+      - name: node-registrar
+        image: "csiplugin/csi-node-driver-registrar:v2.2.0"
+        imagePullPolicy: "IfNotPresent"
+        resources:
+            requests:
+              memory: "20Mi"
+              cpu: "10m"
+        args:
+          - "--csi-address=$(ADDRESS)"
+          - "--kubelet-registration-path=/var/lib/kubelet/plugins/neonsan.csi.qingstor.com/csi.sock"
+          - "--v=5"
+        env:
+          - name: ADDRESS
+            value: /csi/csi.sock
+        lifecycle:
+          preStop:
+            exec:
+              command: [
+                "/bin/sh", "-c",
+                "rm -rf /registration/neonsan.csi.qingstor.com \
+                 /registration/neonsan.csi.qingstor.com-reg.sock"]
+        volumeMounts:
+        - name: socket-dir
+          mountPath: /csi
+        - name: registration-dir
+          mountPath: /registration
+      volumes:
+        - name: socket-dir
+          hostPath:
+            path: /var/lib/kubelet/plugins/neonsan.csi.qingstor.com/
+            type: DirectoryOrCreate
+        - name: registration-dir
+          hostPath:
+            path: /var/lib/kubelet/plugins_registry/
+        - name: dev-dir
+          hostPath:
+            path: /dev
+            type: Directory
+        - name: neonsan-config
+          hostPath:
+            path: /etc/neonsan/qbd.conf
+            type: File
+        - name: plugin-dir
+          hostPath:
+            path: /var/lib/kubelet/plugins
+            type: Directory
+        - name: mountpoint-dir
+          hostPath:
+            path: /var/lib/kubelet/pods
+            type: DirectoryOrCreate
+---
+# Source: csi-neonsan/templates/controller-deploy.yaml
+#  Copyright (C) 2018 Yunify, Inc.
+#
+#  Licensed under the Apache License, Version 2.0 (the "License");
+#  you may not use this work except in compliance with the License.
+#  You may obtain a copy of the License in the LICENSE file, or at:
+#
+#  http://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
+
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: csi-neonsan-controller
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: csi-neonsan
+      role: controller
+      owner: yunify
+      ver: v1.2.2
+  template:
+    metadata:
+      labels:
+        app: csi-neonsan
+        role: controller
+        owner: yunify
+        ver: v1.2.2
+    spec:
+      serviceAccount: csi-neonsan-controller
+      containers:
+        - name: csi-neonsan
+          image: "csiplugin/csi-neonsan:v1.2.2"
+          resources:
+            requests:
+              memory: "50Mi"
+              cpu: "50m"
+          args:
+            - "--config=/etc/neonsan/qbd.conf"
+            - "--drivername=neonsan.csi.qingstor.com"
+            - "--volumearchive=false"
+            - "--endpoint=$(CSI_ENDPOINT)"
+            - "--nodeid=$(NODE_ID)"
+            - "--v=5"
+          env:
+            - name: NODE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: CSI_ENDPOINT
+              value: unix://csi/csi.sock
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
+            - name: neonsan-config
+              mountPath: /etc/neonsan/qbd.conf
+        - name: csi-provisioner
+          image: "csiplugin/csi-provisioner:v2.2.2"
+          resources:
+            requests:
+              memory: "20Mi"
+              cpu: "20m"
+          args:
+            - "--csi-address=$(ADDRESS)"
+            - "--leader-election"
+            - "--feature-gates=Topology=true"
+            - "--retry-interval-max=5m"
+            - "--retry-interval-start=5s"
+            - "--timeout=90s"
+            - "--worker-threads=5"
+            - "--volume-name-prefix=pvc"
+            - "--v=5"
+          env:
+            - name: ADDRESS
+              value: /csi/csi.sock
+          imagePullPolicy: "IfNotPresent"
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
+        - name: csi-attacher
+          image: "csiplugin/csi-attacher:v3.2.1"
+          resources:
+            requests:
+              memory: "20Mi"
+              cpu: "20m"
+          args:
+            - "--csi-address=$(ADDRESS)"
+            - "--leader-election"
+            - "--retry-interval-max=5m"
+            - "--retry-interval-start=5s"
+            - "--timeout=90s"
+            - "--worker-threads=5"
+            - "--v=5"
+          env:
+            - name: ADDRESS
+              value: /csi/csi.sock
+            - name: MY_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          imagePullPolicy: "IfNotPresent"
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
+        - name: csi-resizer
+          image: "csiplugin/csi-resizer:v1.2.0"
+          resources:
+            requests:
+              memory: "20Mi"
+              cpu: "20m"
+          args:
+            - "--csi-address=$(ADDRESS)"
+            - "--leader-election"
+            - "--v=5"
+          env:
+            - name: ADDRESS
+              value: /csi/csi.sock
+          imagePullPolicy: "IfNotPresent"
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
+        - name: csi-snapshotter
+          image: "csiplugin/csi-snapshotter:v4.0.0"
+          resources:
+            requests:
+              memory: "20Mi"
+              cpu: "20m"
+          args:
+            - "--csi-address=$(ADDRESS)"
+            - "--leader-election=false"
+            - "--v=5"
+          env:
+            - name: ADDRESS
+              value: /csi/csi.sock
+          imagePullPolicy: "IfNotPresent"
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
+      volumes:
+        - name: socket-dir
+          emptyDir:
+        - name: neonsan-config
+          hostPath:
+            path: /etc/neonsan/qbd.conf
+            type: File
+---
+# Source: csi-neonsan/templates/csi-driver.yaml
+#  Copyright (C) 2018 Yunify, Inc.
+#
+#  Licensed under the Apache License, Version 2.0 (the "License");
+#  you may not use this work except in compliance with the License.
+#  You may obtain a copy of the License in the LICENSE file, or at:
+#
+#  http://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
+
+
+apiVersion: storage.k8s.io/v1
+
+kind: CSIDriver
+metadata:
+  name: neonsan.csi.qingstor.com
+spec:
+  attachRequired: false
+  podInfoOnMount: false
+  volumeLifecycleModes:
+    - Persistent

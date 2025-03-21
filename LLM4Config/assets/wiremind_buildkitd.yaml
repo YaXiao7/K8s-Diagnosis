@@ -1,0 +1,275 @@
+---
+# Source: buildkitd/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-buildkitd
+  labels:
+    app: my-buildkitd
+    chart: "buildkitd-0.17.0"
+    release: "my-buildkitd"
+    heritage: "Helm"
+data:
+  buildkitd.toml: |
+    # See: https://docs.docker.com/build/buildkit/toml-configuration/
+    # See: https://github.com/moby/buildkit/blob/master/docs/buildkitd.toml.md
+    rootless = true
+    # root is where all buildkit state is stored.
+    root = "/home/user/.local/share/buildkit/"
+    debug = false
+    trace = false
+
+    [log]
+      # log formatter: json or text
+      format = "text"
+
+    [otel]
+      # OTEL collector trace socket path
+      socketPath = "/run/user/1000/buildkit/otel-grpc.sock"
+
+    [grpc]
+      address = [ "tcp://0.0.0.0:12345" ]
+      debugAddress = "0.0.0.0:6060"
+      uid = 1000
+      gid = 1000
+
+    [worker.oci]
+      enabled = true
+      rootless = true
+      selinux = false
+      platforms = ["linux/amd64"]
+      snapshotter = "auto"
+      # Whether run subprocesses in main pid namespace or not, this is useful for
+      # running rootless buildkit inside a container.
+      noProcessSandbox = true
+      gc = true
+      gckeepstorage = 921
+
+      [[worker.oci.gcpolicy]]
+        keepBytes = "100MB"
+        keepDuration = "48h"
+        filters = ["type==source.local","type==exec.cachemount","type==source.git.checkout"]
+
+      [[worker.oci.gcpolicy]]
+        all = true
+        keepBytes = 921
+
+    [worker.containerd]
+      enabled = false
+
+    # config for build history API that stores information about completed
+    # build commands
+    [history]
+      # maxAge is the maximum age of history entries to keep, in seconds.
+      maxAge = 172800
+      # maxEntries is the maximum number of history entries to keep.
+      maxEntries = 50
+---
+# Source: buildkitd/templates/configmap.yaml
+# See https://github.com/moby/buildkit/blob/master/Dockerfile
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-buildkitd-env-vars
+  labels:
+    app: my-buildkitd
+    chart: "buildkitd-0.17.0"
+    release: "my-buildkitd"
+    heritage: "Helm"
+data:
+  XDG_RUNTIME_DIR: "/run/user/1000"
+  TMPDIR: "/run/user/1000"
+  BUILDKIT_HOST: "tcp://localhost:12345"
+  OTEL_SERVICE_NAME: my-buildkitd
+  OTEL_METRIC_EXPORT_INTERVAL: "10000"
+  OTEL_METRIC_EXPORT_TIMEOUT: "10000"
+  OTEL_METRICS_EXPORTER: "none"
+  OTEL_EXPORTER_OTLP_PROTOCOL: "grpc"
+  OTEL_RESOURCE_ATTRIBUTES: ""
+  OTEL_EXPORTER_OTLP_ENDPOINT: ""
+  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: ""
+  OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: ""
+  OTEL_EXPORTER_OTLP_HEADERS: ""
+  OTEL_EXPORTER_OTLP_TRACES_HEADERS: ""
+  OTEL_EXPORTER_OTLP_METRICS_HEADERS: ""
+  OTEL_EXPORTER_OTLP_COMPRESSION: "gzip"
+  OTEL_EXPORTER_OTLP_TRACES_COMPRESSION: "gzip"
+  OTEL_EXPORTER_OTLP_METRICS_COMPRESSION: "gzip"
+  OTEL_EXPORTER_OTLP_TIMEOUT: "10000"
+  OTEL_EXPORTER_OTLP_TRACES_TIMEOUT: "10000"
+  OTEL_EXPORTER_OTLP_METRICS_TIMEOUT: "10000"
+  OTEL_EXPORTER_OTLP_INSECURE: "false"
+  OTEL_EXPORTER_OTLP_TRACES_INSECURE: "false"
+  OTEL_EXPORTER_OTLP_METRICS_INSECURE: "false"
+---
+# Source: buildkitd/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-buildkitd
+  labels:
+    helm.sh/chart: buildkitd-0.17.0
+    app.kubernetes.io/name: buildkitd
+    app.kubernetes.io/instance: my-buildkitd
+    app.kubernetes.io/version: "0.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 12345
+      protocol: TCP
+      name: tcp
+    - port: 6060
+      protocol: TCP
+      name: debug
+  selector:
+    app.kubernetes.io/name: buildkitd
+    app.kubernetes.io/instance: my-buildkitd
+---
+# Source: buildkitd/templates/statefulset.yaml
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: my-buildkitd
+  labels:
+    helm.sh/chart: buildkitd-0.17.0
+    app.kubernetes.io/name: buildkitd
+    app.kubernetes.io/instance: my-buildkitd
+    app.kubernetes.io/version: "0.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  serviceName: my-buildkitd
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: buildkitd
+      app.kubernetes.io/instance: my-buildkitd
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: buildkitd
+        app.kubernetes.io/instance: my-buildkitd
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "6060"
+        container.apparmor.security.beta.kubernetes.io/buildkitd: unconfined
+        checksum/config: f1541eaf2d9a1c904814f11da2c09656c939c0981febbbd3f4bdeaf4be25370e
+    spec:
+      securityContext:
+        # To change UID/GID, you need to rebuild the image
+        fsGroup: 1000
+        # Set this to avoid massive cascading chown on restart
+        fsGroupChangePolicy: "OnRootMismatch"
+      volumes:
+        - name: config
+          configMap:
+            defaultMode: 420
+            name: my-buildkitd
+        - name: runtime-dir
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Gi
+      containers:
+        - name: buildkitd
+          image: moby/buildkit:v0.16.0-rootless
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: my-buildkitd-env-vars
+          volumeMounts:
+            # Dockerfile has `VOLUME /home/user/.local/share/buildkit` by
+            # default too, but the default VOLUME does not work with rootless
+            # on Google's Container-Optimized OS as it is mounted with
+            # `nosuid,nodev`.
+            # https://github.com/moby/buildkit/issues/879#issuecomment-1240347038
+            - name: my-buildkitd
+              mountPath: /home/user/.local/share/buildkit
+            - name: config
+              mountPath: /home/user/.config/buildkit
+            - name: runtime-dir
+              mountPath: /run/user/1000
+          args:
+          ports:
+            - name: tcp
+              containerPort: 12345
+              protocol: TCP
+            - name: debug
+              containerPort: 6060
+              protocol: TCP
+          env:
+            - name: NO_COLOR
+              value: "true"
+          livenessProbe:
+            exec:
+              command:
+                - buildctl
+                - debug
+                - workers
+            initialDelaySeconds: 5
+            periodSeconds: 30
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 5
+          readinessProbe:
+            exec:
+              command:
+                - buildctl
+                - debug
+                - workers
+            initialDelaySeconds: 5
+            periodSeconds: 30
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 5
+          startupProbe:
+            exec:
+              command:
+                - buildctl
+                - debug
+                - workers
+            failureThreshold: 60
+            periodSeconds: 1
+          securityContext:
+            capabilities:
+              add:
+                - CHOWN
+                - DAC_OVERRIDE
+                - FOWNER
+                - FSETID
+                - SETGID
+                - SETUID
+                - SETFCAP
+              drop:
+                - ALL
+            # allowPrivilegeEscalation has to be true for initializing the user
+            # namespace with newuidmap setuid binary.
+            allowPrivilegeEscalation: true
+            # It needs to create some local files in /home/user/.local
+            readOnlyRootFilesystem: false
+            seccompProfile:
+              type: Unconfined
+            privileged: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup:  1000
+      terminationGracePeriodSeconds: 30
+  volumeClaimTemplates:
+    - kind: PersistentVolumeClaim
+      apiVersion: v1
+      metadata:
+        name: my-buildkitd
+        namespace: default
+        labels:
+          app: my-buildkitd
+          chart: buildkitd-0.17.0
+          release: my-buildkitd
+          heritage: Helm
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: 1Gi
+        storageClassName: 
+        volumeMode: Filesystem

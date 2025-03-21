@@ -1,0 +1,126 @@
+---
+# Source: tfy-buildkitd-service/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-tfy-buildkitd-service
+  labels:
+    helm.sh/chart: tfy-buildkitd-service-0.1.4
+    app.kubernetes.io/name: tfy-buildkitd-service
+    app.kubernetes.io/instance: my-tfy-buildkitd-service
+    app.kubernetes.io/version: "0.13.1"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: tfy-buildkitd-service/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-tfy-buildkitd-service
+  labels:
+    helm.sh/chart: tfy-buildkitd-service-0.1.4
+    app.kubernetes.io/name: tfy-buildkitd-service
+    app.kubernetes.io/instance: my-tfy-buildkitd-service
+    app.kubernetes.io/version: "0.13.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 1234
+      targetPort: 1234
+      protocol: TCP
+      name: grpc-buildkit
+  selector:
+    app.kubernetes.io/name: tfy-buildkitd-service
+    app.kubernetes.io/instance: my-tfy-buildkitd-service
+---
+# Source: tfy-buildkitd-service/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-tfy-buildkitd-service
+  labels:
+    helm.sh/chart: tfy-buildkitd-service-0.1.4
+    app.kubernetes.io/name: tfy-buildkitd-service
+    app.kubernetes.io/instance: my-tfy-buildkitd-service
+    app.kubernetes.io/version: "0.13.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: tfy-buildkitd-service
+      app.kubernetes.io/instance: my-tfy-buildkitd-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: tfy-buildkitd-service
+        app.kubernetes.io/instance: my-tfy-buildkitd-service
+    spec:
+      serviceAccountName: my-tfy-buildkitd-service
+      securityContext:
+        {}
+      containers:
+        - name: tfy-buildkitd-service
+          securityContext:
+            privileged: true
+          image: "moby/buildkit:v0.13.1"
+          imagePullPolicy: IfNotPresent
+          args:
+            - --addr
+            - unix:///run/buildkit/buildkitd.sock
+            - --addr
+            - tcp://0.0.0.0:1234
+          ports:
+            - name: http
+              containerPort: 1234
+              protocol: TCP
+          livenessProbe:
+            exec:
+              command:
+                - buildctl
+                - debug
+                - workers
+          readinessProbe:
+            exec:
+              command:
+                - buildctl
+                - debug
+                - workers
+          resources:
+            limits:
+              cpu: 2
+              ephemeral-storage: 70Gi
+              memory: 8Gi
+            requests:
+              cpu: 2
+              ephemeral-storage: 70Gi
+              memory: 8Gi
+          volumeMounts:
+            []
+      volumes:
+        []
+---
+# Source: tfy-buildkitd-service/templates/hpa.yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: my-tfy-buildkitd-service
+  labels:
+    helm.sh/chart: tfy-buildkitd-service-0.1.4
+    app.kubernetes.io/name: tfy-buildkitd-service
+    app.kubernetes.io/instance: my-tfy-buildkitd-service
+    app.kubernetes.io/version: "0.13.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: my-tfy-buildkitd-service
+  minReplicas: 1
+  maxReplicas: 4
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70

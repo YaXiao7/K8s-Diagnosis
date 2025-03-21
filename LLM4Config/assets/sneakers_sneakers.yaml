@@ -1,0 +1,166 @@
+---
+# Source: sneakers/templates/mysql_pvc.yaml
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: mysql-pv-volume
+  labels:
+    type: local
+spec:
+  storageClassName: manual
+  capacity:
+    storage: 20Gi
+  accessModes:
+    - ReadWriteMany
+  hostPath:
+    path: "/mnt/data"
+---
+# Source: sneakers/templates/mysql_pvc.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mysql-pv-claim
+spec:
+  storageClassName: manual
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 20Gi
+---
+# Source: sneakers/templates/mysql-deployment.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql-svc
+spec:
+  ports:
+  - port: 3306
+  selector:
+    app: mysql
+  clusterIP: None
+---
+# Source: sneakers/templates/php_service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: php-svc
+spec:
+  ports:
+  - port: 80
+  selector:
+    app: php-svc
+  clusterIP: None
+---
+# Source: sneakers/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  creationTimestamp: null
+  labels:
+    app: node
+  name: node
+spec:
+  ports:
+  - port: 3000
+    protocol: TCP
+    targetPort: 3000
+  selector:
+    app: node
+  type: LoadBalancer
+status:
+  loadBalancer: {}
+---
+# Source: sneakers/templates/mysql-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mysql
+spec:
+  selector:
+    matchLabels:
+      app: mysql
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: mysql
+    spec:
+      containers:
+      - image: helga09/my_sql_shoes:v1.1.1
+        name: mysql
+        env:
+          # Use secret in real usage
+        - name: MYSQL_ROOT_PASSWORD
+          value: password
+        ports:
+        - containerPort: 3306
+          name: mysql
+        volumeMounts:
+        - name: mysql-persistent-storage
+          mountPath: /var/lib/mysql
+      volumes:
+      - name: mysql-persistent-storage
+        persistentVolumeClaim:
+          claimName: mysql-pv-claim
+---
+# Source: sneakers/templates/node_deploy.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  labels:
+    app: node
+  name: node
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: node
+  strategy: {}
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: node
+    spec:
+      volumes: 
+      - name: vol 
+        emptyDir: {}
+      containers:
+      - image: helga09/shoes_ukr:v1.1.1
+        name: project-shoes-825lq
+        resources: {}
+        volumeMounts:
+        - name: vol
+          mountPath: /app/src/data
+      - image: nginx
+        name: busybox
+        command: ['sh', '-c', 'while true; do curl php-svc.default.svc.cluster.local > work-dir/products.json; sleep 60; done']
+        volumeMounts:
+        - name: vol
+          mountPath: /work-dir
+        resources: {}
+status: {}
+---
+# Source: sneakers/templates/php_deploy.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: php-svc
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: php-svc
+  template:
+    metadata:
+      labels:
+        app: php-svc
+    spec:
+      containers:
+      - name: php-svc
+        image: helga09/php_shoes_ukr:v1.1.1
+        ports:
+        - containerPort: 80

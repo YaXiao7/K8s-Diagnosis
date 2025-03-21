@@ -1,0 +1,119 @@
+---
+# Source: prometheus-jmx-exporter/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jmx-exporter-config
+  namespace: default
+  labels:
+    helm.sh/chart: prometheus-jmx-exporter-2.4.0
+    app.kubernetes.io/name: jmx-exporter
+    app.kubernetes.io/version: "2.3.4"
+    app.kubernetes.io/managed-by: Helm     
+data:
+  config.yml: |-
+    host: jmx-remote-host:2111
+    ssl: False
+    jmxUrl: service:jmx:rmi:///jndi/rmi://jmx-remote-host:2111/jmxrmi
+    listenPort: 8080
+    rules:
+    - pattern: java.*
+    - pattern: jmx.*
+---
+# Source: prometheus-jmx-exporter/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: jmx-exporter
+  namespace: default
+  labels:
+    helm.sh/chart: prometheus-jmx-exporter-2.4.0
+    app.kubernetes.io/name: jmx-exporter
+    app.kubernetes.io/version: "2.3.4"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: metrics 
+      protocol: TCP
+      name: metrics
+  selector:
+    app.kubernetes.io/name: jmx-exporter
+---
+# Source: prometheus-jmx-exporter/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jmx-exporter
+  labels:
+    helm.sh/chart: prometheus-jmx-exporter-2.4.0
+    app.kubernetes.io/name: jmx-exporter
+    app.kubernetes.io/version: "2.3.4"
+    app.kubernetes.io/managed-by: Helm
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: jmx-exporter
+  template:
+    metadata:
+      annotations:
+        checksum/config: 58eb510c023c57140a937b0b58c41ba70d6a589d896b9e3843c2a1485c85b1ac
+      labels:
+        app.kubernetes.io/name: jmx-exporter
+    spec:
+      securityContext:
+        {}
+      containers:
+        - name: prometheus-jmx-exporter
+          securityContext:
+            {}
+          image: "registry.cn-beijing.aliyuncs.com/kubegemsapp/jmx-exporter:0.17.0"
+          args: 
+          - "8080"
+          - "/opt/bitnami/jmx-exporter/config.yml"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: metrics
+              containerPort: 8080
+              protocol: TCP
+          volumeMounts:
+            - name: exporter-config
+              mountPath: /opt/bitnami/jmx-exporter/config.yml
+              subPath: config.yml
+          resources:
+            null
+      volumes:
+        - name: exporter-config
+          configMap:
+            name: jmx-exporter-config
+---
+# Source: prometheus-jmx-exporter/templates/servicemonitor.yaml
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: jmx-exporter
+  namespace: default
+  labels:
+    helm.sh/chart: prometheus-jmx-exporter-2.4.0
+    app.kubernetes.io/name: jmx-exporter
+    app.kubernetes.io/version: "2.3.4"
+    app.kubernetes.io/managed-by: Helm    
+spec:
+  selector:
+    matchLabels:
+      helm.sh/chart: prometheus-jmx-exporter-2.4.0
+      app.kubernetes.io/name: jmx-exporter
+      app.kubernetes.io/version: "2.3.4"
+      app.kubernetes.io/managed-by: Helm
+  endpoints:
+    - port: metrics
+      interval: 60s
+      scrapeTimeout: 10s
+      scheme: http
+      path: /metrics
+  namespaceSelector:
+    matchNames:
+      - default

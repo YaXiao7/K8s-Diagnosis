@@ -1,0 +1,1060 @@
+---
+# Source: spinnaker/charts/minio/templates/post-install-prometheus-metrics-serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-spinnaker-minio-update-prometheus-secret
+  labels:
+    app: minio-update-prometheus-secret
+    chart: minio-8.0.9
+    release: my-spinnaker
+    heritage: Helm
+---
+# Source: spinnaker/charts/minio/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: "my-spinnaker-minio"
+  namespace: "default"
+  labels:
+    app: minio
+    chart: minio-8.0.9
+    release: "my-spinnaker"
+---
+# Source: spinnaker/templates/rbac/halyard-sa.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-spinnaker-spinnaker-halyard
+  namespace: default
+  labels:
+    app: "my-spinnaker-spinnaker"
+    heritage: "Helm"
+    release: "my-spinnaker"
+    chart: "spinnaker-2.2.7"
+---
+# Source: spinnaker/charts/minio/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-spinnaker-minio
+  labels:
+    app: minio
+    chart: minio-8.0.9
+    release: my-spinnaker
+    heritage: Helm
+type: Opaque
+data:
+  accesskey: "c3Bpbm5ha2VyYWRtaW4="
+  secretkey: "c3Bpbm5ha2VyYWRtaW4="
+---
+# Source: spinnaker/charts/redis/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-spinnaker-redis
+  labels:
+    app: redis
+    chart: redis-10.5.3
+    release: "my-spinnaker"
+    heritage: "Helm"
+type: Opaque
+data:
+  redis-password: "cGFzc3dvcmQ="
+---
+# Source: spinnaker/templates/secrets/registry.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-spinnaker-spinnaker-registry
+  labels:
+    app: "my-spinnaker-spinnaker"
+    heritage: "Helm"
+    release: "my-spinnaker"
+    chart: "spinnaker-2.2.7"
+    component: clouddriver
+type: Opaque
+data:
+  dockerhub: ""
+---
+# Source: spinnaker/charts/minio/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-spinnaker-minio
+  labels:
+    app: minio
+    chart: minio-8.0.9
+    release: my-spinnaker
+    heritage: Helm
+data:
+  initialize: |-
+    #!/bin/sh
+    set -e ; # Have script exit in the event of a failed command.
+    MC_CONFIG_DIR="/etc/minio/mc/"
+    MC="/usr/bin/mc --insecure --config-dir ${MC_CONFIG_DIR}"
+    
+    # connectToMinio
+    # Use a check-sleep-check loop to wait for Minio service to be available
+    connectToMinio() {
+      SCHEME=$1
+      ATTEMPTS=0 ; LIMIT=29 ; # Allow 30 attempts
+      set -e ; # fail if we can't read the keys.
+      ACCESS=$(cat /config/accesskey) ; SECRET=$(cat /config/secretkey) ;
+      set +e ; # The connections to minio are allowed to fail.
+      echo "Connecting to Minio server: $SCHEME://$MINIO_ENDPOINT:$MINIO_PORT" ;
+      MC_COMMAND="${MC} config host add myminio $SCHEME://$MINIO_ENDPOINT:$MINIO_PORT $ACCESS $SECRET" ;
+      $MC_COMMAND ;
+      STATUS=$? ;
+      until [ $STATUS = 0 ]
+      do
+        ATTEMPTS=`expr $ATTEMPTS + 1` ;
+        echo \"Failed attempts: $ATTEMPTS\" ;
+        if [ $ATTEMPTS -gt $LIMIT ]; then
+          exit 1 ;
+        fi ;
+        sleep 2 ; # 1 second intervals between attempts
+        $MC_COMMAND ;
+        STATUS=$? ;
+      done ;
+      set -e ; # reset `e` as active
+      return 0
+    }
+    
+    # checkBucketExists ($bucket)
+    # Check if the bucket exists, by using the exit code of `mc ls`
+    checkBucketExists() {
+      BUCKET=$1
+      CMD=$(${MC} ls myminio/$BUCKET > /dev/null 2>&1)
+      return $?
+    }
+    
+    # createBucket ($bucket, $policy, $purge)
+    # Ensure bucket exists, purging if asked to
+    createBucket() {
+      BUCKET=$1
+      POLICY=$2
+      PURGE=$3
+      VERSIONING=$4
+    
+      # Purge the bucket, if set & exists
+      # Since PURGE is user input, check explicitly for `true`
+      if [ $PURGE = true ]; then
+        if checkBucketExists $BUCKET ; then
+          echo "Purging bucket '$BUCKET'."
+          set +e ; # don't exit if this fails
+          ${MC} rm -r --force myminio/$BUCKET
+          set -e ; # reset `e` as active
+        else
+          echo "Bucket '$BUCKET' does not exist, skipping purge."
+        fi
+      fi
+    
+      # Create the bucket if it does not exist
+      if ! checkBucketExists $BUCKET ; then
+        echo "Creating bucket '$BUCKET'"
+        ${MC} mb myminio/$BUCKET
+      else
+        echo "Bucket '$BUCKET' already exists."
+      fi
+    
+    
+      # set versioning for bucket
+      if [ ! -z $VERSIONING ] ; then
+        if [ $VERSIONING = true ] ; then
+            echo "Enabling versioning for '$BUCKET'"
+            ${MC} version enable myminio/$BUCKET
+        elif [ $VERSIONING = false ] ; then
+            echo "Suspending versioning for '$BUCKET'"
+            ${MC} version suspend myminio/$BUCKET
+        fi
+      else
+          echo "Bucket '$BUCKET' versioning unchanged."
+      fi
+    
+      # At this point, the bucket should exist, skip checking for existence
+      # Set policy on the bucket
+      echo "Setting policy of bucket '$BUCKET' to '$POLICY'."
+      ${MC} policy set $POLICY myminio/$BUCKET
+    }
+    
+    # Try connecting to Minio instance
+    scheme=http
+    connectToMinio $scheme
+    # Create the bucket
+    createBucket spinnaker none false
+---
+# Source: spinnaker/charts/redis/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-spinnaker-redis
+  labels:
+    app: redis
+    chart: redis-10.5.3
+    heritage: Helm
+    release: my-spinnaker
+data:
+  redis.conf: |-
+    # User-supplied configuration:
+    # Enable AOF https://redis.io/topics/persistence#append-only-file
+    appendonly yes
+    # Disable RDB persistence, AOF persistence already enabled.
+    save ""
+  master.conf: |-
+    dir /data
+    rename-command FLUSHDB ""
+    rename-command FLUSHALL ""
+  replica.conf: |-
+    dir /data
+    slave-read-only yes
+    rename-command FLUSHDB ""
+    rename-command FLUSHALL ""
+---
+# Source: spinnaker/charts/redis/templates/health-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-spinnaker-redis-health
+  labels:
+    app: redis
+    chart: redis-10.5.3
+    heritage: Helm
+    release: my-spinnaker
+data:
+  ping_readiness_local.sh: |-
+    response=$(
+      timeout -s 9 $1 \
+      redis-cli \
+        -a $REDIS_PASSWORD --no-auth-warning \
+        -h localhost \
+        -p $REDIS_PORT \
+        ping
+    )
+    if [ "$response" != "PONG" ]; then
+      echo "$response"
+      exit 1
+    fi
+  ping_liveness_local.sh: |-
+    response=$(
+      timeout -s 9 $1 \
+      redis-cli \
+        -a $REDIS_PASSWORD --no-auth-warning \
+        -h localhost \
+        -p $REDIS_PORT \
+        ping
+    )
+    if [ "$response" != "PONG" ] && [ "$response" != "LOADING Redis is loading the dataset in memory" ]; then
+      echo "$response"
+      exit 1
+    fi
+  ping_readiness_master.sh: |-
+    response=$(
+      timeout -s 9 $1 \
+      redis-cli \
+        -a $REDIS_MASTER_PASSWORD --no-auth-warning \
+        -h $REDIS_MASTER_HOST \
+        -p $REDIS_MASTER_PORT_NUMBER \
+        ping
+    )
+    if [ "$response" != "PONG" ]; then
+      echo "$response"
+      exit 1
+    fi
+  ping_liveness_master.sh: |-
+    response=$(
+      timeout -s 9 $1 \
+      redis-cli \
+        -a $REDIS_MASTER_PASSWORD --no-auth-warning \
+        -h $REDIS_MASTER_HOST \
+        -p $REDIS_MASTER_PORT_NUMBER \
+        ping
+    )
+    if [ "$response" != "PONG" ] && [ "$response" != "LOADING Redis is loading the dataset in memory" ]; then
+      echo "$response"
+      exit 1
+    fi
+  ping_readiness_local_and_master.sh: |-
+    script_dir="$(dirname "$0")"
+    exit_status=0
+    "$script_dir/ping_readiness_local.sh" $1 || exit_status=$?
+    "$script_dir/ping_readiness_master.sh" $1 || exit_status=$?
+    exit $exit_status
+  ping_liveness_local_and_master.sh: |-
+    script_dir="$(dirname "$0")"
+    exit_status=0
+    "$script_dir/ping_liveness_local.sh" $1 || exit_status=$?
+    "$script_dir/ping_liveness_master.sh" $1 || exit_status=$?
+    exit $exit_status
+---
+# Source: spinnaker/templates/configmap/additional-profile-configmaps.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-spinnaker-spinnaker-additional-profile-config-maps
+  labels:
+    app: "my-spinnaker-spinnaker"
+    heritage: "Helm"
+    release: "my-spinnaker"
+    chart: "spinnaker-2.2.7"
+data:
+  front50-local.yml: |-
+    spinnaker:
+      s3:
+        versioning: false
+  gate-local.yml: '{}'
+---
+# Source: spinnaker/templates/configmap/halyard-config.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-spinnaker-spinnaker-halyard-config
+  labels:
+    app: "my-spinnaker-spinnaker"
+    heritage: "Helm"
+    release: "my-spinnaker"
+    chart: "spinnaker-2.2.7"
+data:
+  install.sh: |
+    #!/bin/bash
+
+    # Wait for the Hal daemon to be ready
+    export DAEMON_ENDPOINT=http://my-spinnaker-spinnaker-halyard:8064
+    export HAL_COMMAND="hal --daemon-endpoint $DAEMON_ENDPOINT"
+    until $HAL_COMMAND --ready; do sleep 10 ; done
+
+    bash -xe /opt/halyard/scripts/config.sh
+
+    $HAL_COMMAND deploy apply
+  clean.sh: |
+    export HAL_COMMAND='hal --daemon-endpoint http://my-spinnaker-spinnaker-halyard:8064'
+    $HAL_COMMAND deploy clean -q
+  config.sh: |
+    # Spinnaker version
+    
+    $HAL_COMMAND config version edit --version 1.26.6
+    
+
+    # Storage
+    
+    echo spinnakeradmin | $HAL_COMMAND config storage s3 edit \
+        --endpoint http://my-spinnaker-minio:9000 \
+        --access-key-id spinnakeradmin \
+        --secret-access-key --bucket spinnaker \
+        --path-style-access true
+    $HAL_COMMAND config storage edit --type s3
+    
+    
+    
+    
+
+    # Docker Registry
+    $HAL_COMMAND config provider docker-registry enable
+
+    if $HAL_COMMAND config provider docker-registry account get dockerhub; then
+      PROVIDER_COMMAND='edit'
+    else
+      PROVIDER_COMMAND='add'
+    fi
+
+    $HAL_COMMAND config provider docker-registry account $PROVIDER_COMMAND dockerhub --address index.docker.io \
+       \
+      --repositories library/alpine,library/ubuntu,library/centos,library/nginx
+
+    $HAL_COMMAND config provider kubernetes enable
+
+    if $HAL_COMMAND config provider kubernetes account get default; then
+      PROVIDER_COMMAND='edit'
+    else
+      PROVIDER_COMMAND='add'
+    fi
+
+    $HAL_COMMAND config provider kubernetes account $PROVIDER_COMMAND default --docker-registries dockerhub \
+                --context default --service-account true \
+                 \
+                 \
+                 \
+                 \
+                --omit-namespaces=kube-system,kube-public \
+                 \
+                 \
+                 \
+                --provider-version v2
+    $HAL_COMMAND config deploy edit --account-name default --type distributed \
+                           --location default
+    # Use Deck to route to Gate
+    $HAL_COMMAND config security api edit --no-validate --override-base-url /gate
+---
+# Source: spinnaker/templates/configmap/halyard-init-script.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-spinnaker-spinnaker-halyard-init-script
+  labels:
+    app: "my-spinnaker-spinnaker"
+    heritage: "Helm"
+    release: "my-spinnaker"
+    chart: "spinnaker-2.2.7"
+data:
+  init.sh: |
+    #!/bin/bash
+
+    # Override Halyard daemon's listen address
+    cp /opt/halyard/config/* /tmp/config
+    printf 'server.address: 0.0.0.0\n' > /tmp/config/halyard-local.yml
+
+    # Use Redis deployed via the dependent Helm chart
+    rm -rf /tmp/spinnaker/.hal/default/service-settings
+    mkdir -p /tmp/spinnaker/.hal/default/service-settings
+    cp /tmp/service-settings/* /tmp/spinnaker/.hal/default/service-settings/
+
+    rm -rf /tmp/spinnaker/.hal/default/profiles
+    mkdir -p /tmp/spinnaker/.hal/default/profiles
+    cp /tmp/additionalProfileConfigMaps/* /tmp/spinnaker/.hal/default/profiles/
+
+    rm -rf /tmp/spinnaker/.hal/.boms
+---
+# Source: spinnaker/templates/configmap/service-settings.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-spinnaker-spinnaker-service-settings
+  labels:
+    app: "my-spinnaker-spinnaker"
+    heritage: "Helm"
+    release: "my-spinnaker"
+    chart: "spinnaker-2.2.7"
+
+data:
+  deck.yml: |-
+    env:
+      API_HOST: http://spin-gate:8084
+  redis.yml: |-
+    overrideBaseUrl: redis://:password@my-spinnaker-redis-master:6379
+    skipLifeCycleManagement: true
+---
+# Source: spinnaker/charts/minio/templates/pvc.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: my-spinnaker-minio
+  labels:
+    app: minio
+    chart: minio-8.0.9
+    release: my-spinnaker
+    heritage: Helm
+spec:
+  accessModes:
+    - "ReadWriteOnce"
+  resources:
+    requests:
+      storage: "10Gi"
+---
+# Source: spinnaker/templates/rbac/spinnaker-sa.yaml
+# In the case of a local cluster Spinnaker needs
+# to be able to deploy to all namespaces in the cluster.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-spinnaker-spinnaker-spinnaker
+  labels:
+    app: "my-spinnaker-spinnaker"
+    heritage: "Helm"
+    release: "my-spinnaker"
+    chart: "spinnaker-2.2.7"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+- namespace: default
+  kind: ServiceAccount
+  # Clouddriver does not currently allow config of its
+  # service account.
+  name: default
+---
+# Source: spinnaker/charts/minio/templates/post-install-prometheus-metrics-role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: my-spinnaker-minio-update-prometheus-secret
+  labels:
+    app: minio-update-prometheus-secret
+    chart: minio-8.0.9
+    release: my-spinnaker
+    heritage: Helm
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+    verbs:
+      - get
+      - create
+      - update
+      - patch
+    resourceNames:
+      - my-spinnaker-minio-prometheus
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+    verbs:
+      - create
+  - apiGroups:
+      - monitoring.coreos.com
+    resources:
+      - servicemonitors
+    verbs:
+      - get
+    resourceNames:
+      - my-spinnaker-minio
+---
+# Source: spinnaker/charts/minio/templates/post-install-prometheus-metrics-rolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: my-spinnaker-minio-update-prometheus-secret
+  labels:
+    app: minio-update-prometheus-secret
+    chart: minio-8.0.9
+    release: my-spinnaker
+    heritage: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: my-spinnaker-minio-update-prometheus-secret
+subjects:
+  - kind: ServiceAccount
+    name: my-spinnaker-minio-update-prometheus-secret
+    namespace: "default"
+---
+# Source: spinnaker/templates/rbac/rolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: my-spinnaker-spinnaker-halyard
+  labels:
+    app: "my-spinnaker-spinnaker"
+    heritage: "Helm"
+    release: "my-spinnaker"
+    chart: "spinnaker-2.2.7"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: edit
+subjects:
+- namespace: default
+  kind: ServiceAccount
+  name: my-spinnaker-spinnaker-halyard
+---
+# Source: spinnaker/charts/minio/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-spinnaker-minio
+  labels:
+    app: minio
+    chart: minio-8.0.9
+    release: my-spinnaker
+    heritage: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 9000
+      protocol: TCP
+      targetPort: 9000
+  selector:
+    app: minio
+    release: my-spinnaker
+---
+# Source: spinnaker/charts/redis/templates/headless-svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-spinnaker-redis-headless
+  labels:
+    app: redis
+    chart: redis-10.5.3
+    release: my-spinnaker
+    heritage: Helm
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+  - name: redis
+    port: 6379
+    targetPort: redis
+  selector:
+    app: redis
+    release: my-spinnaker
+---
+# Source: spinnaker/charts/redis/templates/redis-master-svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-spinnaker-redis-master
+  labels:
+    app: redis
+    chart: redis-10.5.3
+    release: my-spinnaker
+    heritage: Helm
+spec:
+  type: ClusterIP
+  ports:
+  - name: redis
+    port: 6379
+    targetPort: redis
+  selector:
+    app: redis
+    release: my-spinnaker
+    role: master
+---
+# Source: spinnaker/templates/services/halyard.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-spinnaker-spinnaker-halyard
+  labels:
+    app: "my-spinnaker-spinnaker"
+    heritage: "Helm"
+    release: "my-spinnaker"
+    chart: "spinnaker-2.2.7"
+    component: halyard
+spec:
+  ports:
+  - port: 8064
+    name: daemon
+  clusterIP: None
+  selector:
+    app: my-spinnaker-spinnaker
+    component: halyard
+---
+# Source: spinnaker/charts/minio/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-spinnaker-minio
+  labels:
+    app: minio
+    chart: minio-8.0.9
+    release: my-spinnaker
+    heritage: Helm
+spec:
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 100%
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: minio
+      release: my-spinnaker
+  template:
+    metadata:
+      name: my-spinnaker-minio
+      labels:
+        app: minio
+        release: my-spinnaker
+      annotations:
+        checksum/secrets: ce91340e4baf6befc4dd13b0d6bd225ebc1fc16c573f21257473e6d2d2002c4c
+        checksum/config: e536ccd7243cc0433055ba63537097b169f5e134fc4ebae78d33689f4a14a13a
+    spec:
+      serviceAccountName: "my-spinnaker-minio"
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: minio
+          image: "minio/minio:RELEASE.2020-01-03T19-12-21Z"
+          imagePullPolicy: IfNotPresent
+          command:
+            - "/bin/sh"
+            - "-ce"
+            - "/usr/bin/docker-entrypoint.sh minio -S /etc/minio/certs/ server /export"
+          volumeMounts:
+            - name: export
+              mountPath: /export            
+          ports:
+            - name: http
+              containerPort: 9000
+          env:
+            - name: MINIO_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: my-spinnaker-minio
+                  key: accesskey
+            - name: MINIO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: my-spinnaker-minio
+                  key: secretkey
+          resources:
+            requests:
+              memory: 4Gi      
+      volumes:
+        - name: export
+          persistentVolumeClaim:
+            claimName: my-spinnaker-minio
+        - name: minio-user
+          secret:
+            secretName: my-spinnaker-minio
+---
+# Source: spinnaker/charts/redis/templates/redis-master-statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-spinnaker-redis-master
+  labels:
+    app: redis
+    chart: redis-10.5.3
+    release: my-spinnaker
+    heritage: Helm
+spec:
+  selector:
+    matchLabels:
+      app: redis
+      release: my-spinnaker
+      role: master
+  serviceName: my-spinnaker-redis-headless
+  template:
+    metadata:
+      labels:
+        app: redis
+        chart: redis-10.5.3
+        release: my-spinnaker
+        role: master
+      annotations:
+        checksum/health: 9f246651849fadc0d3644a2a18e067a35b644bfaefdcca12c9a4a1a4fd438a61
+        checksum/configmap: 3edf0ac765ad79c8c1ec8857c06d5712f20067683c423a9e7c5ad47edda5e05c
+        checksum/secret: cceceab4dce3df1ab534c7a7d3c3f2ff42e3f157afb975d1e2cc6b29ad52b3c9
+    spec:      
+      securityContext:
+        fsGroup: 1001
+      serviceAccountName: "default"
+      containers:
+      - name: my-spinnaker-redis
+        image: "docker.io/bitnami/redis:5.0.7-debian-10-r0"
+        imagePullPolicy: "IfNotPresent"
+        securityContext:
+          runAsUser: 1001
+        command:
+        - /bin/bash
+        - -c
+        - |
+          if [[ -n $REDIS_PASSWORD_FILE ]]; then
+            password_aux=`cat ${REDIS_PASSWORD_FILE}`
+            export REDIS_PASSWORD=$password_aux
+          fi
+          if [[ ! -f /opt/bitnami/redis/etc/master.conf ]];then
+            cp /opt/bitnami/redis/mounted-etc/master.conf /opt/bitnami/redis/etc/master.conf
+          fi
+          if [[ ! -f /opt/bitnami/redis/etc/redis.conf ]];then
+            cp /opt/bitnami/redis/mounted-etc/redis.conf /opt/bitnami/redis/etc/redis.conf
+          fi
+          ARGS=("--port" "${REDIS_PORT}")
+          ARGS+=("--requirepass" "${REDIS_PASSWORD}")
+          ARGS+=("--masterauth" "${REDIS_PASSWORD}")
+          ARGS+=("--include" "/opt/bitnami/redis/etc/redis.conf")
+          ARGS+=("--include" "/opt/bitnami/redis/etc/master.conf")
+          /run.sh ${ARGS[@]}
+        env:
+        - name: REDIS_REPLICATION_MODE
+          value: master
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: my-spinnaker-redis
+              key: redis-password
+        - name: REDIS_PORT
+          value: "6379"
+        ports:
+        - name: redis
+          containerPort: 6379
+        livenessProbe:
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 5
+          exec:
+            command:
+            - sh
+            - -c
+            - /health/ping_liveness_local.sh 5
+        readinessProbe:
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 1
+          successThreshold: 1
+          failureThreshold: 5
+          exec:
+            command:
+            - sh
+            - -c
+            - /health/ping_readiness_local.sh 5
+        resources:
+          null
+        volumeMounts:
+        - name: health
+          mountPath: /health
+        - name: redis-data
+          mountPath: /data
+          subPath: 
+        - name: config
+          mountPath: /opt/bitnami/redis/mounted-etc
+        - name: redis-tmp-conf
+          mountPath: /opt/bitnami/redis/etc/
+      volumes:
+      - name: health
+        configMap:
+          name: my-spinnaker-redis-health
+          defaultMode: 0755
+      - name: config
+        configMap:
+          name: my-spinnaker-redis
+      - name: redis-tmp-conf
+        emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: redis-data
+        labels:
+          app: redis
+          release: my-spinnaker
+          heritage: Helm
+          component: master
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "8Gi"
+        
+        selector:
+  updateStrategy:
+    type: RollingUpdate
+---
+# Source: spinnaker/templates/statefulsets/halyard.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-spinnaker-spinnaker-halyard
+  labels:
+    app: "my-spinnaker-spinnaker"
+    heritage: "Helm"
+    release: "my-spinnaker"
+    chart: "spinnaker-2.2.7"
+spec:
+  serviceName: my-spinnaker-spinnaker-halyard
+  replicas: 1
+  selector:
+    matchLabels:
+      app: "my-spinnaker-spinnaker"
+      release: "my-spinnaker"
+      component: halyard
+  template:
+    metadata:
+      annotations:
+        checksum/config: 1718fc45ec29af19c1269cf7c1dd68a79045908fdbd4ad6d63c32b0f16eb46e7
+      labels:
+        app: "my-spinnaker-spinnaker"
+        heritage: "Helm"
+        release: "my-spinnaker"
+        chart: "spinnaker-2.2.7"
+        component: halyard
+    spec:
+      serviceAccountName: my-spinnaker-spinnaker-halyard
+      securityContext:
+        runAsUser: 1000
+        fsGroup: 1000
+      initContainers:
+      - name: "create-halyard-local"
+        image: us-docker.pkg.dev/spinnaker-community/docker/halyard:1.39.0
+        command:
+        - bash
+        - /tmp/initscript/init.sh
+        volumeMounts:
+        - name: halyard-config
+          mountPath: /tmp/config
+        - name: service-settings
+          mountPath: /tmp/service-settings
+        - name: halyard-home
+          mountPath: /tmp/spinnaker
+        - name: additional-profile-config-maps
+          mountPath: /tmp/additionalProfileConfigMaps
+        - name: halyard-initscript
+          mountPath: /tmp/initscript
+      volumes:
+      - name: reg-secrets
+        secret:
+          secretName: my-spinnaker-spinnaker-registry
+      - name: additional-profile-config-maps
+        configMap:
+          name: my-spinnaker-spinnaker-additional-profile-config-maps
+      - name: halyard-config
+        emptyDir: {}
+      - name: service-settings
+        configMap:
+          name: my-spinnaker-spinnaker-service-settings
+      - name: halyard-initscript
+        configMap:
+          name: my-spinnaker-spinnaker-halyard-init-script
+      containers:
+      - name: halyard
+        image: us-docker.pkg.dev/spinnaker-community/docker/halyard:1.39.0
+        ports:
+        - containerPort: 8064
+          name: daemon
+        volumeMounts:
+        - name: halyard-home
+          mountPath: /home/spinnaker
+        - name: halyard-config
+          mountPath: /opt/halyard/config
+        - name: reg-secrets
+          mountPath: /opt/registry/passwords
+  volumeClaimTemplates:
+  - metadata:
+      name: halyard-home
+      labels:
+        app: "my-spinnaker-spinnaker"
+        heritage: "Helm"
+        release: "my-spinnaker"
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 10Gi
+---
+# Source: spinnaker/charts/minio/templates/post-install-create-bucket-job.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: my-spinnaker-minio-make-bucket-job
+  labels:
+    app: minio-make-bucket-job
+    chart: minio-8.0.9
+    release: my-spinnaker
+    heritage: Helm
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
+spec:
+  template:
+    metadata:
+      labels:
+        app: minio-job
+        release: my-spinnaker
+    spec:
+      restartPolicy: OnFailure      
+      volumes:
+        - name: minio-configuration
+          projected:
+            sources:
+            - configMap:
+                name: my-spinnaker-minio
+            - secret:
+                name: my-spinnaker-minio
+      serviceAccountName: "my-spinnaker-minio"
+      containers:
+      - name: minio-mc
+        image: "minio/mc:RELEASE.2020-11-25T23-04-07Z"
+        imagePullPolicy: IfNotPresent
+        command: ["/bin/sh", "/config/initialize"]
+        env:
+          - name: MINIO_ENDPOINT
+            value: my-spinnaker-minio
+          - name: MINIO_PORT
+            value: "9000"
+        volumeMounts:
+          - name: minio-configuration
+            mountPath: /config
+        resources:
+          requests:
+            memory: 128Mi
+---
+# Source: spinnaker/templates/hooks/cleanup.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "my-spinnaker-spinnaker-cleanup-using-hal"
+  labels:
+    app: "my-spinnaker-spinnaker"
+    heritage: "Helm"
+    release: "my-spinnaker"
+    chart: "spinnaker-2.2.7"
+    component: halyard
+  annotations:
+    "helm.sh/hook": "pre-delete"
+    "helm.sh/hook-delete-policy": "before-hook-creation"
+spec:
+  template:
+    metadata:
+      labels:
+        app: "my-spinnaker-spinnaker"
+        heritage: "Helm"
+        release: "my-spinnaker"
+        chart: "spinnaker-2.2.7"
+        component: halyard
+    spec:
+      restartPolicy: OnFailure
+      volumes:
+      - name: halyard-config
+        configMap:
+          name: my-spinnaker-spinnaker-halyard-config
+      containers:
+      - name: halyard-install
+        image: us-docker.pkg.dev/spinnaker-community/docker/halyard:1.39.0
+        volumeMounts:
+        - name: halyard-config
+          mountPath: /opt/halyard/scripts
+        command:
+        - bash
+        - -xe
+        - "/opt/halyard/scripts/clean.sh"
+---
+# Source: spinnaker/templates/hooks/install-using-hal.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "my-spinnaker-install-using-hal"
+  labels:
+    app: "my-spinnaker-spinnaker"
+    heritage: "Helm"
+    release: "my-spinnaker"
+    chart: "spinnaker-2.2.7"
+  annotations:
+    "helm.sh/hook": "post-install,post-upgrade"
+    "helm.sh/hook-delete-policy": "before-hook-creation"
+    "helm.sh/hook-weight": "0"
+spec:
+  template:
+    metadata:
+      annotations:
+        checksum/config: e2084a39fb2393a0ce3d00bc948940380d7a696466008aae984e44d93f8882b3
+      labels:
+        app: "my-spinnaker-spinnaker"
+        heritage: "Helm"
+        release: "my-spinnaker"
+        chart: "spinnaker-2.2.7"
+    spec:
+      serviceAccountName: my-spinnaker-spinnaker-halyard
+      securityContext:
+        runAsUser: 1000
+        fsGroup: 1000
+      restartPolicy: OnFailure
+      volumes:
+      - name: halyard-config
+        configMap:
+          name: my-spinnaker-spinnaker-halyard-config
+      containers:
+      - name: halyard-install
+        image: us-docker.pkg.dev/spinnaker-community/docker/halyard:1.39.0
+        volumeMounts:
+        - name: halyard-config
+          mountPath: /opt/halyard/scripts
+        command:
+        - bash
+        - -xe
+        - "/opt/halyard/scripts/install.sh"

@@ -1,0 +1,82 @@
+---
+# Source: webhook/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-webhook
+  labels:
+    helm.sh/chart: webhook-0.1.1
+    app.kubernetes.io/name: webhook
+    app.kubernetes.io/instance: my-webhook
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+automountServiceAccountToken: true
+---
+# Source: webhook/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-webhook
+  labels:
+    helm.sh/chart: webhook-0.1.1
+    app.kubernetes.io/name: webhook
+    app.kubernetes.io/instance: my-webhook
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9090
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: webhook
+    app.kubernetes.io/instance: my-webhook
+---
+# Source: webhook/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-webhook
+  labels:
+    helm.sh/chart: webhook-0.1.1
+    app.kubernetes.io/name: webhook
+    app.kubernetes.io/instance: my-webhook
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: webhook
+      app.kubernetes.io/instance: my-webhook
+  template:
+    metadata:
+      labels:
+        helm.sh/chart: webhook-0.1.1
+        app.kubernetes.io/name: webhook
+        app.kubernetes.io/instance: my-webhook
+        app.kubernetes.io/version: "1.16.0"
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      serviceAccountName: my-webhook
+      securityContext:
+        {}
+      containers:
+        - name: webhook
+          securityContext:
+            {}
+          image: "leonardomulticloud/webhook:v1.0.0:latest"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 9090
+              protocol: TCP
+          resources:
+            limits:
+              cpu: 100m
+              memory: 128Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi

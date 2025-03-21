@@ -1,0 +1,112 @@
+---
+# Source: airsonic-advanced/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-airsonic-advanced
+  labels:
+    helm.sh/chart: airsonic-advanced-0.2.0
+    app.kubernetes.io/name: airsonic-advanced
+    app.kubernetes.io/instance: my-airsonic-advanced
+    app.kubernetes.io/version: "11.0.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: airsonic-advanced/templates/service-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-airsonic-advanced-headless
+  labels:
+    helm.sh/chart: airsonic-advanced-0.2.0
+    app.kubernetes.io/name: airsonic-advanced
+    app.kubernetes.io/instance: my-airsonic-advanced
+    app.kubernetes.io/version: "11.0.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: airsonic-advanced
+    app.kubernetes.io/instance: my-airsonic-advanced
+---
+# Source: airsonic-advanced/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-airsonic-advanced
+  labels:
+    helm.sh/chart: airsonic-advanced-0.2.0
+    app.kubernetes.io/name: airsonic-advanced
+    app.kubernetes.io/instance: my-airsonic-advanced
+    app.kubernetes.io/version: "11.0.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: airsonic-advanced
+      app.kubernetes.io/instance: my-airsonic-advanced
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: airsonic-advanced
+        app.kubernetes.io/instance: my-airsonic-advanced
+    spec:
+      serviceAccountName: my-airsonic-advanced
+      securityContext:
+        {}
+      containers:
+        - name: airsonic-advanced
+          securityContext:
+            {}
+          image: "linuxserver/airsonic-advanced:11.0.0"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: JAVA_OPTS
+              value: -Dserver.port=8080
+            - name: CONTEXT_PATH
+              value: /
+            - name: PUID
+              value: "1000"
+            - name: PGID
+              value: "1000"
+            - name: TZ
+              value: "Etc/UTC"
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            tcpSocket:
+              port: http
+          readinessProbe:
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            tcpSocket:
+              port: http
+          startupProbe:
+            tcpSocket:
+              port: http
+            failureThreshold: 30
+            periodSeconds: 10
+          volumeMounts:
+            - name: my-airsonic-advanced-data
+              mountPath: "/config"
+              subPath: "config"
+            - name: my-airsonic-advanced-data
+              mountPath: "/playlists"
+              subPath: "playlists"
+            - name: my-airsonic-advanced-data
+              mountPath: "/podcasts"
+              subPath: "podcasts"
+          resources:
+            {}
+      volumes:
+        - name: my-airsonic-advanced-data
+          emptyDir: { }

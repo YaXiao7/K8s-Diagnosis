@@ -1,0 +1,182 @@
+---
+# Source: fluent-operator/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fluent-operator
+  labels:
+    app.kubernetes.io/component: operator
+    app.kubernetes.io/name: fluent-operator
+---
+# Source: fluent-operator/templates/fluent-operator-clusterRole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/name: fluent-operator
+  name: fluent-operator
+rules:
+  - apiGroups:
+      - apps
+    resources:
+      - daemonsets
+      - statefulsets
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+    verbs:
+      - get
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+      - configmaps
+      - serviceaccounts
+      - configmaps
+      - services
+      - namespaces
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - fluentbit.fluent.io
+    resources:
+      - fluentbits
+      - clusterfluentbitconfigs
+      - clusterfilters
+      - clusterinputs
+      - clusteroutputs
+      - clusterparsers
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - fluentd.fluent.io
+    resources:
+      - fluentds
+      - fluentds/status
+      - clusterfluentdconfigs
+      - clusterfluentdconfigs/status
+      - fluentdconfigs
+      - fluentdconfigs/status
+      - clusterfilters
+      - filters
+      - clusteroutputs
+      - outputs
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - rbac.authorization.k8s.io
+    resources:
+      - clusterrolebindings
+    verbs:
+      - create
+  - apiGroups:
+      - rbac.authorization.k8s.io
+    resources:
+      - clusterroles
+    verbs:
+      - create
+---
+# Source: fluent-operator/templates/fluent-operator-clusterRoleBinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/name: fluent-operator
+  name: fluent-operator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: fluent-operator
+subjects:
+- kind: ServiceAccount
+  name: fluent-operator
+  namespace: default
+---
+# Source: fluent-operator/templates/fluent-operator-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fluent-operator
+  labels:
+    app.kubernetes.io/component: operator
+    app.kubernetes.io/name: fluent-operator
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: operator
+      app.kubernetes.io/name: fluent-operator
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: operator
+        app.kubernetes.io/name: fluent-operator
+    spec:
+      volumes:
+      - name: env
+        emptyDir: {}
+      - name: dockersock
+        hostPath:
+          path: /var/run/docker.sock
+      initContainers:
+      - name: setenv
+        image: docker:19.03
+        command:
+        - /bin/sh
+        - '-c'
+        - set -ex;
+          echo CONTAINER_ROOT_DIR=$(docker info -f '{{.DockerRootDir}}' 2> /dev/null) > /fluent-operator/fluent-bit.env
+        volumeMounts:
+        - name: env
+          mountPath: /fluent-operator
+        - name: dockersock
+          readOnly: true
+          mountPath: /var/run/docker.sock
+      containers:
+      - name: fluent-operator
+        image: kubesphere/fluent-operator:v1.0.2
+        resources:
+          limits:
+            cpu: 100m
+            memory: 30Mi
+          requests:
+            cpu: 100m
+            memory: 20Mi
+        env:
+          - name: NAMESPACE
+            valueFrom:
+              fieldRef:
+                apiVersion: v1
+                fieldPath: metadata.namespace
+        volumeMounts:
+        - name: env
+          mountPath: /fluent-operator
+      serviceAccountName: fluent-operator

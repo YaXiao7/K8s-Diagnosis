@@ -1,0 +1,111 @@
+---
+# Source: service-chart/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-service-chart
+  labels:
+    helm.sh/chart: service-chart-0.24.0
+    app.kubernetes.io/name: service-chart
+    app.kubernetes.io/instance: my-service-chart
+    app.kubernetes.io/version: "0.24.0"
+    app.kubernetes.io/managed-by: Helm
+automountServiceAccountToken: true
+---
+# Source: service-chart/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-service-chart
+  labels:
+    helm.sh/chart: service-chart-0.24.0
+    app.kubernetes.io/name: service-chart
+    app.kubernetes.io/instance: my-service-chart
+    app.kubernetes.io/version: "0.24.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: service-chart
+    app.kubernetes.io/instance: my-service-chart
+---
+# Source: service-chart/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-service-chart
+  labels:
+    helm.sh/chart: service-chart-0.24.0
+    app.kubernetes.io/name: service-chart
+    app.kubernetes.io/instance: my-service-chart
+    app.kubernetes.io/version: "0.24.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: service-chart
+      app.kubernetes.io/instance: my-service-chart
+  template:
+    metadata:
+      labels:
+        helm.sh/chart: service-chart-0.24.0
+        app.kubernetes.io/name: service-chart
+        app.kubernetes.io/instance: my-service-chart
+        app.kubernetes.io/version: "0.24.0"
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      imagePullSecrets:
+        - name: docker-reg
+      serviceAccountName: my-service-chart
+      securityContext:
+        {}
+      containers:
+        - name: service-chart
+          securityContext:
+            {}
+          image: "nginx:0.24.0"
+          imagePullPolicy: IfNotPresent
+          envFrom:
+          - secretRef:
+              name: thecratedig-secrets
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+            {}
+---
+# Source: service-chart/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-service-chart-test-connection"
+  labels:
+    helm.sh/chart: service-chart-0.24.0
+    app.kubernetes.io/name: service-chart
+    app.kubernetes.io/instance: my-service-chart
+    app.kubernetes.io/version: "0.24.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-service-chart:80']
+  restartPolicy: Never

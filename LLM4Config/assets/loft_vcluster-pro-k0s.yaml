@@ -1,0 +1,566 @@
+---
+# Source: vcluster-pro-k0s/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vc-my-vcluster-pro-k0s
+  namespace: default
+  labels:
+    app: vcluster
+    chart: "vcluster-pro-k0s-0.2.0"
+    release: "my-vcluster-pro-k0s"
+    heritage: "Helm"
+---
+# Source: vcluster-pro-k0s/templates/workloadserviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vc-workload-my-vcluster-pro-k0s
+  namespace: default
+  labels:
+    app: vcluster
+    chart: "vcluster-pro-k0s-0.2.0"
+    release: "my-vcluster-pro-k0s"
+    heritage: "Helm"
+---
+# Source: vcluster-pro-k0s/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: vc-my-vcluster-pro-k0s-config
+  namespace: default
+  labels:
+    app: vcluster
+    chart: "vcluster-pro-k0s-0.2.0"
+    release: "my-vcluster-pro-k0s"
+    heritage: "Helm"
+type: Opaque
+stringData:
+  config.yaml: |-
+    apiVersion: k0s.k0sproject.io/v1beta1
+    kind: Cluster
+    metadata:
+      name: k0s
+    spec:
+      api:
+        port: 6443
+        k0sApiPort: 9443
+        extraArgs:
+          enable-admission-plugins: NodeRestriction
+          endpoint-reconciler-type: none
+      network:
+        # Will be replaced automatically by the syncer container on first 
+        serviceCIDR: CIDR_PLACEHOLDER
+        provider: custom
+      controllerManager:
+        extraArgs:
+          controllers: '*,-nodeipam,-nodelifecycle,-persistentvolume-binder,-attachdetach,-persistentvolume-expander,-cloud-node-lifecycle,-ttl'
+---
+# Source: vcluster-pro-k0s/templates/coredns.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-vcluster-pro-k0s-coredns
+  namespace: default
+data:
+  coredns.yaml: |-
+    apiVersion: v1
+    kind: ServiceAccount
+    metadata:
+      name: coredns
+      namespace: kube-system
+    ---
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: ClusterRole
+    metadata:
+      labels:
+        kubernetes.io/bootstrapping: rbac-defaults
+      name: system:coredns
+    rules:
+      - apiGroups:
+          - ""
+        resources:
+          - endpoints
+          - services
+          - pods
+          - namespaces
+        verbs:
+          - list
+          - watch
+      - apiGroups:
+          - discovery.k8s.io
+        resources:
+          - endpointslices
+        verbs:
+          - list
+          - watch
+    ---
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: ClusterRoleBinding
+    metadata:
+      annotations:
+        rbac.authorization.kubernetes.io/autoupdate: "true"
+      labels:
+        kubernetes.io/bootstrapping: rbac-defaults
+      name: system:coredns
+    roleRef:
+      apiGroup: rbac.authorization.k8s.io
+      kind: ClusterRole
+      name: system:coredns
+    subjects:
+      - kind: ServiceAccount
+        name: coredns
+        namespace: kube-system
+    ---
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: coredns
+      namespace: kube-system
+    data:
+      Corefile: |-
+        .:1053 {
+            errors {
+                stacktrace
+            }
+            health
+            ready
+            rewrite name regex .*\.nodes\.vcluster\.com kubernetes.default.svc.cluster.local
+            kubernetes cluster.local in-addr.arpa ip6.arpa {
+                pods insecure
+                fallthrough in-addr.arpa ip6.arpa
+            }
+            hosts /etc/NodeHosts {
+                ttl 60
+                reload 15s
+                fallthrough
+            }
+            prometheus :9153
+            forward . /etc/resolv.conf
+            cache 30
+            loop
+            loadbalance
+        }
+      
+        import /etc/coredns/custom/*.server
+      NodeHosts: ""
+    ---
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: coredns
+      namespace: kube-system
+      labels:
+        k8s-app: kube-dns
+        kubernetes.io/name: "CoreDNS"
+    spec:
+      replicas: 1
+      strategy:
+        type: RollingUpdate
+        rollingUpdate:
+          maxUnavailable: 1
+      selector:
+        matchLabels:
+          k8s-app: kube-dns
+      template:
+        metadata:
+          labels:
+            k8s-app: kube-dns
+        spec:
+          priorityClassName: "system-cluster-critical"
+          serviceAccountName: coredns
+          nodeSelector:
+            kubernetes.io/os: linux
+          topologySpreadConstraints:
+            - maxSkew: 1
+              topologyKey: kubernetes.io/hostname
+              whenUnsatisfiable: DoNotSchedule
+              labelSelector:
+                matchLabels:
+                  k8s-app: kube-dns
+          containers:
+            - name: coredns
+              image: {{.IMAGE}}
+              imagePullPolicy: IfNotPresent
+              resources:
+                limits:
+                  cpu: 1000m
+                  memory: 512Mi
+                requests:
+                  cpu: 20m
+                  memory: 64Mi
+              args: [ "-conf", "/etc/coredns/Corefile" ]
+              volumeMounts:
+                - name: config-volume
+                  mountPath: /etc/coredns
+                  readOnly: true
+                - name: custom-config-volume
+                  mountPath: /etc/coredns/custom
+                  readOnly: true
+              ports:
+                - containerPort: 1053
+                  name: dns
+                  protocol: UDP
+                - containerPort: 1053
+                  name: dns-tcp
+                  protocol: TCP
+                - containerPort: 9153
+                  name: metrics
+                  protocol: TCP
+              securityContext:
+                runAsNonRoot: true
+                runAsUser: {{.RUN_AS_USER}}
+                runAsGroup: {{.RUN_AS_GROUP}}
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                    - ALL
+                readOnlyRootFilesystem: true
+              livenessProbe:
+                httpGet:
+                  path: /health
+                  port: 8080
+                  scheme: HTTP
+                initialDelaySeconds: 60
+                periodSeconds: 10
+                timeoutSeconds: 1
+                successThreshold: 1
+                failureThreshold: 3
+              readinessProbe:
+                httpGet:
+                  path: /ready
+                  port: 8181
+                  scheme: HTTP
+                initialDelaySeconds: 0
+                periodSeconds: 2
+                timeoutSeconds: 1
+                successThreshold: 1
+                failureThreshold: 3
+          dnsPolicy: Default
+          volumes:
+            - name: config-volume
+              configMap:
+                name: coredns
+                items:
+                  - key: Corefile
+                    path: Corefile
+                  - key: NodeHosts
+                    path: NodeHosts
+            - name: custom-config-volume
+              configMap:
+                name: coredns-custom
+                optional: true
+    ---
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: kube-dns
+      namespace: kube-system
+      annotations:
+        prometheus.io/port: "9153"
+        prometheus.io/scrape: "true"
+      labels:
+        k8s-app: kube-dns
+        kubernetes.io/cluster-service: "true"
+        kubernetes.io/name: "CoreDNS"
+    spec:
+      selector:
+        k8s-app: kube-dns
+      type: ClusterIP
+      ports:
+        - name: dns
+          port: 53
+          targetPort: 1053
+          protocol: UDP
+        - name: dns-tcp
+          port: 53
+          targetPort: 1053
+          protocol: TCP
+        - name: metrics
+          port: 9153
+          protocol: TCP
+---
+# Source: vcluster-pro-k0s/templates/init-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-vcluster-pro-k0s-init-manifests
+  namespace: default
+  labels:
+    app: vcluster
+    chart: "vcluster-pro-k0s-0.2.0"
+    release: "my-vcluster-pro-k0s"
+    heritage: "Helm"
+data:
+  manifests: |-
+    ---
+---
+# Source: vcluster-pro-k0s/templates/rbac/clusterrole.yaml
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: vc-my-vcluster-pro-k0s-v-default
+  labels:
+    app: vcluster
+    chart: "vcluster-pro-k0s-0.2.0"
+    release: "my-vcluster-pro-k0s"
+    heritage: "Helm"
+rules:
+  - apiGroups: ["cluster.loft.sh", "storage.loft.sh"]
+    resources: ["features", "virtualclusters"]
+    verbs: ["get", "list", "watch"]
+---
+# Source: vcluster-pro-k0s/templates/rbac/clusterrolebinding.yaml
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: vc-my-vcluster-pro-k0s-v-default
+  labels:
+    app: vcluster
+    chart: "vcluster-pro-k0s-0.2.0"
+    release: "my-vcluster-pro-k0s"
+    heritage: "Helm"
+subjects:
+  - kind: ServiceAccount
+    name: vc-my-vcluster-pro-k0s
+    namespace: default
+roleRef:
+  kind: ClusterRole
+  name: vc-my-vcluster-pro-k0s-v-default
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: vcluster-pro-k0s/templates/rbac/role.yaml
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-vcluster-pro-k0s
+  namespace: default
+  labels:
+    app: vcluster
+    chart: "vcluster-pro-k0s-0.2.0"
+    release: "my-vcluster-pro-k0s"
+    heritage: "Helm"
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps", "secrets", "services", "pods", "pods/attach", "pods/portforward", "pods/exec", "persistentvolumeclaims"]
+    verbs: ["create", "delete", "patch", "update", "get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["endpoints"]
+    verbs: ["create", "delete", "patch", "update"]
+  - apiGroups: [""]
+    resources: ["endpoints", "events", "pods/log"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["statefulsets", "replicasets", "deployments"]
+    verbs: ["get", "list", "watch"]
+---
+# Source: vcluster-pro-k0s/templates/rbac/rolebinding.yaml
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-vcluster-pro-k0s
+  namespace: default
+  labels:
+    app: vcluster
+    chart: "vcluster-pro-k0s-0.2.0"
+    release: "my-vcluster-pro-k0s"
+    heritage: "Helm"
+subjects:
+  - kind: ServiceAccount
+    name: vc-my-vcluster-pro-k0s
+    namespace: default
+roleRef:
+  kind: Role
+  name: my-vcluster-pro-k0s
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: vcluster-pro-k0s/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-vcluster-pro-k0s
+  namespace: default
+  labels:
+    app: vcluster
+    chart: "vcluster-pro-k0s-0.2.0"
+    release: "my-vcluster-pro-k0s"
+    heritage: "Helm"
+spec:
+  type: ClusterIP
+  ports:
+    - name: https
+      port: 443
+      targetPort: 8443
+      protocol: TCP
+    - name: kubelet
+      port: 10250
+      targetPort: 8443
+      protocol: TCP
+  selector:
+    app: vcluster
+    release: my-vcluster-pro-k0s
+---
+# Source: vcluster-pro-k0s/templates/statefulset-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-vcluster-pro-k0s-headless
+  namespace: default
+  labels:
+    app: my-vcluster-pro-k0s
+    chart: "vcluster-pro-k0s-0.2.0"
+    release: "my-vcluster-pro-k0s"
+    heritage: "Helm"
+spec:
+  ports:
+    - name: https
+      port: 443
+      targetPort: 8443
+      protocol: TCP
+  clusterIP: None
+  selector:
+    app: vcluster
+    release: "my-vcluster-pro-k0s"
+---
+# Source: vcluster-pro-k0s/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-vcluster-pro-k0s
+  namespace: default
+  labels:
+    app: vcluster
+    chart: "vcluster-pro-k0s-0.2.0"
+    release: "my-vcluster-pro-k0s"
+    heritage: "Helm"
+spec:
+  serviceName: my-vcluster-pro-k0s-headless
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vcluster
+      release: my-vcluster-pro-k0s
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        resources:
+          requests:
+            storage: 5Gi
+  template:
+    metadata:
+      labels:
+        app: vcluster
+        release: my-vcluster-pro-k0s
+    spec:
+      terminationGracePeriodSeconds: 10
+      nodeSelector:
+        {}
+      affinity:
+        {}
+      tolerations:
+        []
+      serviceAccountName: vc-my-vcluster-pro-k0s
+      volumes:
+        - name: k0s-config
+          secret:
+            secretName: vc-my-vcluster-pro-k0s-config
+        - name: coredns
+          configMap:
+            name: my-vcluster-pro-k0s-coredns
+        - name: custom-config-volume
+          configMap:
+            name: coredns-custom
+            optional: true
+      securityContext:
+        allowPrivilegeEscalation: false
+        runAsGroup: 0
+        runAsUser: 0
+      containers:
+      - image: k0sproject/k0s:v1.26.0-k0s.0
+        name: vcluster
+        command:
+          - "k0s"
+        args:
+          - "controller"
+          - "--config=/etc/k0s/config.yaml"
+          - "--data-dir=/data/k0s"
+          - --disable-components=konnectivity-server,kube-scheduler,csr-approver,kube-proxy,coredns,network-provider,helm,metrics-server,kubelet-config
+        env:
+          - name: ETCD_UNSUPPORTED_ARCH
+            value: arm64
+          - name: CONFIG_READY
+            valueFrom:
+              secretKeyRef:
+                name: "vc-my-vcluster-pro-k0s-config"
+                key: CONFIG_READY
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsGroup: 0
+          runAsUser: 0
+        volumeMounts:
+          - mountPath: /data
+            name: data
+          - mountPath: /etc/k0s
+            name: k0s-config
+        resources:
+          limits:
+            memory: 2Gi
+          requests:
+            cpu: 200m
+            memory: 256Mi
+      - name: syncer
+        image: "ghcr.io/loft-sh/vcluster-pro:0.2.0"
+        args:
+          - --name=my-vcluster-pro-k0s
+          - --service-account=vc-workload-my-vcluster-pro-k0s
+          - --request-header-ca-cert=/data/k0s/pki/ca.crt
+          - --client-ca-cert=/data/k0s/pki/ca.crt
+          - --server-ca-cert=/data/k0s/pki/ca.crt
+          - --server-ca-key=/data/k0s/pki/ca.key
+          - --kube-config=/data/k0s/pki/admin.conf                    
+          - --kube-config-context-name=my-vcluster          
+          - --sync=-ingressclasses
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8443
+            scheme: HTTPS
+          failureThreshold: 10
+          initialDelaySeconds: 60
+          periodSeconds: 2
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8443
+            scheme: HTTPS
+          failureThreshold: 30
+          periodSeconds: 2
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsGroup: 0
+          runAsUser: 0
+        env:
+          - name: VCLUSTER_NODE_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: spec.nodeName
+          - name: CONFIG
+            value: |-
+              ---
+          - name: VCLUSTER_TELEMETRY_CONFIG
+            value: "{\"disabled\":\"false\",\"instanceCreator\":\"helm\",\"instanceCreatorUID\":\"\"}"
+        volumeMounts:
+          - name: coredns
+            mountPath: /manifests/coredns
+            readOnly: true
+          - mountPath: /data
+            name: data
+            readOnly: true
+        resources:
+          limits:
+            memory: 1Gi
+          requests:
+            cpu: 10m
+            memory: 64Mi

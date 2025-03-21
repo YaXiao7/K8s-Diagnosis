@@ -1,0 +1,93 @@
+---
+# Source: deemix/templates/common.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-deemix
+  labels:
+    app.kubernetes.io/instance: my-deemix
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: deemix
+    app.kubernetes.io/version: 2022.5.28-r206.a752a63e0e
+    helm.sh/chart: deemix-1.1.2
+  annotations:
+spec:
+  type: ClusterIP
+  ports:
+  - port: 6595
+    targetPort: http
+    protocol: TCP
+    name: http
+  selector:
+    app.kubernetes.io/name: deemix
+    app.kubernetes.io/instance: my-deemix
+---
+# Source: deemix/templates/common.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-deemix
+  labels:
+    app.kubernetes.io/instance: my-deemix
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: deemix
+    app.kubernetes.io/version: 2022.5.28-r206.a752a63e0e
+    helm.sh/chart: deemix-1.1.2
+spec:
+  revisionHistoryLimit: 3
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: deemix
+      app.kubernetes.io/instance: my-deemix
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: deemix
+        app.kubernetes.io/instance: my-deemix
+    spec:
+      
+      serviceAccountName: default
+      automountServiceAccountToken: true
+      dnsPolicy: ClusterFirst
+      enableServiceLinks: true
+      containers:
+        - name: my-deemix
+          image: "registry.gitlab.com/bockiii/deemix-docker:2022.5.28-r206.a752a63e0e"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: PGID
+              value: "1000"
+            - name: PUID
+              value: "1000"
+            - name: TZ
+              value: UTC
+            - name: UMASK_SET
+              value: "022"
+          ports:
+            - name: http
+              containerPort: 6595
+              protocol: TCP
+          livenessProbe:
+            tcpSocket:
+              port: 6595
+            initialDelaySeconds: 0
+            failureThreshold: 3
+            timeoutSeconds: 1
+            periodSeconds: 10
+          readinessProbe:
+            tcpSocket:
+              port: 6595
+            initialDelaySeconds: 0
+            failureThreshold: 3
+            timeoutSeconds: 1
+            periodSeconds: 10
+          startupProbe:
+            tcpSocket:
+              port: 6595
+            initialDelaySeconds: 0
+            failureThreshold: 30
+            timeoutSeconds: 1
+            periodSeconds: 5

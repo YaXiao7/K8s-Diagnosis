@@ -1,0 +1,80 @@
+---
+# Source: prometheus-nats-exporter/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    {}
+  name: my-prometheus-nats-exporter
+  labels:
+    app.kubernetes.io/name: prometheus-nats-exporter
+    app.kubernetes.io/instance: my-prometheus-nats-exporter
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: prometheus-nats-exporter-2.17.0
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 7777
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: prometheus-nats-exporter
+    app.kubernetes.io/instance: my-prometheus-nats-exporter
+---
+# Source: prometheus-nats-exporter/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-prometheus-nats-exporter
+  labels:
+    app.kubernetes.io/name: prometheus-nats-exporter
+    app.kubernetes.io/instance: my-prometheus-nats-exporter
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: prometheus-nats-exporter-2.17.0
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus-nats-exporter
+      app.kubernetes.io/instance: my-prometheus-nats-exporter
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: prometheus-nats-exporter
+        app.kubernetes.io/instance: my-prometheus-nats-exporter
+      annotations:
+    spec:
+      containers:
+        - name: prometheus-nats-exporter
+          args:
+            - "-port"
+            - "7777"
+            - "-varz"
+            - "-accstatz"
+            - "-channelz"
+            - "-connz"
+            - "-connz_detailed"
+            - "-routez"
+            - "-serverz"
+            - "-subz"
+            - "-gatewayz"
+            - "-jsz=all"
+            - "-leafz"
+            - "http://nats-nats-monitoring.default.svc:8222"
+          image: "natsio/prometheus-nats-exporter:0.15.0"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 7777
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: http
+          resources:
+            {}

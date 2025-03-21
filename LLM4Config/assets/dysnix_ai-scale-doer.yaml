@@ -1,0 +1,385 @@
+---
+# Source: ai-scale-doer/templates/base-all.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-ai-scale-doer
+  labels:
+    app.kubernetes.io/name: ai-scale-doer
+    helm.sh/chart: ai-scale-doer-0.1.0
+    app.kubernetes.io/instance: my-ai-scale-doer
+    app.kubernetes.io/managed-by: Helm
+    control-plane: controller-manager
+    controller-tools.k8s.io: "1.0"
+---
+# Source: ai-scale-doer/templates/base-all.yaml
+apiVersion: v1
+kind: ConfigMap
+immutable: false
+metadata:
+  name: my-ai-scale-doer
+  labels:
+    app.kubernetes.io/name: ai-scale-doer
+    helm.sh/chart: ai-scale-doer-0.1.0
+    app.kubernetes.io/instance: my-ai-scale-doer
+    app.kubernetes.io/managed-by: Helm
+    control-plane: controller-manager
+    controller-tools.k8s.io: "1.0"
+data:
+  configs.yaml: |
+    client:
+      clusterId: <some_client_cluster_id>
+      name: <some_client_name>
+      token: <some_client_token>
+    debugMode: true
+    gatewaySaverGrpc:
+      compression:
+        enabled: false
+        type: Zstd
+      connection:
+        host: localhost
+        insecure: true
+        maxMessageSize: 30MiB
+        port: 8091
+        readBufferSize: 100MiB
+        timeout: 15s
+        writeBufferSize: 100MiB
+      enabled: true
+      keepalive:
+        enforcementPolicy:
+          minTime: 20m
+          permitWithoutStream: false
+        time: 5m
+        timeout: 5m
+      useReflection: true
+    grpc:
+      compression:
+        enabled: false
+        type: Zstd
+      connection:
+        host: localhost
+        insecure: true
+        maxMessageSize: 30MiB
+        port: 8091
+        readBufferSize: 100MiB
+        timeout: 15s
+        writeBufferSize: 100MiB
+      enabled: true
+      keepalive:
+        enforcementPolicy:
+          minTime: 20m
+          permitWithoutStream: false
+        time: 5m
+        timeout: 5m
+      useReflection: true
+    monitoring:
+      enabled: true
+      host: 0.0.0.0
+      port: 8097
+    profiling:
+      enabled: true
+      host: 0.0.0.0
+      port: 8098
+    startupWorkers:
+      cron: '@every 20s'
+---
+# Source: ai-scale-doer/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-ai-scale-doer
+  labels:
+    app.kubernetes.io/name: ai-scale-doer
+    helm.sh/chart: ai-scale-doer-0.1.0
+    app.kubernetes.io/instance: my-ai-scale-doer
+    app.kubernetes.io/managed-by: Helm
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - namespaces
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - apps
+    resources:
+      - deployments
+      - statefulsets
+      - daemonsets
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+  - apiGroups: [""]
+    resources:
+      - aipodautoscalers
+      - aipodautoscaler
+    verbs:
+      - "*"
+  - apiGroups: [""]
+    resources:
+      - aipodautoscalers/status
+      - aipodautoscaler/status
+    verbs:
+      - "*"
+  - apiGroups: ["autoscaling.ai.op.dysnix.org"]
+    resources: ["*"]
+    verbs: ["*"]
+  - apiGroups:
+      - autoscaling.ai.op.dysnix.org
+    resources:
+      - aipodautoscalers/status
+      - aipodautoscaler/status
+    verbs:
+      - '*'
+  - apiGroups:
+      - autoscaling.ai.op.dysnix.org
+    resources:
+      - aipodautoscalers
+      - aipodautoscaler
+    verbs:
+      - '*'
+  - apiGroups:
+      - authorization.k8s.io
+    resources:
+      - subjectaccessreviews
+    verbs:
+      - '*'
+  - apiGroups:
+      - apps
+    resources:
+      - daemonsets/status
+    verbs:
+      - '*'
+  - apiGroups:
+      - apps
+    resources:
+      - deployments/status
+    verbs:
+      - '*'
+  - apiGroups:
+      - apps
+    resources:
+      - statefulsets/status
+    verbs:
+      - '*'
+  - apiGroups:
+      - autoscaling.ai.op.dysnix.org
+    resources:
+      - aipodautoscalers/finalizers
+      - aipodautoscaler/finalizers
+    verbs:
+      - '*'
+  - apiGroups:
+      - autoscaling.ai.op.dysnix.org
+    resources:
+      - aipodautoscalers/status
+      - aipodautoscaler/status
+    verbs:
+      - '*'
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+  - apiGroups:
+      - coordination.k8s.io
+    resources:
+      - leases
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - create
+      - update
+      - delete
+      - deletecollection
+      - patch
+---
+# Source: ai-scale-doer/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-ai-scale-doer
+  labels:
+    app.kubernetes.io/name: ai-scale-doer
+    helm.sh/chart: ai-scale-doer-0.1.0
+    app.kubernetes.io/instance: my-ai-scale-doer
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-ai-scale-doer
+subjects:
+  - kind: ServiceAccount
+    name: my-ai-scale-doer
+    namespace: default
+---
+# Source: ai-scale-doer/templates/base-all.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-ai-scale-doer
+  labels:
+    app.kubernetes.io/name: ai-scale-doer
+    helm.sh/chart: ai-scale-doer-0.1.0
+    app.kubernetes.io/instance: my-ai-scale-doer
+    app.kubernetes.io/managed-by: Helm
+    control-plane: controller-manager
+    controller-tools.k8s.io: "1.0"
+spec:
+  ports:
+    - name: https
+      port: 8443
+      protocol: TCP
+      targetPort: https
+    - name: webhooks
+      port: 443
+      protocol: TCP
+      targetPort: https
+    - name: pprof
+      port: 8098
+      protocol: TCP
+      targetPort: pprof
+    - name: metrics
+      port: 8097
+      protocol: TCP
+      targetPort: metrics
+    - name: probes
+      port: 8081
+      protocol: TCP
+      targetPort: probes
+  selector:
+    app.kubernetes.io/name: ai-scale-doer
+    app.kubernetes.io/instance: my-ai-scale-doer
+---
+# Source: ai-scale-doer/templates/base-all.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-ai-scale-doer
+  labels:
+    app.kubernetes.io/name: ai-scale-doer
+    helm.sh/chart: ai-scale-doer-0.1.0
+    app.kubernetes.io/instance: my-ai-scale-doer
+    app.kubernetes.io/managed-by: Helm
+    control-plane: controller-manager
+    controller-tools.k8s.io: "1.0"
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ai-scale-doer
+      app.kubernetes.io/instance: my-ai-scale-doer
+  template:
+    metadata:
+      annotations:
+        checksum/config: '3b6d07454cdccf3115e9c583c076531af160f27d2e66c4f3d60d63c31f269702'
+      labels:
+        app.kubernetes.io/name: ai-scale-doer
+        helm.sh/chart: ai-scale-doer-0.1.0
+        app.kubernetes.io/instance: my-ai-scale-doer
+        app.kubernetes.io/managed-by: Helm
+        control-plane: controller-manager
+        controller-tools.k8s.io: "1.0"
+    spec:      
+      serviceAccountName: my-ai-scale-doer
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: ai-scale-doer
+                    app.kubernetes.io/instance: my-ai-scale-doer
+                namespaces:
+                  - "default"
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+      securityContext: 
+        fsGroup: 1001
+      
+      containers:
+        -
+          name: ai-scale-doer
+          image: alex6021710/ai-scale-doer:latest
+          imagePullPolicy: Always
+          securityContext: 
+            runAsNonRoot: true
+            runAsUser: 1001
+          command:
+            - /usr/local/bin/manager
+          args:
+            - --zap-log-level=debug
+            - --leader-elect=false
+            - --sync-period=120s
+            - -conf=/etc/doer/configs/configs.yaml
+            - --health-probe-bind-address=0.0.0.0:8081
+            - --metrics-bind-address=0.0.0.0:8097
+            - --enable-webhooks=false
+          resources:
+            limits: {}
+            requests: {}
+          ports:  
+            - name: https
+              containerPort: 8443
+              protocol: TCP
+            - name: pprof
+              containerPort: 8098
+              protocol: TCP
+            - name: metrics
+              containerPort: 8097
+              protocol: TCP
+            - name: probes
+              containerPort: 8081
+              protocol: TCP
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /readyz
+              port: 8081
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+          volumeMounts:  
+            - name: configs
+              mountPath: /etc/doer/configs
+              readOnly: true
+      volumes:   
+        - name: configs
+          configMap:
+            name: "my-ai-scale-doer"

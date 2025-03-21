@@ -1,0 +1,428 @@
+---
+# Source: testlink/charts/mariadb/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-testlink-mariadb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: mariadb
+    helm.sh/chart: mariadb-10.4.0
+    app.kubernetes.io/instance: my-testlink
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+automountServiceAccountToken: false
+---
+# Source: testlink/charts/mariadb/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-testlink-mariadb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: mariadb
+    helm.sh/chart: mariadb-10.4.0
+    app.kubernetes.io/instance: my-testlink
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  mariadb-root-password: "blY4TUgzVEpPRQ=="
+  mariadb-password: "UlF3NExITjQxVA=="
+---
+# Source: testlink/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-testlink
+  labels:
+    app.kubernetes.io/name: testlink
+    helm.sh/chart: testlink-10.0.13
+    app.kubernetes.io/instance: my-testlink
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  testlink-password: "TmJvRGQwNnh0bQ=="
+---
+# Source: testlink/charts/mariadb/templates/primary/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-testlink-mariadb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: mariadb
+    helm.sh/chart: mariadb-10.4.0
+    app.kubernetes.io/instance: my-testlink
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: primary
+data:
+  my.cnf: |-
+    [mysqld]
+    skip-name-resolve
+    explicit_defaults_for_timestamp
+    basedir=/opt/bitnami/mariadb
+    plugin_dir=/opt/bitnami/mariadb/plugin
+    port=3306
+    socket=/opt/bitnami/mariadb/tmp/mysql.sock
+    tmpdir=/opt/bitnami/mariadb/tmp
+    max_allowed_packet=16M
+    bind-address=::
+    pid-file=/opt/bitnami/mariadb/tmp/mysqld.pid
+    log-error=/opt/bitnami/mariadb/logs/mysqld.log
+    character-set-server=UTF8
+    collation-server=utf8_general_ci
+    
+    [client]
+    port=3306
+    socket=/opt/bitnami/mariadb/tmp/mysql.sock
+    default-character-set=UTF8
+    plugin_dir=/opt/bitnami/mariadb/plugin
+    
+    [manager]
+    port=3306
+    socket=/opt/bitnami/mariadb/tmp/mysql.sock
+    pid-file=/opt/bitnami/mariadb/tmp/mysqld.pid
+---
+# Source: testlink/templates/pvc.yaml
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: my-testlink-testlink
+  labels:
+    app.kubernetes.io/name: testlink
+    helm.sh/chart: testlink-10.0.13
+    app.kubernetes.io/instance: my-testlink
+    app.kubernetes.io/managed-by: Helm
+spec:
+  accessModes:
+    - "ReadWriteOnce"
+  resources:
+    requests:
+      storage: "8Gi"
+---
+# Source: testlink/charts/mariadb/templates/primary/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-testlink-mariadb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: mariadb
+    helm.sh/chart: mariadb-10.4.0
+    app.kubernetes.io/instance: my-testlink
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: primary
+  annotations:
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+    - name: mysql
+      port: 3306
+      protocol: TCP
+      targetPort: mysql
+      nodePort: null
+  selector: 
+    app.kubernetes.io/name: mariadb
+    app.kubernetes.io/instance: my-testlink
+    app.kubernetes.io/component: primary
+---
+# Source: testlink/templates/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-testlink
+  labels:
+    app.kubernetes.io/name: testlink
+    helm.sh/chart: testlink-10.0.13
+    app.kubernetes.io/instance: my-testlink
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: "Cluster"
+  sessionAffinity: None
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+    - name: https
+      port: 443
+      targetPort: https
+  selector:
+    app.kubernetes.io/name: testlink
+    app.kubernetes.io/instance: my-testlink
+---
+# Source: testlink/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-testlink
+  labels:
+    app.kubernetes.io/name: testlink
+    helm.sh/chart: testlink-10.0.13
+    app.kubernetes.io/instance: my-testlink
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: testlink
+      app.kubernetes.io/instance: my-testlink
+  strategy:
+    type: RollingUpdate
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: testlink
+        helm.sh/chart: testlink-10.0.13
+        app.kubernetes.io/instance: my-testlink
+        app.kubernetes.io/managed-by: Helm
+      annotations:
+    spec:
+      
+      securityContext:
+        fsGroup: 1001
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: testlink
+                    app.kubernetes.io/instance: my-testlink
+                namespaces:
+                  - "default"
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      priorityClassName: ""
+      # yamllint disable rule:indentation
+      hostAliases:
+        - hostnames:
+          - status.localhost
+          ip: 127.0.0.1
+      # yamllint enable rule:indentation
+      initContainers:
+      containers:
+        - name: my-testlink
+          image: marketplace.azurecr.io/bitnami/testlink:1.9.20-debian-10-r670
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: ALLOW_EMPTY_PASSWORD
+              value: "yes"
+            - name: APACHE_HTTP_PORT_NUMBER
+              value: "8080"
+            - name: APACHE_HTTPS_PORT_NUMBER
+              value: "8443"
+            - name: TESTLINK_DATABASE_HOST
+              value: "my-testlink-mariadb"
+            - name: TESTLINK_DATABASE_PORT_NUMBER
+              value: "3306"
+            - name: TESTLINK_DATABASE_NAME
+              value: "bitnami_testlink"
+            - name: TESTLINK_DATABASE_USER
+              value: "bn_testlink"
+            - name: TESTLINK_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-testlink-mariadb
+                  key: mariadb-password
+            - name: TESTLINK_SKIP_BOOTSTRAP
+              value: "no"
+            - name: TESTLINK_USERNAME
+              value: "user"
+            - name: TESTLINK_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-testlink
+                  key: testlink-password
+            - name: TESTLINK_EMAIL
+              value: "user@example.com"
+            - name: TESTLINK_LANGUAGE
+              value: "en_US"
+          envFrom:
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: https
+              containerPort: 8443
+          livenessProbe:
+            httpGet:
+              path: /login.php
+              port: http
+            initialDelaySeconds: 120
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          readinessProbe:
+            httpGet:
+              path: /login.php
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 5
+            timeoutSeconds: 3
+            successThreshold: 1
+            failureThreshold: 6
+          resources:
+            limits: {}
+            requests:
+              cpu: 300m
+              memory: 512Mi
+          volumeMounts:
+            - name: testlink-data
+              mountPath: /bitnami/testlink
+      volumes:
+        - name: testlink-data
+          persistentVolumeClaim:
+            claimName: my-testlink-testlink
+---
+# Source: testlink/charts/mariadb/templates/primary/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-testlink-mariadb
+  namespace: default
+  labels:
+    app.kubernetes.io/name: mariadb
+    helm.sh/chart: mariadb-10.4.0
+    app.kubernetes.io/instance: my-testlink
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: primary
+spec:
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels: 
+      app.kubernetes.io/name: mariadb
+      app.kubernetes.io/instance: my-testlink
+      app.kubernetes.io/component: primary
+  serviceName: my-testlink-mariadb
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations:
+        checksum/configuration: 5cf11e5cf5bc87a5f70676a3381276a1220879815b6b186f30c56172e725ec1d
+      labels:
+        app.kubernetes.io/name: mariadb
+        helm.sh/chart: mariadb-10.4.0
+        app.kubernetes.io/instance: my-testlink
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/component: primary
+    spec:
+      
+      serviceAccountName: my-testlink-mariadb
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: mariadb
+                    app.kubernetes.io/instance: my-testlink
+                    app.kubernetes.io/component: primary
+                namespaces:
+                  - "default"
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+      containers:
+        - name: mariadb
+          image: marketplace.azurecr.io/bitnami/mariadb:10.5.15-debian-10-r11
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: MARIADB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-testlink-mariadb
+                  key: mariadb-root-password
+            - name: MARIADB_USER
+              value: "bn_testlink"
+            - name: MARIADB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-testlink-mariadb
+                  key: mariadb-password
+            - name: MARIADB_DATABASE
+              value: "bitnami_testlink"
+          ports:
+            - name: mysql
+              containerPort: 3306
+          livenessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 120
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+            exec:
+              command:
+                - /bin/bash
+                - -ec
+                - |
+                  password_aux="${MARIADB_ROOT_PASSWORD:-}"
+                  if [[ -f "${MARIADB_ROOT_PASSWORD_FILE:-}" ]]; then
+                      password_aux=$(cat "$MARIADB_ROOT_PASSWORD_FILE")
+                  fi
+                  mysqladmin status -uroot -p"${password_aux}"
+          readinessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+            exec:
+              command:
+                - /bin/bash
+                - -ec
+                - |
+                  password_aux="${MARIADB_ROOT_PASSWORD:-}"
+                  if [[ -f "${MARIADB_ROOT_PASSWORD_FILE:-}" ]]; then
+                      password_aux=$(cat "$MARIADB_ROOT_PASSWORD_FILE")
+                  fi
+                  mysqladmin status -uroot -p"${password_aux}"
+          resources: 
+            limits: {}
+            requests: {}
+          volumeMounts:
+            - name: data
+              mountPath: /bitnami/mariadb
+            - name: config
+              mountPath: /opt/bitnami/mariadb/conf/my.cnf
+              subPath: my.cnf
+      volumes:
+        - name: config
+          configMap:
+            name: my-testlink-mariadb
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels: 
+          app.kubernetes.io/name: mariadb
+          app.kubernetes.io/instance: my-testlink
+          app.kubernetes.io/component: primary
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "8Gi"

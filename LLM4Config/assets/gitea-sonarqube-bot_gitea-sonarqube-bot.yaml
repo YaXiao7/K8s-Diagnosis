@@ -1,0 +1,151 @@
+---
+# Source: gitea-sonarqube-bot/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-gitea-sonarqube-bot
+  labels:
+    helm.sh/chart: gitea-sonarqube-bot-0.3.5
+    app.kubernetes.io/name: gitea-sonarqube-bot
+    app.kubernetes.io/instance: my-gitea-sonarqube-bot
+    app.kubernetes.io/version: "v0.3.5"
+    app.kubernetes.io/managed-by: Helm
+automountServiceAccountToken: false
+---
+# Source: gitea-sonarqube-bot/templates/config.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-gitea-sonarqube-bot
+stringData:
+  config.yaml: |-
+    gitea:
+      statusCheck:
+        name: gitea-sonarqube-bot
+      token:
+        value: ""
+      url: ""
+      webhook:
+        secret: ""
+    namingPattern:
+      regex: ^PR-(\d+)$
+      template: PR-%d
+    projects:
+    - gitea:
+        name: ""
+        owner: ""
+      sonarqube:
+        key: ""
+    sonarqube:
+      additionalMetrics: []
+      token:
+        value: ""
+      url: ""
+      webhook:
+        secret: ""
+---
+# Source: gitea-sonarqube-bot/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-gitea-sonarqube-bot
+  labels:
+    helm.sh/chart: gitea-sonarqube-bot-0.3.5
+    app.kubernetes.io/name: gitea-sonarqube-bot
+    app.kubernetes.io/instance: my-gitea-sonarqube-bot
+    app.kubernetes.io/version: "v0.3.5"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: gitea-sonarqube-bot
+    app.kubernetes.io/instance: my-gitea-sonarqube-bot
+---
+# Source: gitea-sonarqube-bot/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-gitea-sonarqube-bot
+  labels:
+    helm.sh/chart: gitea-sonarqube-bot-0.3.5
+    app.kubernetes.io/name: gitea-sonarqube-bot
+    app.kubernetes.io/instance: my-gitea-sonarqube-bot
+    app.kubernetes.io/version: "v0.3.5"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: gitea-sonarqube-bot
+      app.kubernetes.io/instance: my-gitea-sonarqube-bot
+  template:
+    metadata:
+      annotations:
+        checksum/config: b699e33abe98290cb7a24818ec4fe9e569978f1b914bc38514620127887f6d29
+      labels:
+        app.kubernetes.io/name: gitea-sonarqube-bot
+        app.kubernetes.io/instance: my-gitea-sonarqube-bot
+    spec:
+      serviceAccountName: my-gitea-sonarqube-bot
+      securityContext:
+        fsGroup: 1000
+      containers:
+        - name: gitea-sonarqube-bot
+          securityContext:
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+          image: "justusbunsi/gitea-sonarqube-bot:v0.3.5"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: GITEA_SQ_BOT_PORT
+              value: "3000"
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: http
+          resources:
+            limits: {}
+            requests: {}
+          volumeMounts:
+            - name: sq-bot-config
+              mountPath: /home/bot/config
+              readOnly: true
+      volumes:
+        - name: sq-bot-config
+          secret:
+            secretName: my-gitea-sonarqube-bot
+---
+# Source: gitea-sonarqube-bot/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-gitea-sonarqube-bot-test-connection"
+  labels:
+    helm.sh/chart: gitea-sonarqube-bot-0.3.5
+    app.kubernetes.io/name: gitea-sonarqube-bot
+    app.kubernetes.io/instance: my-gitea-sonarqube-bot
+    app.kubernetes.io/version: "v0.3.5"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-gitea-sonarqube-bot:80']
+  restartPolicy: Never

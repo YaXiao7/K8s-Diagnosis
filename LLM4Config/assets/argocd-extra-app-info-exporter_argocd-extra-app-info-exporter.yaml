@@ -1,0 +1,102 @@
+---
+# Source: argocd-extra-app-info-exporter/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: argocd-extra-app-info-exporter
+  labels:
+    helm.sh/chart: argocd-extra-app-info-exporter-0.1.10
+    app.kubernetes.io/name: argocd-extra-app-info-exporter
+    app.kubernetes.io/instance: my-argocd-extra-app-info-exporter
+    app.kubernetes.io/version: "0.1.5"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: argocd-extra-app-info-exporter/templates/clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: argocd-extra-app-info-exporter
+rules:
+- apiGroups: 
+    - argoproj.io
+  resources:
+    - applications
+  verbs:
+    - get
+    - list
+---
+# Source: argocd-extra-app-info-exporter/templates/clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: argocd-extra-app-info-exporter
+  labels: 
+    helm.sh/chart: argocd-extra-app-info-exporter-0.1.10
+    app.kubernetes.io/name: argocd-extra-app-info-exporter
+    app.kubernetes.io/instance: my-argocd-extra-app-info-exporter
+    app.kubernetes.io/version: "0.1.5"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: argocd-extra-app-info-exporter
+subjects:
+  - kind: ServiceAccount
+    name: argocd-extra-app-info-exporter
+    namespace: default
+---
+# Source: argocd-extra-app-info-exporter/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: argocd-extra-app-info-exporter
+  labels:
+    helm.sh/chart: argocd-extra-app-info-exporter-0.1.10
+    app.kubernetes.io/name: argocd-extra-app-info-exporter
+    app.kubernetes.io/instance: my-argocd-extra-app-info-exporter
+    app.kubernetes.io/version: "0.1.5"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: argocd-extra-app-info-exporter
+      app.kubernetes.io/instance: my-argocd-extra-app-info-exporter
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: argocd-extra-app-info-exporter
+        app.kubernetes.io/instance: my-argocd-extra-app-info-exporter
+    spec:
+      serviceAccountName: argocd-extra-app-info-exporter
+      securityContext:
+        {}
+      containers:
+        - name: argocd-extra-app-info-exporter
+          args:
+            - -interval
+            - "10s"
+            - -metrics-listen-address
+            - "0.0.0.0:9999"
+            - -metrics-path
+            - "/metrics"
+            - -exclude-revisions
+            - "HEAD,main,master"
+          securityContext:
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+          image: "mikejoh/argocd-extra-app-info-exporter:0.1.5"
+          imagePullPolicy: IfNotPresent
+          resources:
+            limits:
+              cpu: 100m
+              memory: 128Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+          ports:
+          - containerPort: 9999

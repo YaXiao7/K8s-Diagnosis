@@ -1,0 +1,205 @@
+---
+# Source: object-cloner/templates/rbac.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: object-cloner
+---
+# Source: object-cloner/templates/crd.yaml
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: clusterobjects.object-cloner.ideamix.es
+spec:
+  group: object-cloner.ideamix.es
+  names:
+    kind: ClusterObject
+    plural: clusterobjects
+  scope: Namespaced
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required:
+                - namespacesToInclude
+                - sourceObject
+              properties:
+                fieldsToExclude:
+                  type: array
+                  default: []
+                  items:
+                    type: string
+                namespacesToExclude:
+                  type: array
+                  default: []
+                  items:
+                    type: string
+                namespacesToInclude:
+                  type: array
+                  items:
+                    type: string
+                sourceObject:
+                  type: object
+                  required:
+                    - group
+                    - version
+                    - kind
+                  properties:
+                    group:
+                      type: string
+                    version:
+                      type: string
+                    kind:
+                      type: string
+                    name:
+                      type: string
+                cleanupEvents:
+                  type: string
+                  default: ""
+                  description: "Comma-delimited list of zero or more of the following values: OnClusterObjectDelete, OnSourceObjectDelete"
+                updateStrategy:
+                  type: string
+                  default: Default
+                  description: "Supported values: Default, Auto, AlwaysRecreate, NeverRecreate"
+            status:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
+              properties:
+                syncedNamespaces:
+                  description: Namespaces where the object is synced to
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                      timestamp:
+                        type: string
+                        format: datetime
+      subresources:
+        status: {}
+---
+# Source: object-cloner/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: object-cloner
+rules:
+  - apiGroups:
+      - object-cloner.ideamix.es
+    resources:
+      - clusterobjects
+      - clusterobjects/status
+    verbs:
+      - '*'
+  - apiGroups:
+      - ""
+    resources:
+      - namespaces
+      - namespaces/status
+    verbs:
+      - watch
+      - list
+      - get
+      - patch
+  
+  - apiGroups:
+      - ""
+    resources:
+      - "secrets"
+    verbs:
+      - '*'
+  # The rest of the rules are required by kopf itself
+  # (see https://kopf.readthedocs.io/en/stable/deployment/ for more details)
+  # Framework: knowing which other operators are running (i.e. peering).
+  - apiGroups: [kopf.dev]
+    resources: [clusterkopfpeerings]
+    verbs: [list, watch, patch, get]
+  # Framework: runtime observation of namespaces & CRDs (addition/deletion).
+  - apiGroups: [apiextensions.k8s.io]
+    resources: [customresourcedefinitions]
+    verbs: [list, watch]
+  - apiGroups: [""]
+    resources: [namespaces]
+    verbs: [list, watch]
+  # Framework: admission webhook configuration management.
+  - apiGroups: [admissionregistration.k8s.io/v1, admissionregistration.k8s.io/v1beta1]
+    resources: [validatingwebhookconfigurations, mutatingwebhookconfigurations]
+    verbs: [create, patch]
+---
+# Source: object-cloner/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: object-cloner
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: object-cloner
+subjects:
+  - kind: ServiceAccount
+    name: object-cloner
+    namespace: default
+---
+# Source: object-cloner/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: object-cloner
+rules:
+
+  # Framework: knowing which other operators are running (i.e. peering).
+  - apiGroups: [kopf.dev]
+    resources: [kopfpeerings]
+    verbs: [list, watch, patch, get]
+
+  # Framework: posting the events about the handlers progress/errors.
+  - apiGroups: [""]
+    resources: [events]
+    verbs: [create]
+---
+# Source: object-cloner/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: object-cloner
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: object-cloner
+subjects:
+  - kind: ServiceAccount
+    name: object-cloner
+---
+# Source: object-cloner/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: object-cloner
+  labels:
+    app: object-cloner
+spec:
+    selector:
+      matchLabels:
+        app: object-cloner
+    template:
+      metadata:
+        labels:
+          app: object-cloner
+      spec:
+        serviceAccountName: object-cloner
+        containers:
+        - name: app
+          image: ghcr.io/ideamixes/object-cloner:2.0.0
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: OBJECT_CLONER_ALLOWED_OBJECT_KINDS
+              value: ",v1,secrets"
+            - name: OBJECT_CLONER_LOG_LEVEL
+              value: INFO

@@ -1,0 +1,560 @@
+---
+# Source: nexus3/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-nexus3
+  namespace: default
+  labels:
+    helm.sh/chart: nexus3-5.0.0
+    app.kubernetes.io/name: nexus3
+    app.kubernetes.io/instance: my-nexus3
+    app.kubernetes.io/component: repository
+    app.kubernetes.io/version: "3.72.0"
+    app.kubernetes.io/managed-by: Helm
+automountServiceAccountToken: false
+---
+# Source: nexus3/templates/configmap-logback.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-nexus3-logback
+  namespace: default
+  labels:
+    helm.sh/chart: nexus3-5.0.0
+    app.kubernetes.io/name: nexus3
+    app.kubernetes.io/instance: my-nexus3
+    app.kubernetes.io/component: repository
+    app.kubernetes.io/version: "3.72.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+  logback-access.xml: |
+    <?xml version="1.0"?>
+    <configuration>
+      <appender name="request.logfile" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <File>${karaf.data}/log/request.log</File>
+        <Append>true</Append>
+        <encoder class="org.sonatype.nexus.pax.logging.AccessPatternLayoutEncoder">
+          <pattern>%clientHost %l %user [%date] "%requestURL" %statusCode %header{Content-Length} %bytesSent %elapsedTime "%header{User-Agent}" [%thread]</pattern>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+          <fileNamePattern>${karaf.data}/log/request-%d{yyyy-MM-dd}.log.gz</fileNamePattern>
+          <maxHistory>30</maxHistory>
+        </rollingPolicy>
+      </appender>
+
+      <appender-ref ref="request.logfile"/>
+    </configuration>
+
+  logback.xml: |
+    <?xml version="1.0" encoding="UTF-8"?>
+    <configuration>
+      <contextListener class="ch.qos.logback.classic.jul.LevelChangePropagator">
+        <resetJUL>true</resetJUL>
+      </contextListener>
+
+      <jmxConfigurator/>
+
+      <appender name="osgi" class="org.ops4j.pax.logging.logback.internal.bridges.PaxAppenderDelegate">
+        <filter class="org.sonatype.nexus.pax.logging.NexusLogFilter" />
+      </appender>
+
+      <appender name="console" class="ch.qos.logback.core.ConsoleAppender">
+        <filter class="org.sonatype.nexus.pax.logging.NexusLogFilter" />
+        <encoder>
+          <pattern>%d{"yyyy-MM-dd HH:mm:ss,SSSZ"} %-5p [%thread] %mdc{userId:-*SYSTEM} %c - %m%n</pattern>
+        </encoder>
+      </appender>
+
+      <appender name="jvm" class="ch.qos.logback.core.FileAppender">
+        <File>${karaf.data}/log/jvm.log</File>
+        <append>true</append>
+      </appender>
+
+      <appender name="logfile" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <File>${karaf.data}/log/nexus.log</File>
+        <Append>true</Append>
+        <encoder class="org.sonatype.nexus.pax.logging.NexusLayoutEncoder">
+          <pattern>%d{"yyyy-MM-dd HH:mm:ss,SSSZ"} %-5p [%thread] %node %mdc{userId:-*SYSTEM} %c - %m%n</pattern>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+          <fileNamePattern>${karaf.data}/log/nexus-%d{yyyy-MM-dd}.log.gz</fileNamePattern>
+          <maxHistory>30</maxHistory>
+        </rollingPolicy>
+        <filter class="org.sonatype.nexus.pax.logging.NexusLogFilter" />
+      </appender>
+
+      <appender name="clusterlogfile" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <File>${karaf.data}/log/nexus_cluster.log</File>
+        <Append>true</Append>
+        <encoder class="org.sonatype.nexus.pax.logging.NexusLayoutEncoder">
+          <pattern>%d{"yyyy-MM-dd HH:mm:ss,SSSZ"} %-5p [%thread] %node %mdc{userId:-*SYSTEM} %c - %m%n</pattern>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+          <fileNamePattern>${karaf.data}/log/nexus_cluster-%d{yyyy-MM-dd}.log.gz</fileNamePattern>
+          <maxHistory>30</maxHistory>
+        </rollingPolicy>
+        <filter class="org.sonatype.nexus.pax.logging.ClusterLogFilter" />
+      </appender>
+
+      <appender name="tasklogfile" class="ch.qos.logback.classic.sift.SiftingAppender">
+        <filter class="org.sonatype.nexus.pax.logging.TaskLogsFilter" />
+        <discriminator>
+          <key>taskIdAndDate</key>
+          <defaultValue>unknown</defaultValue>
+        </discriminator>
+        <sift>
+          <appender name="taskAppender" class="ch.qos.logback.core.FileAppender">
+            <file>${karaf.data}/log/tasks/${taskIdAndDate}.log</file>
+            <encoder class="org.sonatype.nexus.pax.logging.NexusLayoutEncoder">
+              <pattern>%d{"yyyy-MM-dd HH:mm:ss,SSSZ"} %-5p [%thread] %node %mdc{userId:-*SYSTEM} %c - %m%n</pattern>
+            </encoder>
+          </appender>
+        </sift>
+      </appender>
+
+      <appender name="replicationlogfile" class="ch.qos.logback.classic.sift.SiftingAppender">
+        <filter class="org.sonatype.nexus.pax.logging.ReplicationLogsFilter" />
+        <discriminator>
+          <key>repositoryName</key>
+          <defaultValue>unknown</defaultValue>
+        </discriminator>
+        <sift>
+          <appender name="replicationAppender" class="ch.qos.logback.core.rolling.RollingFileAppender">
+            <file>${karaf.data}/log/replication/replication-${repositoryName}.log</file>
+            <encoder class="org.sonatype.nexus.pax.logging.NexusLayoutEncoder">
+              <pattern>%d{"yyyy-MM-dd HH:mm:ss,SSSZ"} %-5p [%thread] %node %mdc{userId:-*SYSTEM} %c - %m%n</pattern>
+            </encoder>
+            <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+              <fileNamePattern>${karaf.data}/log/replication/replication-${repositoryName}-%d{yyyy-MM-dd}.log.gz</fileNamePattern>
+              <maxHistory>30</maxHistory>
+            </rollingPolicy>
+          </appender>
+        </sift>
+      </appender>
+
+      <appender name="outboundRequestslogfile" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <File>${karaf.data}/log/outbound-request.log</File>
+        <Append>true</Append>
+        <encoder>
+          <pattern>%msg%n</pattern>
+        </encoder>
+        <filter class="org.sonatype.nexus.pax.logging.OutboundRequestsLogFilter" />
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+          <fileNamePattern>${karaf.data}/log/outbound-request-%d{yyyy-MM-dd}.log.gz</fileNamePattern>
+          <maxHistory>30</maxHistory>
+        </rollingPolicy>
+      </appender>
+      <logger name="outboundRequests">
+        <appender-ref ref="outboundRequestslogfile"/>
+      </logger>
+
+      <appender name="auditlogfile" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <File>${karaf.data}/log/audit/audit.log</File>
+        <Append>true</Append>
+        <encoder>
+          <pattern>%msg%n</pattern>
+        </encoder>
+        <filter class="org.sonatype.nexus.pax.logging.AuditLogFilter"/>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+          <fileNamePattern>${karaf.data}/log/audit/audit-%d{yyyy-MM-dd}.log.gz</fileNamePattern>
+          <maxHistory>30</maxHistory>
+        </rollingPolicy>
+      </appender>
+
+      <logger name="auditlog" additivity="false">
+        <appender-ref ref="auditlogfile"/>
+      </logger>
+
+      <appender name="blobstore-reconciliation-log-file" class="ch.qos.logback.classic.sift.SiftingAppender">
+        <discriminator>
+          <key>blobstore-reconciliation-path</key>
+          <defaultValue>unknown</defaultValue>
+        </discriminator>
+        <sift>
+          <appender name="FILE-${blobstore}" class="ch.qos.logback.core.rolling.RollingFileAppender">
+            <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
+              <Pattern>%d{"yyyy-MM-dd HH:mm:ss"},%msg%n</Pattern>
+            </encoder>
+            <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+              <fileNamePattern>${blobstore-reconciliation-path}/%d</fileNamePattern>
+              <maxHistory>30</maxHistory>
+            </rollingPolicy>
+          </appender>
+        </sift>
+      </appender>
+      <logger name="blobstore-reconciliation-log" additivity="false">
+        <appender-ref ref="blobstore-reconciliation-log-file"/>
+      </logger>
+
+      <appender name="metrics" class="org.sonatype.nexus.pax.logging.InstrumentedAppender"/>
+
+      <logger name="org.eclipse.jetty.webapp" level="INFO"/>
+      <logger name="org.eclipse.jetty.webapp.StandardDescriptorProcessor" level="WARN"/>
+
+      <logger name="org.apache.aries" level="WARN"/>
+      <logger name="org.apache.felix" level="WARN"/>
+      <logger name="org.apache.karaf" level="WARN"/>
+
+      <include file="${karaf.data}/etc/logback/logback-tasklogfile-appender-override.xml" optional="true"/>
+
+      <root level="${root.level:-INFO}">
+        <appender-ref ref="osgi"/>
+        <appender-ref ref="console"/>
+        <appender-ref ref="jvm"/>
+        <appender-ref ref="logfile"/>
+        <appender-ref ref="clusterlogfile"/>
+        <appender-ref ref="tasklogfile"/>
+        <appender-ref ref="replicationlogfile"/>
+        <appender-ref ref="metrics"/>
+      </root>
+    </configuration>
+
+  logback-tasklogfile-appender-override.xml: |
+    <included>
+      <appender name="tasklogfile" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <File>${karaf.data}/log/tasks/allTasks.log</File>
+        <filter class="org.sonatype.nexus.pax.logging.TaskLogsFilter" />
+        <Append>true</Append>
+        <encoder class="org.sonatype.nexus.pax.logging.NexusLayoutEncoder">
+          <pattern>%d{"yyyy-MM-dd HH:mm:ss,SSSZ"} %-5p [%thread] %node %mdc{userId:-*SYSTEM} %c - %m%n</pattern>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+          <fileNamePattern>${karaf.data}/log/tasks/allTasks-%d{yyyy-MM-dd}.log.gz</fileNamePattern>
+          <maxHistory>30</maxHistory>
+        </rollingPolicy>
+      </appender>
+    </included>
+---
+# Source: nexus3/templates/configmap-properties.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-nexus3-props
+  namespace: default
+  labels:
+    helm.sh/chart: nexus3-5.0.0
+    app.kubernetes.io/name: nexus3
+    app.kubernetes.io/instance: my-nexus3
+    app.kubernetes.io/component: repository
+    app.kubernetes.io/version: "3.72.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+  nexus.properties: |
+    nexus.datastore.enabled=true
+    nexus.loadAsOSS=true
+  nexus-store.properties: |
+---
+# Source: nexus3/templates/configmap-scripts.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-nexus3-scripts
+  namespace: default
+  labels:
+    helm.sh/chart: nexus3-5.0.0
+    app.kubernetes.io/name: nexus3
+    app.kubernetes.io/instance: my-nexus3
+    app.kubernetes.io/component: repository
+    app.kubernetes.io/version: "3.72.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+  import-ca-certs.sh: |
+    #!/usr/bin/env bash
+    set -euo pipefail
+    mkdir -p /nexus-data/keystores
+    cp -f "${JAVA_HOME}/lib/security/cacerts" /nexus-data/keystores/cacerts
+    for f in /nexus-data/secrets/cas/*
+    do
+      keytool -importcert -file "${f}" -alias "$(basename "${f}")" -keystore /nexus-data/keystores/cacerts -storepass changeit -trustcacerts -noprompt
+    done
+  download-plugins.sh: |
+    #!/usr/bin/env bash
+    set -euo pipefail
+  chown-data-dir.sh: |
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    mkdir -p /nexus-data/etc/logback
+    mkdir -p /nexus-data/log/tasks
+    mkdir -p /nexus-data/log/audit
+
+    touch -a /nexus-data/log/tasks/allTasks.log
+    touch -a /nexus-data/log/audit/audit.log
+    touch -a /nexus-data/log/request.log
+
+    chown -R 200:200 /nexus-data
+  tail-logs.sh: |
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    _term() {
+      kill -TERM "${child}" 2>/dev/null
+    }
+
+    trap _term SIGTERM
+
+    tail -F -n+1 "${LOG_FILE}" &
+
+    child=$!
+    wait "${child}"
+---
+# Source: nexus3/templates/service-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-nexus3-hl
+  namespace: default
+  labels:
+    helm.sh/chart: nexus3-5.0.0
+    app.kubernetes.io/name: nexus3
+    app.kubernetes.io/instance: my-nexus3
+    app.kubernetes.io/component: repository
+    app.kubernetes.io/version: "3.72.0"
+    app.kubernetes.io/managed-by: Helm
+    prometheus.io/service-monitor: "false"
+spec:
+  type: ClusterIP
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+    - port: 8081
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: nexus3
+    app.kubernetes.io/instance: my-nexus3
+    app.kubernetes.io/component: repository
+---
+# Source: nexus3/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-nexus3
+  namespace: default
+  labels:
+    helm.sh/chart: nexus3-5.0.0
+    app.kubernetes.io/name: nexus3
+    app.kubernetes.io/instance: my-nexus3
+    app.kubernetes.io/component: repository
+    app.kubernetes.io/version: "3.72.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8081
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: nexus3
+    app.kubernetes.io/instance: my-nexus3
+    app.kubernetes.io/component: repository
+---
+# Source: nexus3/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-nexus3
+  namespace: default
+  labels:
+    helm.sh/chart: nexus3-5.0.0
+    app.kubernetes.io/name: nexus3
+    app.kubernetes.io/instance: my-nexus3
+    app.kubernetes.io/component: repository
+    app.kubernetes.io/version: "3.72.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  serviceName: my-nexus3
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: nexus3
+      app.kubernetes.io/instance: my-nexus3
+      app.kubernetes.io/component: repository
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: nexus3
+        app.kubernetes.io/instance: my-nexus3
+        app.kubernetes.io/component: repository
+      annotations:
+        checksum/logback: d03107776376aeb9a48c0afeb73e2df1e779ff7c98a22a71b3c62b492610d660
+        checksum/properties: 5b90af68e2eba9c72ca6015374cac77066c0c7620a0698099714d503aeb1dbb0
+        checksum/scripts: f06ef7e297c7530a7fd55b0c11c40f6269a603b6881fca5ae407d142a4067719
+    spec:
+      serviceAccountName: my-nexus3
+      securityContext:
+        fsGroup: 200
+        runAsNonRoot: false
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 120
+      initContainers:
+        - name: chown-data-dir
+          image: cgr.dev/chainguard/bash:latest
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            privileged: false
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: false
+            runAsUser: 0
+            runAsGroup: 0
+          args: ["/scripts/chown-data-dir.sh"]
+          volumeMounts:
+            - mountPath: /scripts/chown-data-dir.sh
+              name: scripts
+              subPath: chown-data-dir.sh
+            - mountPath: /nexus-data
+              name: data
+        - name: tail-request-log
+          restartPolicy: Always
+          image: cgr.dev/chainguard/bash:latest
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsGroup: 200
+            runAsNonRoot: true
+            runAsUser: 200
+          env:
+            - name: LOG_FILE
+              value: /nexus-data/log/request.log
+          args: ["/scripts/tail-logs.sh"]
+          volumeMounts:
+            - mountPath: /scripts/tail-logs.sh
+              name: scripts
+              subPath: tail-logs.sh
+            - mountPath: /nexus-data
+              name: data
+        - name: tail-audit-log
+          restartPolicy: Always
+          image: cgr.dev/chainguard/bash:latest
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsGroup: 200
+            runAsNonRoot: true
+            runAsUser: 200
+          env:
+            - name: LOG_FILE
+              value: /nexus-data/log/audit/audit.log
+          args: ["/scripts/tail-logs.sh"]
+          volumeMounts:
+            - mountPath: /scripts/tail-logs.sh
+              name: scripts
+              subPath: tail-logs.sh
+            - mountPath: /nexus-data
+              name: data
+        - name: tail-tasks-log
+          restartPolicy: Always
+          image: cgr.dev/chainguard/bash:latest
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsGroup: 200
+            runAsNonRoot: true
+            runAsUser: 200
+          env:
+            - name: LOG_FILE
+              value: /nexus-data/log/tasks/allTasks.log
+          args: ["/scripts/tail-logs.sh"]
+          volumeMounts:
+            - mountPath: /scripts/tail-logs.sh
+              name: scripts
+              subPath: tail-logs.sh
+            - mountPath: /nexus-data
+              name: data
+      containers:
+        - name: nexus3
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsGroup: 200
+            runAsNonRoot: true
+            runAsUser: 200
+          image: docker.io/sonatype/nexus3:3.72.0-java17-ubi
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: INSTALL4J_ADD_VM_PARAMS
+              value: -Djava.util.prefs.userRoot=${NEXUS_DATA}/javaprefs -Xms1024m -Xmx1024m -XX:MaxDirectMemorySize=2048m
+            - name: NEXUS_SECURITY_RANDOMPASSWORD
+              value: "true"
+          ports:
+            - name: http
+              containerPort: 8081
+              protocol: TCP
+          startupProbe:
+            failureThreshold: 180
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 0
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+          livenessProbe:
+            failureThreshold: 6
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 0
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+          readinessProbe:
+            failureThreshold: 6
+            httpGet:
+              path: /service/rest/v1/status
+              port: http
+            initialDelaySeconds: 0
+            periodSeconds: 60
+            successThreshold: 1
+            timeoutSeconds: 1
+          volumeMounts:
+            - mountPath: /tmp
+              name: temp
+            - mountPath: /nexus-data
+              name: data
+            - mountPath: /opt/sonatype/nexus/etc/logback
+              name: logback
+            - mountPath: /nexus-data/etc/nexus.properties
+              name: properties
+              subPath: nexus.properties
+      volumes:
+        - name: temp
+          emptyDir: {}
+        - name: scripts
+          configMap:
+            name: my-nexus3-scripts
+            defaultMode: 0555
+        - name: logback
+          configMap:
+            name: my-nexus3-logback
+            defaultMode: 0444
+        - name: properties
+          configMap:
+            name: my-nexus3-props
+            defaultMode: 0444
+        - name: data
+          emptyDir: {}

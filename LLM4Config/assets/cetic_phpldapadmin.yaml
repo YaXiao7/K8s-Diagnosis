@@ -1,0 +1,81 @@
+---
+# Source: phpldapadmin/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-phpldapadmin
+  labels:
+    app: phpldapadmin
+    chart: phpldapadmin-0.1.4
+    release: my-phpldapadmin
+    heritage: Helm
+data:
+  PHPLDAPADMIN_HTTPS: "false"
+  PHPLDAPADMIN_TRUST_PROXY_SSL: "true"
+---
+# Source: phpldapadmin/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-phpldapadmin
+  labels:
+    app: phpldapadmin
+    chart: phpldapadmin-0.1.4
+    release: my-phpldapadmin
+    heritage: Helm
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 80
+    targetPort: http
+    protocol: TCP
+    name: http
+  selector:
+    app: phpldapadmin
+    release: my-phpldapadmin
+---
+# Source: phpldapadmin/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: my-phpldapadmin
+  labels:
+    app: phpldapadmin
+    chart: phpldapadmin-0.1.4
+    release: my-phpldapadmin
+    heritage: Helm
+
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: phpldapadmin
+      release: my-phpldapadmin
+  template:
+    metadata:
+      labels:
+        app: phpldapadmin
+        release: my-phpldapadmin
+    spec:
+      containers:
+      - name: phpldapadmin
+        image: "osixia/phpldapadmin:0.7.1"
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 80
+          protocol: TCP
+        envFrom:
+        - configMapRef:
+            name: my-phpldapadmin
+        livenessProbe:
+            httpGet:
+              path: /
+              port: http
+        readinessProbe:
+            httpGet:
+              path: /
+              port: http
+        resources:
+            {}

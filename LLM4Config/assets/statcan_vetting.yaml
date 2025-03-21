@@ -1,0 +1,1612 @@
+---
+# Source: vetting/charts/postgresql/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-vetting-postgresql
+  labels:
+    app.kubernetes.io/name: postgresql
+    helm.sh/chart: postgresql-9.4.1
+    app.kubernetes.io/instance: my-vetting
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  postgresql-password: "dGVzdHBhc3N3b3Jk"
+---
+# Source: vetting/templates/secret/ad-scan-cronjob-secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ad-scan-cronjob-init
+type: Opaque
+stringData:
+  dbConnectionString: postgresql://:@:/
+  canRun: "false"
+  projectsIgnoreList: ""
+  accessToken: ""
+  elasticSearchUrl: 
+  elasticSearchUsername: 
+  elasticSearchPassword: 
+  elasticSearchLogsIndex: 
+  elasticSearchErrorsIndex:
+---
+# Source: vetting/templates/secret/configmodule_py.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-vetting-configmodulepy-secret
+  labels:
+    app.kubernetes.io/name: my-vetting
+    helm.sh/chart: vetting-0.1.170
+    app.kubernetes.io/instance: my-vetting
+    app.kubernetes.io/managed-by: Helm
+    
+type: Opaque
+stringData:
+  configmodule.py: |-
+    import os
+
+    class Config:
+      SQLALCHEMY_DATABASE_URI = "postgresql://testuser:testpassword@my-vetting-postgresql:5432/DisclosureVettingDB"
+      SQLALCHEMY_TRACK_MODIFICATIONS = "False"
+      SECRET_KEY = ""
+      
+      SESSION_COOKIE_SECURE = True
+      SESSION_COOKIE_SAMESITE = "Lax"
+      
+      SESSION_TYPE="sqlalchemy"
+      PERMANENT_SESSION_LIFETIME=1200
+      SESSION_USE_SIGNER=True
+      SESSION_SQLALCHEMY_TABLE="Sessions"
+      EMAIL_ENABLE_NOTIFICATIONS="False"
+      EMAIL_STMP_SERVER=""
+      EMAIL_USERNAME=""
+      EMAIL_PASSWORD=""
+      EMAIL_SENDER_EMAIL=""
+      EMAIL_RECEIVER_EMAIL=""
+      EMAIL_PORT=25
+
+      CLIENT_SECRET = ""
+
+      CLIENT_ID = ""
+      TENANT_ID=""
+
+      STORAGE_ANALYST_NAME = ""
+      STORAGE_ANALYST_RESOURCE_GROUP = ""
+      STORAGE_RESEARCHER_NAME = ""
+      STORAGE_RESEARCHER_RESOURCE_GROUP = ""
+
+      AUTHORITY = "https://login.microsoftonline.com/"
+      LOGOUT="https://login.microsoftonline.com//oauth2/v2.0/logout"
+
+      ENDPOINT = 'https://graph.microsoft.com/v1.0/users'
+      SCOPE = [""]
+
+      APP_RELEASE_DATE=os.environ["RELEASE_DATE"]
+      APP_RELEASE_HASH=os.environ["RELEASE_HASH"]
+      APP_RELEASE_VERSION=""
+
+      ELASTIC_SEARCH_URL=""
+      ELASTIC_SEARCH_USERNAME=""
+      ELASTIC_SEARCH_PASSWORD=""
+
+      ELASTIC_SEARCH_LOGS_INDEX=""
+      ELASTIC_SEARCH_ERRORS_INDEX=""
+    
+    class ProductionConfig(Config):
+      SQLALCHEMY_DATABASE_URI = "postgresql://testuser:testpassword@my-vetting-postgresql:5432/DisclosureVettingDB"
+---
+# Source: vetting/templates/secret/db-cronjob-entrypoint_sh.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-vetting-db-cronjob-entrypointsh-secret
+type: Opaque
+stringData:
+  entrypoint.sh: |-
+        #!/bin/bash
+        set -e
+        while ! nc -z my-vetting-postgresql 5432; do
+
+          echo "Waiting for POSTGRES!"
+          sleep 0.1
+        done
+        
+        echo "First input is $1"
+        echo "Second input is $2"
+        
+        if [ $2 == 'init' ]
+        then
+          flask vettingDb wipeTables
+          flask db upgrade
+        elif [ $2 == 'initWithData' ]
+        then
+          flask vettingDb wipeTables
+          flask db upgrade
+          flask vettingDb populateInitData
+        elif [ $2 == 'initWithDataAndUsers' ]
+        then
+          flask vettingDb wipeTables
+          flask db upgrade
+          flask vettingDb populateInitData
+          flask vettingDb populateInitUsers
+        elif [ $2 == 'populateInitData' ]
+        then
+          flask vettingDb populateInitData
+        elif [ $2 == 'populateInitUsers' ]
+        then
+          flask vettingDb populateInitUsers
+        elif [ $2 == 'update' ]
+        then
+          flask db upgrade
+        elif [ $2 == 'addmigration' ]
+        then
+          flask db migrate -m $3
+          flask db upgrade
+        fi
+
+        if [ $1 == 'true' ]
+        then
+          if [ $2 == 'massive' ]
+          then
+            flask vettingDb populateTestData true
+          else
+            flask vettingDb populateTestData false
+          fi
+        fi
+
+        #gunicorn --bind 0.0.0.0:5000 --workers 4 --threads 50 run:app
+---
+# Source: vetting/templates/secret/db-cronjob-secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: db-cronjob-init
+type: Opaque
+stringData:
+  dbConnectionString: postgresql://:@:/
+  researcherAccounts: insertData
+  analystAccounts: insertData
+  adminAccounts: insertData
+  projectsData: insertData
+---
+# Source: vetting/templates/secret/entrypoint_ad_scan_sh.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-vetting-ad-scan-cronjob-entrypointsh-secret
+  labels:
+    app.kubernetes.io/name: my-vetting
+    helm.sh/chart: vetting-0.1.170
+    app.kubernetes.io/instance: my-vetting
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+stringData:
+  entrypoint.sh: |-
+        #!/bin/bash
+        set -e
+        while ! nc -z my-vetting-postgresql 5432; do
+
+          echo "Waiting for POSTGRES!"
+          sleep 0.1
+        done
+
+        echo "Scan for new users and projects"
+        flask users scan_for_users
+---
+# Source: vetting/templates/secret/entrypoint_reports_sh.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-vetting-reports-cronjob-entrypointsh-secret
+  labels:
+    app.kubernetes.io/name: my-vetting
+    helm.sh/chart: vetting-0.1.170
+    app.kubernetes.io/instance: my-vetting
+    app.kubernetes.io/managed-by: Helm
+
+type: Opaque
+stringData:
+  entrypoint.sh: |-
+      #!/bin/bash
+      set -e
+      
+      sleep 15
+          while ! nc -z my-vetting-postgresql 5432; do
+
+        echo "Waiting for POSTGRES!"
+        sleep 0.1
+      done
+
+      echo "Report type is $1"
+
+      if [ $1 == 'time_spent_vetting' ]
+      then
+
+        if [ $2 == 'monthly' ]
+        then
+          flask reports time_spent_vetting month
+        else
+          flask reports time_spent_vetting  year
+        fi
+
+      elif [ $1 == 'vetting_analyst_project' ]
+      then
+        flask reports vetting_analyst_project
+
+      elif [ $1 == 'vetting_project' ]
+      then
+        flask reports vetting_project
+
+      elif [ $1 == 'vetting_analyst' ]
+      then
+        flask reports vetting_analyst
+
+      elif [ $1 == 'vetting_requests_analyst' ]
+      then
+        flask reports vetting_requests_analyst
+
+      elif [ $1 == 'requests_sent_back' ]
+      then
+        flask reports requests_sent_back
+
+      elif [ $1 == 'vetting_hours_org' ]
+      then
+        flask reports vetting_hours_org
+
+      elif [ $1 == 'open_requests_analysts' ]
+      then
+        flask reports open_requests_analysts
+
+      fi
+
+      #flask run --host=0.0.0.0
+---
+# Source: vetting/templates/secret/entrypoint_sh.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-vetting-entrypointsh-secret
+  labels:
+    app.kubernetes.io/name: my-vetting
+    helm.sh/chart: vetting-0.1.170
+    app.kubernetes.io/instance: my-vetting
+    app.kubernetes.io/managed-by: Helm
+
+type: Opaque
+stringData:
+  entrypoint.sh: |-
+        #!/bin/bash
+        set -e
+        while ! nc -z my-vetting-postgresql 5432; do
+
+          echo "Waiting for POSTGRES!"
+          sleep 0.1
+        done
+        
+        # python setup.py develop
+        # disclosureVetting db initdb
+        # disclosureVetting db populatecodesets
+        # disclosureVetting db initdbdata
+        # disclosureVetting run --host=0.0.0.0
+
+
+        gunicorn --bind 0.0.0.0:5000 --workers 4 --threads 50 run:app
+---
+# Source: vetting/templates/secret/report-cronjob-secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: reports-cronjob-init
+type: Opaque
+stringData:
+  dbConnectionString: postgresql://:@:/
+  storageAccountName: 
+  storageAccountResourceGroup: 
+  storageAccountFileShareName: 
+  elasticSearchUrl: 
+  elasticSearchUsername: 
+  elasticSearchPassword: 
+  elasticSearchLogsIndex: 
+  elasticSearchErrorsIndex:
+---
+# Source: vetting/templates/fluentd-configmap.yaml
+#fluetd-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vetting-fluentd-config
+  labels:
+    app: fluentd
+    kubernetes.io/cluster-service: "true"
+data:
+  fluent.conf: |
+    <filter **>
+      @type record_transformer
+      <record>
+        cluster 
+      </record>
+    </filter>
+    
+    <match **>
+      @type copy
+
+      <store ignore_error>
+        @type elasticsearch
+        hosts https://
+        ssl_version TLSv1_2
+        user 
+        password 
+
+        pipeline "vetting requests"
+        include_timestamp true
+        index_name ""
+
+        <buffer tag, time>
+          @type memory
+          timekey 60
+          timekey_wait 0
+        </buffer>
+      </store>
+
+      <store ignore_error>
+        @type elasticsearch
+        hosts https://
+        ssl_version TLSv1_2
+        user 
+        password 
+
+        pipeline "vetting errors"
+        include_timestamp true
+        index_name ""
+
+        <buffer tag, time>
+          @type memory
+          timekey 60
+          timekey_wait 0
+        </buffer>
+      </store>
+    </match>
+---
+# Source: vetting/charts/postgresql/templates/svc-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-vetting-postgresql-headless
+  labels:
+    app.kubernetes.io/name: postgresql
+    helm.sh/chart: postgresql-9.4.1
+    app.kubernetes.io/instance: my-vetting
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: tcp-postgresql
+      port: 5432
+      targetPort: tcp-postgresql
+  selector:
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/instance: my-vetting
+---
+# Source: vetting/charts/postgresql/templates/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-vetting-postgresql
+  labels:
+    app.kubernetes.io/name: postgresql
+    helm.sh/chart: postgresql-9.4.1
+    app.kubernetes.io/instance: my-vetting
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+spec:
+  type: ClusterIP
+  ports:
+    - name: tcp-postgresql
+      port: 5432
+      targetPort: tcp-postgresql
+  selector:
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/instance: my-vetting
+    role: master
+---
+# Source: vetting/templates/service-app-static-error.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-vetting-static-error
+  labels:
+    app.kubernetes.io/name: vetting-static-error
+    helm.sh/chart: vetting-0.1.170
+    app.kubernetes.io/instance: my-vetting
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5000
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: vetting-static-error
+    app.kubernetes.io/instance: my-vetting
+---
+# Source: vetting/templates/service-app.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-vetting
+  labels:
+    app.kubernetes.io/name: vetting
+    helm.sh/chart: vetting-0.1.170
+    app.kubernetes.io/instance: my-vetting
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5000
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: vetting
+    app.kubernetes.io/instance: my-vetting
+---
+# Source: vetting/templates/deployment-app-static-error.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-vetting-static-error-deployment
+  labels:
+    app.kubernetes.io/name: vetting-static-error
+    helm.sh/chart: vetting-0.1.170
+    app.kubernetes.io/instance: my-vetting
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vetting-static-error
+      app.kubernetes.io/instance: my-vetting
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: vetting-static-error
+        app.kubernetes.io/instance: my-vetting
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app.kubernetes.io/instance
+                  operator: In
+                  values:
+                  - disclosure-vetting
+              topologyKey: topology.kubernetes.io/zone
+      containers:
+        - name: vetting-static-error
+          image: "statcan/disclosure-vetting-app:0.1.1"
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 5000
+              protocol: TCP
+---
+# Source: vetting/templates/deployment-app.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-vetting
+  labels:
+    app.kubernetes.io/name: vetting
+    helm.sh/chart: vetting-0.1.170
+    app.kubernetes.io/instance: my-vetting
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vetting
+      app.kubernetes.io/instance: my-vetting
+  template:
+    metadata:
+      labels:
+        aadpodidbinding: disclosure-vetting
+        app.kubernetes.io/name: vetting
+        app.kubernetes.io/instance: my-vetting
+    spec:
+      affinity:
+          podAntiAffinity:
+            preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                  - key: app.kubernetes.io/instance
+                    operator: In
+                    values:
+                    - disclosure-vetting
+                topologyKey: topology.kubernetes.io/zone
+      containers:
+        - name: vetting
+          image: "statcan/disclosure-vetting-app:0.1.1"
+          imagePullPolicy: Always
+          env:
+            - name: FLASK_ENV
+              value: development
+            - name: APP_SETTINGS
+              value: project.config.DevelopmentConfig
+            - name: POSTGRES_USER
+              value: testuser
+            - name: POSTGRES_PASSWORD
+              value: testpassword
+          ports:
+            - name: http
+              containerPort: 5000
+              protocol: TCP
+          volumeMounts:
+            - name: my-vetting-configmodulepy
+              mountPath: /app/app/configmodule.py
+              subPath: configmodule.py
+            - name: my-vetting-entrypointsh
+              mountPath: /app/entrypoint.sh
+              subPath: entrypoint.sh
+            - name: vetting-app
+              mountPath: /app/app/logs
+          resources:
+            {}
+      imagePullSecrets:              
+        - name: artifactory-prod     
+      volumes:
+        - name: vetting-app
+          emptyDir: {}
+        - name: config-volume
+          configMap:
+            name: vetting-fluentd-config
+        - name:  my-vetting-configmodulepy
+          secret:
+            secretName: my-vetting-configmodulepy-secret
+        - name:  my-vetting-entrypointsh
+          secret:
+            secretName: my-vetting-entrypointsh-secret
+            defaultMode: 0755
+---
+# Source: vetting/charts/postgresql/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-vetting-postgresql
+  labels:
+    app.kubernetes.io/name: postgresql
+    helm.sh/chart: postgresql-9.4.1
+    app.kubernetes.io/instance: my-vetting
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+spec:
+  serviceName: my-vetting-postgresql-headless
+  replicas: 1
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgresql
+      app.kubernetes.io/instance: my-vetting
+      role: master
+  template:
+    metadata:
+      name: my-vetting-postgresql
+      labels:
+        app.kubernetes.io/name: postgresql
+        helm.sh/chart: postgresql-9.4.1
+        app.kubernetes.io/instance: my-vetting
+        app.kubernetes.io/managed-by: Helm
+        role: master
+    spec:      
+      securityContext:
+        fsGroup: 1001
+      containers:
+        - name: my-vetting-postgresql
+          image: docker.io/bitnami/postgresql:11.9.0-debian-10-r16
+          imagePullPolicy: "IfNotPresent"
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+          securityContext:
+            runAsUser: 1001
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: POSTGRESQL_PORT_NUMBER
+              value: "5432"
+            - name: POSTGRESQL_VOLUME_DIR
+              value: "/bitnami/postgresql"
+            - name: PGDATA
+              value: "/bitnami/postgresql/data"
+            - name: POSTGRES_USER
+              value: "testuser"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-vetting-postgresql
+                  key: postgresql-password
+            - name: POSTGRES_DB
+              value: "DisclosureVettingDB"
+            - name: POSTGRESQL_ENABLE_LDAP
+              value: "no"
+            - name: POSTGRESQL_ENABLE_TLS
+              value: "no"
+          ports:
+            - name: tcp-postgresql
+              containerPort: 5432
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - exec pg_isready -U "testuser" -d "dbname=DisclosureVettingDB" -h 127.0.0.1 -p 5432
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - -e
+                - |
+                  exec pg_isready -U "testuser" -d "dbname=DisclosureVettingDB" -h 127.0.0.1 -p 5432
+                  [ -f /opt/bitnami/postgresql/tmp/.initialized ] || [ -f /bitnami/postgresql/.initialized ]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          volumeMounts:
+            - name: dshm
+              mountPath: /dev/shm
+            - name: data
+              mountPath: /bitnami/postgresql
+              subPath: 
+      volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Gi
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "20Gi"
+---
+# Source: vetting/templates/ad-scan-users-projects.yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: ad-scan-users-projects
+spec:
+  schedule: "0 0 * * *"
+  #suspend: true
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            aadpodidbinding: "disclosure-vetting"
+            app.kubernetes.io/name: ad-scan-app.name
+            app.kubernetes.io/instance: my-vetting
+        spec:
+          containers:
+          - name: ad-scan-users-projects
+            image: "statcan/disclosure-vetting-app:0.1.1"
+            imagePullPolicy: "Always"
+            env:
+            - name: CAN_RUN
+              valueFrom:
+                secretKeyRef:
+                  name: ad-scan-cronjob-init
+                  key: canRun
+            - name: PROJECTS_IGNORE_LIST
+              valueFrom:
+                secretKeyRef:
+                  name: ad-scan-cronjob-init
+                  key: projectsIgnoreList
+            - name: DB_CONNECTION_STRING
+              valueFrom:
+                secretKeyRef:
+                  name: ad-scan-cronjob-init
+                  key: dbConnectionString
+            - name: ACCESS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: ad-scan-cronjob-init
+                  key: accessToken
+            - name: ELASTIC_SEARCH_URL
+              valueFrom:
+                secretKeyRef:
+                  name: ad-scan-cronjob-init
+                  key: elasticSearchUrl
+            - name: ELASTIC_SEARCH_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: ad-scan-cronjob-init
+                  key: elasticSearchUsername
+            - name: ELASTIC_SEARCH_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ad-scan-cronjob-init
+                  key: elasticSearchPassword
+            - name: ELASTIC_SEARCH_LOGS_INDEX
+              valueFrom:
+                secretKeyRef:
+                  name: ad-scan-cronjob-init
+                  key: elasticSearchLogsIndex
+            - name: ELASTIC_SEARCH_ERRORS_INDEX
+              valueFrom:
+                secretKeyRef:
+                  name: ad-scan-cronjob-init
+                  key: elasticSearchErrorsIndex
+            volumeMounts:
+              - name: my-vetting-entrypointsh
+                mountPath: /app/entrypoint.sh
+                subPath: entrypoint.sh
+          volumes:
+            - name:  my-vetting-entrypointsh
+              secret:
+                secretName: my-vetting-ad-scan-cronjob-entrypointsh-secret
+                defaultMode: 0755
+          restartPolicy: OnFailure
+---
+# Source: vetting/templates/db-cronjob.yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: db-vetting-job
+spec:
+  schedule: "*/1 * * * *"
+  suspend: true
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: db-vetting-job
+            image: "statcan/disclosure-vetting-app:0.1.1"
+            imagePullPolicy: "Always"
+            args: ["false","update"]
+            env:
+            - name: RESEARCHER_ACCOUNTS
+              valueFrom:
+                secretKeyRef:
+                  name: db-cronjob-init
+                  key: researcherAccounts
+            - name: ANALYST_ACCOUNTS
+              valueFrom:
+                secretKeyRef:
+                  name: db-cronjob-init
+                  key: analystAccounts
+            - name: ADMIN_ACCOUNTS
+              valueFrom:
+                secretKeyRef:
+                  name: db-cronjob-init
+                  key: adminAccounts
+            - name: PROJECTS_DATA
+              valueFrom:
+                secretKeyRef:
+                  name: db-cronjob-init
+                  key: projectsData
+            - name: DB_CONNECTION_STRING
+              valueFrom:
+                secretKeyRef:
+                  name: db-cronjob-init
+                  key: dbConnectionString
+            volumeMounts:
+              - name: my-vetting-entrypointsh
+                mountPath: /app/entrypoint.sh
+                subPath: entrypoint.sh
+          volumes:
+            - name:  my-vetting-entrypointsh
+              secret:
+                secretName: my-vetting-db-cronjob-entrypointsh-secret
+                defaultMode: 0755
+          restartPolicy: OnFailure
+---
+# Source: vetting/templates/report-time-open-requests-by-analysts-biweekly-cronjob.yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: report-time-open-requests-by-analysts-biweelky-job
+spec:
+  #schedule: "*/1 * * * *"
+  #suspend: true
+  schedule: "0 5 * * 1"
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            aadpodidbinding: "disclosure-vetting"
+            app.kubernetes.io/name: reports-app.name
+            app.kubernetes.io/instance: my-vetting
+        spec:
+          containers:
+          - name: report-time-open-requests-by-analysts-biweelky-job
+            image: "statcan/disclosure-vetting-app:0.1.1"
+            imagePullPolicy: "Always"
+            args: ["open_requests_analysts"]
+            env:
+            - name: STORAGE_ACCOUNT_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: storageAccountName
+            - name: STORAGE_ACCOUNT_RESOURCE_GROUP
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: storageAccountResourceGroup
+            - name: STORAGE_ACCOUNT_FILE_SHARE_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: storageAccountFileShareName
+            - name: DB_CONNECTION_STRING
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: dbConnectionString
+            - name: ELASTIC_SEARCH_URL
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: elasticSearchUrl
+            - name: ELASTIC_SEARCH_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: elasticSearchUsername
+            - name: ELASTIC_SEARCH_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: elasticSearchPassword
+            - name: ELASTIC_SEARCH_LOGS_INDEX
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: elasticSearchLogsIndex
+            - name: ELASTIC_SEARCH_ERRORS_INDEX
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: elasticSearchErrorsIndex
+            volumeMounts:
+              - name: my-vetting-entrypointsh
+                mountPath: /app/entrypoint.sh
+                subPath: entrypoint.sh
+          volumes:
+            - name:  my-vetting-entrypointsh
+              secret:
+                secretName: my-vetting-reports-cronjob-entrypointsh-secret
+                defaultMode: 0755
+          restartPolicy: OnFailure
+---
+# Source: vetting/templates/report-time-vetting-analyst-project-monthly-cronjob.yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: report-time-vetting-analyst-project-monthly-job
+spec:
+  #schedule: "*/1 * * * *"
+  #suspend: true
+  schedule: "0 5 1 * *"
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            aadpodidbinding: "disclosure-vetting"
+            app.kubernetes.io/name: reports-app.name
+            app.kubernetes.io/instance: my-vetting
+        spec:
+          containers:
+          - name: report-time-vetting-analyst-project-monthly-job
+            image: "statcan/disclosure-vetting-app:0.1.1"
+            imagePullPolicy: "Always"
+            args: ["vetting_analyst_project"]
+            env:
+            - name: STORAGE_ACCOUNT_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: storageAccountName
+            - name: STORAGE_ACCOUNT_RESOURCE_GROUP
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: storageAccountResourceGroup
+            - name: STORAGE_ACCOUNT_FILE_SHARE_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: storageAccountFileShareName
+            - name: DB_CONNECTION_STRING
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: dbConnectionString
+            - name: ELASTIC_SEARCH_URL
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: elasticSearchUrl
+            - name: ELASTIC_SEARCH_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: elasticSearchUsername
+            - name: ELASTIC_SEARCH_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: elasticSearchPassword
+            - name: ELASTIC_SEARCH_LOGS_INDEX
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: elasticSearchLogsIndex
+            - name: ELASTIC_SEARCH_ERRORS_INDEX
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: elasticSearchErrorsIndex
+            volumeMounts:
+              - name: my-vetting-entrypointsh
+                mountPath: /app/entrypoint.sh
+                subPath: entrypoint.sh
+          volumes:
+            - name:  my-vetting-entrypointsh
+              secret:
+                secretName: my-vetting-reports-cronjob-entrypointsh-secret
+                defaultMode: 0755
+          restartPolicy: OnFailure
+---
+# Source: vetting/templates/report-time-vetting-annually-cronjob.yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: report-time-vetting-annually-job
+spec:
+  #schedule: "*/1 * * * *"
+  #suspend: true
+  schedule: "0 5 1 1 *"
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            aadpodidbinding: "disclosure-vetting"
+            app.kubernetes.io/name: reports-app.name
+            app.kubernetes.io/instance: my-vetting
+        spec:
+          containers:
+          - name: report-time-vetting-annually-job
+            image: "statcan/disclosure-vetting-app:0.1.1"
+            imagePullPolicy: "Always"
+            args: ["time_spent_vetting","annually"]
+            env:
+            - name: STORAGE_ACCOUNT_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: storageAccountName
+            - name: STORAGE_ACCOUNT_RESOURCE_GROUP
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: storageAccountResourceGroup
+            - name: STORAGE_ACCOUNT_FILE_SHARE_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: storageAccountFileShareName
+            - name: DB_CONNECTION_STRING
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: dbConnectionString
+            - name: ELASTIC_SEARCH_URL
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: elasticSearchUrl
+            - name: ELASTIC_SEARCH_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: elasticSearchUsername
+            - name: ELASTIC_SEARCH_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: elasticSearchPassword
+            - name: ELASTIC_SEARCH_LOGS_INDEX
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: elasticSearchLogsIndex
+            - name: ELASTIC_SEARCH_ERRORS_INDEX
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: elasticSearchErrorsIndex
+            volumeMounts:
+              - name: my-vetting-entrypointsh
+                mountPath: /app/entrypoint.sh
+                subPath: entrypoint.sh
+          volumes:
+            - name:  my-vetting-entrypointsh
+              secret:
+                secretName: my-vetting-reports-cronjob-entrypointsh-secret
+                defaultMode: 0755
+          restartPolicy: OnFailure
+---
+# Source: vetting/templates/report-time-vetting-hours-per-org-monthly-cronjob.yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: report-time-vetting-hours-per-org-monthly-job
+spec:
+  #schedule: "*/1 * * * *"
+  #suspend: true
+  schedule: "0 5 1 * *"
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            aadpodidbinding: "disclosure-vetting"
+            app.kubernetes.io/name: reports-app.name
+            app.kubernetes.io/instance: my-vetting
+        spec:
+          containers:
+          - name: report-time-vetting-hours-per-org-monthly-job
+            image: "statcan/disclosure-vetting-app:0.1.1"
+            imagePullPolicy: "Always"
+            args: ["vetting_hours_org"]
+            env:
+            - name: STORAGE_ACCOUNT_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: storageAccountName
+            - name: STORAGE_ACCOUNT_RESOURCE_GROUP
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: storageAccountResourceGroup
+            - name: STORAGE_ACCOUNT_FILE_SHARE_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: storageAccountFileShareName
+            - name: DB_CONNECTION_STRING
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: dbConnectionString
+            - name: ELASTIC_SEARCH_URL
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: elasticSearchUrl
+            - name: ELASTIC_SEARCH_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: elasticSearchUsername
+            - name: ELASTIC_SEARCH_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: elasticSearchPassword
+            - name: ELASTIC_SEARCH_LOGS_INDEX
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: elasticSearchLogsIndex
+            - name: ELASTIC_SEARCH_ERRORS_INDEX
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: elasticSearchErrorsIndex
+            volumeMounts:
+              - name: my-vetting-entrypointsh
+                mountPath: /app/entrypoint.sh
+                subPath: entrypoint.sh
+          volumes:
+            - name:  my-vetting-entrypointsh
+              secret:
+                secretName: my-vetting-reports-cronjob-entrypointsh-secret
+                defaultMode: 0755
+          restartPolicy: OnFailure
+---
+# Source: vetting/templates/report-time-vetting-monthly-cronjob.yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: report-time-vetting-monthly-job
+spec:
+  #schedule: "*/1 * * * *"
+  #suspend: true
+  schedule: "0 5 1 * *"
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            aadpodidbinding: "disclosure-vetting"
+            app.kubernetes.io/name: reports-app.name
+            app.kubernetes.io/instance: my-vetting
+        spec:
+          containers:
+          - name: report-time-vetting-monthly-job
+            image: "statcan/disclosure-vetting-app:0.1.1"
+            imagePullPolicy: "Always"
+            args: ["time_spent_vetting","monthly"]
+            env:
+            - name: STORAGE_ACCOUNT_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: storageAccountName
+            - name: STORAGE_ACCOUNT_RESOURCE_GROUP
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: storageAccountResourceGroup
+            - name: STORAGE_ACCOUNT_FILE_SHARE_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: storageAccountFileShareName
+            - name: DB_CONNECTION_STRING
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: dbConnectionString
+            - name: ELASTIC_SEARCH_URL
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: elasticSearchUrl
+            - name: ELASTIC_SEARCH_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: elasticSearchUsername
+            - name: ELASTIC_SEARCH_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: elasticSearchPassword
+            - name: ELASTIC_SEARCH_LOGS_INDEX
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: elasticSearchLogsIndex
+            - name: ELASTIC_SEARCH_ERRORS_INDEX
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: elasticSearchErrorsIndex
+            volumeMounts:
+              - name: my-vetting-entrypointsh
+                mountPath: /app/entrypoint.sh
+                subPath: entrypoint.sh
+          volumes:
+            - name:  my-vetting-entrypointsh
+              secret:
+                secretName: my-vetting-reports-cronjob-entrypointsh-secret
+                defaultMode: 0755
+          restartPolicy: OnFailure
+---
+# Source: vetting/templates/report-time-vetting-per-analyst-monthly-cronjob.yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: report-time-vetting-per-analyst-monthly-job
+spec:
+  #schedule: "*/1 * * * *"
+  #suspend: true
+  schedule: "0 5 1 * *"
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            aadpodidbinding: "disclosure-vetting"
+            app.kubernetes.io/name: reports-app.name
+            app.kubernetes.io/instance: my-vetting
+        spec:
+          containers:
+          - name: report-time-vetting-per-analyst-monthly-job
+            image: "statcan/disclosure-vetting-app:0.1.1"
+            imagePullPolicy: "Always"
+            args: ["vetting_analyst"]
+            env:
+            - name: STORAGE_ACCOUNT_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: storageAccountName
+            - name: STORAGE_ACCOUNT_RESOURCE_GROUP
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: storageAccountResourceGroup
+            - name: STORAGE_ACCOUNT_FILE_SHARE_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: storageAccountFileShareName
+            - name: DB_CONNECTION_STRING
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: dbConnectionString
+            - name: ELASTIC_SEARCH_URL
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: elasticSearchUrl
+            - name: ELASTIC_SEARCH_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: elasticSearchUsername
+            - name: ELASTIC_SEARCH_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: elasticSearchPassword
+            - name: ELASTIC_SEARCH_LOGS_INDEX
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: elasticSearchLogsIndex
+            - name: ELASTIC_SEARCH_ERRORS_INDEX
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: elasticSearchErrorsIndex
+            volumeMounts:
+              - name: my-vetting-entrypointsh
+                mountPath: /app/entrypoint.sh
+                subPath: entrypoint.sh
+          volumes:
+            - name:  my-vetting-entrypointsh
+              secret:
+                secretName: my-vetting-reports-cronjob-entrypointsh-secret
+                defaultMode: 0755
+          restartPolicy: OnFailure
+---
+# Source: vetting/templates/report-time-vetting-per-project-monthly-cronjob.yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: report-time-vetting-per-project-monthly-job
+spec:
+  #schedule: "*/1 * * * *"
+  #suspend: true
+  schedule: "0 5 1 * *"
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            aadpodidbinding: "disclosure-vetting"
+            app.kubernetes.io/name: reports-app.name
+            app.kubernetes.io/instance: my-vetting
+        spec:
+          containers:
+          - name: report-time-vetting-per-project-monthly-job
+            image: "statcan/disclosure-vetting-app:0.1.1"
+            imagePullPolicy: "Always"
+            args: ["vetting_project"]
+            env:
+            - name: STORAGE_ACCOUNT_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: storageAccountName
+            - name: STORAGE_ACCOUNT_RESOURCE_GROUP
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: storageAccountResourceGroup
+            - name: STORAGE_ACCOUNT_FILE_SHARE_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: storageAccountFileShareName
+            - name: DB_CONNECTION_STRING
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: dbConnectionString
+            - name: ELASTIC_SEARCH_URL
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: elasticSearchUrl
+            - name: ELASTIC_SEARCH_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: elasticSearchUsername
+            - name: ELASTIC_SEARCH_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: elasticSearchPassword
+            - name: ELASTIC_SEARCH_LOGS_INDEX
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: elasticSearchLogsIndex
+            - name: ELASTIC_SEARCH_ERRORS_INDEX
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: elasticSearchErrorsIndex
+            volumeMounts:
+              - name: my-vetting-entrypointsh
+                mountPath: /app/entrypoint.sh
+                subPath: entrypoint.sh
+          volumes:
+            - name:  my-vetting-entrypointsh
+              secret:
+                secretName: my-vetting-reports-cronjob-entrypointsh-secret
+                defaultMode: 0755
+          restartPolicy: OnFailure
+---
+# Source: vetting/templates/report-time-vetting-requests-per-analyst-monthly-cronjob.yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: report-time-vetting-requests-per-analyst-monthly-job
+spec:
+  #schedule: "*/1 * * * *"
+  #suspend: true
+  schedule: "0 5 1 * *"
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            aadpodidbinding: "disclosure-vetting"
+            app.kubernetes.io/name: reports-app.name
+            app.kubernetes.io/instance: my-vetting
+        spec:
+          containers:
+          - name: report-time-vetting-requests-per-analyst-monthly-job
+            image: "statcan/disclosure-vetting-app:0.1.1"
+            imagePullPolicy: "Always"
+            args: ["vetting_requests_analyst"]
+            env:
+            - name: STORAGE_ACCOUNT_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: storageAccountName
+            - name: STORAGE_ACCOUNT_RESOURCE_GROUP
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: storageAccountResourceGroup
+            - name: STORAGE_ACCOUNT_FILE_SHARE_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: storageAccountFileShareName
+            - name: DB_CONNECTION_STRING
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: dbConnectionString
+            - name: ELASTIC_SEARCH_URL
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: elasticSearchUrl
+            - name: ELASTIC_SEARCH_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: elasticSearchUsername
+            - name: ELASTIC_SEARCH_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: elasticSearchPassword
+            - name: ELASTIC_SEARCH_LOGS_INDEX
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: elasticSearchLogsIndex
+            - name: ELASTIC_SEARCH_ERRORS_INDEX
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: elasticSearchErrorsIndex
+            volumeMounts:
+              - name: my-vetting-entrypointsh
+                mountPath: /app/entrypoint.sh
+                subPath: entrypoint.sh
+          volumes:
+            - name:  my-vetting-entrypointsh
+              secret:
+                secretName: my-vetting-reports-cronjob-entrypointsh-secret
+                defaultMode: 0755
+          restartPolicy: OnFailure
+---
+# Source: vetting/templates/report-time-vetting-requests-sent-back-monthly-cronjob.yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: report-time-vetting-requests-sent-back-monthly-job
+spec:
+  #schedule: "*/1 * * * *"
+  #suspend: true
+  schedule: "0 5 1 * *"
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            aadpodidbinding: "disclosure-vetting"
+            app.kubernetes.io/name: reports-app.name
+            app.kubernetes.io/instance: my-vetting
+        spec:
+          containers:
+          - name: report-time-vetting-requests-sent-back-monthly-job
+            image: "statcan/disclosure-vetting-app:0.1.1"
+            imagePullPolicy: "Always"
+            args: ["requests_sent_back"]
+            env:
+            - name: STORAGE_ACCOUNT_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: storageAccountName
+            - name: STORAGE_ACCOUNT_RESOURCE_GROUP
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: storageAccountResourceGroup
+            - name: STORAGE_ACCOUNT_FILE_SHARE_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: storageAccountFileShareName
+            - name: DB_CONNECTION_STRING
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: dbConnectionString
+            - name: ELASTIC_SEARCH_URL
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: elasticSearchUrl
+            - name: ELASTIC_SEARCH_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: elasticSearchUsername
+            - name: ELASTIC_SEARCH_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: elasticSearchPassword
+            - name: ELASTIC_SEARCH_LOGS_INDEX
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: elasticSearchLogsIndex
+            - name: ELASTIC_SEARCH_ERRORS_INDEX
+              valueFrom:
+                secretKeyRef:
+                  name: reports-cronjob-init
+                  key: elasticSearchErrorsIndex
+            volumeMounts:
+              - name: my-vetting-entrypointsh
+                mountPath: /app/entrypoint.sh
+                subPath: entrypoint.sh
+          volumes:
+            - name:  my-vetting-entrypointsh
+              secret:
+                secretName: my-vetting-reports-cronjob-entrypointsh-secret
+                defaultMode: 0755
+          restartPolicy: OnFailure
+---
+# Source: vetting/templates/manifest.yaml
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: 
+  namespace: 
+spec:
+  host: .svc.cluster.local
+  trafficPolicy:
+    loadBalancer:
+      simple: ROUND_ROBIN
+    portLevelSettings:
+    - port:
+        number: 443
+      tls:
+        mode: DISABLE
+---
+# Source: vetting/templates/ingress-app.yaml
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: disclosure-vetting-pb
+  namespace: org-ces-system
+spec:
+  gateways:
+  - ingress-general-system/disclosure-vetting
+  hosts:
+  - vma-agdcc.statcan.gc.ca
+  http:
+  - match:
+    - uri:
+        prefix: /
+    route:
+    - destination:
+        host: disclosure-vetting.org-ces-system.svc.cluster.local
+        port:
+          number: 5000
+---
+# Source: vetting/templates/manifest.yaml
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: 
+  namespace: 
+spec:
+  gateways:
+  - 
+  hosts:
+  - 
+  http:
+    - match:
+      - uri:
+          prefix: /error
+      route:
+        - destination:
+            host: .svc.cluster.local
+            port:
+              number: 5000
+    - route:
+      - destination:
+          host: .svc.cluster.local
+          port:
+            number: 5000
+        weight: 100
+      - destination:
+          host: .svc.cluster.local
+          port:
+            number: 5000
+        weight: 0

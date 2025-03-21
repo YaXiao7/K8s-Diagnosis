@@ -1,0 +1,143 @@
+---
+# Source: prometheus-operated/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus-default
+  labels:
+    helm.sh/chart: prometheus-operated-0.3.0
+    app.kubernetes.io/name: prometheus
+    app.kubernetes.io/instance: default
+    app.kubernetes.io/version: "2.44.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: prometheus-operated/templates/clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prometheus-default
+  labels:
+    helm.sh/chart: prometheus-operated-0.3.0
+    app.kubernetes.io/name: prometheus
+    app.kubernetes.io/instance: default
+    app.kubernetes.io/version: "2.44.0"
+    app.kubernetes.io/managed-by: Helm
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - nodes
+      - nodes/proxy
+      - nodes/metrics
+      - services
+      - endpoints
+      - pods
+      - ingresses
+      - configmaps
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - extensions
+    resources:
+      - ingresses/status
+      - ingresses
+    verbs:
+      - get
+      - list
+      - watch
+  - nonResourceURLs:
+      - /metrics
+    verbs:
+      - get
+---
+# Source: prometheus-operated/templates/clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus-default
+  labels:
+    helm.sh/chart: prometheus-operated-0.3.0
+    app.kubernetes.io/name: prometheus
+    app.kubernetes.io/instance: default
+    app.kubernetes.io/version: "2.44.0"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus-default
+subjects:
+  - kind: ServiceAccount
+    name: prometheus-default
+    namespace: default
+---
+# Source: prometheus-operated/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus-default-service
+  labels:
+    helm.sh/chart: prometheus-operated-0.3.0
+    app.kubernetes.io/name: prometheus
+    app.kubernetes.io/instance: default
+    app.kubernetes.io/version: "2.44.0"
+    app.kubernetes.io/managed-by: Helm
+
+  namespace: default
+spec:
+  type: ClusterIP
+  ports:
+    - name: web
+      port: 9090
+      protocol: TCP
+      targetPort: web
+  selector:
+    app.kubernetes.io/name: prometheus
+    app.kubernetes.io/instance: default
+---
+# Source: prometheus-operated/templates/prometheus.yaml
+apiVersion: monitoring.coreos.com/v1
+kind: Prometheus
+metadata:
+  name: default
+  namespace: default
+spec:
+  enableAdminAPI: false
+  replicas: 1
+  paused: false
+  resources:
+    {}
+  retention: 7d
+  podMonitorNamespaceSelector:
+    matchLabels:
+      prometheus-default: "true"
+  podMonitorSelector:
+    matchLabels:
+      prometheus-default: "true"
+  ruleNamespaceSelector:
+    matchLabels:
+      prometheus-default: "true"
+  ruleSelector:
+    matchLabels:
+      prometheus-default: "true"
+  serviceMonitorNamespaceSelector:
+    matchLabels:
+      prometheus-default: "true"
+  serviceMonitorSelector:
+    matchLabels:
+      prometheus-default: "true"
+  securityContext:
+    fsGroup: 65534
+    runAsGroup: 65534
+    runAsNonRoot: true
+    runAsUser: 65534
+  serviceAccountName: prometheus-default
+  storage:
+    volumeClaimTemplate:
+      spec:
+        resources:
+          requests:
+            storage: 30Gi
+        storageClassName: 
+  version: v2.44.0

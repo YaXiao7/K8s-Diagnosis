@@ -1,0 +1,253 @@
+---
+# Source: mcrouter/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-mcrouter-mcrouter
+  labels:
+    app: mcrouter
+    chart: mcrouter-0.4.0
+    release: my-mcrouter
+    heritage: Helm
+data:
+  config.json: |-
+    {
+      "pools": {
+        "A": {
+          "servers": [
+            // hosts of replicated pool, https://github.com/facebook/mcrouter/wiki/Replicated-pools-setup e.g.:
+            "my-mcrouter-0.my-mcrouter.default.svc.cluster.local:11211",
+            "my-mcrouter-1.my-mcrouter.default.svc.cluster.local:11211",
+          ]
+        }
+      },
+      "route": {
+        "type": "OperationSelectorRoute",
+        "default_policy": "PoolRoute|A",
+        "operation_policies": {
+          "add": "AllFastestRoute|Pool|A",
+          "delete": "AllFastestRoute|Pool|A",
+          "get": "LatestRoute|Pool|A",
+          "set": "AllFastestRoute|Pool|A",
+          "incr": "AllFastestRoute|Pool|A",
+          "decr": "AllFastestRoute|Pool|A"
+        }
+      }
+    }
+---
+# Source: mcrouter/charts/memcached/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-mcrouter-memcached
+  namespace: default
+  labels:
+    app.kubernetes.io/name: memcached
+    helm.sh/chart: memcached-6.2.7
+    app.kubernetes.io/instance: my-mcrouter
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+    - name: memcache
+      port: 11211
+      targetPort: memcache
+      nodePort: null
+  selector:
+    app.kubernetes.io/name: memcached
+    app.kubernetes.io/instance: my-mcrouter
+---
+# Source: mcrouter/templates/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-mcrouter-mcrouter
+  labels:
+    app: my-mcrouter-mcrouter
+    chart: "mcrouter-0.4.0"
+    release: "my-mcrouter"
+    heritage: "Helm"
+  annotations:
+    {}
+spec:
+  clusterIP: "None"
+  ports:
+  - name: mcrouter-port
+    port: 5000
+    targetPort: mcrouter-port
+  selector:
+    app: my-mcrouter-mcrouter
+---
+# Source: mcrouter/templates/daemonset.yaml
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: my-mcrouter-mcrouter
+  labels:
+    app: my-mcrouter-mcrouter
+    chart: "mcrouter-0.4.0"
+    release: "my-mcrouter"
+  annotations:
+    checksum/config: b8de01e91be84a75d6c891a981e3d6d53086177fa1d6635606c57180ffb96e7b
+spec:
+  selector:
+    matchLabels:
+      app: my-mcrouter-mcrouter
+      release: "my-mcrouter"
+  template:
+    metadata:
+      labels:
+        app: my-mcrouter-mcrouter
+        release: "my-mcrouter"
+    spec:
+      nodeSelector: 
+        {}
+      tolerations: 
+        []
+      securityContext: 
+        runAsGroup: 65534
+        runAsNonRoot: true
+        runAsUser: 65534
+      containers:
+      - name: my-mcrouter-mcrouter
+        image: quay.io/evryfs/docker-mcrouter:0.40.0-9
+        imagePullPolicy: ""
+        command: ["mcrouter"]
+        args:
+        - -p 5000
+        - --config-file=/etc/mcrouter/config.json
+        securityContext: 
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+        volumeMounts:
+        - name: config
+          mountPath: /etc/mcrouter
+        - name: var-mcrouter
+          mountPath: /var/mcrouter
+        - name: var-spool-mcrouter
+          mountPath: /var/spool/mcrouter
+        ports:
+        - name: mcrouter-port
+          containerPort: 5000
+          hostPort: 5000
+        livenessProbe:
+          tcpSocket:
+            port: mcrouter-port
+          initialDelaySeconds: 30
+          timeoutSeconds: 5
+        readinessProbe:
+          tcpSocket:
+            port: mcrouter-port
+          initialDelaySeconds: 5
+          timeoutSeconds: 1
+        resources:
+          limits:
+            cpu: 256m
+            memory: 512Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+      volumes:
+      - name: config
+        configMap:
+          name: my-mcrouter-mcrouter
+      - name: var-mcrouter
+        emptyDir: {}
+      - name: var-spool-mcrouter
+        emptyDir: {}
+---
+# Source: mcrouter/charts/memcached/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-mcrouter-memcached
+  namespace: default
+  labels:
+    app.kubernetes.io/name: memcached
+    helm.sh/chart: memcached-6.2.7
+    app.kubernetes.io/instance: my-mcrouter
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: memcached
+      app.kubernetes.io/instance: my-mcrouter
+  replicas: 2
+  podManagementPolicy: "Parallel"
+  serviceName: my-mcrouter-memcached
+  updateStrategy:
+    rollingUpdate: {}
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: memcached
+        helm.sh/chart: memcached-6.2.7
+        app.kubernetes.io/instance: my-mcrouter
+        app.kubernetes.io/managed-by: Helm
+      annotations:
+    spec:
+      
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: memcached
+                    app.kubernetes.io/instance: my-mcrouter
+                namespaces:
+                  - "default"
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+      serviceAccountName: default
+      containers:
+        - name: memcached
+          image: docker.io/bitnami/memcached:1.6.17-debian-11-r15
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: MEMCACHED_PORT_NUMBER
+              value: "11211"
+          ports:
+            - name: memcache
+              containerPort: 11211
+          livenessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+            tcpSocket:
+              port: memcache
+          readinessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            successThreshold: 1
+            timeoutSeconds: 3
+            tcpSocket:
+              port: memcache
+          resources:
+            limits: {}
+            requests:
+              cpu: 250m
+              memory: 256Mi
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

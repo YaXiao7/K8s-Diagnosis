@@ -1,0 +1,82 @@
+---
+# Source: netcupscp-exporter/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-netcupscp-exporter
+  labels:
+    helm.sh/chart: netcupscp-exporter-1.1.6
+    app.kubernetes.io/name: netcupscp-exporter
+    app.kubernetes.io/instance: my-netcupscp-exporter
+    app.kubernetes.io/version: "v0.3.6"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: netcupscp-exporter/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-netcupscp-exporter
+data:
+  SCP_LOGINNAME: YWRtaW4=
+  SCP_PASSWORD: cGFzc3dvcmQ=
+---
+# Source: netcupscp-exporter/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-netcupscp-exporter
+  labels:
+    helm.sh/chart: netcupscp-exporter-1.1.6
+    app.kubernetes.io/name: netcupscp-exporter
+    app.kubernetes.io/instance: my-netcupscp-exporter
+    app.kubernetes.io/version: "v0.3.6"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: netcupscp-exporter
+    app.kubernetes.io/instance: my-netcupscp-exporter
+---
+# Source: netcupscp-exporter/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-netcupscp-exporter
+  labels:
+    helm.sh/chart: netcupscp-exporter-1.1.6
+    app.kubernetes.io/name: netcupscp-exporter
+    app.kubernetes.io/instance: my-netcupscp-exporter
+    app.kubernetes.io/version: "v0.3.6"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: netcupscp-exporter
+      app.kubernetes.io/instance: my-netcupscp-exporter
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: netcupscp-exporter
+        app.kubernetes.io/instance: my-netcupscp-exporter
+    spec:
+      serviceAccountName: my-netcupscp-exporter
+      containers:
+        - name: netcupscp-exporter
+          image: "ghcr.io/mrueg/netcupscp-exporter:v0.3.6"
+          imagePullPolicy: Always
+          args:
+            - "/netcupscp-exporter"
+          envFrom:
+            - secretRef:
+                name: my-netcupscp-exporter
+          ports:
+            - name: http
+              containerPort: 9757
+              protocol: TCP

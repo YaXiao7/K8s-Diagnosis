@@ -1,0 +1,82 @@
+---
+# Source: nats-kafka/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-nats-kafka-config
+  namespace: default
+  labels:
+    helm.sh/chart: nats-kafka-0.15.4
+    app.kubernetes.io/name: nats-kafka
+    app.kubernetes.io/instance: my-nats-kafka
+    app.kubernetes.io/version: "1.4.2"
+    app.kubernetes.io/managed-by: Helm
+data:
+  nats-kafka.conf: |
+    reconnectinterval: 5000
+    connecttimeout: 5000
+
+    logging: {
+      time: true,
+      debug: false,
+      trace: false,
+      colors: true,
+      pid: true,
+    }
+
+    nats: {
+      Servers: [
+      ],
+      ConnectTimeout: 5000,
+      MaxReconnects: 120,
+      ReconnectWait: 5000,
+    }
+
+    
+
+    connect:     []
+---
+# Source: nats-kafka/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-nats-kafka
+  namespace: default
+  labels:
+    helm.sh/chart: nats-kafka-0.15.4
+    app.kubernetes.io/name: nats-kafka
+    app.kubernetes.io/instance: my-nats-kafka
+    app.kubernetes.io/version: "1.4.2"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: nats-kafka
+      app.kubernetes.io/instance: my-nats-kafka
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: nats-kafka
+        app.kubernetes.io/instance: my-nats-kafka
+    spec:
+      serviceAccountName: default
+      containers:
+        - name: nats-kafka
+          image: natsio/nats-kafka:1.4.2
+          imagePullPolicy: IfNotPresent
+          resources:
+            {}
+          volumeMounts:
+            - name: config-volume
+              mountPath: /etc/nats-kafka
+            
+          command:
+            - "nats-kafka"
+            - "-c"
+            - /etc/nats-kafka/nats-kafka.conf
+          
+      volumes:
+        - name: config-volume
+          configMap:
+            name: my-nats-kafka-config

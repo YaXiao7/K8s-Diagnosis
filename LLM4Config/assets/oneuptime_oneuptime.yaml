@@ -1,0 +1,3239 @@
+---
+# Source: oneuptime/charts/clickhouse/templates/networkpolicy.yaml
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: my-oneuptime-clickhouse
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-oneuptime
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: clickhouse
+    app.kubernetes.io/version: 24.1.5
+    helm.sh/chart: clickhouse-5.1.0
+    app.kubernetes.io/component: clickhouse
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: my-oneuptime
+      app.kubernetes.io/name: clickhouse
+      app.kubernetes.io/component: clickhouse
+  policyTypes:
+    - Ingress
+    - Egress
+  egress:
+    - {}
+  ingress:
+    - ports:
+        - port: 8123
+        - port: 9000
+        - port: 9004
+        - port: 9005
+        - port: 9009
+---
+# Source: oneuptime/charts/postgresql/templates/primary/networkpolicy.yaml
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: my-oneuptime-postgresql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-oneuptime
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/version: 16.1.0
+    helm.sh/chart: postgresql-14.0.0
+    app.kubernetes.io/component: primary
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: my-oneuptime
+      app.kubernetes.io/name: postgresql
+      app.kubernetes.io/component: primary
+  policyTypes:
+    - Ingress
+    - Egress
+  egress:
+    # Allow dns resolution
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    # Allow outbound connections to read-replicas
+    - ports:
+        - port: 5432
+        - port: 5432
+      to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: my-oneuptime
+              app.kubernetes.io/name: postgresql
+              app.kubernetes.io/component: read
+  ingress:
+    - ports:
+        - port: 5432
+---
+# Source: oneuptime/charts/postgresql/templates/read/networkpolicy.yaml
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: my-oneuptime-postgresql-read
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-oneuptime
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/version: 16.1.0
+    helm.sh/chart: postgresql-14.0.0
+    app.kubernetes.io/component: read
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: my-oneuptime
+      app.kubernetes.io/name: postgresql
+      app.kubernetes.io/component: read
+  policyTypes:
+    - Ingress
+    - Egress
+  egress:
+    # Allow dns resolution
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    # Allow outbound connections to primary
+    - ports:
+        - port: 5432
+        - port: 5432
+      to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: my-oneuptime
+              app.kubernetes.io/name: postgresql
+              app.kubernetes.io/component: primary
+  ingress:
+    - ports:
+        - port: 5432
+---
+# Source: oneuptime/charts/redis/templates/networkpolicy.yaml
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: my-oneuptime-redis
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-oneuptime
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/version: 7.2.4
+    helm.sh/chart: redis-18.19.1
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: my-oneuptime
+      app.kubernetes.io/name: redis
+  policyTypes:
+    - Ingress
+    - Egress
+  egress:
+    - {}
+  ingress:
+    # Allow inbound connections
+    - ports:
+        - port: 6379
+---
+# Source: oneuptime/charts/clickhouse/templates/service-account.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-oneuptime-clickhouse
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-oneuptime
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: clickhouse
+    app.kubernetes.io/version: 24.1.5
+    helm.sh/chart: clickhouse-5.1.0
+    app.kubernetes.io/component: clickhouse
+automountServiceAccountToken: false
+---
+# Source: oneuptime/charts/postgresql/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-oneuptime-postgresql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-oneuptime
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/version: 16.1.0
+    helm.sh/chart: postgresql-14.0.0
+automountServiceAccountToken: false
+---
+# Source: oneuptime/charts/redis/templates/master/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+automountServiceAccountToken: false
+metadata:
+  name: my-oneuptime-redis-master
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-oneuptime
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/version: 7.2.4
+    helm.sh/chart: redis-18.19.1
+---
+# Source: oneuptime/charts/clickhouse/templates/init-scripts-secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-oneuptime-clickhouse-init-scripts
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-oneuptime
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: clickhouse
+    app.kubernetes.io/version: 24.1.5
+    helm.sh/chart: clickhouse-5.1.0
+    app.kubernetes.io/component: clickhouse
+stringData:
+  db-init.sql: |
+    CREATE DATABASE oneuptime;
+---
+# Source: oneuptime/charts/clickhouse/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-oneuptime-clickhouse
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-oneuptime
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: clickhouse
+    app.kubernetes.io/version: 24.1.5
+    helm.sh/chart: clickhouse-5.1.0
+    app.kubernetes.io/component: clickhouse
+type: Opaque
+data:
+  admin-password: "UjFTREhIQko3bw=="
+---
+# Source: oneuptime/charts/postgresql/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-oneuptime-postgresql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-oneuptime
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/version: 16.1.0
+    helm.sh/chart: postgresql-14.0.0
+type: Opaque
+data:
+  postgres-password: "UnZtbG5PSkkyRA=="
+  password: "RlpkRjFlWEpzcQ=="
+  # We don't auto-generate LDAP password when it's not provided as we do for other passwords
+---
+# Source: oneuptime/charts/redis/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-oneuptime-redis
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-oneuptime
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/version: 7.2.4
+    helm.sh/chart: redis-18.19.1
+type: Opaque
+data:
+  redis-password: "NXU1RmY3ZGl0Uw=="
+---
+# Source: oneuptime/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-oneuptime-secrets
+  annotations:
+    "helm.sh/resource-policy": "keep"
+type: Opaque
+data:
+  ## Secrets Change when the release is upgraded
+  ## https://github.com/helm/helm-www/issues/1259
+  ## This is a workaround to keep the secrets unchanged # install operation
+
+  internal-smtp: "VlIxRjFKbms2Y0VtbHg2RjBMWDRMNktDNFFRUnlCTlk="
+  oneuptime-secret: "N000RFVjcEFITnI4NWJYTlZFU2tJU2ZOZVZLT2dmdTg="
+  encryption-secret: "dnIyMWxab0RmUXc2MzY2aFNmSkg5RkN5WTJEbEVacWE="
+  probe-one: "dm9YTEpKeWZCUXNqZFJYSjlBT3JCWGJvanJLV0hyYm4="
+---
+# Source: oneuptime/charts/clickhouse/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-oneuptime-clickhouse
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-oneuptime
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: clickhouse
+    app.kubernetes.io/version: 24.1.5
+    helm.sh/chart: clickhouse-5.1.0
+    app.kubernetes.io/component: clickhouse
+data:
+  00_default_overrides.xml: |
+    <clickhouse>
+      <!-- Macros -->
+      <macros>
+        <shard from_env="CLICKHOUSE_SHARD_ID"></shard>
+        <replica from_env="CLICKHOUSE_REPLICA_ID"></replica>
+        <layer>my-oneuptime-clickhouse</layer>
+      </macros>
+      <!-- Log Level -->
+      <logger>
+        <level>information</level>
+      </logger>
+    </clickhouse>
+---
+# Source: oneuptime/charts/clickhouse/templates/scripts-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-oneuptime-clickhouse-scripts
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-oneuptime
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: clickhouse
+    app.kubernetes.io/version: 24.1.5
+    helm.sh/chart: clickhouse-5.1.0
+    app.kubernetes.io/component: clickhouse
+data:
+  setup.sh: |-
+    #!/bin/bash
+
+    # Execute entrypoint as usual after obtaining KEEPER_SERVER_ID
+    # check KEEPER_SERVER_ID in persistent volume via myid
+    # if not present, set based on POD hostname
+    if [[ -f "/bitnami/clickhouse/keeper/data/myid" ]]; then
+        export KEEPER_SERVER_ID="$(cat /bitnami/clickhouse/keeper/data/myid)"
+    else
+        HOSTNAME="$(hostname -s)"
+        if [[ $HOSTNAME =~ (.*)-([0-9]+)$ ]]; then
+            export KEEPER_SERVER_ID=${BASH_REMATCH[2]}
+        else
+            echo "Failed to get index from hostname $HOST"
+            exit 1
+        fi
+    fi
+    exec /opt/bitnami/scripts/clickhouse/entrypoint.sh /opt/bitnami/scripts/clickhouse/run.sh -- --listen_host=0.0.0.0
+---
+# Source: oneuptime/charts/redis/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-oneuptime-redis-configuration
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-oneuptime
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/version: 7.2.4
+    helm.sh/chart: redis-18.19.1
+data:
+  redis.conf: |-
+    # User-supplied common configuration:
+    appendonly no
+    save ""
+    # End of common configuration
+  master.conf: |-
+    dir /data
+    # User-supplied master configuration:
+    rename-command FLUSHDB ""
+    rename-command FLUSHALL ""
+    # End of master configuration
+  replica.conf: |-
+    dir /data
+    # User-supplied replica configuration:
+    rename-command FLUSHDB ""
+    rename-command FLUSHALL ""
+    # End of replica configuration
+---
+# Source: oneuptime/charts/redis/templates/health-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-oneuptime-redis-health
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-oneuptime
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/version: 7.2.4
+    helm.sh/chart: redis-18.19.1
+data:
+  ping_readiness_local.sh: |-
+    #!/bin/bash
+
+    [[ -f $REDIS_PASSWORD_FILE ]] && export REDIS_PASSWORD="$(< "${REDIS_PASSWORD_FILE}")"
+    [[ -n "$REDIS_PASSWORD" ]] && export REDISCLI_AUTH="$REDIS_PASSWORD"
+    response=$(
+      timeout -s 15 $1 \
+      redis-cli \
+        -h localhost \
+        -p $REDIS_PORT \
+        ping
+    )
+    if [ "$?" -eq "124" ]; then
+      echo "Timed out"
+      exit 1
+    fi
+    if [ "$response" != "PONG" ]; then
+      echo "$response"
+      exit 1
+    fi
+  ping_liveness_local.sh: |-
+    #!/bin/bash
+
+    [[ -f $REDIS_PASSWORD_FILE ]] && export REDIS_PASSWORD="$(< "${REDIS_PASSWORD_FILE}")"
+    [[ -n "$REDIS_PASSWORD" ]] && export REDISCLI_AUTH="$REDIS_PASSWORD"
+    response=$(
+      timeout -s 15 $1 \
+      redis-cli \
+        -h localhost \
+        -p $REDIS_PORT \
+        ping
+    )
+    if [ "$?" -eq "124" ]; then
+      echo "Timed out"
+      exit 1
+    fi
+    responseFirstWord=$(echo $response | head -n1 | awk '{print $1;}')
+    if [ "$response" != "PONG" ] && [ "$responseFirstWord" != "LOADING" ] && [ "$responseFirstWord" != "MASTERDOWN" ]; then
+      echo "$response"
+      exit 1
+    fi
+  ping_readiness_master.sh: |-
+    #!/bin/bash
+
+    [[ -f $REDIS_MASTER_PASSWORD_FILE ]] && export REDIS_MASTER_PASSWORD="$(< "${REDIS_MASTER_PASSWORD_FILE}")"
+    [[ -n "$REDIS_MASTER_PASSWORD" ]] && export REDISCLI_AUTH="$REDIS_MASTER_PASSWORD"
+    response=$(
+      timeout -s 15 $1 \
+      redis-cli \
+        -h $REDIS_MASTER_HOST \
+        -p $REDIS_MASTER_PORT_NUMBER \
+        ping
+    )
+    if [ "$?" -eq "124" ]; then
+      echo "Timed out"
+      exit 1
+    fi
+    if [ "$response" != "PONG" ]; then
+      echo "$response"
+      exit 1
+    fi
+  ping_liveness_master.sh: |-
+    #!/bin/bash
+
+    [[ -f $REDIS_MASTER_PASSWORD_FILE ]] && export REDIS_MASTER_PASSWORD="$(< "${REDIS_MASTER_PASSWORD_FILE}")"
+    [[ -n "$REDIS_MASTER_PASSWORD" ]] && export REDISCLI_AUTH="$REDIS_MASTER_PASSWORD"
+    response=$(
+      timeout -s 15 $1 \
+      redis-cli \
+        -h $REDIS_MASTER_HOST \
+        -p $REDIS_MASTER_PORT_NUMBER \
+        ping
+    )
+    if [ "$?" -eq "124" ]; then
+      echo "Timed out"
+      exit 1
+    fi
+    responseFirstWord=$(echo $response | head -n1 | awk '{print $1;}')
+    if [ "$response" != "PONG" ] && [ "$responseFirstWord" != "LOADING" ]; then
+      echo "$response"
+      exit 1
+    fi
+  ping_readiness_local_and_master.sh: |-
+    script_dir="$(dirname "$0")"
+    exit_status=0
+    "$script_dir/ping_readiness_local.sh" $1 || exit_status=$?
+    "$script_dir/ping_readiness_master.sh" $1 || exit_status=$?
+    exit $exit_status
+  ping_liveness_local_and_master.sh: |-
+    script_dir="$(dirname "$0")"
+    exit_status=0
+    "$script_dir/ping_liveness_local.sh" $1 || exit_status=$?
+    "$script_dir/ping_liveness_master.sh" $1 || exit_status=$?
+    exit $exit_status
+---
+# Source: oneuptime/charts/redis/templates/scripts-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-oneuptime-redis-scripts
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-oneuptime
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/version: 7.2.4
+    helm.sh/chart: redis-18.19.1
+data:
+  start-master.sh: |
+    #!/bin/bash
+
+    [[ -f $REDIS_PASSWORD_FILE ]] && export REDIS_PASSWORD="$(< "${REDIS_PASSWORD_FILE}")"
+    if [[ -f /opt/bitnami/redis/mounted-etc/master.conf ]];then
+        cp /opt/bitnami/redis/mounted-etc/master.conf /opt/bitnami/redis/etc/master.conf
+    fi
+    if [[ -f /opt/bitnami/redis/mounted-etc/redis.conf ]];then
+        cp /opt/bitnami/redis/mounted-etc/redis.conf /opt/bitnami/redis/etc/redis.conf
+    fi
+    ARGS=("--port" "${REDIS_PORT}")
+    ARGS+=("--requirepass" "${REDIS_PASSWORD}")
+    ARGS+=("--masterauth" "${REDIS_PASSWORD}")
+    ARGS+=("--include" "/opt/bitnami/redis/etc/redis.conf")
+    ARGS+=("--include" "/opt/bitnami/redis/etc/master.conf")
+    exec redis-server "${ARGS[@]}"
+---
+# Source: oneuptime/charts/clickhouse/templates/service-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-oneuptime-clickhouse-headless
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-oneuptime
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: clickhouse
+    app.kubernetes.io/version: 24.1.5
+    helm.sh/chart: clickhouse-5.1.0
+    app.kubernetes.io/component: clickhouse
+spec:
+  type: ClusterIP
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+    - name: http
+      targetPort: http
+      port: 8123
+      protocol: TCP
+    - name: tcp
+      targetPort: tcp
+      port: 9000
+      protocol: TCP
+    - name: tcp-mysql
+      targetPort: tcp-mysql
+      port: 9004
+      protocol: TCP
+    - name: tcp-postgresql
+      targetPort: tcp-postgresql
+      port: 9005
+      protocol: TCP
+    - name: http-intersrv
+      targetPort: http-intersrv
+      port: 9009
+      protocol: TCP
+  selector:
+    app.kubernetes.io/instance: my-oneuptime
+    app.kubernetes.io/name: clickhouse
+    app.kubernetes.io/component: clickhouse
+---
+# Source: oneuptime/charts/clickhouse/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-oneuptime-clickhouse
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-oneuptime
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: clickhouse
+    app.kubernetes.io/version: 24.1.5
+    helm.sh/chart: clickhouse-5.1.0
+    app.kubernetes.io/component: clickhouse
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+    - name: http
+      targetPort: http
+      port: 8123
+      protocol: TCP
+      nodePort: null
+    - name: tcp
+      targetPort: tcp
+      port: 9000
+      protocol: TCP
+      nodePort: null
+    - name: tcp-mysql
+      targetPort: tcp-mysql
+      port: 9004
+      protocol: TCP
+      nodePort: null
+    - name: tcp-postgresql
+      targetPort: tcp-postgresql
+      port: 9005
+      protocol: TCP
+      nodePort: null
+    - name: http-intersrv
+      targetPort: http-intersrv
+      port: 9009
+      protocol: TCP
+      nodePort: null
+  selector:
+    app.kubernetes.io/instance: my-oneuptime
+    app.kubernetes.io/name: clickhouse
+    app.kubernetes.io/component: clickhouse
+---
+# Source: oneuptime/charts/postgresql/templates/primary/svc-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-oneuptime-postgresql-hl
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-oneuptime
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/version: 16.1.0
+    helm.sh/chart: postgresql-14.0.0
+    app.kubernetes.io/component: primary
+  annotations:
+    # Use this annotation in addition to the actual publishNotReadyAddresses
+    # field below because the annotation will stop being respected soon but the
+    # field is broken in some versions of Kubernetes:
+    # https://github.com/kubernetes/kubernetes/issues/58662
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+spec:
+  type: ClusterIP
+  clusterIP: None
+  # We want all pods in the StatefulSet to have their addresses published for
+  # the sake of the other Postgresql pods even before they're ready, since they
+  # have to be able to talk to each other in order to become ready.
+  publishNotReadyAddresses: true
+  ports:
+    - name: tcp-postgresql
+      port: 5432
+      targetPort: tcp-postgresql
+  selector:
+    app.kubernetes.io/instance: my-oneuptime
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/component: primary
+---
+# Source: oneuptime/charts/postgresql/templates/primary/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-oneuptime-postgresql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-oneuptime
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/version: 16.1.0
+    helm.sh/chart: postgresql-14.0.0
+    app.kubernetes.io/component: primary
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+    - name: tcp-postgresql
+      port: 5432
+      targetPort: tcp-postgresql
+      nodePort: null
+  selector:
+    app.kubernetes.io/instance: my-oneuptime
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/component: primary
+---
+# Source: oneuptime/charts/redis/templates/headless-svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-oneuptime-redis-headless
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-oneuptime
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/version: 7.2.4
+    helm.sh/chart: redis-18.19.1
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: tcp-redis
+      port: 6379
+      targetPort: redis
+  selector:
+    app.kubernetes.io/instance: my-oneuptime
+    app.kubernetes.io/name: redis
+---
+# Source: oneuptime/charts/redis/templates/master/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-oneuptime-redis-master
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-oneuptime
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/version: 7.2.4
+    helm.sh/chart: redis-18.19.1
+    app.kubernetes.io/component: master
+spec:
+  type: ClusterIP
+  internalTrafficPolicy: Cluster
+  sessionAffinity: None
+  ports:
+    - name: tcp-redis
+      port: 6379
+      targetPort: redis
+      nodePort: null
+  selector:
+    app.kubernetes.io/instance: my-oneuptime
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/component: master
+---
+# Source: oneuptime/templates/accounts.yaml
+# OneUptime accounts Service
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: my-oneuptime-accounts
+    app.kubernetes.io/part-of: oneuptime
+    app.kubernetes.io/managed-by: Helm
+    appname: oneuptime
+  name: my-oneuptime-accounts
+  namespace: default
+  annotations:
+spec:
+  ports:
+    - port: 3003
+      targetPort: 3003
+      name: port
+  selector:
+      app: my-oneuptime-accounts
+  type: ClusterIP
+---
+# Source: oneuptime/templates/admin-dashboard.yaml
+# OneUptime adminDashboard Service
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: my-oneuptime-admin-dashboard
+    app.kubernetes.io/part-of: oneuptime
+    app.kubernetes.io/managed-by: Helm
+    appname: oneuptime
+  name: my-oneuptime-admin-dashboard
+  namespace: default
+  annotations:
+spec:
+  ports:
+    - port: 3158
+      targetPort: 3158
+      name: port
+  selector:
+      app: my-oneuptime-admin-dashboard
+  type: ClusterIP
+---
+# Source: oneuptime/templates/app.yaml
+# OneUptime app Service
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: my-oneuptime-app
+    app.kubernetes.io/part-of: oneuptime
+    app.kubernetes.io/managed-by: Helm
+    appname: oneuptime
+  name: my-oneuptime-app
+  namespace: default
+  annotations:
+spec:
+  ports:
+    - port: 3002
+      targetPort: 3002
+      name: port
+  selector:
+      app: my-oneuptime-app
+  type: ClusterIP
+---
+# Source: oneuptime/templates/dashboard.yaml
+# OneUptime dashboard Service
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: my-oneuptime-dashboard
+    app.kubernetes.io/part-of: oneuptime
+    app.kubernetes.io/managed-by: Helm
+    appname: oneuptime
+  name: my-oneuptime-dashboard
+  namespace: default
+  annotations:
+spec:
+  ports:
+    - port: 3009
+      targetPort: 3009
+      name: port
+  selector:
+      app: my-oneuptime-dashboard
+  type: ClusterIP
+---
+# Source: oneuptime/templates/haraka.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: my-oneuptime-haraka
+    app.kubernetes.io/part-of: oneuptime
+    app.kubernetes.io/managed-by: Helm
+    appname: oneuptime
+  name: my-oneuptime-haraka
+  namespace: default
+  annotations:
+spec:
+  ports:
+    - name: pop3
+      protocol: TCP
+      port: 110
+      targetPort: 110
+    - name: imap
+      protocol: TCP
+      port: 143
+      targetPort: 143
+    - name: pop3s
+      protocol: TCP
+      port: 995
+      targetPort: 995
+    - name: imaps
+      protocol: TCP
+      port: 993
+      targetPort: 993
+    - name: smtp
+      protocol: TCP
+      port: 25
+      targetPort: 25
+    - name: submission
+      protocol: TCP
+      port: 587
+      targetPort: 587
+    - name: smtps
+      protocol: TCP
+      port: 465
+      targetPort: 465
+    - name: haraka
+      protocol: TCP
+      port: 2525
+      targetPort: 2525
+  selector:
+      app: my-oneuptime-internalSmtp
+  type: ClusterIP
+---
+# Source: oneuptime/templates/ingestor.yaml
+# OneUptime ingestor Service
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: my-oneuptime-ingestor
+    app.kubernetes.io/part-of: oneuptime
+    app.kubernetes.io/managed-by: Helm
+    appname: oneuptime
+  name: my-oneuptime-ingestor
+  namespace: default
+  annotations:
+spec:
+  ports:
+    - port: 3400
+      targetPort: 3400
+      name: port
+  selector:
+      app: my-oneuptime-ingestor
+  type: ClusterIP
+---
+# Source: oneuptime/templates/isolated-vm.yaml
+# OneUptime isolatedVM Service
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: my-oneuptime-isolated-vm
+    app.kubernetes.io/part-of: oneuptime
+    app.kubernetes.io/managed-by: Helm
+    appname: oneuptime
+  name: my-oneuptime-isolated-vm
+  namespace: default
+  annotations:
+spec:
+  ports:
+    - port: 4572
+      targetPort: 4572
+      name: port
+  selector:
+      app: my-oneuptime-isolated-vm
+  type: ClusterIP
+---
+# Source: oneuptime/templates/nginx.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: my-oneuptime-nginx
+    app.kubernetes.io/part-of: oneuptime
+    app.kubernetes.io/managed-by: Helm
+    appname: oneuptime
+  name: my-oneuptime-nginx
+  namespace: default
+  annotations:
+spec:
+  ports:
+    - port: 80
+      targetPort: 7849
+      name: oneuptime-http
+    - port: 443
+      targetPort: 7850
+      name: statuspage-ssl
+  selector:
+      app: my-oneuptime-nginx
+  type: LoadBalancer
+---
+# Source: oneuptime/templates/otel-collector.yaml
+# OneUptime otel-collector Service
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: my-oneuptime-otel-collector
+    app.kubernetes.io/part-of: oneuptime
+    app.kubernetes.io/managed-by: Helm
+    appname: oneuptime
+  name: my-oneuptime-otel-collector
+  namespace: default
+  annotations:
+spec:
+  ports:
+    - port: 4317
+      targetPort: 4317
+      name: grpc
+    - port: 4318
+      targetPort: 4318
+      name: http
+  selector:
+      app: my-oneuptime-otel-collector
+  type: ClusterIP
+---
+# Source: oneuptime/templates/status-page.yaml
+# OneUptime statusPage Service
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: my-oneuptime-status-page
+    app.kubernetes.io/part-of: oneuptime
+    app.kubernetes.io/managed-by: Helm
+    appname: oneuptime
+  name: my-oneuptime-status-page
+  namespace: default
+  annotations:
+spec:
+  ports:
+    - port: 3105
+      targetPort: 3105
+      name: port
+  selector:
+      app: my-oneuptime-status-page
+  type: ClusterIP
+---
+# Source: oneuptime/templates/accounts.yaml
+# OneUptime accounts Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-oneuptime-accounts
+  namespace: default
+  labels:
+    app: my-oneuptime-accounts
+    app.kubernetes.io/part-of: oneuptime
+    app.kubernetes.io/managed-by: Helm
+    appname: oneuptime
+    date: "1726474446"
+spec:
+  selector:
+    matchLabels:
+      app: my-oneuptime-accounts
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: my-oneuptime-accounts
+        date: "1726474446"
+        appname: oneuptime
+    spec:
+      containers:
+        - image: docker.io/oneuptime/accounts:release
+          name: my-oneuptime-accounts
+          imagePullPolicy: Always
+          env:
+            
+            - name: HOST
+              value: localhost
+            - name: STATUS_PAGE_CNAME_RECORD
+              value: 
+            - name: ALLOWED_ACTIVE_MONITOR_COUNT_IN_FREE_PLAN
+              value: "10"
+            - name: OTEL_COLLECTOR_HOST
+              value: 
+            - name: LOG_LEVEL
+              value: INFO
+            - name: FLUENTD_HOST
+              value: 
+            - name: HTTP_PROTOCOL
+              value: http
+            - name: NODE_ENV
+              value: production
+            - name: BILLING_ENABLED
+              value: 'false'
+            - name: BILLING_PUBLIC_KEY
+              value: 
+            - name: SUBSCRIPTION_PLAN_BASIC
+              value: 
+            - name: SUBSCRIPTION_PLAN_GROWTH
+              value: 
+            - name: SUBSCRIPTION_PLAN_SCALE
+              value: 
+            - name: SUBSCRIPTION_PLAN_ENTERPRISE
+              value: 
+            - name: ANALYTICS_KEY
+              value: 
+            - name: ANALYTICS_HOST
+              value: 
+            - name: SERVER_ACCOUNTS_HOSTNAME
+              value: my-oneuptime-accounts.default.svc.cluster.local
+            - name: SERVER_ISOLATED_VM_HOSTNAME
+              value: my-oneuptime-isolated-vm.default.svc.cluster.local
+            - name: SERVER_APP_HOSTNAME
+              value: my-oneuptime-app.default.svc.cluster.local
+            - name: SERVER_INGESTOR_HOSTNAME
+              value: my-oneuptime-ingestor.default.svc.cluster.local
+            - name: SERVER_TEST_SERVER_HOSTNAME
+              value: my-oneuptime-test-server.default.svc.cluster.local
+            - name: SERVER_OTEL_COLLECTOR_HOSTNAME
+              value: my-oneuptime-otel-collector.default.svc.cluster.local
+            - name: SERVER_STATUS_PAGE_HOSTNAME
+              value: my-oneuptime-status-page.default.svc.cluster.local
+            - name: SERVER_DASHBOARD_HOSTNAME
+              value: my-oneuptime-dashboard.default.svc.cluster.local
+            - name: SERVER_ADMIN_DASHBOARD_HOSTNAME
+              value: my-oneuptime-admin-dashboard.default.svc.cluster.local
+            
+            - name: APP_PORT
+              value: '3002'
+            - name: INGESTOR_PORT
+              value: '3400'
+            - name: PROBE_PORT
+              value: '3500'
+            - name: TEST_SERVER_PORT
+              value: '3800'
+            - name: ACCOUNTS_PORT
+              value: '3003'
+            - name: ISOLATED_VM_PORT
+              value: '4572'
+            - name: STATUS_PAGE_PORT
+              value: '3105'
+            - name: DASHBOARD_PORT
+              value: '3009'
+            - name: ADMIN_DASHBOARD_PORT
+              value: '3158'
+            
+            - name: IS_SERVER
+              value: 'false'
+            
+            - name: OPENTELEMETRY_EXPORTER_OTLP_ENDPOINT
+              value: 
+            - name: OPENTELEMETRY_EXPORTER_OTLP_HEADERS
+              value: 
+            - name: PORT
+              value: '3003'
+          ports:
+            - containerPort: 3003
+              protocol: TCP
+              name: port
+      restartPolicy: Always
+---
+# Source: oneuptime/templates/admin-dashboard.yaml
+# OneUptime adminDashboard Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-oneuptime-admin-dashboard
+  namespace: default
+  labels:
+    app: my-oneuptime-admin-dashboard
+    app.kubernetes.io/part-of: oneuptime
+    app.kubernetes.io/managed-by: Helm
+    appname: oneuptime
+    date: "1726474446"
+spec:
+  selector:
+    matchLabels:
+      app: my-oneuptime-admin-dashboard
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: my-oneuptime-admin-dashboard
+        date: "1726474446"
+        appname: oneuptime
+    spec:
+      containers:
+        - image: docker.io/oneuptime/admin-dashboard:release
+          name: my-oneuptime-admin-dashboard
+          imagePullPolicy: Always
+          env:
+            
+            - name: HOST
+              value: localhost
+            - name: STATUS_PAGE_CNAME_RECORD
+              value: 
+            - name: ALLOWED_ACTIVE_MONITOR_COUNT_IN_FREE_PLAN
+              value: "10"
+            - name: OTEL_COLLECTOR_HOST
+              value: 
+            - name: LOG_LEVEL
+              value: INFO
+            - name: FLUENTD_HOST
+              value: 
+            - name: HTTP_PROTOCOL
+              value: http
+            - name: NODE_ENV
+              value: production
+            - name: BILLING_ENABLED
+              value: 'false'
+            - name: BILLING_PUBLIC_KEY
+              value: 
+            - name: SUBSCRIPTION_PLAN_BASIC
+              value: 
+            - name: SUBSCRIPTION_PLAN_GROWTH
+              value: 
+            - name: SUBSCRIPTION_PLAN_SCALE
+              value: 
+            - name: SUBSCRIPTION_PLAN_ENTERPRISE
+              value: 
+            - name: ANALYTICS_KEY
+              value: 
+            - name: ANALYTICS_HOST
+              value: 
+            - name: SERVER_ACCOUNTS_HOSTNAME
+              value: my-oneuptime-accounts.default.svc.cluster.local
+            - name: SERVER_ISOLATED_VM_HOSTNAME
+              value: my-oneuptime-isolated-vm.default.svc.cluster.local
+            - name: SERVER_APP_HOSTNAME
+              value: my-oneuptime-app.default.svc.cluster.local
+            - name: SERVER_INGESTOR_HOSTNAME
+              value: my-oneuptime-ingestor.default.svc.cluster.local
+            - name: SERVER_TEST_SERVER_HOSTNAME
+              value: my-oneuptime-test-server.default.svc.cluster.local
+            - name: SERVER_OTEL_COLLECTOR_HOSTNAME
+              value: my-oneuptime-otel-collector.default.svc.cluster.local
+            - name: SERVER_STATUS_PAGE_HOSTNAME
+              value: my-oneuptime-status-page.default.svc.cluster.local
+            - name: SERVER_DASHBOARD_HOSTNAME
+              value: my-oneuptime-dashboard.default.svc.cluster.local
+            - name: SERVER_ADMIN_DASHBOARD_HOSTNAME
+              value: my-oneuptime-admin-dashboard.default.svc.cluster.local
+            
+            - name: APP_PORT
+              value: '3002'
+            - name: INGESTOR_PORT
+              value: '3400'
+            - name: PROBE_PORT
+              value: '3500'
+            - name: TEST_SERVER_PORT
+              value: '3800'
+            - name: ACCOUNTS_PORT
+              value: '3003'
+            - name: ISOLATED_VM_PORT
+              value: '4572'
+            - name: STATUS_PAGE_PORT
+              value: '3105'
+            - name: DASHBOARD_PORT
+              value: '3009'
+            - name: ADMIN_DASHBOARD_PORT
+              value: '3158'
+            
+            - name: IS_SERVER
+              value: 'false'
+            
+            - name: OPENTELEMETRY_EXPORTER_OTLP_ENDPOINT
+              value: 
+            - name: OPENTELEMETRY_EXPORTER_OTLP_HEADERS
+              value: 
+            - name: PORT
+              value: '3158'
+          ports:
+            - containerPort: 3158
+              protocol: TCP
+              name: port
+      restartPolicy: Always
+---
+# Source: oneuptime/templates/app.yaml
+# OneUptime app Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-oneuptime-app
+  namespace: default
+  labels:
+    app: my-oneuptime-app
+    app.kubernetes.io/part-of: oneuptime
+    app.kubernetes.io/managed-by: Helm
+    appname: oneuptime
+    date: "1726474446"
+spec:
+  selector:
+    matchLabels:
+      app: my-oneuptime-app
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: my-oneuptime-app
+        date: "1726474446"
+        appname: oneuptime
+    spec:
+      containers:
+        - image: docker.io/oneuptime/app:release
+          name: my-oneuptime-app
+          # Liveness probe
+          livenessProbe:
+            httpGet:
+              path: /status/live
+              port: 3002
+            initialDelaySeconds: 300
+            periodSeconds: 10
+            timeoutSeconds: 30
+          # Readyness Probe
+          readinessProbe:
+            httpGet:
+              path: /status/ready
+              port: 3002
+            initialDelaySeconds: 300
+            periodSeconds: 10
+            timeoutSeconds: 30
+          imagePullPolicy: Always
+          env:
+            
+            - name: HOST
+              value: localhost
+            - name: STATUS_PAGE_CNAME_RECORD
+              value: 
+            - name: ALLOWED_ACTIVE_MONITOR_COUNT_IN_FREE_PLAN
+              value: "10"
+            - name: OTEL_COLLECTOR_HOST
+              value: 
+            - name: LOG_LEVEL
+              value: INFO
+            - name: FLUENTD_HOST
+              value: 
+            - name: HTTP_PROTOCOL
+              value: http
+            - name: NODE_ENV
+              value: production
+            - name: BILLING_ENABLED
+              value: 'false'
+            - name: BILLING_PUBLIC_KEY
+              value: 
+            - name: SUBSCRIPTION_PLAN_BASIC
+              value: 
+            - name: SUBSCRIPTION_PLAN_GROWTH
+              value: 
+            - name: SUBSCRIPTION_PLAN_SCALE
+              value: 
+            - name: SUBSCRIPTION_PLAN_ENTERPRISE
+              value: 
+            - name: ANALYTICS_KEY
+              value: 
+            - name: ANALYTICS_HOST
+              value: 
+            - name: SERVER_ACCOUNTS_HOSTNAME
+              value: my-oneuptime-accounts.default.svc.cluster.local
+            - name: SERVER_ISOLATED_VM_HOSTNAME
+              value: my-oneuptime-isolated-vm.default.svc.cluster.local
+            - name: SERVER_APP_HOSTNAME
+              value: my-oneuptime-app.default.svc.cluster.local
+            - name: SERVER_INGESTOR_HOSTNAME
+              value: my-oneuptime-ingestor.default.svc.cluster.local
+            - name: SERVER_TEST_SERVER_HOSTNAME
+              value: my-oneuptime-test-server.default.svc.cluster.local
+            - name: SERVER_OTEL_COLLECTOR_HOSTNAME
+              value: my-oneuptime-otel-collector.default.svc.cluster.local
+            - name: SERVER_STATUS_PAGE_HOSTNAME
+              value: my-oneuptime-status-page.default.svc.cluster.local
+            - name: SERVER_DASHBOARD_HOSTNAME
+              value: my-oneuptime-dashboard.default.svc.cluster.local
+            - name: SERVER_ADMIN_DASHBOARD_HOSTNAME
+              value: my-oneuptime-admin-dashboard.default.svc.cluster.local
+            
+            - name: APP_PORT
+              value: '3002'
+            - name: INGESTOR_PORT
+              value: '3400'
+            - name: PROBE_PORT
+              value: '3500'
+            - name: TEST_SERVER_PORT
+              value: '3800'
+            - name: ACCOUNTS_PORT
+              value: '3003'
+            - name: ISOLATED_VM_PORT
+              value: '4572'
+            - name: STATUS_PAGE_PORT
+              value: '3105'
+            - name: DASHBOARD_PORT
+              value: '3009'
+            - name: ADMIN_DASHBOARD_PORT
+              value: '3158'
+            
+            - name: IS_SERVER
+              value: 'true'
+            
+            - name: OPENTELEMETRY_EXPORTER_OTLP_ENDPOINT
+              value: 
+            
+            - name: NOTIFICATION_WEBHOOK_ON_CREATED_USER
+              value: 
+            
+            - name: LETS_ENCRYPT_NOTIFICATION_EMAIL
+              value: 
+            
+            - name: LETS_ENCRYPT_ACCOUNT_KEY
+              value: 
+            
+            - name: ENCRYPTION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: my-oneuptime-secrets
+                  key: encryption-secret
+            
+            - name: CLICKHOUSE_USER
+              value: oneuptime
+            
+            - name: CLICKHOUSE_IS_HOST_HTTPS
+              value: 'false'
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                    name: my-oneuptime-clickhouse
+                    key: admin-password
+            - name: CLICKHOUSE_HOST
+              value: my-oneuptime-clickhouse.default.svc.cluster.local
+            - name: CLICKHOUSE_PORT
+              value: '8123'
+            - name: CLICKHOUSE_DATABASE
+              value: 'oneuptime'
+            
+            
+            ## REDIS SSL BLOCK
+            # do nothing here.
+            
+            
+            
+            
+            
+            - name: REDIS_HOST
+              value: my-oneuptime-redis-master.default.svc.cluster.local
+            - name: REDIS_PORT
+              value: "6379"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                    name: my-oneuptime-redis
+                    key: redis-password
+            - name: REDIS_DB
+              value: '0'
+            - name: REDIS_USERNAME
+              value: default
+            
+            
+            ## REDIS SSL BLOCK
+            # do nothing here.
+            
+            # Postgres configuration
+            
+            - name: DATABASE_HOST
+              value: my-oneuptime-postgresql.default.svc.cluster.local
+            - name: DATABASE_PORT
+              value: '5432'
+            - name: DATABASE_USERNAME
+              value: postgres
+            - name: DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                    name: my-oneuptime-postgresql
+                    key: postgres-password
+            - name: DATABASE_NAME
+              value: oneuptimedb
+            
+            
+            ## DATABASE SSL BLOCK
+            # do nothing here.
+            
+            ## DATABASE SSL ENDS HERE
+            
+            - name: BILLING_PRIVATE_KEY
+              value: 
+            
+            - name: DISABLE_AUTOMATIC_INCIDENT_CREATION
+              value: 'false'
+            
+            - name: WORKFLOW_SCRIPT_TIMEOUT_IN_MS
+              value: '5000'
+            
+            - name: ONEUPTIME_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: my-oneuptime-secrets
+                  key: oneuptime-secret
+            - name: OPENTELEMETRY_EXPORTER_OTLP_HEADERS
+              value: 
+            - name: PORT
+              value: "3002"
+            - name: SMS_HIGH_RISK_COST_IN_CENTS
+              value: 
+            - name: CALL_HIGH_RISK_COST_IN_CENTS_PER_MINUTE
+              value: 
+            - name: SMS_DEFAULT_COST_IN_CENTS
+              value: 
+            - name: CALL_DEFAULT_COST_IN_CENTS_PER_MINUTE
+              value: 
+            - name: INTERNAL_SMTP_HOST
+              value: "my-oneuptime-haraka.default.svc.cluster.local"
+            - name: INTERNAL_SMTP_FROM_NAME
+              value: 
+            - name: INTERNAL_SMTP_EMAIL
+              value: 
+            - name: INTERNAL_SMTP_PASSWORD
+              value: "internal_smtp_password"  
+        
+          ports:
+            - containerPort: 3002
+              protocol: TCP
+              name: http
+      restartPolicy: Always
+---
+# Source: oneuptime/templates/dashboard.yaml
+# OneUptime dashboard Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-oneuptime-dashboard
+  namespace: default
+  labels:
+    app: my-oneuptime-dashboard
+    app.kubernetes.io/part-of: oneuptime
+    app.kubernetes.io/managed-by: Helm
+    appname: oneuptime
+    date: "1726474446"
+spec:
+  selector:
+    matchLabels:
+      app: my-oneuptime-dashboard
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: my-oneuptime-dashboard
+        date: "1726474446"
+        appname: oneuptime
+    spec:
+      containers:
+        - image: docker.io/oneuptime/dashboard:release
+          name: my-oneuptime-dashboard
+          imagePullPolicy: Always
+          env:
+            
+            - name: HOST
+              value: localhost
+            - name: STATUS_PAGE_CNAME_RECORD
+              value: 
+            - name: ALLOWED_ACTIVE_MONITOR_COUNT_IN_FREE_PLAN
+              value: "10"
+            - name: OTEL_COLLECTOR_HOST
+              value: 
+            - name: LOG_LEVEL
+              value: INFO
+            - name: FLUENTD_HOST
+              value: 
+            - name: HTTP_PROTOCOL
+              value: http
+            - name: NODE_ENV
+              value: production
+            - name: BILLING_ENABLED
+              value: 'false'
+            - name: BILLING_PUBLIC_KEY
+              value: 
+            - name: SUBSCRIPTION_PLAN_BASIC
+              value: 
+            - name: SUBSCRIPTION_PLAN_GROWTH
+              value: 
+            - name: SUBSCRIPTION_PLAN_SCALE
+              value: 
+            - name: SUBSCRIPTION_PLAN_ENTERPRISE
+              value: 
+            - name: ANALYTICS_KEY
+              value: 
+            - name: ANALYTICS_HOST
+              value: 
+            - name: SERVER_ACCOUNTS_HOSTNAME
+              value: my-oneuptime-accounts.default.svc.cluster.local
+            - name: SERVER_ISOLATED_VM_HOSTNAME
+              value: my-oneuptime-isolated-vm.default.svc.cluster.local
+            - name: SERVER_APP_HOSTNAME
+              value: my-oneuptime-app.default.svc.cluster.local
+            - name: SERVER_INGESTOR_HOSTNAME
+              value: my-oneuptime-ingestor.default.svc.cluster.local
+            - name: SERVER_TEST_SERVER_HOSTNAME
+              value: my-oneuptime-test-server.default.svc.cluster.local
+            - name: SERVER_OTEL_COLLECTOR_HOSTNAME
+              value: my-oneuptime-otel-collector.default.svc.cluster.local
+            - name: SERVER_STATUS_PAGE_HOSTNAME
+              value: my-oneuptime-status-page.default.svc.cluster.local
+            - name: SERVER_DASHBOARD_HOSTNAME
+              value: my-oneuptime-dashboard.default.svc.cluster.local
+            - name: SERVER_ADMIN_DASHBOARD_HOSTNAME
+              value: my-oneuptime-admin-dashboard.default.svc.cluster.local
+            
+            - name: APP_PORT
+              value: '3002'
+            - name: INGESTOR_PORT
+              value: '3400'
+            - name: PROBE_PORT
+              value: '3500'
+            - name: TEST_SERVER_PORT
+              value: '3800'
+            - name: ACCOUNTS_PORT
+              value: '3003'
+            - name: ISOLATED_VM_PORT
+              value: '4572'
+            - name: STATUS_PAGE_PORT
+              value: '3105'
+            - name: DASHBOARD_PORT
+              value: '3009'
+            - name: ADMIN_DASHBOARD_PORT
+              value: '3158'
+            
+            - name: IS_SERVER
+              value: 'false'
+            
+            - name: OPENTELEMETRY_EXPORTER_OTLP_ENDPOINT
+              value: 
+            - name: OPENTELEMETRY_EXPORTER_OTLP_HEADERS
+              value: 
+            - name: PORT
+              value: '3009'
+          ports:
+            - containerPort: 3009
+              protocol: TCP
+              name: port
+      restartPolicy: Always
+---
+# Source: oneuptime/templates/haraka.yaml
+# OneUptime haraka Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-oneuptime-haraka
+  namespace: default
+  labels:
+    app: my-oneuptime-haraka
+    app.kubernetes.io/part-of: oneuptime
+    app.kubernetes.io/managed-by: Helm
+    appname: oneuptime
+    date: "1726474446"
+spec:
+  selector:
+    matchLabels:
+      app: my-oneuptime-haraka
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: my-oneuptime-haraka
+        date: "1726474446"
+        appname: oneuptime
+    spec:
+      volumes:
+        - name: haraka-queue
+          emptyDir:
+            sizeLimit: 1Gi
+      containers:
+        - image: docker.io/oneuptime/haraka:release
+          name: my-oneuptime-haraka
+          imagePullPolicy: Always
+          env:
+            
+            - name: HOST
+              value: localhost
+            - name: STATUS_PAGE_CNAME_RECORD
+              value: 
+            - name: ALLOWED_ACTIVE_MONITOR_COUNT_IN_FREE_PLAN
+              value: "10"
+            - name: OTEL_COLLECTOR_HOST
+              value: 
+            - name: LOG_LEVEL
+              value: INFO
+            - name: FLUENTD_HOST
+              value: 
+            - name: HTTP_PROTOCOL
+              value: http
+            - name: NODE_ENV
+              value: production
+            - name: BILLING_ENABLED
+              value: 'false'
+            - name: BILLING_PUBLIC_KEY
+              value: 
+            - name: SUBSCRIPTION_PLAN_BASIC
+              value: 
+            - name: SUBSCRIPTION_PLAN_GROWTH
+              value: 
+            - name: SUBSCRIPTION_PLAN_SCALE
+              value: 
+            - name: SUBSCRIPTION_PLAN_ENTERPRISE
+              value: 
+            - name: ANALYTICS_KEY
+              value: 
+            - name: ANALYTICS_HOST
+              value: 
+            - name: SERVER_ACCOUNTS_HOSTNAME
+              value: my-oneuptime-accounts.default.svc.cluster.local
+            - name: SERVER_ISOLATED_VM_HOSTNAME
+              value: my-oneuptime-isolated-vm.default.svc.cluster.local
+            - name: SERVER_APP_HOSTNAME
+              value: my-oneuptime-app.default.svc.cluster.local
+            - name: SERVER_INGESTOR_HOSTNAME
+              value: my-oneuptime-ingestor.default.svc.cluster.local
+            - name: SERVER_TEST_SERVER_HOSTNAME
+              value: my-oneuptime-test-server.default.svc.cluster.local
+            - name: SERVER_OTEL_COLLECTOR_HOSTNAME
+              value: my-oneuptime-otel-collector.default.svc.cluster.local
+            - name: SERVER_STATUS_PAGE_HOSTNAME
+              value: my-oneuptime-status-page.default.svc.cluster.local
+            - name: SERVER_DASHBOARD_HOSTNAME
+              value: my-oneuptime-dashboard.default.svc.cluster.local
+            - name: SERVER_ADMIN_DASHBOARD_HOSTNAME
+              value: my-oneuptime-admin-dashboard.default.svc.cluster.local
+            
+            - name: APP_PORT
+              value: '3002'
+            - name: INGESTOR_PORT
+              value: '3400'
+            - name: PROBE_PORT
+              value: '3500'
+            - name: TEST_SERVER_PORT
+              value: '3800'
+            - name: ACCOUNTS_PORT
+              value: '3003'
+            - name: ISOLATED_VM_PORT
+              value: '4572'
+            - name: STATUS_PAGE_PORT
+              value: '3105'
+            - name: DASHBOARD_PORT
+              value: '3009'
+            - name: ADMIN_DASHBOARD_PORT
+              value: '3158'
+            - name: DKIM_PRIVATE_KEY
+              value: 
+            - name: DKIM_PUBLIC_KEY
+              value: 
+            - name: DKIM_SELECTOR
+              value: 'oneuptime'
+            - name: DOMAIN
+              value: 
+            - name: INCOMING_EMAIL_DOMAIN
+              value: 
+            - name: SMTP_EMAIL
+              value: 
+            - name: SMTP_PASSWORD
+              value: 'internal_smtp_password'
+          volumeMounts:
+            - name: haraka-queue
+              mountPath: /harakaapp/queue
+          ports:
+            - containerPort: 2525
+              protocol: TCP
+              name: port
+      restartPolicy: Always
+---
+# Source: oneuptime/templates/ingestor.yaml
+# OneUptime ingestor Deployment
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-oneuptime-ingestor
+  namespace: default
+  labels:
+    app: my-oneuptime-ingestor
+    app.kubernetes.io/part-of: oneuptime
+    app.kubernetes.io/managed-by: Helm
+    appname: oneuptime
+    date: "1726474446"
+spec:
+  selector:
+    matchLabels:
+      app: my-oneuptime-ingestor
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: my-oneuptime-ingestor
+        date: "1726474446"
+        appname: oneuptime
+    spec:
+      volumes:
+        - name: greenlockrc
+          emptyDir:
+            sizeLimit: "1Gi"
+      containers:
+        - image: docker.io/oneuptime/ingestor:release
+          name: my-oneuptime-ingestor
+          # Liveness probe
+          livenessProbe:
+            httpGet:
+              path: /status/live
+              port: 3400
+            initialDelaySeconds: 300
+            periodSeconds: 10
+            timeoutSeconds: 30
+          # Readyness Probe
+          readinessProbe:
+            httpGet:
+              path: /status/ready
+              port: 3400
+            initialDelaySeconds: 300
+            periodSeconds: 10
+            timeoutSeconds: 30
+          imagePullPolicy: Always
+          env:
+            
+            - name: HOST
+              value: localhost
+            - name: STATUS_PAGE_CNAME_RECORD
+              value: 
+            - name: ALLOWED_ACTIVE_MONITOR_COUNT_IN_FREE_PLAN
+              value: "10"
+            - name: OTEL_COLLECTOR_HOST
+              value: 
+            - name: LOG_LEVEL
+              value: INFO
+            - name: FLUENTD_HOST
+              value: 
+            - name: HTTP_PROTOCOL
+              value: http
+            - name: NODE_ENV
+              value: production
+            - name: BILLING_ENABLED
+              value: 'false'
+            - name: BILLING_PUBLIC_KEY
+              value: 
+            - name: SUBSCRIPTION_PLAN_BASIC
+              value: 
+            - name: SUBSCRIPTION_PLAN_GROWTH
+              value: 
+            - name: SUBSCRIPTION_PLAN_SCALE
+              value: 
+            - name: SUBSCRIPTION_PLAN_ENTERPRISE
+              value: 
+            - name: ANALYTICS_KEY
+              value: 
+            - name: ANALYTICS_HOST
+              value: 
+            - name: SERVER_ACCOUNTS_HOSTNAME
+              value: my-oneuptime-accounts.default.svc.cluster.local
+            - name: SERVER_ISOLATED_VM_HOSTNAME
+              value: my-oneuptime-isolated-vm.default.svc.cluster.local
+            - name: SERVER_APP_HOSTNAME
+              value: my-oneuptime-app.default.svc.cluster.local
+            - name: SERVER_INGESTOR_HOSTNAME
+              value: my-oneuptime-ingestor.default.svc.cluster.local
+            - name: SERVER_TEST_SERVER_HOSTNAME
+              value: my-oneuptime-test-server.default.svc.cluster.local
+            - name: SERVER_OTEL_COLLECTOR_HOSTNAME
+              value: my-oneuptime-otel-collector.default.svc.cluster.local
+            - name: SERVER_STATUS_PAGE_HOSTNAME
+              value: my-oneuptime-status-page.default.svc.cluster.local
+            - name: SERVER_DASHBOARD_HOSTNAME
+              value: my-oneuptime-dashboard.default.svc.cluster.local
+            - name: SERVER_ADMIN_DASHBOARD_HOSTNAME
+              value: my-oneuptime-admin-dashboard.default.svc.cluster.local
+            
+            - name: APP_PORT
+              value: '3002'
+            - name: INGESTOR_PORT
+              value: '3400'
+            - name: PROBE_PORT
+              value: '3500'
+            - name: TEST_SERVER_PORT
+              value: '3800'
+            - name: ACCOUNTS_PORT
+              value: '3003'
+            - name: ISOLATED_VM_PORT
+              value: '4572'
+            - name: STATUS_PAGE_PORT
+              value: '3105'
+            - name: DASHBOARD_PORT
+              value: '3009'
+            - name: ADMIN_DASHBOARD_PORT
+              value: '3158'
+            
+            - name: IS_SERVER
+              value: 'true'
+            
+            - name: OPENTELEMETRY_EXPORTER_OTLP_ENDPOINT
+              value: 
+            
+            - name: NOTIFICATION_WEBHOOK_ON_CREATED_USER
+              value: 
+            
+            - name: LETS_ENCRYPT_NOTIFICATION_EMAIL
+              value: 
+            
+            - name: LETS_ENCRYPT_ACCOUNT_KEY
+              value: 
+            
+            - name: ENCRYPTION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: my-oneuptime-secrets
+                  key: encryption-secret
+            
+            - name: CLICKHOUSE_USER
+              value: oneuptime
+            
+            - name: CLICKHOUSE_IS_HOST_HTTPS
+              value: 'false'
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                    name: my-oneuptime-clickhouse
+                    key: admin-password
+            - name: CLICKHOUSE_HOST
+              value: my-oneuptime-clickhouse.default.svc.cluster.local
+            - name: CLICKHOUSE_PORT
+              value: '8123'
+            - name: CLICKHOUSE_DATABASE
+              value: 'oneuptime'
+            
+            
+            ## REDIS SSL BLOCK
+            # do nothing here.
+            
+            
+            
+            
+            
+            - name: REDIS_HOST
+              value: my-oneuptime-redis-master.default.svc.cluster.local
+            - name: REDIS_PORT
+              value: "6379"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                    name: my-oneuptime-redis
+                    key: redis-password
+            - name: REDIS_DB
+              value: '0'
+            - name: REDIS_USERNAME
+              value: default
+            
+            
+            ## REDIS SSL BLOCK
+            # do nothing here.
+            
+            # Postgres configuration
+            
+            - name: DATABASE_HOST
+              value: my-oneuptime-postgresql.default.svc.cluster.local
+            - name: DATABASE_PORT
+              value: '5432'
+            - name: DATABASE_USERNAME
+              value: postgres
+            - name: DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                    name: my-oneuptime-postgresql
+                    key: postgres-password
+            - name: DATABASE_NAME
+              value: oneuptimedb
+            
+            
+            ## DATABASE SSL BLOCK
+            # do nothing here.
+            
+            ## DATABASE SSL ENDS HERE
+            
+            - name: BILLING_PRIVATE_KEY
+              value: 
+            
+            - name: DISABLE_AUTOMATIC_INCIDENT_CREATION
+              value: 'false'
+            
+            - name: WORKFLOW_SCRIPT_TIMEOUT_IN_MS
+              value: '5000'
+            
+            - name: ONEUPTIME_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: my-oneuptime-secrets
+                  key: oneuptime-secret
+            - name: OPENTELEMETRY_EXPORTER_OTLP_HEADERS
+              value: 
+            - name: PORT
+              value: "3400" 
+          ports:
+            - containerPort: 3400
+              protocol: TCP
+              name: http
+      restartPolicy: Always
+---
+# Source: oneuptime/templates/isolated-vm.yaml
+# OneUptime app Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-oneuptime-isolated-vm
+  namespace: default
+  labels:
+    app: my-oneuptime-isolated-vm
+    app.kubernetes.io/part-of: oneuptime
+    app.kubernetes.io/managed-by: Helm
+    appname: oneuptime
+    date: "1726474446"
+spec:
+  selector:
+    matchLabels:
+      app: my-oneuptime-isolated-vm
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: my-oneuptime-isolated-vm
+        date: "1726474446"
+        appname: oneuptime
+    spec:
+      containers:
+        - image: docker.io/oneuptime/isolated-vm:release
+          name: my-oneuptime-isolated-vm
+          imagePullPolicy: Always
+          env:
+            
+            - name: HOST
+              value: localhost
+            - name: STATUS_PAGE_CNAME_RECORD
+              value: 
+            - name: ALLOWED_ACTIVE_MONITOR_COUNT_IN_FREE_PLAN
+              value: "10"
+            - name: OTEL_COLLECTOR_HOST
+              value: 
+            - name: LOG_LEVEL
+              value: INFO
+            - name: FLUENTD_HOST
+              value: 
+            - name: HTTP_PROTOCOL
+              value: http
+            - name: NODE_ENV
+              value: production
+            - name: BILLING_ENABLED
+              value: 'false'
+            - name: BILLING_PUBLIC_KEY
+              value: 
+            - name: SUBSCRIPTION_PLAN_BASIC
+              value: 
+            - name: SUBSCRIPTION_PLAN_GROWTH
+              value: 
+            - name: SUBSCRIPTION_PLAN_SCALE
+              value: 
+            - name: SUBSCRIPTION_PLAN_ENTERPRISE
+              value: 
+            - name: ANALYTICS_KEY
+              value: 
+            - name: ANALYTICS_HOST
+              value: 
+            - name: SERVER_ACCOUNTS_HOSTNAME
+              value: my-oneuptime-accounts.default.svc.cluster.local
+            - name: SERVER_ISOLATED_VM_HOSTNAME
+              value: my-oneuptime-isolated-vm.default.svc.cluster.local
+            - name: SERVER_APP_HOSTNAME
+              value: my-oneuptime-app.default.svc.cluster.local
+            - name: SERVER_INGESTOR_HOSTNAME
+              value: my-oneuptime-ingestor.default.svc.cluster.local
+            - name: SERVER_TEST_SERVER_HOSTNAME
+              value: my-oneuptime-test-server.default.svc.cluster.local
+            - name: SERVER_OTEL_COLLECTOR_HOSTNAME
+              value: my-oneuptime-otel-collector.default.svc.cluster.local
+            - name: SERVER_STATUS_PAGE_HOSTNAME
+              value: my-oneuptime-status-page.default.svc.cluster.local
+            - name: SERVER_DASHBOARD_HOSTNAME
+              value: my-oneuptime-dashboard.default.svc.cluster.local
+            - name: SERVER_ADMIN_DASHBOARD_HOSTNAME
+              value: my-oneuptime-admin-dashboard.default.svc.cluster.local
+            
+            - name: APP_PORT
+              value: '3002'
+            - name: INGESTOR_PORT
+              value: '3400'
+            - name: PROBE_PORT
+              value: '3500'
+            - name: TEST_SERVER_PORT
+              value: '3800'
+            - name: ACCOUNTS_PORT
+              value: '3003'
+            - name: ISOLATED_VM_PORT
+              value: '4572'
+            - name: STATUS_PAGE_PORT
+              value: '3105'
+            - name: DASHBOARD_PORT
+              value: '3009'
+            - name: ADMIN_DASHBOARD_PORT
+              value: '3158'
+            
+            - name: ONEUPTIME_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: my-oneuptime-secrets
+                  key: oneuptime-secret
+            - name: OPENTELEMETRY_EXPORTER_OTLP_HEADERS
+              value: 
+            - name: PORT
+              value: "4572" 
+        
+          ports:
+            - containerPort: 4572
+              protocol: TCP
+              name: http
+      restartPolicy: Always
+---
+# Source: oneuptime/templates/nginx.yaml
+# OneUptime nginx Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-oneuptime-nginx
+  namespace: default
+  labels:
+    app: my-oneuptime-nginx
+    app.kubernetes.io/part-of: oneuptime
+    app.kubernetes.io/managed-by: Helm
+    appname: oneuptime
+    date: "1726474446"
+spec:
+  selector:
+    matchLabels:
+      app: my-oneuptime-nginx
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: my-oneuptime-nginx
+        date: "1726474446"
+        appname: oneuptime
+    spec:
+      volumes:
+        - name: status-page-certs
+          emptyDir:
+            sizeLimit: "1Gi"
+        - name: cache
+          emptyDir:
+            sizeLimit: "1Gi"
+        - name: conf
+          emptyDir:
+            sizeLimit: "1Gi"
+        - name: run
+          emptyDir:
+            sizeLimit: "1Gi"
+      containers:
+        - image: docker.io/oneuptime/nginx:release
+          name: my-oneuptime-nginx
+          # Liveness probe
+          livenessProbe:
+            httpGet:
+              path: /status/live
+              port: 7851
+            initialDelaySeconds: 300
+            periodSeconds: 10
+            timeoutSeconds: 30
+          # Readyness Probe
+          readinessProbe:
+            httpGet:
+              path: /status/ready
+              port: 7851
+            initialDelaySeconds: 300
+            periodSeconds: 10
+            timeoutSeconds: 30
+          volumeMounts:
+            - name: status-page-certs
+              mountPath: /etc/nginx/certs/StatusPageCerts
+            - name: cache
+              mountPath: /var/cache/nginx
+            - name: conf
+              mountPath: /etc/nginx/conf.d
+            - name: run
+              mountPath: /var/run
+          imagePullPolicy: Always
+          env:
+            
+            - name: HOST
+              value: localhost
+            - name: STATUS_PAGE_CNAME_RECORD
+              value: 
+            - name: ALLOWED_ACTIVE_MONITOR_COUNT_IN_FREE_PLAN
+              value: "10"
+            - name: OTEL_COLLECTOR_HOST
+              value: 
+            - name: LOG_LEVEL
+              value: INFO
+            - name: FLUENTD_HOST
+              value: 
+            - name: HTTP_PROTOCOL
+              value: http
+            - name: NODE_ENV
+              value: production
+            - name: BILLING_ENABLED
+              value: 'false'
+            - name: BILLING_PUBLIC_KEY
+              value: 
+            - name: SUBSCRIPTION_PLAN_BASIC
+              value: 
+            - name: SUBSCRIPTION_PLAN_GROWTH
+              value: 
+            - name: SUBSCRIPTION_PLAN_SCALE
+              value: 
+            - name: SUBSCRIPTION_PLAN_ENTERPRISE
+              value: 
+            - name: ANALYTICS_KEY
+              value: 
+            - name: ANALYTICS_HOST
+              value: 
+            - name: SERVER_ACCOUNTS_HOSTNAME
+              value: my-oneuptime-accounts.default.svc.cluster.local
+            - name: SERVER_ISOLATED_VM_HOSTNAME
+              value: my-oneuptime-isolated-vm.default.svc.cluster.local
+            - name: SERVER_APP_HOSTNAME
+              value: my-oneuptime-app.default.svc.cluster.local
+            - name: SERVER_INGESTOR_HOSTNAME
+              value: my-oneuptime-ingestor.default.svc.cluster.local
+            - name: SERVER_TEST_SERVER_HOSTNAME
+              value: my-oneuptime-test-server.default.svc.cluster.local
+            - name: SERVER_OTEL_COLLECTOR_HOSTNAME
+              value: my-oneuptime-otel-collector.default.svc.cluster.local
+            - name: SERVER_STATUS_PAGE_HOSTNAME
+              value: my-oneuptime-status-page.default.svc.cluster.local
+            - name: SERVER_DASHBOARD_HOSTNAME
+              value: my-oneuptime-dashboard.default.svc.cluster.local
+            - name: SERVER_ADMIN_DASHBOARD_HOSTNAME
+              value: my-oneuptime-admin-dashboard.default.svc.cluster.local
+            
+            - name: APP_PORT
+              value: '3002'
+            - name: INGESTOR_PORT
+              value: '3400'
+            - name: PROBE_PORT
+              value: '3500'
+            - name: TEST_SERVER_PORT
+              value: '3800'
+            - name: ACCOUNTS_PORT
+              value: '3003'
+            - name: ISOLATED_VM_PORT
+              value: '4572'
+            - name: STATUS_PAGE_PORT
+              value: '3105'
+            - name: DASHBOARD_PORT
+              value: '3009'
+            - name: ADMIN_DASHBOARD_PORT
+              value: '3158'
+            
+            - name: IS_SERVER
+              value: 'true'
+            
+            - name: OPENTELEMETRY_EXPORTER_OTLP_ENDPOINT
+              value: 
+            
+            - name: NOTIFICATION_WEBHOOK_ON_CREATED_USER
+              value: 
+            
+            - name: LETS_ENCRYPT_NOTIFICATION_EMAIL
+              value: 
+            
+            - name: LETS_ENCRYPT_ACCOUNT_KEY
+              value: 
+            
+            - name: ENCRYPTION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: my-oneuptime-secrets
+                  key: encryption-secret
+            
+            - name: CLICKHOUSE_USER
+              value: oneuptime
+            
+            - name: CLICKHOUSE_IS_HOST_HTTPS
+              value: 'false'
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                    name: my-oneuptime-clickhouse
+                    key: admin-password
+            - name: CLICKHOUSE_HOST
+              value: my-oneuptime-clickhouse.default.svc.cluster.local
+            - name: CLICKHOUSE_PORT
+              value: '8123'
+            - name: CLICKHOUSE_DATABASE
+              value: 'oneuptime'
+            
+            
+            ## REDIS SSL BLOCK
+            # do nothing here.
+            
+            
+            
+            
+            
+            - name: REDIS_HOST
+              value: my-oneuptime-redis-master.default.svc.cluster.local
+            - name: REDIS_PORT
+              value: "6379"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                    name: my-oneuptime-redis
+                    key: redis-password
+            - name: REDIS_DB
+              value: '0'
+            - name: REDIS_USERNAME
+              value: default
+            
+            
+            ## REDIS SSL BLOCK
+            # do nothing here.
+            
+            # Postgres configuration
+            
+            - name: DATABASE_HOST
+              value: my-oneuptime-postgresql.default.svc.cluster.local
+            - name: DATABASE_PORT
+              value: '5432'
+            - name: DATABASE_USERNAME
+              value: postgres
+            - name: DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                    name: my-oneuptime-postgresql
+                    key: postgres-password
+            - name: DATABASE_NAME
+              value: oneuptimedb
+            
+            
+            ## DATABASE SSL BLOCK
+            # do nothing here.
+            
+            ## DATABASE SSL ENDS HERE
+            
+            - name: BILLING_PRIVATE_KEY
+              value: 
+            
+            - name: DISABLE_AUTOMATIC_INCIDENT_CREATION
+              value: 'false'
+            
+            - name: WORKFLOW_SCRIPT_TIMEOUT_IN_MS
+              value: '5000'
+            
+            - name: ONEUPTIME_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: my-oneuptime-secrets
+                  key: oneuptime-secret
+            - name: ONEUPTIME_HTTP_PORT
+              value: "80"
+            - name: OPENTELEMETRY_EXPORTER_OTLP_HEADERS
+              value: 
+            - name: PORT
+              value: "7851" # Port for the nodejs server for live and ready status
+          ports:
+            - containerPort: 7849
+              protocol: TCP
+              name: oneuptime-http
+              # If you are connecting Status Pages to custom domains, then this will be the port where the status page will be hosted on.
+            - containerPort: 7850
+              protocol: TCP
+              name: statuspage-ssl
+      restartPolicy: Always
+---
+# Source: oneuptime/templates/otel-collector.yaml
+# OneUptime otel-collector Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-oneuptime-otel-collector
+  namespace: default
+  labels:
+    app: my-oneuptime-otel-collector
+    app.kubernetes.io/part-of: oneuptime
+    app.kubernetes.io/managed-by: Helm
+    appname: oneuptime
+    date: "1726474446"
+spec:
+  selector:
+    matchLabels:
+      app: my-oneuptime-otel-collector
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: my-oneuptime-otel-collector
+        date: "1726474446"
+        appname: oneuptime
+    spec:
+      containers:
+        - image: docker.io/oneuptime/otel-collector:release
+          name: my-oneuptime-otel-collector
+          imagePullPolicy: Always
+          env:
+            
+            - name: HOST
+              value: localhost
+            - name: STATUS_PAGE_CNAME_RECORD
+              value: 
+            - name: ALLOWED_ACTIVE_MONITOR_COUNT_IN_FREE_PLAN
+              value: "10"
+            - name: OTEL_COLLECTOR_HOST
+              value: 
+            - name: LOG_LEVEL
+              value: INFO
+            - name: FLUENTD_HOST
+              value: 
+            - name: HTTP_PROTOCOL
+              value: http
+            - name: NODE_ENV
+              value: production
+            - name: BILLING_ENABLED
+              value: 'false'
+            - name: BILLING_PUBLIC_KEY
+              value: 
+            - name: SUBSCRIPTION_PLAN_BASIC
+              value: 
+            - name: SUBSCRIPTION_PLAN_GROWTH
+              value: 
+            - name: SUBSCRIPTION_PLAN_SCALE
+              value: 
+            - name: SUBSCRIPTION_PLAN_ENTERPRISE
+              value: 
+            - name: ANALYTICS_KEY
+              value: 
+            - name: ANALYTICS_HOST
+              value: 
+            - name: SERVER_ACCOUNTS_HOSTNAME
+              value: my-oneuptime-accounts.default.svc.cluster.local
+            - name: SERVER_ISOLATED_VM_HOSTNAME
+              value: my-oneuptime-isolated-vm.default.svc.cluster.local
+            - name: SERVER_APP_HOSTNAME
+              value: my-oneuptime-app.default.svc.cluster.local
+            - name: SERVER_INGESTOR_HOSTNAME
+              value: my-oneuptime-ingestor.default.svc.cluster.local
+            - name: SERVER_TEST_SERVER_HOSTNAME
+              value: my-oneuptime-test-server.default.svc.cluster.local
+            - name: SERVER_OTEL_COLLECTOR_HOSTNAME
+              value: my-oneuptime-otel-collector.default.svc.cluster.local
+            - name: SERVER_STATUS_PAGE_HOSTNAME
+              value: my-oneuptime-status-page.default.svc.cluster.local
+            - name: SERVER_DASHBOARD_HOSTNAME
+              value: my-oneuptime-dashboard.default.svc.cluster.local
+            - name: SERVER_ADMIN_DASHBOARD_HOSTNAME
+              value: my-oneuptime-admin-dashboard.default.svc.cluster.local
+            
+            - name: APP_PORT
+              value: '3002'
+            - name: INGESTOR_PORT
+              value: '3400'
+            - name: PROBE_PORT
+              value: '3500'
+            - name: TEST_SERVER_PORT
+              value: '3800'
+            - name: ACCOUNTS_PORT
+              value: '3003'
+            - name: ISOLATED_VM_PORT
+              value: '4572'
+            - name: STATUS_PAGE_PORT
+              value: '3105'
+            - name: DASHBOARD_PORT
+              value: '3009'
+            - name: ADMIN_DASHBOARD_PORT
+              value: '3158'
+            
+            - name: IS_SERVER
+              value: 'true'
+            
+            - name: OPENTELEMETRY_EXPORTER_OTLP_ENDPOINT
+              value: 
+            
+            - name: NOTIFICATION_WEBHOOK_ON_CREATED_USER
+              value: 
+            
+            - name: LETS_ENCRYPT_NOTIFICATION_EMAIL
+              value: 
+            
+            - name: LETS_ENCRYPT_ACCOUNT_KEY
+              value: 
+            
+            - name: ENCRYPTION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: my-oneuptime-secrets
+                  key: encryption-secret
+            
+            - name: CLICKHOUSE_USER
+              value: oneuptime
+            
+            - name: CLICKHOUSE_IS_HOST_HTTPS
+              value: 'false'
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                    name: my-oneuptime-clickhouse
+                    key: admin-password
+            - name: CLICKHOUSE_HOST
+              value: my-oneuptime-clickhouse.default.svc.cluster.local
+            - name: CLICKHOUSE_PORT
+              value: '8123'
+            - name: CLICKHOUSE_DATABASE
+              value: 'oneuptime'
+            
+            
+            ## REDIS SSL BLOCK
+            # do nothing here.
+            
+            
+            
+            
+            
+            - name: REDIS_HOST
+              value: my-oneuptime-redis-master.default.svc.cluster.local
+            - name: REDIS_PORT
+              value: "6379"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                    name: my-oneuptime-redis
+                    key: redis-password
+            - name: REDIS_DB
+              value: '0'
+            - name: REDIS_USERNAME
+              value: default
+            
+            
+            ## REDIS SSL BLOCK
+            # do nothing here.
+            
+            # Postgres configuration
+            
+            - name: DATABASE_HOST
+              value: my-oneuptime-postgresql.default.svc.cluster.local
+            - name: DATABASE_PORT
+              value: '5432'
+            - name: DATABASE_USERNAME
+              value: postgres
+            - name: DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                    name: my-oneuptime-postgresql
+                    key: postgres-password
+            - name: DATABASE_NAME
+              value: oneuptimedb
+            
+            
+            ## DATABASE SSL BLOCK
+            # do nothing here.
+            
+            ## DATABASE SSL ENDS HERE
+            
+            - name: BILLING_PRIVATE_KEY
+              value: 
+            
+            - name: DISABLE_AUTOMATIC_INCIDENT_CREATION
+              value: 'false'
+            
+            - name: WORKFLOW_SCRIPT_TIMEOUT_IN_MS
+              value: '5000'
+            
+            - name: ONEUPTIME_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: my-oneuptime-secrets
+                  key: oneuptime-secret
+            - name: PORT
+              value: '4317'
+          ports:
+            - containerPort: 4317
+              protocol: TCP
+              name: grpc
+            - containerPort: 4318
+              protocol: TCP
+              name: http
+      restartPolicy: Always
+---
+# Source: oneuptime/templates/probe.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-oneuptime-probe-one
+  namespace: default
+  labels:
+    app: my-oneuptime-probe-one
+    app.kubernetes.io/part-of: oneuptime
+    app.kubernetes.io/managed-by: Helm
+    appname: oneuptime
+    date: "1726474446"
+spec:
+  selector:
+    matchLabels:
+      app: my-oneuptime-probe-one
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: my-oneuptime-probe-one
+        date: "1726474446"
+        appname: oneuptime
+    spec:
+      containers:
+        - image: docker.io/oneuptime/probe:release
+          name: my-oneuptime-probe-one
+          imagePullPolicy: Always
+          env:
+            - name: LOG_LEVEL
+              value: INFO
+            - name: PORT
+              value: '3500'
+            - name: OPENTELEMETRY_EXPORTER_OTLP_HEADERS
+              value: 
+            - name: OPENTELEMETRY_EXPORTER_OTLP_ENDPOINT
+              value: 
+            - name: ONEUPTIME_URL
+              value: http://my-oneuptime-ingestor.default.svc.cluster.local:3400
+            - name: PROBE_NAME
+              value: Probe
+            - name: PROBE_DESCRIPTION
+              value: Probe
+            - name: PROBE_MONITORING_WORKERS
+              value: '3'
+            # syntheticMonitorScriptTimeoutInMs
+            - name: PROBE_SYNTHETIC_MONITOR_SCRIPT_TIMEOUT_IN_MS
+              value: '60000'
+            - name: PROBE_CUSTOM_CODE_MONITOR_SCRIPT_TIMEOUT_IN_MS
+              value: '60000'
+            - name: PROBE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: my-oneuptime-secrets
+                  key: probe-one
+            - name: PROBE_MONITOR_FETCH_LIMIT
+              value: '10'
+            
+            - name: ONEUPTIME_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: my-oneuptime-secrets
+                  key: oneuptime-secret
+          
+      restartPolicy: Always
+---
+# Source: oneuptime/templates/status-page.yaml
+# OneUptime statusPage Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-oneuptime-status-page
+  namespace: default
+  labels:
+    app: my-oneuptime-status-page
+    app.kubernetes.io/part-of: oneuptime
+    app.kubernetes.io/managed-by: Helm
+    appname: oneuptime
+    date: "1726474446"
+spec:
+  selector:
+    matchLabels:
+      app: my-oneuptime-status-page
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: my-oneuptime-status-page
+        date: "1726474446"
+        appname: oneuptime
+    spec:
+      containers:
+        - image: docker.io/oneuptime/status-page:release
+          name: my-oneuptime-status-page
+          imagePullPolicy: Always
+          env:
+            
+            - name: HOST
+              value: localhost
+            - name: STATUS_PAGE_CNAME_RECORD
+              value: 
+            - name: ALLOWED_ACTIVE_MONITOR_COUNT_IN_FREE_PLAN
+              value: "10"
+            - name: OTEL_COLLECTOR_HOST
+              value: 
+            - name: LOG_LEVEL
+              value: INFO
+            - name: FLUENTD_HOST
+              value: 
+            - name: HTTP_PROTOCOL
+              value: http
+            - name: NODE_ENV
+              value: production
+            - name: BILLING_ENABLED
+              value: 'false'
+            - name: BILLING_PUBLIC_KEY
+              value: 
+            - name: SUBSCRIPTION_PLAN_BASIC
+              value: 
+            - name: SUBSCRIPTION_PLAN_GROWTH
+              value: 
+            - name: SUBSCRIPTION_PLAN_SCALE
+              value: 
+            - name: SUBSCRIPTION_PLAN_ENTERPRISE
+              value: 
+            - name: ANALYTICS_KEY
+              value: 
+            - name: ANALYTICS_HOST
+              value: 
+            - name: SERVER_ACCOUNTS_HOSTNAME
+              value: my-oneuptime-accounts.default.svc.cluster.local
+            - name: SERVER_ISOLATED_VM_HOSTNAME
+              value: my-oneuptime-isolated-vm.default.svc.cluster.local
+            - name: SERVER_APP_HOSTNAME
+              value: my-oneuptime-app.default.svc.cluster.local
+            - name: SERVER_INGESTOR_HOSTNAME
+              value: my-oneuptime-ingestor.default.svc.cluster.local
+            - name: SERVER_TEST_SERVER_HOSTNAME
+              value: my-oneuptime-test-server.default.svc.cluster.local
+            - name: SERVER_OTEL_COLLECTOR_HOSTNAME
+              value: my-oneuptime-otel-collector.default.svc.cluster.local
+            - name: SERVER_STATUS_PAGE_HOSTNAME
+              value: my-oneuptime-status-page.default.svc.cluster.local
+            - name: SERVER_DASHBOARD_HOSTNAME
+              value: my-oneuptime-dashboard.default.svc.cluster.local
+            - name: SERVER_ADMIN_DASHBOARD_HOSTNAME
+              value: my-oneuptime-admin-dashboard.default.svc.cluster.local
+            
+            - name: APP_PORT
+              value: '3002'
+            - name: INGESTOR_PORT
+              value: '3400'
+            - name: PROBE_PORT
+              value: '3500'
+            - name: TEST_SERVER_PORT
+              value: '3800'
+            - name: ACCOUNTS_PORT
+              value: '3003'
+            - name: ISOLATED_VM_PORT
+              value: '4572'
+            - name: STATUS_PAGE_PORT
+              value: '3105'
+            - name: DASHBOARD_PORT
+              value: '3009'
+            - name: ADMIN_DASHBOARD_PORT
+              value: '3158'
+            
+            - name: IS_SERVER
+              value: 'false'
+            
+            - name: OPENTELEMETRY_EXPORTER_OTLP_ENDPOINT
+              value: 
+            - name: OPENTELEMETRY_EXPORTER_OTLP_HEADERS
+              value: 
+            - name: PORT
+              value: '3105'
+          ports:
+            - containerPort: 3105
+              protocol: TCP
+              name: port
+      restartPolicy: Always
+---
+# Source: oneuptime/charts/clickhouse/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-oneuptime-clickhouse-shard0
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-oneuptime
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: clickhouse
+    app.kubernetes.io/version: 24.1.5
+    helm.sh/chart: clickhouse-5.1.0
+    app.kubernetes.io/component: clickhouse
+spec:
+  replicas: 1
+  podManagementPolicy: "Parallel"
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: my-oneuptime
+      app.kubernetes.io/name: clickhouse
+      app.kubernetes.io/component: clickhouse
+  serviceName: my-oneuptime-clickhouse-headless
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations:
+        checksum/config: 43769f170ab2a96e179ad9d967800351bf8e6385ec343eac3af4a296d842e0a1
+        checksum/config-extra: 01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b
+        checksum/config-users-extra: 01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b
+      labels:
+        app.kubernetes.io/instance: my-oneuptime
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: clickhouse
+        app.kubernetes.io/version: 24.1.5
+        helm.sh/chart: clickhouse-5.1.0
+        app.kubernetes.io/component: clickhouse
+        shard: "0"
+    spec:
+      serviceAccountName: my-oneuptime-clickhouse
+      
+      automountServiceAccountToken: false
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/instance: my-oneuptime
+                    app.kubernetes.io/name: clickhouse
+                    app.kubernetes.io/component: clickhouse
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+        fsGroupChangePolicy: Always
+        supplementalGroups: []
+        sysctls: []
+      initContainers:
+      containers:
+        - name: clickhouse
+          image: docker.io/bitnami/clickhouse:24.1.5-debian-11-r0
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 1001
+            seccompProfile:
+              type: RuntimeDefault
+          command:
+            - /scripts/setup.sh
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: CLICKHOUSE_HTTP_PORT
+              value: "8123"
+            - name: CLICKHOUSE_TCP_PORT
+              value: "9000"
+            - name: CLICKHOUSE_MYSQL_PORT
+              value: "9004"
+            - name: CLICKHOUSE_POSTGRESQL_PORT
+              value: "9005"
+            - name: CLICKHOUSE_INTERSERVER_HTTP_PORT
+              value: "9009"
+            - name: CLICKHOUSE_ADMIN_USER
+              value: "oneuptime"
+            - name: CLICKHOUSE_SHARD_ID
+              value: "shard0"
+            - name: CLICKHOUSE_REPLICA_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: CLICKHOUSE_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-oneuptime-clickhouse
+                  key: admin-password
+          envFrom:
+          ports:
+            - name: http
+              containerPort: 8123
+            - name: tcp
+              containerPort: 9000
+            - name: tcp-postgresql
+              containerPort: 9005
+            - name: tcp-mysql
+              containerPort: 9004
+            - name: http-intersrv
+              containerPort: 9009
+          livenessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+            httpGet:
+              path: /ping
+              port: http
+          readinessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+            httpGet:
+              path: /ping
+              port: http
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts/setup.sh
+              subPath: setup.sh
+            - name: data
+              mountPath: /bitnami/clickhouse
+            - name: config
+              mountPath: /bitnami/clickhouse/etc/conf.d/default
+            - name: custom-init-scripts
+              mountPath: /docker-entrypoint-initdb.d
+      volumes:
+        - name: scripts
+          configMap:
+            name: my-oneuptime-clickhouse-scripts
+            defaultMode: 0755
+        - name: config
+          configMap:
+            name: my-oneuptime-clickhouse
+        - name: custom-init-scripts
+          secret:
+            secretName: my-oneuptime-clickhouse-init-scripts
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          app.kubernetes.io/instance: my-oneuptime
+          app.kubernetes.io/name: clickhouse
+          app.kubernetes.io/component: clickhouse
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "25Gi"
+---
+# Source: oneuptime/charts/postgresql/templates/primary/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-oneuptime-postgresql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-oneuptime
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/version: 16.1.0
+    helm.sh/chart: postgresql-14.0.0
+    app.kubernetes.io/component: primary
+spec:
+  replicas: 1
+  serviceName: my-oneuptime-postgresql-hl
+  updateStrategy:
+    rollingUpdate: {}
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: my-oneuptime
+      app.kubernetes.io/name: postgresql
+      app.kubernetes.io/component: primary
+  template:
+    metadata:
+      name: my-oneuptime-postgresql
+      labels:
+        app.kubernetes.io/instance: my-oneuptime
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: postgresql
+        app.kubernetes.io/version: 16.1.0
+        helm.sh/chart: postgresql-14.0.0
+        app.kubernetes.io/component: primary
+    spec:
+      serviceAccountName: my-oneuptime-postgresql
+      
+      automountServiceAccountToken: false
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/instance: my-oneuptime
+                    app.kubernetes.io/name: postgresql
+                    app.kubernetes.io/component: primary
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+        fsGroupChangePolicy: Always
+        supplementalGroups: []
+        sysctls: []
+      hostNetwork: false
+      hostIPC: false
+      containers:
+        - name: postgresql
+          image: docker.io/bitnami/postgresql:16.1.0-debian-11-r25
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 1001
+            seccompProfile:
+              type: RuntimeDefault
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: POSTGRESQL_PORT_NUMBER
+              value: "5432"
+            - name: POSTGRESQL_VOLUME_DIR
+              value: "/bitnami/postgresql"
+            - name: PGDATA
+              value: "/bitnami/postgresql/data"
+            # Authentication
+            - name: POSTGRES_USER
+              value: "oneuptime"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-oneuptime-postgresql
+                  key: password
+            - name: POSTGRES_POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-oneuptime-postgresql
+                  key: postgres-password
+            - name: POSTGRES_DATABASE
+              value: "oneuptimedb"
+            # Replication
+            # Initdb
+            # Standby
+            # LDAP
+            - name: POSTGRESQL_ENABLE_LDAP
+              value: "no"
+            # TLS
+            - name: POSTGRESQL_ENABLE_TLS
+              value: "no"
+            # Audit
+            - name: POSTGRESQL_LOG_HOSTNAME
+              value: "false"
+            - name: POSTGRESQL_LOG_CONNECTIONS
+              value: "false"
+            - name: POSTGRESQL_LOG_DISCONNECTIONS
+              value: "false"
+            - name: POSTGRESQL_PGAUDIT_LOG_CATALOG
+              value: "off"
+            # Others
+            - name: POSTGRESQL_CLIENT_MIN_MESSAGES
+              value: "error"
+            - name: POSTGRESQL_SHARED_PRELOAD_LIBRARIES
+              value: "pgaudit"
+          ports:
+            - name: tcp-postgresql
+              containerPort: 5432
+          livenessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - exec pg_isready -U "oneuptime" -d "dbname=oneuptimedb" -h 127.0.0.1 -p 5432
+          readinessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - -e
+                - |
+                  exec pg_isready -U "oneuptime" -d "dbname=oneuptimedb" -h 127.0.0.1 -p 5432
+                  [ -f /opt/bitnami/postgresql/tmp/.initialized ] || [ -f /bitnami/postgresql/.initialized ]
+          resources:
+            limits: {}
+            requests:
+              cpu: 250m
+              memory: 256Mi
+          volumeMounts:
+            - name: dshm
+              mountPath: /dev/shm
+            - name: data
+              mountPath: /bitnami/postgresql
+      volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+  volumeClaimTemplates:
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: data
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "25Gi"
+---
+# Source: oneuptime/charts/redis/templates/master/application.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-oneuptime-redis-master
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-oneuptime
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/version: 7.2.4
+    helm.sh/chart: redis-18.19.1
+    app.kubernetes.io/component: master
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: my-oneuptime
+      app.kubernetes.io/name: redis
+      app.kubernetes.io/component: master
+  serviceName: my-oneuptime-redis-headless
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: my-oneuptime
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: redis
+        app.kubernetes.io/version: 7.2.4
+        helm.sh/chart: redis-18.19.1
+        app.kubernetes.io/component: master
+      annotations:
+        checksum/configmap: b80a98d43003b6ba444715c5099f8debc2981ec5c6f2de25b6b3b46c414885c3
+        checksum/health: aff24913d801436ea469d8d374b2ddb3ec4c43ee7ab24663d5f8ff1a1b6991a9
+        checksum/scripts: 560c33ff34d845009b51830c332aa05fa211444d1877d3526d3599be7543aaa5
+        checksum/secret: 76fb0f60923beaa06eb27003df0dab246122dda5b2689f344d47d12f4ca14c72
+    spec:
+      
+      securityContext:
+        fsGroup: 1001
+        fsGroupChangePolicy: Always
+        supplementalGroups: []
+        sysctls: []
+      serviceAccountName: my-oneuptime-redis-master
+      automountServiceAccountToken: false
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/instance: my-oneuptime
+                    app.kubernetes.io/name: redis
+                    app.kubernetes.io/component: master
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      enableServiceLinks: true
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: redis
+          image: docker.io/bitnami/redis:7.2.4-debian-12-r9
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: false
+            runAsGroup: 0
+            runAsNonRoot: true
+            runAsUser: 1001
+            seccompProfile:
+              type: RuntimeDefault
+          command:
+            - /bin/bash
+          args:
+            - -c
+            - /opt/bitnami/scripts/start-scripts/start-master.sh
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: REDIS_REPLICATION_MODE
+              value: master
+            - name: ALLOW_EMPTY_PASSWORD
+              value: "no"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-oneuptime-redis
+                  key: redis-password
+            - name: REDIS_TLS_ENABLED
+              value: "no"
+            - name: REDIS_PORT
+              value: "6379"
+          ports:
+            - name: redis
+              containerPort: 6379
+          livenessProbe:
+            initialDelaySeconds: 20
+            periodSeconds: 5
+            # One second longer than command timeout should prevent generation of zombie processes.
+            timeoutSeconds: 6
+            successThreshold: 1
+            failureThreshold: 5
+            exec:
+              command:
+                - sh
+                - -c
+                - /health/ping_liveness_local.sh 5
+          readinessProbe:
+            initialDelaySeconds: 20
+            periodSeconds: 5
+            timeoutSeconds: 2
+            successThreshold: 1
+            failureThreshold: 5
+            exec:
+              command:
+                - sh
+                - -c
+                - /health/ping_readiness_local.sh 1
+          volumeMounts:
+            - name: start-scripts
+              mountPath: /opt/bitnami/scripts/start-scripts
+            - name: health
+              mountPath: /health
+            - name: redis-data
+              mountPath: /data
+            - name: config
+              mountPath: /opt/bitnami/redis/mounted-etc
+            - name: empty-dir
+              mountPath: /opt/bitnami/redis/etc/
+              subPath: app-conf-dir
+            - name: empty-dir
+              mountPath: /tmp
+              subPath: tmp-dir
+      volumes:
+        - name: start-scripts
+          configMap:
+            name: my-oneuptime-redis-scripts
+            defaultMode: 0755
+        - name: health
+          configMap:
+            name: my-oneuptime-redis-health
+            defaultMode: 0755
+        - name: config
+          configMap:
+            name: my-oneuptime-redis-configuration
+        - name: empty-dir
+          emptyDir: {}
+        - name: redis-data
+          emptyDir: {}
+---
+# Source: oneuptime/templates/accounts.yaml
+# OneUptime accounts autoscaler
+---
+# Source: oneuptime/templates/admin-dashboard.yaml
+# OneUptime adminDashboard autoscaler
+---
+# Source: oneuptime/templates/app.yaml
+# OneUptime app autoscaler
+---
+# Source: oneuptime/templates/dashboard.yaml
+# OneUptime dashboard autoscaler
+---
+# Source: oneuptime/templates/haraka.yaml
+# OneUptime haraka autoscaler
+---
+# Source: oneuptime/templates/ingestor.yaml
+# OneUptime ingestor autoscaler
+---
+# Source: oneuptime/templates/isolated-vm.yaml
+# OneUptime isolatedVM autoscaler
+---
+# Source: oneuptime/templates/nginx.yaml
+# OneUptime nginx autoscaler
+---
+# Source: oneuptime/templates/otel-collector.yaml
+# OneUptime otel-collector autoscaler
+---
+# Source: oneuptime/templates/probe.yaml
+# OneUptime probe autoscaler
+---
+# Source: oneuptime/templates/secrets.yaml
+---
+
+
+## External Redis Configuration
+---
+# Source: oneuptime/templates/secrets.yaml
+# Clickhouse Configuration
+---
+# Source: oneuptime/templates/status-page.yaml
+# OneUptime statusPage autoscaler
+---
+# Source: oneuptime/templates/tests/test.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-oneuptime-test
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: oneptime-test
+      imagePullPolicy: Always
+      image: docker.io/oneuptime/test:release
+      command: ['/bin/sh']
+      args: ["-c", 
+      "Scripts/status-check.sh http://localhost",
+      ]
+  restartPolicy: Never

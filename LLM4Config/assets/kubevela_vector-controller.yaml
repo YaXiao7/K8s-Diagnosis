@@ -1,0 +1,310 @@
+---
+# Source: vector-controller/templates/deployment.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vector-controller
+---
+# Source: vector-controller/templates/deployment.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: vector-controller
+rules:
+  - apiGroups: ["*"]
+    resources: ["*"]
+    verbs: ["*"]
+---
+# Source: vector-controller/templates/deployment.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: vector-controller
+subjects:
+  - kind: ServiceAccount
+    name: vector-controller # name of your service account
+    namespace: default # this is the namespace your service account is in
+roleRef: # referring to your ClusterRole
+  kind: ClusterRole
+  name: vector-controller
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: vector-controller/templates/admission-webhook/webhook.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: vector-controller-webhook
+  namespace: default
+spec:
+  ports:
+    - port: 443
+      protocol: TCP
+      targetPort: 9443
+  selector:
+    
+      app.kubernetes.io/name: vector-controller
+      app.kubernetes.io/instance: my-vector-controller
+---
+# Source: vector-controller/templates/deployment.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: vector-controller
+  namespace: default
+  labels:
+    helm.sh/chart: vector-controller-0.2.3
+    app.kubernetes.io/name: vector-controller
+    app.kubernetes.io/instance: my-vector-controller
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  ports:
+    - port: 9443
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: vector-controller
+    app.kubernetes.io/instance: my-vector-controller
+---
+# Source: vector-controller/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vector-controller
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vector-controller
+      app.kubernetes.io/instance: my-vector-controller
+  template:
+    metadata:
+      labels:
+        helm.sh/chart: vector-controller-0.2.3
+        app.kubernetes.io/name: vector-controller
+        app.kubernetes.io/instance: my-vector-controller
+        app.kubernetes.io/version: "1.16.0"
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      serviceAccountName: vector-controller
+      containers:
+        - name: vector-controller
+          image: oamdev/vector-controller:v0.2.3
+          args:
+            
+            - "--disable-webhook=false"
+            
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 9443
+              protocol: TCP
+          volumeMounts:
+            - mountPath: /tmp/k8s-webhook-server/serving-certs/
+              name: tls-cert-vol
+              readOnly: true
+      volumes:
+        - name: tls-cert-vol
+          secret:
+            defaultMode: 420
+            secretName: vector-controller-admission
+---
+# Source: vector-controller/templates/admission-webhook/webhook.yaml
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: vector-controller-admission
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    caBundle: Cg==
+    service:
+      name: vector-controller-webhook
+      namespace: default
+      path: /validate-vector-oam-dev-v1alpha1-config
+  failurePolicy: Fail
+  name: vconfig.kb.io
+  rules:
+  - apiGroups:
+    - vector.oam.dev
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - configs
+  sideEffects: None
+---
+# Source: vector-controller/templates/admission-webhook/job-patch/patch.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name:  vector-controller-admission
+  namespace: default
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade,post-install,post-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+  labels:
+    app: vector-controller-admission
+---
+# Source: vector-controller/templates/admission-webhook/job-patch/patch.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name:  vector-controller-admission
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade,post-install,post-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+  labels:
+    app: vector-controller-admission
+rules:
+  - apiGroups:
+      - admissionregistration.k8s.io
+    resources:
+      - validatingwebhookconfigurations
+      - mutatingwebhookconfigurations
+    verbs:
+      - get
+      - update
+  - apiGroups:
+      - apiextensions.k8s.io
+    resources:
+      - customresourcedefinitions
+    verbs:
+      - get
+      - update
+---
+# Source: vector-controller/templates/admission-webhook/job-patch/patch.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name:  vector-controller-admission
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade,post-install,post-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+  labels:
+    app: vector-controller-admission
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: vector-controller-admission
+subjects:
+  - kind: ServiceAccount
+    name: vector-controller-admission
+    namespace: default
+---
+# Source: vector-controller/templates/admission-webhook/job-patch/patch.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name:  vector-controller-admission
+  namespace: default
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade,post-install,post-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+  labels:
+    app: vector-controller-admission
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+    verbs:
+      - get
+      - create
+---
+# Source: vector-controller/templates/admission-webhook/job-patch/patch.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name:  vector-controller-admission
+  namespace: default
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade,post-install,post-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+  labels:
+    app: vector-controller-admission
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: vector-controller-admission
+subjects:
+  - kind: ServiceAccount
+    name: vector-controller-admission
+    namespace: default
+---
+# Source: vector-controller/templates/admission-webhook/job-patch/patch.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name:  vector-controller-admission-create
+  namespace: default
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+  labels:
+    app: vector-controller-admission-create
+spec:
+  template:
+    metadata:
+      name:  vector-controller-admission-create
+      labels:
+        app: vector-controller-admission-create
+    spec:
+      containers:
+        - name: create
+          image: oamdev/kube-webhook-certgen:v2.4.1
+          imagePullPolicy: IfNotPresent
+          args:
+            - create
+            - --host=vector-controller-webhook,vector-controller-webhook.default.svc
+            - --namespace=default
+            - --secret-name=vector-controller-admission
+            - --key-name=tls.key
+            - --cert-name=tls.crt
+      restartPolicy: OnFailure
+      serviceAccountName: vector-controller-admission
+      securityContext:
+        runAsGroup: 2000
+        runAsNonRoot: true
+        runAsUser: 2000
+---
+# Source: vector-controller/templates/admission-webhook/job-patch/patch.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name:  vector-controller-admission-patch
+  namespace: default
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+  labels:
+    app: vector-controller-admission-patch
+spec:
+  template:
+    metadata:
+      name:  vector-controller-admission-patch
+      labels:
+        app: vector-controller-admission-patch
+    spec:
+      containers:
+        - name: patch
+          image: oamdev/kube-webhook-certgen:v2.4.1
+          imagePullPolicy: IfNotPresent
+          args:
+            - patch
+            - --webhook-name=vector-controller-admission
+            - --namespace=default
+            - --secret-name=vector-controller-admission
+            - --patch-mutating=false
+            - --patch-failure-policy=Fail
+      restartPolicy: OnFailure
+      serviceAccountName: vector-controller-admission
+      securityContext:
+        runAsGroup: 2000
+        runAsNonRoot: true
+        runAsUser: 2000

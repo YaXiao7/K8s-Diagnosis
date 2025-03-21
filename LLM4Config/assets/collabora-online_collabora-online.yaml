@@ -1,0 +1,185 @@
+---
+# Source: collabora-online/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-collabora-online
+  labels:
+    helm.sh/chart: collabora-online-1.1.21
+    app.kubernetes.io/name: collabora-online
+    app.kubernetes.io/instance: my-collabora-online
+    app.kubernetes.io/version: "24.04.7.2.1"
+    app.kubernetes.io/managed-by: Helm
+data:
+  username: YWRtaW4=
+  password: ZXhhbXBsZXBhc3M=
+---
+# Source: collabora-online/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-collabora-online
+  annotations:
+    confighash: config-c6e23312420c1c4059fa294347417293
+  labels:
+    helm.sh/chart: collabora-online-1.1.21
+    app.kubernetes.io/name: collabora-online
+    app.kubernetes.io/instance: my-collabora-online
+    app.kubernetes.io/version: "24.04.7.2.1"
+    app.kubernetes.io/managed-by: Helm
+data:
+  extra_params: --o:ssl.enable=false
+---
+# Source: collabora-online/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-collabora-online
+  labels:
+    helm.sh/chart: collabora-online-1.1.21
+    app.kubernetes.io/name: collabora-online
+    app.kubernetes.io/instance: my-collabora-online
+    app.kubernetes.io/version: "24.04.7.2.1"
+    app.kubernetes.io/managed-by: Helm
+    type: main
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9980
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: collabora-online
+    app.kubernetes.io/instance: my-collabora-online
+    type: main
+---
+# Source: collabora-online/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-collabora-online
+  labels:
+    helm.sh/chart: collabora-online-1.1.21
+    app.kubernetes.io/name: collabora-online
+    app.kubernetes.io/instance: my-collabora-online
+    app.kubernetes.io/version: "24.04.7.2.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  minReadySeconds: 0
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: collabora-online
+      app.kubernetes.io/instance: my-collabora-online
+      type: main
+  template:
+    metadata:
+      annotations:
+        confighash: config-c6e23312420c1c4059fa294347417293
+        cluster-autoscaler.kubernetes.io/safe-to-evict: "true"
+      labels:
+        app.kubernetes.io/name: collabora-online
+        app.kubernetes.io/instance: my-collabora-online
+        type: main
+    spec:
+      terminationGracePeriodSeconds: 60
+      serviceAccountName: default
+      securityContext:
+        {}
+      containers:
+        - name: collabora-online
+          securityContext:
+            {}
+          image: "collabora/code:24.04.7.2.1"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 9980
+              protocol: TCP
+          startupProbe:
+            httpGet:
+              path: /
+              port: 9980
+              scheme: HTTP
+            failureThreshold: 30
+            periodSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 9980
+              scheme: HTTP
+            initialDelaySeconds: 0
+            periodSeconds: 10
+            timeoutSeconds: 30
+            successThreshold: 1
+            failureThreshold: 4
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 9980
+              scheme: HTTP
+            initialDelaySeconds: 0
+            periodSeconds: 10
+            timeoutSeconds: 30
+            successThreshold: 1
+            failureThreshold: 2
+
+          envFrom:
+            - configMapRef:
+                name: my-collabora-online
+          env:
+            - name: username
+              valueFrom:
+                secretKeyRef:
+                  name: my-collabora-online
+                  key: username
+            - name: password
+              valueFrom:
+                secretKeyRef:
+                  name: my-collabora-online
+                  key: password
+          resources:
+            {}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+# Source: collabora-online/templates/hpa.yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: my-collabora-online
+  labels:
+    helm.sh/chart: collabora-online-1.1.21
+    app.kubernetes.io/name: collabora-online
+    app.kubernetes.io/instance: my-collabora-online
+    app.kubernetes.io/version: "24.04.7.2.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: my-collabora-online
+  minReplicas: 2
+  maxReplicas: 100
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 50

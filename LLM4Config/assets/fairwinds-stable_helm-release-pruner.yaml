@@ -1,0 +1,69 @@
+---
+# Source: helm-release-pruner/templates/rbac.yml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-helm-release-pruner
+---
+# Source: helm-release-pruner/templates/rbac.yml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-helm-release-pruner
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+- kind: ServiceAccount
+  name: my-helm-release-pruner
+  namespace: default
+---
+# Source: helm-release-pruner/templates/cronjob.yml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: my-helm-release-pruner
+  labels:
+    app: helm-release-pruner
+    chart: helm-release-pruner-3.3.0
+    release: my-helm-release-pruner
+    heritage: Helm
+spec:
+  schedule: "0 */4 * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 300
+  jobTemplate:
+    spec:
+      backoffLimit: 3
+      template:
+        metadata:
+          name: my-helm-release-pruner
+          labels:
+            app: helm-release-pruner
+            release: my-helm-release-pruner
+        spec:
+          serviceAccountName: my-helm-release-pruner
+          restartPolicy: Never
+          containers:
+          - name: helm-release-pruner
+            image: "quay.io/fairwinds/helm-release-pruner:v3.3.0"
+            imagePullPolicy: Always
+            command: ["/bin/bash", "-c"]
+            args:
+            - |
+            securityContext:
+              readOnlyRootFilesystem: true
+              allowPrivilegeEscalation: false
+              runAsNonRoot: true
+              runAsUser: 10324
+              capabilities:
+                drop:
+                  - ALL
+            resources:
+              limits:
+                cpu: 25m
+                memory: 32Mi
+              requests:
+                cpu: 25m
+                memory: 32M

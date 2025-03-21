@@ -1,0 +1,97 @@
+---
+# Source: demo-model-chart/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: model-server
+spec: 
+  type: NodePort
+  selector:
+    app: demo-server
+  ports:
+    - port: 3000
+      targetPort: 3000
+---
+# Source: demo-model-chart/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: model-client
+spec: 
+  type: NodePort
+  selector:
+    app: demo-client
+  ports:
+    - port: 8080
+      targetPort: 8080
+---
+# Source: demo-model-chart/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-server-deployment
+  labels:
+    app: demo-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: demo-server
+  template:
+    metadata:
+      labels:
+        app: demo-server
+    spec:
+      containers:
+      - name: demo-server
+        image: gtato/demo-model-server:1.0.0
+        ports:
+        - containerPort: 3000
+        volumeMounts:
+          - name: model-volume
+            mountPath: /opt/models/
+      initContainers:
+        - name: demo-copier
+          image: gtato/demo-model-copier:2.0.0
+          volumeMounts:
+            - name: model-volume
+              mountPath: /opt/models/
+      volumes:  
+        - name: model-volume
+          emptyDir: {}
+      tolerations:
+      - key: cattle.io/os
+        operator: "Equal"
+        value: "linux"
+        effect: NoSchedule
+      nodeSelector:
+        kubernetes.io/os: linux
+---
+# Source: demo-model-chart/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-client-deployment
+  labels:
+    app: demo-client
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: demo-client
+  template:
+    metadata:
+      labels:
+        app: demo-client
+    spec:
+      containers:
+      - name: demo-client
+        image: gtato/demo-model-client:1.0.0
+        ports:
+        - containerPort: 8080
+        volumeMounts:
+      nodeSelector:
+        kubernetes.io/os: windows
+      securityContext:
+        windowsOptions:
+          runAsUserName: ContainerAdministrator

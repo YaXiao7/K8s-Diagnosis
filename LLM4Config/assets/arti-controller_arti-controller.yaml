@@ -1,0 +1,181 @@
+---
+# Source: arti-controller/templates/rbac.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: arti-controller
+---
+# Source: arti-controller/templates/crd.yaml
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: onionservices.arti.nirvati.org
+spec:
+  group: arti.nirvati.org
+  names:
+    categories: []
+    kind: OnionService
+    plural: onionservices
+    shortNames: []
+    singular: onionservice
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns: []
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Auto-generated derived type for OnionServiceSpec via `CustomResource`
+        properties:
+          spec:
+            properties:
+              insecure_single_hop:
+                default: false
+                type: boolean
+              key_secret:
+                properties:
+                  name:
+                    description: name is unique within a namespace to reference a secret resource.
+                    type: string
+                  namespace:
+                    description: namespace defines the space within which the secret name must be unique.
+                    nullable: true
+                    type: string
+                required:
+                - name
+                type: object
+              routes:
+                items:
+                  properties:
+                    source_port:
+                      description: Any connections to a port matching this pattern match this rule.
+                      format: uint16
+                      minimum: 0.0
+                      type: integer
+                    target:
+                      anyOf:
+                      - required:
+                        - svc
+                      - required:
+                        - dns_name
+                      - required:
+                        - ip
+                      description: When this rule matches, we take this action.
+                      properties:
+                        dns_name:
+                          type: string
+                        ip:
+                          type: string
+                        ns:
+                          nullable: true
+                          type: string
+                        port:
+                          format: uint16
+                          minimum: 0.0
+                          type: integer
+                        svc:
+                          type: string
+                      required:
+                      - port
+                      type: object
+                  required:
+                  - source_port
+                  - target
+                  type: object
+                type: array
+            required:
+            - key_secret
+            - routes
+            type: object
+          status:
+            nullable: true
+            properties:
+              conditions:
+                items:
+                  properties:
+                    message:
+                      nullable: true
+                      type: string
+                    state:
+                      enum:
+                      - Shutdown
+                      - Bootstrapping
+                      - Degraded
+                      - Running
+                      - Recovering
+                      - Broken
+                      type: string
+                    time:
+                      format: date-time
+                      type: string
+                  required:
+                  - state
+                  - time
+                  type: object
+                type: array
+              onion_name:
+                type: string
+            required:
+            - conditions
+            - onion_name
+            type: object
+        required:
+        - spec
+        title: OnionService
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+# Source: arti-controller/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: arti-controller
+rules:
+- apiGroups:
+  - arti.nirvati.org
+  resources:
+  - onionservices
+  - onionservices/status
+  verbs:
+  - '*'
+- apiGroups:
+  - ''
+  resources:
+  - secrets
+  verbs:
+  - '*'
+---
+# Source: arti-controller/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: arti-controller
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: arti-controller
+subjects:
+  - kind: ServiceAccount
+    name: arti-controller
+    namespace: default
+---
+# Source: arti-controller/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: controller
+spec:
+  selector:
+    matchLabels:
+      container: controller
+  template:
+    metadata:
+      labels:
+        container: controller
+    spec:
+      containers:
+      - image: harbor.nirvati.org/citadel/arti-controller:0-1-1
+        name: controller
+      serviceAccountName: arti-controller

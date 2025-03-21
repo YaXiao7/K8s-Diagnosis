@@ -1,0 +1,74 @@
+---
+# Source: tidb-cluster/templates/cluster.yaml
+apiVersion: apps.kubeblocks.io/v1alpha1
+kind: Cluster
+metadata:
+  name: my-tidb-cluster
+  labels: 
+    helm.sh/chart: tidb-cluster-0.9.0
+    app.kubernetes.io/name: tidb-cluster
+    app.kubernetes.io/instance: my-tidb-cluster
+    app.kubernetes.io/version: "v7.1.2"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  clusterDefinitionRef: tidb  # ref clusterdefinition.name
+  clusterVersionRef: tidb-v7.1.2 # ref clusterversion.name
+  terminationPolicy: Halt
+  affinity:
+    topologyKeys: 
+      - kubernetes.io/hostname
+  componentSpecs:
+    - name: pd
+      componentDefRef: pd
+      serviceAccountName: kb-my-tidb-cluster
+      monitor: false
+      replicas: 3
+      resources:
+        limits:
+          cpu: "2"
+          memory: "8Gi"
+        requests:
+          cpu: "2"
+          memory: "8Gi"
+      volumeClaimTemplates:
+      - name: data
+        spec:
+          storageClassName: 
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 20Gi
+    - name: tikv
+      componentDefRef: tikv
+      serviceAccountName: kb-my-tidb-cluster
+      monitor: false
+      replicas: 3
+      resources:
+        limits:
+          cpu: "4"
+          memory: "16Gi"
+        requests:
+          cpu: "4"
+          memory: "16Gi"
+      volumeClaimTemplates:
+      - name: data
+        spec:
+          storageClassName: 
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 500Gi
+    - name: tidb
+      componentDefRef: tidb
+      serviceAccountName: kb-my-tidb-cluster
+      monitor: false
+      replicas: 2
+      resources:
+        limits:
+          cpu: "4"
+          memory: "16Gi"
+        requests:
+          cpu: "4"
+          memory: "16Gi"

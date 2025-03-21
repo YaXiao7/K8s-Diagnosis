@@ -1,0 +1,195 @@
+---
+# Source: permify/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-permify
+  labels:
+    helm.sh/chart: permify-0.3.5
+    app.kubernetes.io/name: permify
+    app.kubernetes.io/instance: my-permify
+    app.kubernetes.io/version: "v0.10.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: permify/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: my-permify-job-status-reader
+rules:
+- apiGroups:
+  - batch
+  resources:
+  - jobs
+  verbs:
+  - get
+---
+# Source: permify/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: my-permify-job-status-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: my-permify-job-status-reader
+subjects:
+- kind: ServiceAccount
+  name: my-permify
+---
+# Source: permify/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-permify
+  labels:
+    helm.sh/chart: permify-0.3.5
+    app.kubernetes.io/name: permify
+    app.kubernetes.io/instance: my-permify
+    app.kubernetes.io/version: "v0.10.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - name: grpc
+      port: 3478
+      targetPort: grpc
+      protocol: TCP
+    - name: http
+      port: 3476
+      targetPort: http
+      protocol: TCP
+    - name: profiler
+      port: 6060
+      targetPort: profiler
+      protocol: TCP
+
+    - name: invoker
+      port: 5053
+      targetPort: invoker
+
+  selector:
+    app.kubernetes.io/name: permify
+    app.kubernetes.io/instance: my-permify
+---
+# Source: permify/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-permify
+  labels:
+    helm.sh/chart: permify-0.3.5
+    app.kubernetes.io/name: permify
+    app.kubernetes.io/instance: my-permify
+    app.kubernetes.io/version: "v0.10.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: permify
+      app.kubernetes.io/instance: my-permify
+  template:
+    metadata:
+      annotations:
+      labels:
+        app.kubernetes.io/name: permify
+        app.kubernetes.io/instance: my-permify
+    spec:
+      serviceAccountName: my-permify
+      securityContext:
+        {}
+      containers:
+        - name: permify
+          securityContext:
+            {}
+          image: "ghcr.io/permify/permify:v0.10.0"
+          imagePullPolicy: Always
+          args: ["serve"]
+          ports:
+            - name: grpc
+              containerPort: 3478
+
+            - name: http
+              containerPort: 3476
+              protocol: TCP
+
+            - name: profiler
+              containerPort: 6060
+              protocol: TCP
+
+            - name: invoker
+              containerPort: 5053
+
+          env:
+            - name: PERMIFY_RATE_LIMIT
+              value: "100000"
+            - name: PERMIFY_GRPC_PORT
+              value: "3478"
+            - name: PERMIFY_HTTP_ENABLED
+              value: "true"
+            - name: PERMIFY_HTTP_PORT
+              value: "3476"
+            - name: PERMIFY_PROFILER_ENABLED
+              value: "true"
+
+            - name: PERMIFY_PROFILER_PORT
+              value: "6060"
+            - name: PERMIFY_LOG_LEVEL
+              value: "info"
+            - name: PERMIFY_SERVICE_SCHEMA_CACHE_NUMBER_OF_COUNTERS
+              value: "1000"
+            - name: PERMIFY_SERVICE_SCHEMA_CACHE_MAX_COST
+              value: "8MiB"
+            - name: PERMIFY_SERVICE_PERMISSION_CONCURRENCY_LIMIT
+              value: "100"
+            - name: PERMIFY_SERVICE_PERMISSION_CACHE_NUMBER_OF_COUNTERS
+              value: "10000"
+            - name: PERMIFY_SERVICE_PERMISSION_CACHE_MAX_COST
+              value: "16MiB"
+            - name: PERMIFY_DATABASE_ENGINE
+              value: "memory"
+            - name: PERMIFY_DISTRIBUTED_ADDRESS
+              value: "demo:///grpc.demo.consistent_hash_balancer"
+            - name: PERMIFY_DISTRIBUTED_PORT
+              value: "5053"
+          readinessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+            exec:
+              command: ["grpc_health_probe", "-addr=127.0.0.1:3478"]
+          livenessProbe:
+            failureThreshold: 12
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+            grpc:
+              port: 3478
+
+          resources:
+            {}
+---
+# Source: permify/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-permify-test-connection"
+  labels:
+    helm.sh/chart: permify-0.3.5
+    app.kubernetes.io/name: permify
+    app.kubernetes.io/instance: my-permify
+    app.kubernetes.io/version: "v0.10.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: grpc-health-probe
+      image: "ghcr.io/permify/permify:v0.10.0"
+      imagePullPolicy: Always
+      command: ["grpc_health_probe", '-addr=my-permify:3478']
+  restartPolicy: Never

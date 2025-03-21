@@ -1,0 +1,250 @@
+---
+# Source: clamav/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-clamav
+  labels:
+    app.kubernetes.io/name: clamav
+    helm.sh/chart: clamav-3.1.3
+    app.kubernetes.io/instance: my-clamav
+    app.kubernetes.io/version: "1.3.0"
+    app.kubernetes.io/managed-by: Helm
+automountServiceAccountToken: false
+---
+# Source: clamav/templates/clamd-configmap.yaml
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: my-clamav-clamd
+  labels:
+    app: clamav
+    chart: clamav-3.1.3
+    release: my-clamav
+    heritage: Helm
+data:
+  clamd.conf:
+    |
+      ###############
+      # General
+      ###############
+    
+      DatabaseDirectory /data
+      TemporaryDirectory /tmp
+      LogTime yes
+      # CUSTOM: Use pid file in tmp
+      PidFile /tmp/clamd.pid
+      LocalSocket /tmp/clamd.sock
+      TCPSocket 3310
+      Foreground yes
+    
+      ###############
+      # Results
+      ###############
+    
+      DetectPUA yes
+      ExcludePUA NetTool
+      ExcludePUA PWTool
+      HeuristicAlerts yes
+      Bytecode yes
+    
+      ###############
+      # Scan
+      ###############
+    
+      ScanPE yes
+      DisableCertCheck yes
+      ScanELF yes
+      AlertBrokenExecutables yes
+      ScanOLE2 yes
+      ScanPDF yes
+      ScanSWF yes
+      ScanMail yes
+      PhishingSignatures yes
+      PhishingScanURLs yes
+      ScanHTML yes
+      ScanArchive yes
+    
+      ###############
+      # Scan
+      ###############
+    
+      MaxScanSize 150M
+      MaxFileSize 30M
+      MaxRecursion 10
+      MaxFiles 15000
+      MaxEmbeddedPE 10M
+      MaxHTMLNormalize 10M
+      MaxHTMLNoTags 2M
+      MaxScriptNormalize 5M
+      MaxZipTypeRcg 1M
+      MaxPartitions 128
+      MaxIconsPE 200
+      PCREMatchLimit 10000
+      PCRERecMatchLimit 10000
+---
+# Source: clamav/templates/freshclam-configmap.yaml
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: my-clamav-freshclam
+  labels:
+    app: clamav
+    chart: clamav-3.1.3
+    release: my-clamav
+    heritage: Helm
+data:
+  freshclam.conf:
+    |
+      ###############
+      # General
+      ###############
+    
+      DatabaseDirectory /data
+      UpdateLogFile /dev/stdout
+      LogTime yes
+      # CUSTOM: Use pid file in tmp
+      PidFile /tmp/freshclam.pid
+      # CUSTOM: Set defined user
+      DatabaseOwner 2000
+    
+      ###############
+      # Updates
+      ###############
+    
+      DatabaseMirror database.clamav.net
+      ScriptedUpdates yes
+      NotifyClamd /etc/clamav/clamd.conf
+      Bytecode yes
+---
+# Source: clamav/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-clamav
+  labels:
+    app.kubernetes.io/name: clamav
+    helm.sh/chart: clamav-3.1.3
+    app.kubernetes.io/instance: my-clamav
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3310
+      targetPort: tcp-clamav
+      protocol: TCP
+      name: tcp-clamav
+  selector:
+    app.kubernetes.io/name: clamav
+    app.kubernetes.io/instance: my-clamav
+---
+# Source: clamav/templates/hpa.yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: my-clamav
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: StatefulSet
+    name: my-clamav
+  minReplicas: 1
+  maxReplicas: 5
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 80
+---
+# Source: clamav/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-clamav
+  labels:
+    app.kubernetes.io/name: clamav
+    helm.sh/chart: clamav-3.1.3
+    app.kubernetes.io/instance: my-clamav
+    app.kubernetes.io/version: "1.3.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  serviceName: my-clamav
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: clamav
+      app.kubernetes.io/instance: my-clamav
+  template:
+    metadata:
+      annotations:
+      labels:
+        app.kubernetes.io/name: clamav
+        app.kubernetes.io/instance: my-clamav
+    spec:
+      serviceAccountName: my-clamav
+      automountServiceAccountToken: false
+      securityContext:
+        fsGroup: 101
+        runAsGroup: 101
+        runAsNonRoot: true
+        runAsUser: 100
+      containers:
+        - name: clamav
+          image: clamav/clamav:1.3.0_base
+          command:
+            - /init-unprivileged
+          imagePullPolicy: IfNotPresent
+          envFrom:
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            runAsNonRoot: true
+          volumeMounts:
+            - name: clamav-data
+              mountPath: /data
+            - name: freshclam-config-volume
+              mountPath: /etc/clamav/freshclam.conf
+              subPath: freshclam.conf
+            - name: clamd-config-volume
+              mountPath: /etc/clamav/clamd.conf
+              subPath: clamd.conf
+          ports:
+            - name: tcp-clamav
+              containerPort: 3310
+              protocol: TCP
+          startupProbe:
+            initialDelaySeconds: 60
+            failureThreshold: 3
+            periodSeconds: 30
+            tcpSocket:
+              port: tcp-clamav
+            timeoutSeconds: 1
+          livenessProbe:
+            initialDelaySeconds: 300
+            failureThreshold: 3
+            periodSeconds: 10
+            tcpSocket:
+              port: tcp-clamav
+            timeoutSeconds: 1
+          readinessProbe:
+            initialDelaySeconds: 90
+            failureThreshold: 3
+            periodSeconds: 10
+            tcpSocket:
+              port: tcp-clamav
+            timeoutSeconds: 1
+          resources:
+            {}
+      volumes:
+        - name: clamav-data
+          emptyDir: {}
+        - name: freshclam-config-volume
+          configMap:
+            name: my-clamav-freshclam
+        - name: clamd-config-volume
+          configMap:
+            name: my-clamav-clamd

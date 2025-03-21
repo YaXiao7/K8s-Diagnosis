@@ -1,0 +1,125 @@
+---
+# Source: tidb/templates/cluster.yaml
+apiVersion: v1
+kind: Secret
+type: Opaque
+metadata:
+  name: my-tidb-tidb-secret
+  namespace: "default"
+data:
+  root: "MlE2emNxUUZHVw=="
+---
+# Source: tidb/templates/operator.yaml
+apiVersion: plugins.kubegems.io/v1beta1
+kind: Plugin
+metadata:
+  name: tidb-operator
+  namespace: "default"
+spec:
+  chart: tidb-operator
+  kind: helm
+  url: https://charts.pingcap.org
+  version: "v1.5.2"
+  values: 
+    clusterScoped: false
+    scheduler:
+      create: false
+    version: v1.5.2
+    # operatorImage: pingcap/tidb-operator:v1.5.2
+---
+# Source: tidb/templates/cluster.yaml
+apiVersion: pingcap.com/v1alpha1
+kind: TidbCluster
+metadata:
+  name: my-tidb-tidb
+  namespace: "default"
+spec:
+  version: v7.5.0
+  configUpdateStrategy: RollingUpdate
+  pvReclaimPolicy: Retain
+  enableDynamicConfiguration: true
+  pd: 
+    affinity:
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+              - key: app.kubernetes.io/component
+                operator: In
+                values:
+                - pd
+                - tikv
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+    config: |
+      [dashboard]
+        internal-proxy = true
+    maxFailoverCount: 0
+    mountClusterClientSecret: true
+    replicas: 3
+    requests:
+      storage: 10Gi
+    storageClassName: ""
+    # baseImage: pingcap/pd
+    
+  tidb: 
+    affinity:
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+              - key: app.kubernetes.io/component
+                operator: In
+                values:
+                - tidb
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+    config: |
+      [performance]
+        tcp-keep-alive = true
+    maxFailoverCount: 0
+    replicas: 3
+    service:
+      type: ClusterIP
+    storageClassName: ""
+    # baseImage: pingcap/tidb
+    
+  tikv: 
+    affinity:
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+              - key: app.kubernetes.io/component
+                operator: In
+                values:
+                - pd
+                - tikv
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+    config: |
+      log-level = "info"
+    maxFailoverCount: 0
+    mountClusterClientSecret: true
+    replicas: 3
+    requests:
+      storage: 10Gi
+    storageClassName: ""
+    # baseImage: pingcap/tikv
+---
+# Source: tidb/templates/cluster.yaml
+apiVersion: pingcap.com/v1alpha1
+kind: TidbInitializer
+metadata:
+  name: my-tidb-init
+  namespace: "default"
+spec:
+  # image: tnir/mysqlclient
+  
+  cluster:
+    namespace: "default"
+    name: my-tidb-tidb
+  passwordSecret: my-tidb-tidb-secret

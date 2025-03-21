@@ -1,0 +1,87 @@
+---
+# Source: dms/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dms-server
+  labels:
+    app.kubernetes.io/name: data-manager-server
+    app.kubernetes.io/instance: my-dms
+data:
+  GIN_MODE: "debug"
+  DB_GRPC_HOST: "127.0.0.1:8089"
+  JVM_OPTIONS: "-Duser.timezone=Asia/Shanghai -Xss2m"
+---
+# Source: dms/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: dms-server
+  labels:
+    helm.sh/chart: dms-0.0.1
+    app.kubernetes.io/name: data-manager-server
+    app.kubernetes.io/instance: my-dms
+    app.kubernetes.io/version: "0.0.1-alpha.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      protocol: TCP
+      port: 8088
+      targetPort: http
+  selector:
+    app.kubernetes.io/name: data-manager-server
+    app.kubernetes.io/instance: my-dms
+---
+# Source: dms/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: data-manager-server
+  labels:
+    helm.sh/chart: dms-0.0.1
+    app.kubernetes.io/name: data-manager-server
+    app.kubernetes.io/instance: my-dms
+    app.kubernetes.io/version: "0.0.1-alpha.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: data-manager-server
+    app.kubernetes.io/instance: my-dms
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: data-manager-server
+      app.kubernetes.io/instance: my-dms
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: data-manager-server
+        app.kubernetes.io/instance: my-dms
+    spec:
+      serviceAccountName: default
+      securityContext:
+        {}
+      containers:
+        - name: dms-server
+          image: "docker.io/apecloud/dms:0.0.1-alpha.0"
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: dms-server
+          ports:
+            - name: http
+              containerPort: 8088
+          resources:
+            {}
+        - name: db-grpc-server
+          image: "docker.io/apecloud/ob-grpc-server:0.1.1"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: DB_GRPC_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: dms-server
+                  key: DB_GRPC_HOST
+          resources:
+            {}

@@ -1,0 +1,188 @@
+---
+# Source: well-known/templates/pdb.yaml
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: my-well-known
+  labels:
+    helm.sh/chart: well-known-1.8.1
+    app.kubernetes.io/name: well-known
+    app.kubernetes.io/instance: my-well-known
+    app.kubernetes.io/version: "1.8.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: well-known
+      app.kubernetes.io/instance: my-well-known
+---
+# Source: well-known/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-well-known
+  namespace: default
+  labels:
+    helm.sh/chart: well-known-1.8.1
+    app.kubernetes.io/name: well-known
+    app.kubernetes.io/instance: my-well-known
+    app.kubernetes.io/version: "1.8.1"
+    app.kubernetes.io/managed-by: Helm
+automountServiceAccountToken: false
+---
+# Source: well-known/templates/role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: my-well-known
+  namespace: default
+  labels:
+    helm.sh/chart: well-known-1.8.1
+    app.kubernetes.io/name: well-known
+    app.kubernetes.io/instance: my-well-known
+    app.kubernetes.io/version: "1.8.1"
+    app.kubernetes.io/managed-by: Helm
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - services
+  verbs:
+  - watch
+  - list
+  - get
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - get
+  - create
+  - update
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - get
+  - create
+  - update
+---
+# Source: well-known/templates/rolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: my-well-known
+  namespace: default
+  labels:
+    helm.sh/chart: well-known-1.8.1
+    app.kubernetes.io/name: well-known
+    app.kubernetes.io/instance: my-well-known
+    app.kubernetes.io/version: "1.8.1"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: my-well-known
+subjects:
+- kind: ServiceAccount
+  name: my-well-known
+  namespace: default
+---
+# Source: well-known/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-well-known
+  namespace: default
+  labels:
+    helm.sh/chart: well-known-1.8.1
+    app.kubernetes.io/name: well-known
+    app.kubernetes.io/instance: my-well-known
+    app.kubernetes.io/version: "1.8.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: well-known
+    app.kubernetes.io/instance: my-well-known
+---
+# Source: well-known/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-well-known
+  namespace: default
+  labels:
+    helm.sh/chart: well-known-1.8.1
+    app.kubernetes.io/name: well-known
+    app.kubernetes.io/instance: my-well-known
+    app.kubernetes.io/version: "1.8.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: well-known
+      app.kubernetes.io/instance: my-well-known
+  template:
+    metadata:
+      annotations:
+        cluster-autoscaler.kubernetes.io/safe-to-evict: "true"
+      labels:
+        app.kubernetes.io/name: well-known
+        app.kubernetes.io/instance: my-well-known
+    spec:
+      serviceAccountName: my-well-known
+      automountServiceAccountToken: true
+      securityContext:
+        {}
+      containers:
+        - name: well-known
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+          image: "ghcr.io/stenic/well-known:1.8.1"
+          imagePullPolicy: Always
+          args: [
+            "-namespace", "default",
+            "-configmap", "my-well-known-data"
+          ]
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.name
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: probe
+              containerPort: 8081
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: probe
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: probe
+          resources:
+            limits:
+              cpu: 50m
+              memory: 64Mi
+            requests:
+              cpu: 20m
+              memory: 32Mi

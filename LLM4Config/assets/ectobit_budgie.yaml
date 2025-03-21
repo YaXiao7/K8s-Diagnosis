@@ -1,0 +1,102 @@
+---
+# Source: budgie/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-budgie
+  labels:
+    helm.sh/chart: budgie-0.1.2
+    app.kubernetes.io/name: budgie
+    app.kubernetes.io/instance: my-budgie
+    app.kubernetes.io/version: "0.1.4"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: budgie/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-budgie
+  labels:
+    helm.sh/chart: budgie-0.1.2
+    app.kubernetes.io/name: budgie
+    app.kubernetes.io/instance: my-budgie
+    app.kubernetes.io/version: "0.1.4"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: budgie
+    app.kubernetes.io/instance: my-budgie
+---
+# Source: budgie/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-budgie
+  labels:
+    helm.sh/chart: budgie-0.1.2
+    app.kubernetes.io/name: budgie
+    app.kubernetes.io/instance: my-budgie
+    app.kubernetes.io/version: "0.1.4"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: budgie
+      app.kubernetes.io/instance: my-budgie
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: budgie
+        app.kubernetes.io/instance: my-budgie
+    spec:
+      serviceAccountName: my-budgie
+      securityContext:
+        {}
+      containers:
+        - name: budgie
+          securityContext:
+            {}
+          image: "ectobit/budgie:0.1.4"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+            {}
+---
+# Source: budgie/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-budgie-test-connection"
+  labels:
+    helm.sh/chart: budgie-0.1.2
+    app.kubernetes.io/name: budgie
+    app.kubernetes.io/instance: my-budgie
+    app.kubernetes.io/version: "0.1.4"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-budgie:80']
+  restartPolicy: Never

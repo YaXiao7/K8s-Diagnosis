@@ -1,0 +1,436 @@
+---
+# Source: renterd/templates/configmaps/renterd-autopilot.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: renterd-autopilot
+  labels:
+    helm.sh/chart: renterd-1.2.8
+    app.kubernetes.io/name: renterd
+    app.kubernetes.io/instance: my-renterd
+    app.kubernetes.io/version: "1.0.8"
+    app.kubernetes.io/managed-by: Helm
+data:
+  renterd.yml: |
+    # Managed by Helm - configmap/renterd-autopilot/renterd.yml
+    
+    # TODO: dirty bugfix - renterd excepts at least one section in config
+    s3:
+      enabled: true
+---
+# Source: renterd/templates/configmaps/renterd-bus.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: renterd-bus
+  labels:
+    helm.sh/chart: renterd-1.2.8
+    app.kubernetes.io/name: renterd
+    app.kubernetes.io/instance: my-renterd
+    app.kubernetes.io/version: "1.0.8"
+    app.kubernetes.io/managed-by: Helm
+data:
+  renterd.yml: |
+    # Managed by Helm - configmap/renterd-bus/renterd.yml
+    bus:
+      gatewayAddr: "0.0.0.0:9981"
+      
+    s3:
+      enabled: true
+---
+# Source: renterd/templates/configmaps/renterd-worker.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: renterd-worker
+  labels:
+    helm.sh/chart: renterd-1.2.8
+    app.kubernetes.io/name: renterd
+    app.kubernetes.io/instance: my-renterd
+    app.kubernetes.io/version: "1.0.8"
+    app.kubernetes.io/managed-by: Helm
+data:
+  renterd.yml: |
+    # Managed by Helm - configmap/renterd-worker/renterd.yml
+    
+    s3:
+      enabled: true
+---
+# Source: renterd/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: renterd-bus
+  labels:
+    helm.sh/chart: renterd-1.2.8
+    app.kubernetes.io/name: renterd
+    app.kubernetes.io/instance: my-renterd
+    app.kubernetes.io/version: "1.0.8"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9980
+      targetPort: 9980
+      protocol: TCP
+      name: http
+    - port: 9981
+      targetPort: 9981
+      protocol: TCP
+      name: bus
+  selector:
+    app.kubernetes.io/name: renterd
+    app.kubernetes.io/instance: my-renterd
+    app.kubernetes.io/component: bus
+---
+# Source: renterd/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: renterd-autopilot
+  labels:
+    helm.sh/chart: renterd-1.2.8
+    app.kubernetes.io/name: renterd
+    app.kubernetes.io/instance: my-renterd
+    app.kubernetes.io/version: "1.0.8"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9980
+      targetPort: 9980
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: renterd
+    app.kubernetes.io/instance: my-renterd
+    app.kubernetes.io/component: autopilot
+---
+# Source: renterd/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: renterd-worker
+  labels:
+    helm.sh/chart: renterd-1.2.8
+    app.kubernetes.io/name: renterd
+    app.kubernetes.io/instance: my-renterd
+    app.kubernetes.io/version: "1.0.8"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  publishNotReadyAddresses: true
+  ports:
+    - port: 9980
+      targetPort: 9980
+      protocol: TCP
+      name: http
+    - port: 9981
+      targetPort: 9981
+      protocol: TCP
+      name: bus
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
+      name: s3
+  selector:
+    app.kubernetes.io/name: renterd
+    app.kubernetes.io/instance: my-renterd
+    app.kubernetes.io/component: worker
+---
+# Source: renterd/templates/statefulset-renterd-autopilot.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: renterd-autopilot
+  labels:
+    helm.sh/chart: renterd-1.2.8
+    app.kubernetes.io/name: renterd
+    app.kubernetes.io/instance: my-renterd
+    app.kubernetes.io/version: "1.0.8"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: autopilot
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: renterd
+      app.kubernetes.io/instance: my-renterd
+      app.kubernetes.io/component: autopilot
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: renterd
+        app.kubernetes.io/instance: my-renterd
+        app.kubernetes.io/component: autopilot
+      annotations:
+        checksum/configmap-renterd-autopilot: aa02d7031b1c41b12ca675f9b93ec9cbe849659b72666198f37edf069c58053c
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        fsGroup: 1000
+        runAsGroup: 1000
+        runAsUser: 1000
+      initContainers:
+        - name: wait-for
+          image: artur9010/wait-for:v1.0.0
+          args:
+            - --verbose
+            - --timeout=60s
+            # Wait for bus before starting autopilot
+            - --host="renterd-bus:9980"
+            # Make sure all workers are online before starting autopilot
+            
+            - --host="renterd-worker-0.renterd-worker:9980"
+            
+      containers:
+        - name: renterd
+          image: "ghcr.io/siafoundation/renterd:1.0.8"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: bus
+              containerPort: 9981
+              protocol: TCP
+            - name: http
+              containerPort: 9980
+              protocol: TCP
+          readinessProbe:
+            tcpSocket:
+              port: 9980
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 9980
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          volumeMounts:
+            - mountPath: "/data/renterd.yml"
+              name: renterd-autopilot-config
+              subPath: "renterd.yml"
+          envFrom:
+            - secretRef:
+                name: "renterd"
+          env:
+            - name: RENTERD_WORKER_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: RENTERD_AUTOPILOT_ENABLED
+              value: "true"
+            - name: RENTERD_WORKER_ENABLED
+              value: "false"
+            - name: RENTERD_BUS_REMOTE_ADDR
+              value: "http://renterd-bus:9980/api/bus"
+            - name: RENTERD_WORKER_REMOTE_ADDRS
+              value: "http://renterd-worker-0.renterd-worker:9980/api/worker"
+            - name: RENTERD_NETWORK
+              value: "mainnet"
+            - name: RENTERD_LOG_FILE_ENABLED
+              value: "false"
+          resources:
+            {}
+      volumes:
+        - name: renterd-autopilot-config
+          configMap:
+            name: renterd-autopilot
+            defaultMode: 0755
+---
+# Source: renterd/templates/statefulset-renterd-bus.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: renterd-bus
+  labels:
+    helm.sh/chart: renterd-1.2.8
+    app.kubernetes.io/name: renterd
+    app.kubernetes.io/instance: my-renterd
+    app.kubernetes.io/version: "1.0.8"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: bus
+spec:
+  serviceName: "renterd-bus"
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: renterd
+      app.kubernetes.io/instance: my-renterd
+      app.kubernetes.io/component: bus
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: renterd
+        app.kubernetes.io/instance: my-renterd
+        app.kubernetes.io/component: bus
+      annotations:
+        checksum/configmap-renterd-bus: 3fc866a5fa4668b4c434b5bb11a586c38cf88b18997d1b637ac841022382ab9d
+        checksum/secret-renterd-mysql: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        fsGroup: 1000
+        runAsGroup: 1000
+        runAsUser: 1000
+      
+      containers:
+        - name: renterd
+          image: "ghcr.io/siafoundation/renterd:1.0.8"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: bus
+              containerPort: 9981
+              protocol: TCP
+            - name: http
+              containerPort: 9980
+              protocol: TCP
+          readinessProbe:
+            tcpSocket:
+              port: 9980
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 9980
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          volumeMounts:
+            - mountPath: "/data"
+              name: renterd-bus-data
+            - mountPath: "/data/renterd.yml"
+              name: renterd-bus-config
+              subPath: "renterd.yml"
+          envFrom:
+            - secretRef:
+                name: "renterd"
+            
+          env:
+            - name: RENTERD_AUTOPILOT_ENABLED
+              value: "false"
+            - name: RENTERD_WORKER_ENABLED
+              value: "false"
+            - name: RENTERD_NETWORK
+              value: "mainnet"
+            - name: RENTERD_LOG_FILE_ENABLED
+              value: "false"
+          resources:
+            {}
+      volumes:
+        - name: renterd-bus-config
+          configMap:
+            name: renterd-bus
+            defaultMode: 0755
+  volumeClaimTemplates:
+    - metadata:
+        name: renterd-bus-data
+      spec:
+        accessModes:
+        - ReadWriteOnce
+        resources:
+          requests:
+            storage: 10Gi
+        storageClassName: longhorn
+---
+# Source: renterd/templates/statefulset-renterd-worker.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: renterd-worker
+  labels:
+    helm.sh/chart: renterd-1.2.8
+    app.kubernetes.io/name: renterd
+    app.kubernetes.io/instance: my-renterd
+    app.kubernetes.io/version: "1.0.8"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: worker
+spec:
+  serviceName: "renterd-worker"
+  replicas: 1
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: renterd
+      app.kubernetes.io/instance: my-renterd
+      app.kubernetes.io/component: worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: renterd
+        app.kubernetes.io/instance: my-renterd
+        app.kubernetes.io/component: worker
+      annotations:
+        checksum/configmap-renterd-worker: b39adb25843fb0958aca343957c43fe2c78b3aab3e19959f39758c06dd13195e
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        fsGroup: 1000
+        runAsGroup: 1000
+        runAsUser: 1000
+      initContainers:
+        - name: wait-for
+          image: artur9010/wait-for:v1.0.0
+          args:
+            - --verbose
+            - --timeout=60s
+            # Wait for bus before starting workers
+            - --host="renterd-bus:9980"
+      containers:
+        - name: renterd
+          image: "ghcr.io/siafoundation/renterd:1.0.8"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: bus
+              containerPort: 9981
+              protocol: TCP
+            - name: http
+              containerPort: 9980
+              protocol: TCP
+          readinessProbe:
+            tcpSocket:
+              port: 9980
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 9980
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          volumeMounts:
+            - mountPath: "/data/renterd.yml"
+              name: renterd-worker-config
+              subPath: "renterd.yml"
+          env:
+            - name: RENTERD_WORKER_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: RENTERD_AUTOPILOT_ENABLED
+              value: "false"
+            - name: RENTERD_WORKER_ENABLED
+              value: "true"
+            - name: RENTERD_BUS_REMOTE_ADDR
+              value: "http://renterd-bus:9980/api/bus"
+            # Used in RENTERD_WORKER_EXTERNAL_ADDR
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            # TODO: template: service name
+            - name: RENTERD_WORKER_EXTERNAL_ADDR
+              value: "http://$(POD_NAME).renterd-worker:9980/api/worker"
+            - name: RENTERD_NETWORK
+              value: "mainnet"
+            - name: RENTERD_LOG_FILE_ENABLED
+              value: "false"
+          envFrom:
+            - secretRef:
+                name: "renterd"
+          resources:
+            {}
+      volumes:
+        - name: renterd-worker-config
+          configMap:
+            name: renterd-worker
+            defaultMode: 0755

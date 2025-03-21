@@ -1,0 +1,214 @@
+---
+# Source: atlantis/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-atlantis
+  labels:
+    app: atlantis
+    chart: atlantis-5.5.0
+    helm.sh/chart: atlantis-5.5.0
+    release: my-atlantis
+    heritage: Helm
+---
+# Source: atlantis/templates/secret-webhook.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-atlantis-webhook
+  labels:
+    app: atlantis
+    chart: atlantis-5.5.0
+    helm.sh/chart: atlantis-5.5.0
+    release: my-atlantis
+    heritage: Helm
+data:
+---
+# Source: atlantis/templates/tests/test-atlantis-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-atlantis-tests
+data:
+  tests.bats: |-
+    setup() {
+      apk add curl -q
+    }
+    @test "Atlantis UI is available" {
+      ATLANTIS_URL=http://my-atlantis.default.svc.cluster.local:80
+      echo "Trying Atlantis at: $ATLANTIS_URL"
+      curl -v $ATLANTIS_URL
+    }
+---
+# Source: atlantis/templates/pvc.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: my-atlantis-data
+  labels:
+    app: atlantis
+    chart: atlantis-5.5.0
+    helm.sh/chart: atlantis-5.5.0
+    release: my-atlantis
+    heritage: Helm
+spec:
+  accessModes: 
+  - ReadWriteOnce
+  resources:
+    requests:
+      # The biggest thing Atlantis stores is the Git repo when it checks it out.
+      # It deletes the repo after the pull request is merged.
+      storage: 5Gi
+---
+# Source: atlantis/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-atlantis
+  labels:
+    app: atlantis
+    chart: atlantis-5.5.0
+    helm.sh/chart: atlantis-5.5.0
+    release: my-atlantis
+    heritage: Helm
+spec:
+  type: NodePort
+  ports:
+    - port: 80
+      targetPort: 4141
+      protocol: TCP
+      name: atlantis
+  selector:
+    app: atlantis
+    release: my-atlantis
+---
+# Source: atlantis/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-atlantis
+  labels:
+    app: atlantis
+    chart: atlantis-5.5.0
+    helm.sh/chart: atlantis-5.5.0
+    release: my-atlantis
+    heritage: Helm
+spec:
+  serviceName: my-atlantis
+  replicas: 1
+  selector:
+    matchLabels:
+      app: atlantis
+      release: my-atlantis
+  template:
+    metadata:
+      labels:
+        app: atlantis
+        release: my-atlantis
+      annotations:
+        checksum/config: 01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b
+        checksum/repo-config: 01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b
+    spec:
+      hostNetwork: false
+      serviceAccountName: my-atlantis
+      shareProcessNamespace: false
+      automountServiceAccountToken: true
+      securityContext: 
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        runAsUser: 100
+      volumes:
+      - name : atlantis-data
+        persistentVolumeClaim:
+          claimName: my-atlantis-data
+      containers:
+        - name: atlantis
+          image: "ghcr.io/runatlantis/atlantis:v0.29.0"
+          imagePullPolicy: Always
+          args:
+            - server
+          ports:
+          - name: atlantis
+            containerPort: 4141
+          env:
+          - name: PATH
+            value: /plugins:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+          - name: ATLANTIS_DATA_DIR
+            value: /atlantis-data
+          - name: ATLANTIS_REPO_ALLOWLIST
+            value: "<replace-me>"
+          - name: ATLANTIS_PORT
+            value: "4141"
+          - name: ATLANTIS_ATLANTIS_URL
+            value: http://
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 4141
+              scheme: HTTP
+            initialDelaySeconds: 5
+            periodSeconds: 60
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 4141
+              scheme: HTTP
+            initialDelaySeconds: 5
+            periodSeconds: 60
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 5
+          volumeMounts:
+          - name: atlantis-data
+            mountPath: /atlantis-data
+          resources:
+            {}
+---
+# Source: atlantis/templates/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: my-atlantis
+  labels:
+    app: atlantis
+    chart: atlantis-5.5.0
+    helm.sh/chart: atlantis-5.5.0
+    release: my-atlantis
+    heritage: Helm
+spec:
+  rules:
+    -
+      http:
+        paths:
+          - path: /*
+            backend:
+              service:
+                name: my-atlantis
+                port:
+                  number: 80
+            pathType: ImplementationSpecific
+---
+# Source: atlantis/templates/tests/test-atlantis-pod.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-atlantis-ui-test"
+  annotations:
+    helm.sh/hook: test
+spec:
+  containers:
+    - name: my-atlantis-ui-test
+      image: bats/bats:1.9.0
+      command: ["/usr/local/bin/bats", "/tests/"]
+      volumeMounts:
+      - mountPath: /tests
+        name: tests
+        readOnly: true
+  volumes:
+  - name: tests
+    configMap:
+      name: my-atlantis-tests
+  restartPolicy: Never

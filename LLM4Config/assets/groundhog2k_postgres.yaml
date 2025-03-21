@@ -1,0 +1,210 @@
+---
+# Source: postgres/templates/scripts.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-postgres-scripts
+  labels:
+    helm.sh/chart: postgres-1.4.4
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/instance: my-postgres
+    app.kubernetes.io/version: "16.4"
+    app.kubernetes.io/managed-by: Helm
+data:
+  01-init-userdb.sh: |
+    #!/bin/sh
+    create_user()
+    {
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" -v USERDBNAME="$POSTGRES_DB" -v USERDBUSER="$USERDB_USER" -v USERDBPASSWORD="'$USERDB_PASSWORD'" <<-EOSQL
+      CREATE USER :USERDBUSER WITH PASSWORD :USERDBPASSWORD;
+      GRANT ALL PRIVILEGES ON DATABASE :USERDBNAME TO :USERDBUSER;
+    EOSQL
+    }
+    set -e
+    if [ ! -z "$POSTGRES_DB" ] && [ ! -z "$USERDB_USER" ] && [ ! -z "$USERDB_PASSWORD" ]; then
+      create_user
+    fi
+  init.sh: |
+    #!/bin/sh
+    echo "Start initialization"
+    echo "Copy init-userdb script"
+    cp /initscripts/01-init-userdb.sh /scripts
+    if [ -d /extrascripts ]; then
+      echo "Copy extra scripts"
+      cp /extrascripts/* /scripts
+    fi
+    if [ -d /customscripts ]; then
+      echo "Copy custom scripts"
+      cp /customscripts/* /scripts
+    fi
+    if [ -d /customconfig ]; then
+      echo "Create postgres config"
+      cat /customconfig/* >>/configs/postgresql.conf
+    fi    
+    if [ -d /extraconfigs ]; then
+      echo "Add extra configs to postgres config"
+      cat /extraconfigs/* >>/configs/postgresql.conf
+    fi
+    echo "Initialization done."
+---
+# Source: postgres/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-postgres
+  labels:
+    helm.sh/chart: postgres-1.4.4
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/instance: my-postgres
+    app.kubernetes.io/version: "16.4"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5432
+      targetPort: postgres
+      protocol: TCP
+      name: postgres
+  selector:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/instance: my-postgres
+---
+# Source: postgres/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-postgres
+  labels:
+    helm.sh/chart: postgres-1.4.4
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/instance: my-postgres
+    app.kubernetes.io/version: "16.4"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  serviceName: my-postgres
+  podManagementPolicy: OrderedReady
+  updateStrategy: 
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgres
+      app.kubernetes.io/instance: my-postgres
+  template:
+    metadata:
+      annotations:
+        checksum/customconfig: 01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b
+        checksum/secureconfig: 01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b
+        checksum/customscripts: 01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b
+        checksum/scripts: 1ae1c260cd387ce5ed145e35b2fc0fd3404f5c2af17acd962221676dbaf05929
+      labels:
+        app.kubernetes.io/name: postgres
+        app.kubernetes.io/instance: my-postgres
+    spec:
+      serviceAccountName: default
+      securityContext:
+        fsGroup: 999
+        supplementalGroups:
+        - 999
+      initContainers:
+        - name: postgres-init
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsGroup: 999
+            runAsNonRoot: true
+            runAsUser: 999
+          image: "docker.io/postgres:16.4"
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - mountPath: /initscripts
+              name: initscripts
+            - mountPath: /scripts
+              name: scripts
+            - mountPath: /configs
+              name: configs
+          command: [ "/initscripts/init.sh" ]
+      containers:
+        - name: postgres
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsGroup: 999
+            runAsNonRoot: true
+            runAsUser: 999
+          image: "docker.io/postgres:16.4"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: postgres
+              containerPort: 5432
+              protocol: TCP
+          env:
+            - name: PGDATA
+              value: "/var/lib/postgresql/data/pg"
+          startupProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - pg_isready -h localhost
+            initialDelaySeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
+            successThreshold: 1
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - pg_isready -h localhost
+            initialDelaySeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+            successThreshold: 1
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - pg_isready -h localhost
+            initialDelaySeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+            successThreshold: 1
+            periodSeconds: 10
+          volumeMounts:
+            - mountPath: /var/run
+              name: run
+            - mountPath: /tmp
+              name: tmp
+            - mountPath: /var/lib/postgresql/data
+              name: postgres-data
+            - mountPath: /docker-entrypoint-initdb.d
+              name: scripts
+            - mountPath: /etc/postgresql
+              name: configs
+      volumes:
+        - name: run
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+        - name: scripts
+          emptyDir: {}
+        - name: configs
+          emptyDir: {}
+        - name: initscripts
+          configMap:
+            name: my-postgres-scripts
+            defaultMode: 0555
+        - name: postgres-data
+          emptyDir: {}

@@ -1,0 +1,105 @@
+---
+# Source: riverui/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-riverui
+  labels:
+    helm.sh/chart: riverui-0.1.3
+    app.kubernetes.io/name: riverui
+    app.kubernetes.io/instance: my-riverui
+    app.kubernetes.io/version: "0.5.3"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: riverui/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-riverui
+  labels:
+    helm.sh/chart: riverui-0.1.3
+    app.kubernetes.io/name: riverui
+    app.kubernetes.io/instance: my-riverui
+    app.kubernetes.io/version: "0.5.3"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: riverui
+    app.kubernetes.io/instance: my-riverui
+---
+# Source: riverui/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-riverui
+  labels:
+    helm.sh/chart: riverui-0.1.3
+    app.kubernetes.io/name: riverui
+    app.kubernetes.io/instance: my-riverui
+    app.kubernetes.io/version: "0.5.3"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: riverui
+      app.kubernetes.io/instance: my-riverui
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: riverui
+        app.kubernetes.io/instance: my-riverui
+    spec:
+      serviceAccountName: my-riverui
+      securityContext:
+        {}
+      containers:
+        - name: riverui
+          securityContext:
+            {}
+          image: "ghcr.io/riverqueue/riverui:0.5.3"
+          imagePullPolicy: IfNotPresent
+          env:
+          - name: DATABASE_URL
+            value: "postgresql://username:password@localhost:5432/river?application_name=riverui"
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+            {}
+---
+# Source: riverui/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-riverui-test-connection"
+  labels:
+    helm.sh/chart: riverui-0.1.3
+    app.kubernetes.io/name: riverui
+    app.kubernetes.io/instance: my-riverui
+    app.kubernetes.io/version: "0.5.3"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-riverui:8080']
+  restartPolicy: Never

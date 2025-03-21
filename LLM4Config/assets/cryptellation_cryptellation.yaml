@@ -1,0 +1,1100 @@
+---
+# Source: cryptellation/charts/nats/templates/pdb.yaml
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: my-cryptellation-nats
+  namespace: default
+  labels:
+    helm.sh/chart: nats-0.19.13
+    app.kubernetes.io/name: nats
+    app.kubernetes.io/instance: my-cryptellation
+    app.kubernetes.io/version: "2.9.16"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: nats
+      app.kubernetes.io/instance: my-cryptellation
+---
+# Source: cryptellation/charts/mongodb/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-cryptellation-mongodb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: mongodb
+    helm.sh/chart: mongodb-13.12.0
+    app.kubernetes.io/instance: my-cryptellation
+    app.kubernetes.io/managed-by: Helm
+secrets:
+  - name: my-cryptellation-mongodb
+automountServiceAccountToken: true
+---
+# Source: cryptellation/charts/nats/templates/rbac.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-cryptellation-nats
+  namespace: default
+  labels:
+    helm.sh/chart: nats-0.19.13
+    app.kubernetes.io/name: nats
+    app.kubernetes.io/instance: my-cryptellation
+    app.kubernetes.io/version: "2.9.16"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: cryptellation/charts/mongodb/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-cryptellation-mongodb
+  namespace: default
+  labels:
+    app.kubernetes.io/name: mongodb
+    helm.sh/chart: mongodb-13.12.0
+    app.kubernetes.io/instance: my-cryptellation
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: mongodb
+type: Opaque
+data:
+  mongodb-root-password: "cGV0SlYzY0taUg=="
+---
+# Source: cryptellation/charts/mongodb/templates/common-scripts-cm.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-cryptellation-mongodb-common-scripts
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: mongodb
+    helm.sh/chart: mongodb-13.12.0
+    app.kubernetes.io/instance: my-cryptellation
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: mongodb
+data:
+  startup-probe.sh: |
+    #!/bin/bash
+    mongosh  $TLS_OPTIONS --port $MONGODB_PORT_NUMBER --eval 'db.hello().isWritablePrimary || db.hello().secondary' | grep 'true'
+  readiness-probe.sh: |
+    #!/bin/bash
+    # Run the proper check depending on the version
+    [[ $(mongod -version | grep "db version") =~ ([0-9]+\.[0-9]+\.[0-9]+) ]] && VERSION=${BASH_REMATCH[1]}
+    . /opt/bitnami/scripts/libversion.sh
+    VERSION_MAJOR="$(get_sematic_version "$VERSION" 1)"
+    VERSION_MINOR="$(get_sematic_version "$VERSION" 2)"
+    VERSION_PATCH="$(get_sematic_version "$VERSION" 3)"
+    if [[ ( "$VERSION_MAJOR" -ge 5 ) || ( "$VERSION_MAJOR" -ge 4 && "$VERSION_MINOR" -ge 4 && "$VERSION_PATCH" -ge 2 ) ]]; then
+        mongosh $TLS_OPTIONS --port $MONGODB_PORT_NUMBER --eval 'db.hello().isWritablePrimary || db.hello().secondary' | grep 'true'
+    else
+        mongosh  $TLS_OPTIONS --port $MONGODB_PORT_NUMBER --eval 'db.isMaster().ismaster || db.isMaster().secondary' | grep 'true'
+    fi
+  ping-mongodb.sh: |
+    #!/bin/bash
+    mongosh  $TLS_OPTIONS --port $MONGODB_PORT_NUMBER --eval "db.adminCommand('ping')"
+---
+# Source: cryptellation/charts/nats/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-cryptellation-nats-config
+  namespace: default
+  labels:
+    helm.sh/chart: nats-0.19.13
+    app.kubernetes.io/name: nats
+    app.kubernetes.io/instance: my-cryptellation
+    app.kubernetes.io/version: "2.9.16"
+    app.kubernetes.io/managed-by: Helm
+data:
+  nats.conf: |
+    # NATS Clients Port
+    port: 4222
+
+    # PID file shared with configuration reloader.
+    pid_file: "/var/run/nats/nats.pid"
+
+    ###############
+    #             #
+    # Monitoring  #
+    #             #
+    ###############
+    http: 8222
+    server_name:$POD_NAME
+    lame_duck_grace_period: 10s
+    lame_duck_duration: 30s
+---
+# Source: cryptellation/templates/config.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+    name: cryptellation-config
+data:
+    # Backtests
+    backtests.mongodb.database: "backtests"
+    backtests.health.port: "9000"
+
+    # Candlesticks
+    candlesticks.mongodb.database: "candlesticks"
+    candlesticks.health.port: "9000"
+
+    # Exchanges
+    exchanges.mongodb.database: "exchanges"
+    exchanges.health.port: "9000"
+
+    # Forwardtests
+    forwardtests.mongodb.database: "forwardtests"
+    forwardtests.health.port: "9000"
+
+    # Indicators
+    indicators.mongodb.database: "indicators"
+    indicators.health.port: "9000"
+
+    # Ticks
+    ticks.mongodb.database: "ticks"
+    ticks.health.port: "9000"
+---
+# Source: cryptellation/templates/credentials.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+    name: cryptellation-credentials
+data:
+    # Exchanges
+    binance.api_key: ""
+    binance.secret_key: ""
+
+    # Event brokers
+    
+    nats.host: "my-cryptellation-nats.default.svc.cluster.local"
+    nats.port: "4222"
+
+    # Datastores
+    
+    mongodb.connection_string: "mongodb://my-cryptellation-mongodb.default.svc.cluster.local:27017"
+
+    # Opentelemetry
+    opentelemetry.grpc.endpoint: ""
+---
+# Source: cryptellation/charts/mongodb/templates/standalone/pvc.yaml
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: my-cryptellation-mongodb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: mongodb
+    helm.sh/chart: mongodb-13.12.0
+    app.kubernetes.io/instance: my-cryptellation
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: mongodb
+spec:
+  accessModes:
+    - "ReadWriteOnce"
+  resources:
+    requests:
+      storage: "8Gi"
+---
+# Source: cryptellation/charts/mongodb/templates/standalone/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-cryptellation-mongodb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: mongodb
+    helm.sh/chart: mongodb-13.12.0
+    app.kubernetes.io/instance: my-cryptellation
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: mongodb
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+    - name: "mongodb"
+      port: 27017
+      targetPort: mongodb
+      nodePort: null
+  selector:
+    app.kubernetes.io/name: mongodb
+    app.kubernetes.io/instance: my-cryptellation
+    app.kubernetes.io/component: mongodb
+---
+# Source: cryptellation/charts/nats/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-cryptellation-nats
+  namespace: default
+  labels:
+    helm.sh/chart: nats-0.19.13
+    app.kubernetes.io/name: nats
+    app.kubernetes.io/instance: my-cryptellation
+    app.kubernetes.io/version: "2.9.16"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+    app.kubernetes.io/name: nats
+    app.kubernetes.io/instance: my-cryptellation
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+  - name: client
+    port: 4222
+    appProtocol: tcp
+  - name: cluster
+    port: 6222
+    appProtocol: tcp
+  - name: monitor
+    port: 8222
+    appProtocol: http
+  - name: metrics
+    port: 7777
+    appProtocol: http
+  - name: leafnodes
+    port: 7422
+    appProtocol: tcp
+  - name: gateways
+    port: 7522
+    appProtocol: tcp
+---
+# Source: cryptellation/charts/mongodb/templates/standalone/dep-sts.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-cryptellation-mongodb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: mongodb
+    helm.sh/chart: mongodb-13.12.0
+    app.kubernetes.io/instance: my-cryptellation
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: mongodb
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mongodb
+      app.kubernetes.io/instance: my-cryptellation
+      app.kubernetes.io/component: mongodb
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mongodb
+        helm.sh/chart: mongodb-13.12.0
+        app.kubernetes.io/instance: my-cryptellation
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/component: mongodb
+    spec:
+      
+      serviceAccountName: my-cryptellation-mongodb
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: mongodb
+                    app.kubernetes.io/instance: my-cryptellation
+                    app.kubernetes.io/component: mongodb
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+        sysctls: []
+      
+      containers:
+        - name: mongodb
+          image: docker.io/bitnami/mongodb:6.0.5-debian-11-r16
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: MONGODB_ROOT_USER
+              value: "root"
+            - name: MONGODB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-cryptellation-mongodb
+                  key: mongodb-root-password
+            - name: ALLOW_EMPTY_PASSWORD
+              value: "no"
+            - name: MONGODB_SYSTEM_LOG_VERBOSITY
+              value: "0"
+            - name: MONGODB_DISABLE_SYSTEM_LOG
+              value: "no"
+            - name: MONGODB_DISABLE_JAVASCRIPT
+              value: "no"
+            - name: MONGODB_ENABLE_JOURNAL
+              value: "yes"
+            - name: MONGODB_PORT_NUMBER
+              value: "27017"
+            - name: MONGODB_ENABLE_IPV6
+              value: "no"
+            - name: MONGODB_ENABLE_DIRECTORY_PER_DB
+              value: "no"
+          ports:
+            - name: mongodb
+              containerPort: 27017
+          livenessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            successThreshold: 1
+            timeoutSeconds: 10
+            exec:
+              command:
+                - /bitnami/scripts/ping-mongodb.sh
+          readinessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+            exec:
+              command:
+                - /bitnami/scripts/readiness-probe.sh
+          resources:
+            limits: {}
+            requests: {}
+          volumeMounts:
+            - name: datadir
+              mountPath: /bitnami/mongodb
+              subPath: 
+            - name: common-scripts
+              mountPath: /bitnami/scripts
+      volumes:
+        - name: common-scripts
+          configMap:
+            name: my-cryptellation-mongodb-common-scripts
+            defaultMode: 0550
+        - name: datadir
+          persistentVolumeClaim:
+            claimName: my-cryptellation-mongodb
+---
+# Source: cryptellation/charts/nats/templates/nats-box.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-cryptellation-nats-box
+  namespace: default
+  labels:
+    app: my-cryptellation-nats-box
+    chart: nats-0.19.13
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: my-cryptellation-nats-box
+  template:
+    metadata:
+      labels:
+        app: my-cryptellation-nats-box
+    spec:
+      volumes:
+      containers:
+      - name: nats-box
+        image: natsio/nats-box:0.13.8
+        imagePullPolicy: IfNotPresent
+        resources:
+          {}
+        env:
+        - name: NATS_URL
+          value: my-cryptellation-nats
+        command:
+        - "tail"
+        - "-f"
+        - "/dev/null"
+        volumeMounts:
+---
+# Source: cryptellation/templates/backtests.deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: backtests
+  name: backtests
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backtests
+  strategy: {}
+  template:
+    metadata:
+      annotations:
+        
+      labels:
+        app: backtests
+    spec:
+      containers:
+      - name: backtests
+        image: lerenn/cryptellation-backtests:v2.2.0
+        imagePullPolicy: Always
+        livenessProbe:
+          httpGet:
+            path: /liveness
+            port: 9000
+        readinessProbe:
+          httpGet:
+            path: /readiness
+            port: 9000
+        env:        
+        # Health
+        - name: "HEALTH_PORT"
+          valueFrom:
+            configMapKeyRef:
+              key:  backtests.health.port
+              name: cryptellation-config
+        # NATS
+        - name: "NATS_HOST"
+          valueFrom:
+            configMapKeyRef:
+              key:  nats.host
+              name: cryptellation-credentials
+        - name: "NATS_PORT"
+          valueFrom:
+            configMapKeyRef:
+              key:  nats.port
+              name: cryptellation-credentials
+        # MongoDB
+        - name: "MONGO_CONNECTION_STRING"
+          valueFrom:
+            configMapKeyRef:
+              key: mongodb.connection_string
+              name: cryptellation-credentials
+        - name: "MONGO_DATABASE"
+          valueFrom:
+            configMapKeyRef:
+              key: backtests.mongodb.database
+              name: cryptellation-config
+        # Opentelemetry
+        - name: "OPENTELEMETRY_GRPC_ENDPOINT"
+          valueFrom:
+            configMapKeyRef:
+              key: opentelemetry.grpc.endpoint
+              name: cryptellation-credentials
+        resources: {}
+status: {}
+---
+# Source: cryptellation/templates/candlesticks.deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: candlesticks
+  name: candlesticks
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: candlesticks
+  strategy: {}
+  template:
+    metadata:
+      annotations:
+        
+      labels:
+        app: candlesticks
+    spec:
+      containers:
+      - name: candlesticks
+        image: lerenn/cryptellation-candlesticks:v2.2.0
+        imagePullPolicy: Always
+        livenessProbe:
+          httpGet:
+            path: /liveness
+            port: 9000
+        readinessProbe:
+          httpGet:
+            path: /readiness
+            port: 9000
+        env:
+        - name: "BINANCE_API_KEY"
+          valueFrom:
+            configMapKeyRef:
+              key: binance.api_key
+              name: cryptellation-credentials
+        - name: "BINANCE_SECRET_KEY"
+          valueFrom:
+            configMapKeyRef:
+              key: binance.secret_key
+              name: cryptellation-credentials        
+        # Health
+        - name: "HEALTH_PORT"
+          valueFrom:
+            configMapKeyRef:
+              key:  candlesticks.health.port
+              name: cryptellation-config
+        # NATS
+        - name: "NATS_HOST"
+          valueFrom:
+            configMapKeyRef:
+              key:  nats.host
+              name: cryptellation-credentials
+        - name: "NATS_PORT"
+          valueFrom:
+            configMapKeyRef:
+              key:  nats.port
+              name: cryptellation-credentials
+        # MongoDB
+        - name: "MONGO_CONNECTION_STRING"
+          valueFrom:
+            configMapKeyRef:
+              key: mongodb.connection_string
+              name: cryptellation-credentials
+        - name: "MONGO_DATABASE"
+          valueFrom:
+            configMapKeyRef:
+              key: candlesticks.mongodb.database
+              name: cryptellation-config
+        # Opentelemetry
+        - name: "OPENTELEMETRY_GRPC_ENDPOINT"
+          valueFrom:
+            configMapKeyRef:
+              key: opentelemetry.grpc.endpoint
+              name: cryptellation-credentials
+        resources: {}
+status: {}
+---
+# Source: cryptellation/templates/exchanges.deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: exchanges
+  name: exchanges
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: exchanges
+  strategy: {}
+  template:
+    metadata:
+      annotations:
+        
+      labels:
+        app: exchanges
+    spec:
+      containers:
+      - name: exchanges
+        image: lerenn/cryptellation-exchanges:v2.2.0
+        imagePullPolicy: Always
+        livenessProbe:
+          httpGet:
+            path: /liveness
+            port: 9000
+        readinessProbe:
+          httpGet:
+            path: /readiness
+            port: 9000
+        env:
+        - name: "BINANCE_API_KEY"
+          valueFrom:
+            configMapKeyRef:
+              key: binance.api_key
+              name: cryptellation-credentials
+        - name: "BINANCE_SECRET_KEY"
+          valueFrom:
+            configMapKeyRef:
+              key: binance.secret_key
+              name: cryptellation-credentials        
+        # Health
+        - name: "HEALTH_PORT"
+          valueFrom:
+            configMapKeyRef:
+              key:  exchanges.health.port
+              name: cryptellation-config
+        # NATS
+        - name: "NATS_HOST"
+          valueFrom:
+            configMapKeyRef:
+              key:  nats.host
+              name: cryptellation-credentials
+        - name: "NATS_PORT"
+          valueFrom:
+            configMapKeyRef:
+              key:  nats.port
+              name: cryptellation-credentials
+        # MongoDB
+        - name: "MONGO_CONNECTION_STRING"
+          valueFrom:
+            configMapKeyRef:
+              key: mongodb.connection_string
+              name: cryptellation-credentials
+        - name: "MONGO_DATABASE"
+          valueFrom:
+            configMapKeyRef:
+              key: exchanges.mongodb.database
+              name: cryptellation-config
+        # Opentelemetry
+        - name: "OPENTELEMETRY_GRPC_ENDPOINT"
+          valueFrom:
+            configMapKeyRef:
+              key: opentelemetry.grpc.endpoint
+              name: cryptellation-credentials
+        resources: {}
+status: {}
+---
+# Source: cryptellation/templates/forwardtests.deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: forwardtests
+  name: forwardtests
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: forwardtests
+  strategy: {}
+  template:
+    metadata:
+      annotations:
+        
+      labels:
+        app: forwardtests
+    spec:
+      containers:
+      - name: forwardtests
+        image: lerenn/cryptellation-forwardtests:v2.2.0
+        imagePullPolicy: Always
+        livenessProbe:
+          httpGet:
+            path: /liveness
+            port: 9000
+        readinessProbe:
+          httpGet:
+            path: /readiness
+            port: 9000
+        env:        
+        # Health
+        - name: "HEALTH_PORT"
+          valueFrom:
+            configMapKeyRef:
+              key:  forwardtests.health.port
+              name: cryptellation-config
+        # NATS
+        - name: "NATS_HOST"
+          valueFrom:
+            configMapKeyRef:
+              key:  nats.host
+              name: cryptellation-credentials
+        - name: "NATS_PORT"
+          valueFrom:
+            configMapKeyRef:
+              key:  nats.port
+              name: cryptellation-credentials
+        # MongoDB
+        - name: "MONGO_CONNECTION_STRING"
+          valueFrom:
+            configMapKeyRef:
+              key: mongodb.connection_string
+              name: cryptellation-credentials
+        - name: "MONGO_DATABASE"
+          valueFrom:
+            configMapKeyRef:
+              key: forwardtests.mongodb.database
+              name: cryptellation-config
+        # Opentelemetry
+        - name: "OPENTELEMETRY_GRPC_ENDPOINT"
+          valueFrom:
+            configMapKeyRef:
+              key: opentelemetry.grpc.endpoint
+              name: cryptellation-credentials
+        resources: {}
+status: {}
+---
+# Source: cryptellation/templates/indicators.deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: indicators
+  name: indicators
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: indicators
+  strategy: {}
+  template:
+    metadata:
+      annotations:
+        
+      labels:
+        app: indicators
+    spec:
+      containers:
+      - name: indicators
+        image: lerenn/cryptellation-indicators:v2.2.0
+        imagePullPolicy: Always
+        livenessProbe:
+          httpGet:
+            path: /liveness
+            port: 9000
+        readinessProbe:
+          httpGet:
+            path: /readiness
+            port: 9000
+        env:        
+        # Health
+        - name: "HEALTH_PORT"
+          valueFrom:
+            configMapKeyRef:
+              key:  indicators.health.port
+              name: cryptellation-config
+        # NATS
+        - name: "NATS_HOST"
+          valueFrom:
+            configMapKeyRef:
+              key:  nats.host
+              name: cryptellation-credentials
+        - name: "NATS_PORT"
+          valueFrom:
+            configMapKeyRef:
+              key:  nats.port
+              name: cryptellation-credentials
+        # MongoDB
+        - name: "MONGO_CONNECTION_STRING"
+          valueFrom:
+            configMapKeyRef:
+              key: mongodb.connection_string
+              name: cryptellation-credentials
+        - name: "MONGO_DATABASE"
+          valueFrom:
+            configMapKeyRef:
+              key: indicators.mongodb.database
+              name: cryptellation-config
+        # Opentelemetry
+        - name: "OPENTELEMETRY_GRPC_ENDPOINT"
+          valueFrom:
+            configMapKeyRef:
+              key: opentelemetry.grpc.endpoint
+              name: cryptellation-credentials
+        resources: {}
+status: {}
+---
+# Source: cryptellation/templates/ticks.deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: ticks
+  name: ticks
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ticks
+  strategy: {}
+  template:
+    metadata:
+      annotations:
+        
+      labels:
+        app: ticks
+    spec:
+      containers:
+      - name: ticks
+        image: lerenn/cryptellation-ticks:v2.2.0
+        imagePullPolicy: Always
+        livenessProbe:
+          httpGet:
+            path: /liveness
+            port: 9000
+        readinessProbe:
+          httpGet:
+            path: /readiness
+            port: 9000
+        env:
+        - name: "BINANCE_API_KEY"
+          valueFrom:
+            configMapKeyRef:
+              key: binance.api_key
+              name: cryptellation-credentials
+        - name: "BINANCE_SECRET_KEY"
+          valueFrom:
+            configMapKeyRef:
+              key: binance.secret_key
+              name: cryptellation-credentials        
+        # Health
+        - name: "HEALTH_PORT"
+          valueFrom:
+            configMapKeyRef:
+              key:  ticks.health.port
+              name: cryptellation-config
+        # NATS
+        - name: "NATS_HOST"
+          valueFrom:
+            configMapKeyRef:
+              key:  nats.host
+              name: cryptellation-credentials
+        - name: "NATS_PORT"
+          valueFrom:
+            configMapKeyRef:
+              key:  nats.port
+              name: cryptellation-credentials
+        # MongoDB
+        - name: "MONGO_CONNECTION_STRING"
+          valueFrom:
+            configMapKeyRef:
+              key: mongodb.connection_string
+              name: cryptellation-credentials
+        - name: "MONGO_DATABASE"
+          valueFrom:
+            configMapKeyRef:
+              key: ticks.mongodb.database
+              name: cryptellation-config
+        # Opentelemetry
+        - name: "OPENTELEMETRY_GRPC_ENDPOINT"
+          valueFrom:
+            configMapKeyRef:
+              key: opentelemetry.grpc.endpoint
+              name: cryptellation-credentials
+        resources: {}
+status: {}
+---
+# Source: cryptellation/charts/nats/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-cryptellation-nats
+  namespace: default
+  labels:
+    helm.sh/chart: nats-0.19.13
+    app.kubernetes.io/name: nats
+    app.kubernetes.io/instance: my-cryptellation
+    app.kubernetes.io/version: "2.9.16"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: nats
+      app.kubernetes.io/instance: my-cryptellation
+  replicas: 1
+  serviceName: my-cryptellation-nats
+
+  podManagementPolicy: Parallel
+
+  template:
+    metadata:
+      annotations:
+        prometheus.io/path: /metrics
+        prometheus.io/port: "7777"
+        prometheus.io/scrape: "true"
+        checksum/config: 5d1d58951c40e52e191172d4c4e5ebdb431533e3a5146dded0fce7930d1d5b57
+      labels:
+        app.kubernetes.io/name: nats
+        app.kubernetes.io/instance: my-cryptellation
+    spec:
+      dnsPolicy: ClusterFirst
+      # Common volumes for the containers.
+      volumes:
+      - name: config-volume
+        configMap:
+          name: my-cryptellation-nats-config
+
+      # Local volume shared with the reloader.
+      - name: pid
+        emptyDir: {}
+
+      #################
+      #               #
+      #  TLS Volumes  #
+      #               #
+      #################
+
+      serviceAccountName: my-cryptellation-nats
+
+      # Required to be able to HUP signal and apply config
+      # reload to the server without restarting the pod.
+      shareProcessNamespace: true
+
+      #################
+      #               #
+      #  NATS Server  #
+      #               #
+      #################
+      terminationGracePeriodSeconds: 60
+      containers:
+      - name: nats
+        image: nats:2.9.16-alpine
+        imagePullPolicy: IfNotPresent
+        resources:
+          {}
+        ports:
+        - containerPort: 4222
+          name: client
+        - containerPort: 6222
+          name: cluster
+        - containerPort: 8222
+          name: monitor
+
+        command:
+        - "nats-server"
+        - "--config"
+        - "/etc/nats-config/nats.conf"
+
+        # Required to be able to define an environment variable
+        # that refers to other environment variables.  This env var
+        # is later used as part of the configuration file.
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: SERVER_NAME
+          value: $(POD_NAME)
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: CLUSTER_ADVERTISE
+          value: $(POD_NAME).my-cryptellation-nats.$(POD_NAMESPACE).svc.cluster.local
+        volumeMounts:
+        - name: config-volume
+          mountPath: /etc/nats-config
+        - name: pid
+          mountPath: /var/run/nats
+        
+
+        #######################
+        #                     #
+        # Healthcheck Probes  #
+        #                     #
+        #######################
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /
+            port: 8222
+          initialDelaySeconds: 10
+          periodSeconds: 30
+          successThreshold: 1
+          timeoutSeconds: 5
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /
+            port: 8222
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 5
+        startupProbe:
+          # for NATS server versions >=2.7.1, /healthz will be enabled
+          # startup probe checks that the JS server is enabled, is current with the meta leader,
+          # and that all streams and consumers assigned to this JS server are current
+          failureThreshold: 90
+          httpGet:
+            path: /healthz
+            port: 8222
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 5
+
+        # Gracefully stop NATS Server on pod deletion or image upgrade.
+        #
+        lifecycle:
+          preStop:
+            exec:
+              # send the lame duck shutdown signal to trigger a graceful shutdown
+              # nats-server will ignore the TERM signal it receives after this
+              #
+              command:
+              - "nats-server"
+              - "-sl=ldm=/var/run/nats/nats.pid"
+
+      #################################
+      #                               #
+      #  NATS Configuration Reloader  #
+      #                               #
+      #################################
+      - name: reloader
+        image: natsio/nats-server-config-reloader:0.10.1
+        imagePullPolicy: IfNotPresent
+        resources:
+          {}
+        command:
+        - "nats-server-config-reloader"
+        - "-pid"
+        - "/var/run/nats/nats.pid"
+        - "-config"
+        - "/etc/nats-config/nats.conf"
+        volumeMounts:
+        - name: config-volume
+          mountPath: /etc/nats-config
+        - name: pid
+          mountPath: /var/run/nats
+        
+
+      ##############################
+      #                            #
+      #  NATS Prometheus Exporter  #
+      #                            #
+      ##############################
+      - name: metrics
+        image: natsio/prometheus-nats-exporter:0.10.1
+        imagePullPolicy: IfNotPresent
+        resources:
+          {}
+        args:
+        - -connz
+        - -routez
+        - -subz
+        - -varz
+        - -prefix=nats
+        - -use_internal_server_id
+        - http://localhost:8222/
+        ports:
+        - containerPort: 7777
+          name: metrics
+
+  volumeClaimTemplates:
+---
+# Source: cryptellation/charts/nats/templates/tests/test-request-reply.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-cryptellation-nats-test-request-reply"
+  labels:
+    chart: nats-0.19.13
+    app: my-cryptellation-nats-test-request-reply
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+  - name: nats-box
+    image: natsio/nats-box:0.13.8
+    env:
+    - name: NATS_HOST
+      value: my-cryptellation-nats
+    command:
+    - /bin/sh
+    - -ec
+    - |
+      nats reply -s nats://$NATS_HOST:4222 'name.>' --command "echo 1" &
+    - |
+      "&&"
+    - |
+      name=$(nats request -s nats://$NATS_HOST:4222 name.test '' 2>/dev/null)
+    - |
+      "&&"
+    - |
+      [ $name = test ]
+
+  restartPolicy: Never

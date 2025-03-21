@@ -1,0 +1,71 @@
+---
+# Source: muximux/templates/common.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-muximux
+  labels:
+    helm.sh/chart: muximux-1.0.1
+    app.kubernetes.io/name: muximux
+    app.kubernetes.io/instance: my-muximux
+    app.kubernetes.io/version: "057352e8"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: muximux
+    app.kubernetes.io/instance: my-muximux
+---
+# Source: muximux/templates/common.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-muximux
+  labels:
+    helm.sh/chart: muximux-1.0.1
+    app.kubernetes.io/name: muximux
+    app.kubernetes.io/instance: my-muximux
+    app.kubernetes.io/version: "057352e8"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: muximux
+      app.kubernetes.io/instance: my-muximux
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: muximux
+        app.kubernetes.io/instance: my-muximux
+    spec:
+      serviceAccountName: default
+      dnsPolicy: ClusterFirst
+      containers:
+      - name: my-muximux
+        image: "ghcr.io/linuxserver/muximux:version-057352e8"
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 80
+          protocol: TCP
+        volumeMounts:
+        livenessProbe:
+          tcpSocket:
+            port: http
+          initialDelaySeconds: 30
+          failureThreshold: 5
+          timeoutSeconds: 10
+        readinessProbe:
+          tcpSocket:
+            port: http
+          initialDelaySeconds: 30
+          failureThreshold: 5
+          timeoutSeconds: 10

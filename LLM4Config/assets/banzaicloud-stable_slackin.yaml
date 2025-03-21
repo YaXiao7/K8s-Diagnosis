@@ -1,0 +1,109 @@
+---
+# Source: slackin/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-slackin
+  labels:
+    app: slackin
+    chart: "slackin-0.1.0"
+    release: "my-slackin"
+    heritage: "Helm"
+type: Opaque
+data:
+  slackApiToken: ""
+  googleCaptchaSecret: ""
+  googleCaptchaSiteKey: ""
+---
+# Source: slackin/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-slackin
+  labels:
+    app.kubernetes.io/name: slackin
+    helm.sh/chart: slackin-0.1.0
+    app.kubernetes.io/instance: my-slackin
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: slackin
+    app.kubernetes.io/instance: my-slackin
+---
+# Source: slackin/templates/deployment.yaml
+apiVersion: apps/v1beta2
+kind: Deployment
+metadata:
+  name: my-slackin
+  labels:
+    app.kubernetes.io/name: slackin
+    helm.sh/chart: slackin-0.1.0
+    app.kubernetes.io/instance: my-slackin
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: slackin
+      app.kubernetes.io/instance: my-slackin
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: slackin
+        app.kubernetes.io/instance: my-slackin
+    spec:
+      containers:
+        - name: slackin
+          image: "banzaicloud/slackin-extended:0.13.2"
+          imagePullPolicy: IfNotPresent
+
+          env:
+          - name: SLACKIN_PORT
+            value: "3000"
+          - name: SLACKIN_COC
+            value: 
+          - name: SLACKIN_CHANNELS
+            value: 
+          - name: SLACKIN_HOSTNAME
+            value: 0.0.0.0
+          - name: SLACKIN_CSS
+            value: 
+          - name: SLACKIN_THEME
+            value: dark
+          - name: SLACK_SUBDOMAIN
+            value: 
+          - name: SLACK_API_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: my-slackin
+                key: slackApiToken
+          - name: RECAPTCHA_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: my-slackin
+                key: googleCaptchaSecret
+          - name: RECAPTCHA_SITEKEY
+            valueFrom:
+              secretKeyRef:
+                name: my-slackin
+                key: googleCaptchaSiteKey
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+            {}

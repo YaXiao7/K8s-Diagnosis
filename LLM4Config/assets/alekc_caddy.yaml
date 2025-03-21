@@ -1,0 +1,150 @@
+---
+# Source: caddy/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-caddy
+  labels:
+    helm.sh/chart: caddy-0.4.0
+    app.kubernetes.io/name: caddy
+    app.kubernetes.io/instance: my-caddy
+    app.kubernetes.io/version: "2.8.4"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: caddy/templates/cm.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-caddy
+  labels:
+    helm.sh/chart: caddy-0.4.0
+    app.kubernetes.io/name: caddy
+    app.kubernetes.io/instance: my-caddy
+    app.kubernetes.io/version: "2.8.4"
+    app.kubernetes.io/managed-by: Helm
+data:
+  Caddyfile: |
+    {
+      http_port 8080
+      
+      auto_https off
+      acme_ca https://acme-staging-v02.api.letsencrypt.org/directory
+      log {
+        output stdout
+      }
+      
+    }
+
+    :9999 {
+      handle / {
+        respond "OK"
+      }
+    }
+
+    
+    {
+      handle / {
+        respond "Hello"
+      }
+    }
+---
+# Source: caddy/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-caddy
+  labels:
+    helm.sh/chart: caddy-0.4.0
+    app.kubernetes.io/name: caddy
+    app.kubernetes.io/instance: my-caddy
+    app.kubernetes.io/version: "2.8.4"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: caddy
+    app.kubernetes.io/instance: my-caddy
+---
+# Source: caddy/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-caddy
+  labels:
+    helm.sh/chart: caddy-0.4.0
+    app.kubernetes.io/name: caddy
+    app.kubernetes.io/instance: my-caddy
+    app.kubernetes.io/version: "2.8.4"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: caddy
+      app.kubernetes.io/instance: my-caddy
+  template:
+    metadata:
+      annotations:
+        checksum/config: 4aaa30d1e1ff0dbcf29ca7f1f61b014f23a5cce1c7279f93642bebd6a1210e82
+      labels:
+        app.kubernetes.io/name: caddy
+        app.kubernetes.io/instance: my-caddy
+    spec:
+      serviceAccountName: my-caddy
+      securityContext:
+        {}
+      containers:
+        - name: caddy
+          securityContext:
+            {}
+          image: "caddy:2.8.4-alpine"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: health
+              containerPort: 9999
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: health
+          volumeMounts:
+            - mountPath: /etc/caddy/Caddyfile
+              name: "config"
+              subPath: "Caddyfile"
+          resources:
+            requests:
+              cpu: 32m
+              memory: 64Mi
+      volumes:
+        - name: "config"
+          configMap:
+            name: my-caddy
+---
+# Source: caddy/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-caddy-test-connection"
+  labels:
+    helm.sh/chart: caddy-0.4.0
+    app.kubernetes.io/name: caddy
+    app.kubernetes.io/instance: my-caddy
+    app.kubernetes.io/version: "2.8.4"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-caddy:8080']
+  restartPolicy: Never

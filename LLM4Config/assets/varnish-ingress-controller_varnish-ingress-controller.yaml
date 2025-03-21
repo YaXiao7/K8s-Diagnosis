@@ -1,0 +1,132 @@
+---
+# Source: varnish-ingress-controller/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: varnish-controller
+  namespace: default
+automountServiceAccountToken: true
+imagePullSecrets:
+  - name: artifactory-cred
+---
+# Source: varnish-ingress-controller/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: varnish-vcl
+  namespace: default
+data:
+  snippet: ""
+  vcl_recv_snippet: ""
+---
+# Source: varnish-ingress-controller/templates/clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: varnish-controller
+rules:
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["get", "watch", "list"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch"]
+---
+# Source: varnish-ingress-controller/templates/clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: varnish-controller
+subjects:
+  - kind: ServiceAccount
+    name: varnish-controller
+    namespace: default
+roleRef:
+  kind: ClusterRole
+  name: varnish-controller
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: varnish-ingress-controller/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: varnish-ingress-service
+  namespace: default
+  labels:
+    app: varnish-ingress-controller
+spec:
+  type: ClusterIP
+  selector:
+    app: varnish-ingress-controller
+  ports:
+    - port: 8081
+      targetPort: 6081
+      protocol: TCP
+      name: http
+---
+# Source: varnish-ingress-controller/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: varnish-ingress-controller
+  labels:
+    app: varnish-ingress-controller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: varnish-ingress-controller
+  template:
+    metadata:
+      labels:
+        app: varnish-ingress-controller
+    spec:
+      serviceAccountName: varnish-controller
+      containers:
+        - name: varnish-controller
+          image: "mariusm/vingress:0.2.0"
+          env:
+            - name: NAMESPACE
+              value: default
+            - name: LOG_LEVEL
+              value: info
+            - name: INGRESS_CLASS
+              value: varnish
+            - name: VARNISH_HTTP_PORT
+              value: "6081"
+            - name: VARNISH_VCL
+              value: "/etc/varnish/default.vcl"
+            - name: VARNISH_WORK_FOLDER
+              value: "/etc/varnish"
+            - name: VARNISH_PARAMS
+              value: ""
+            - name: VARNISH_DEFAULT_TTL
+              value: "120s"
+            - name: VARNISH_VCL_SNIPPET
+              valueFrom:
+                configMapKeyRef:
+                  name: varnish-vcl
+                  key: snippet
+            - name: VARNISH_VCL_RECV_SNIPPET
+              valueFrom:
+                configMapKeyRef:
+                  name: varnish-vcl
+                  key: vcl_recv_snippet
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "2048Mi"
+              cpu: "150m"
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 6081
+---
+# Source: varnish-ingress-controller/templates/ingressclass.yaml
+apiVersion: networking.k8s.io/v1
+kind: IngressClass
+metadata:
+  name: varnish
+spec:
+  controller: acme.io/varnish-ingress-controller

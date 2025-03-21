@@ -1,0 +1,49 @@
+---
+# Source: kube-bench/templates/cron.yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: my-kube-bench
+  labels: 
+    app.kubernetes.io/name: kube-bench
+    helm.sh/chart: kube-bench-0.1.16
+    app.kubernetes.io/instance: my-kube-bench
+    app.kubernetes.io/version: "0.8.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  schedule: "0 0 1 * *"
+  concurrencyPolicy: "Forbid"
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      template:
+        spec:
+          hostPID: true
+          restartPolicy: Never
+          containers:
+            - name: kube-bench
+              image: "aquasec/kube-bench:v0.8.0"
+              imagePullPolicy: IfNotPresent
+              command: ["kube-bench", "--benchmark", "eks-1.1.0", "run", "--targets", "node"]
+              resources: 
+                {}
+              volumeMounts: 
+                - mountPath: /var/lib/kubelet
+                  name: var-lib-kubelet
+                  readOnly: true
+                - mountPath: /etc/systemd
+                  name: etc-systemd
+                  readOnly: true
+                - mountPath: /etc/kubernetes
+                  name: etc-kubernetes
+                  readOnly: true
+          volumes: 
+            - hostPath:
+                path: /var/lib/kubelet
+              name: var-lib-kubelet
+            - hostPath:
+                path: /etc/systemd
+              name: etc-systemd
+            - hostPath:
+                path: /etc/kubernetes
+              name: etc-kubernetes

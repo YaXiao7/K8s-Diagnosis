@@ -1,0 +1,210 @@
+---
+# Source: phonebook-chart/templates/mysql_deploy.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mysql-secret
+type: Opaque
+data:
+  MYSQL_ROOT_PASSWORD: UGwxMjM0NTY=
+  MYSQL_PASSWORD: Q2xhcnVzd2F5XzE=
+---
+# Source: phonebook-chart/templates/result_server.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: result-secret
+type: Opaque
+data:
+  MYSQL_PASSWORD: Q2xhcnVzd2F5XzE=
+---
+# Source: phonebook-chart/templates/web_server.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: web-secret
+type: Opaque
+data:
+  MYSQL_PASSWORD: Q2xhcnVzd2F5XzE=
+---
+# Source: phonebook-chart/templates/mysql_deploy.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mysql-config
+data:
+  MYSQL_USER: clarus
+  MYSQL_DATABASE: phonebook
+---
+# Source: phonebook-chart/templates/result_server.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: result-config
+data:
+  MYSQL_USER: clarus
+  MYSQL_DATABASE: phonebook
+  MYSQL_DATABASE_HOST: mysql-deploy
+---
+# Source: phonebook-chart/templates/web_server.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: server-config
+data:
+  MYSQL_USER: clarus
+  MYSQL_DATABASE: phonebook
+  MYSQL_DATABASE_HOST: mysql-deploy
+---
+# Source: phonebook-chart/templates/mysql_deploy.yaml
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: mysql-pv
+  labels:
+    type: local
+spec:
+  storageClassName: manual
+  capacity:
+    storage: 20Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/mnt/data"
+---
+# Source: phonebook-chart/templates/mysql_deploy.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mysql-pv-claim
+spec:
+  storageClassName: manual
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+---
+# Source: phonebook-chart/templates/mysql_deploy.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql-deploy
+spec:
+  ports:
+    - port: 3306
+  selector:
+    app: mysql-pods
+  type: ClusterIP
+---
+# Source: phonebook-chart/templates/result_server.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: result-server-svc
+spec:
+  selector:
+    app: resultserver-pod
+  ports:
+    - port: 30002
+      targetPort: 80
+      nodePort: 30004
+  type: NodePort
+---
+# Source: phonebook-chart/templates/web_server.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-server-svc
+spec:
+  selector:
+    app: webserver-pod
+  ports:
+    - port: 30001
+      targetPort: 80
+      nodePort: 30003
+  type: NodePort
+---
+# Source: phonebook-chart/templates/mysql_deploy.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mysql-deployment
+spec:
+  selector:
+    matchLabels:
+      app: mysql-pods
+  template:
+    metadata:
+      labels:
+        app: mysql-pods
+    spec:
+      containers:
+        - image: mysql:5.7
+          name: mysql
+          envFrom:
+            - secretRef:
+                name: mysql-secret
+            - configMapRef:
+                name: mysql-config
+
+          ports:
+            - containerPort: 3306
+              name: mysql
+          volumeMounts:
+            - name: mysql-persistent-storage
+              mountPath: /var/lib/mysql
+      volumes:
+        - name: mysql-persistent-storage
+          persistentVolumeClaim:
+            claimName: mysql-pv-claim
+---
+# Source: phonebook-chart/templates/result_server.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: result-server
+spec:
+  selector:
+    matchLabels:
+      app: resultserver-pod
+  template:
+    metadata:
+      labels:
+        app: resultserver-pod
+    spec:
+      containers:
+        - name: my-result-server
+          image: ahmetgrbzz/result_server:2.0
+          ports:
+            - containerPort: 80
+          envFrom:
+            - configMapRef:
+                name: result-config
+            - secretRef:
+                name: result-secret
+---
+# Source: phonebook-chart/templates/web_server.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-server
+spec:
+  selector:
+    matchLabels:
+      app: webserver-pod
+  template:
+    metadata:
+      labels:
+        app: webserver-pod
+    spec:
+      containers:
+        - name: my-web-server
+          image: ahmetgrbzz/web_server:2.0
+          ports:
+            - containerPort: 80
+          envFrom:
+            - configMapRef:
+                name: server-config
+            - secretRef:
+                name: web-secret

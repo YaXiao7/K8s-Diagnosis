@@ -1,0 +1,381 @@
+---
+# Source: cert-manager-webhook-ace/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-cert-manager-webhook-ace
+  namespace: default
+  labels:
+    helm.sh/chart: cert-manager-webhook-ace-v2023.11.14
+    app.kubernetes.io/name: cert-manager-webhook-ace
+    app.kubernetes.io/instance: my-cert-manager-webhook-ace
+    app.kubernetes.io/version: "v0.0.1"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: cert-manager-webhook-ace/templates/serviceaccount.yaml
+# Grant the webhook permission to listen to flow events and secrets
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-cert-manager-webhook-ace
+  labels:
+    helm.sh/chart: cert-manager-webhook-ace-v2023.11.14
+    app.kubernetes.io/name: cert-manager-webhook-ace
+    app.kubernetes.io/instance: my-cert-manager-webhook-ace
+    app.kubernetes.io/version: "v0.0.1"
+    app.kubernetes.io/managed-by: Helm
+rules:
+  - apiGroups:
+      - "flowcontrol.apiserver.k8s.io"
+    resources:
+      - 'prioritylevelconfigurations'
+      - 'flowschemas'
+    verbs:
+      - "get"
+      - 'list'
+      - 'watch'
+  - apiGroups:
+      - ""
+    resources:
+      - "secrets"
+    verbs:
+      - "get"
+      - "list"
+      - "watch"
+---
+# Source: cert-manager-webhook-ace/templates/serviceaccount.yaml
+# Grant cert-manager permission to validate using our apiserver
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-cert-manager-webhook-ace:domain-solver
+  labels:
+    helm.sh/chart: cert-manager-webhook-ace-v2023.11.14
+    app.kubernetes.io/name: cert-manager-webhook-ace
+    app.kubernetes.io/instance: my-cert-manager-webhook-ace
+    app.kubernetes.io/version: "v0.0.1"
+    app.kubernetes.io/managed-by: Helm
+rules:
+  - apiGroups:
+      - webhook.dns.appscode.com
+    resources:
+      - '*'
+    verbs:
+      - 'create'
+---
+# Source: cert-manager-webhook-ace/templates/serviceaccount.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-cert-manager-webhook-ace
+  labels:
+    helm.sh/chart: cert-manager-webhook-ace-v2023.11.14
+    app.kubernetes.io/name: cert-manager-webhook-ace
+    app.kubernetes.io/instance: my-cert-manager-webhook-ace
+    app.kubernetes.io/version: "v0.0.1"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-cert-manager-webhook-ace
+subjects:
+  - apiGroup: ""
+    kind: ServiceAccount
+    name: my-cert-manager-webhook-ace
+    namespace: "default"
+---
+# Source: cert-manager-webhook-ace/templates/serviceaccount.yaml
+# apiserver gets the auth-delegator role to delegate auth decisions to
+# the core apiserver
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-cert-manager-webhook-ace:auth-delegator
+  labels:
+    helm.sh/chart: cert-manager-webhook-ace-v2023.11.14
+    app.kubernetes.io/name: cert-manager-webhook-ace
+    app.kubernetes.io/instance: my-cert-manager-webhook-ace
+    app.kubernetes.io/version: "v0.0.1"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+  - apiGroup: ""
+    kind: ServiceAccount
+    name: my-cert-manager-webhook-ace
+    namespace: default
+---
+# Source: cert-manager-webhook-ace/templates/serviceaccount.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-cert-manager-webhook-ace:domain-solver
+  labels:
+    helm.sh/chart: cert-manager-webhook-ace-v2023.11.14
+    app.kubernetes.io/name: cert-manager-webhook-ace
+    app.kubernetes.io/instance: my-cert-manager-webhook-ace
+    app.kubernetes.io/version: "v0.0.1"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-cert-manager-webhook-ace:domain-solver
+subjects:
+  - apiGroup: ""
+    kind: ServiceAccount
+    name: cert-manager
+    namespace: cert-manager
+---
+# Source: cert-manager-webhook-ace/templates/serviceaccount.yaml
+# Grant the webhook permission to read the ConfigMap containing the Kubernetes
+# apiserver's requestheader-ca-certificate.
+# This ConfigMap is automatically created by the Kubernetes apiserver.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: my-cert-manager-webhook-ace:webhook-authentication-reader
+  namespace: kube-system
+  labels:
+    helm.sh/chart: cert-manager-webhook-ace-v2023.11.14
+    app.kubernetes.io/name: cert-manager-webhook-ace
+    app.kubernetes.io/instance: my-cert-manager-webhook-ace
+    app.kubernetes.io/version: "v0.0.1"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: extension-apiserver-authentication-reader
+subjects:
+  - apiGroup: ""
+    kind: ServiceAccount
+    name: my-cert-manager-webhook-ace
+    namespace: default
+---
+# Source: cert-manager-webhook-ace/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-cert-manager-webhook-ace
+  namespace: default
+  labels:
+    helm.sh/chart: cert-manager-webhook-ace-v2023.11.14
+    app.kubernetes.io/name: cert-manager-webhook-ace
+    app.kubernetes.io/instance: my-cert-manager-webhook-ace
+    app.kubernetes.io/version: "v0.0.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 443
+      targetPort: https
+      protocol: TCP
+      name: https
+  selector:
+    app.kubernetes.io/name: cert-manager-webhook-ace
+    app.kubernetes.io/instance: my-cert-manager-webhook-ace
+---
+# Source: cert-manager-webhook-ace/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-cert-manager-webhook-ace
+  namespace: default
+  labels:
+    app.kubernetes.io/component: webhook-ace
+    helm.sh/chart: cert-manager-webhook-ace-v2023.11.14
+    app.kubernetes.io/name: cert-manager-webhook-ace
+    app.kubernetes.io/instance: my-cert-manager-webhook-ace
+    app.kubernetes.io/version: "v0.0.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cert-manager-webhook-ace
+      app.kubernetes.io/instance: my-cert-manager-webhook-ace
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: cert-manager-webhook-ace
+        app.kubernetes.io/instance: my-cert-manager-webhook-ace
+    spec:
+      
+      serviceAccountName: my-cert-manager-webhook-ace
+      securityContext:
+        {}
+      containers:
+        - name: cert-manager-webhook-ace
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65534
+            seccompProfile:
+              type: RuntimeDefault
+          image: "ghcr.io/appscode/cert-manager-webhook-ace:v0.0.1"
+          imagePullPolicy: IfNotPresent
+          args:
+            - --secure-port=8443
+            - --tls-cert-file=/tls/tls.crt
+            - --tls-private-key-file=/tls/tls.key
+          env:
+            - name: GROUP_NAME
+              value: "webhook.dns.appscode.com"
+          ports:
+            - name: https
+              containerPort: 8443
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              scheme: HTTPS
+              path: /healthz
+              port: https
+          readinessProbe:
+            httpGet:
+              scheme: HTTPS
+              path: /healthz
+              port: https
+          volumeMounts:
+            - name: certs
+              mountPath: /tls
+              readOnly: true
+          resources:
+            {}
+      volumes:
+        - name: certs
+          secret:
+            secretName: my-cert-manager-webhook-ace-webhook-tls
+---
+# Source: cert-manager-webhook-ace/templates/apiservice.yaml
+apiVersion: apiregistration.k8s.io/v1
+kind: APIService
+metadata:
+  name: v1alpha1.webhook.dns.appscode.com
+  labels:
+    helm.sh/chart: cert-manager-webhook-ace-v2023.11.14
+    app.kubernetes.io/name: cert-manager-webhook-ace
+    app.kubernetes.io/instance: my-cert-manager-webhook-ace
+    app.kubernetes.io/version: "v0.0.1"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+     cert-manager.io/inject-ca-from: "default/my-cert-manager-webhook-ace-webhook-tls"
+spec:
+  group: webhook.dns.appscode.com
+  groupPriorityMinimum: 1000
+  versionPriority: 15
+  service:
+    name: my-cert-manager-webhook-ace
+    namespace: default
+  version: v1alpha1
+---
+# Source: cert-manager-webhook-ace/templates/pki.yaml
+# Generate a CA Certificate used to sign certificates for the webhook
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: my-cert-manager-webhook-ace-ca
+  namespace: "default"
+  labels:
+    helm.sh/chart: cert-manager-webhook-ace-v2023.11.14
+    app.kubernetes.io/name: cert-manager-webhook-ace
+    app.kubernetes.io/instance: my-cert-manager-webhook-ace
+    app.kubernetes.io/version: "v0.0.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  secretName: my-cert-manager-webhook-ace-ca
+  duration: 43800h # 5y
+  issuerRef:
+    name: my-cert-manager-webhook-ace-selfsign
+  commonName: "ca.cert-manager-webhook-ace.cert-manager"
+  isCA: true
+---
+# Source: cert-manager-webhook-ace/templates/pki.yaml
+# Generate a serving certificate for the webhook to use
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: my-cert-manager-webhook-ace-webhook-tls
+  namespace: "default"
+  labels:
+    helm.sh/chart: cert-manager-webhook-ace-v2023.11.14
+    app.kubernetes.io/name: cert-manager-webhook-ace
+    app.kubernetes.io/instance: my-cert-manager-webhook-ace
+    app.kubernetes.io/version: "v0.0.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  secretName: my-cert-manager-webhook-ace-webhook-tls
+  duration: 8760h # 1y
+  issuerRef:
+    name: my-cert-manager-webhook-ace-ca
+  dnsNames:
+  - my-cert-manager-webhook-ace
+  - my-cert-manager-webhook-ace.default
+  - my-cert-manager-webhook-ace.default.svc
+---
+# Source: cert-manager-webhook-ace/templates/pki.yaml
+# Create a selfsigned Issuer, in order to create a root CA certificate for
+# signing webhook serving certificates
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: my-cert-manager-webhook-ace-selfsign
+  namespace: "default"
+  labels:
+    helm.sh/chart: cert-manager-webhook-ace-v2023.11.14
+    app.kubernetes.io/name: cert-manager-webhook-ace
+    app.kubernetes.io/instance: my-cert-manager-webhook-ace
+    app.kubernetes.io/version: "v0.0.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selfSigned: {}
+---
+# Source: cert-manager-webhook-ace/templates/pki.yaml
+# Create an Issuer that uses the above generated CA certificate to issue certs
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: my-cert-manager-webhook-ace-ca
+  namespace: "default"
+  labels:
+    helm.sh/chart: cert-manager-webhook-ace-v2023.11.14
+    app.kubernetes.io/name: cert-manager-webhook-ace
+    app.kubernetes.io/instance: my-cert-manager-webhook-ace
+    app.kubernetes.io/version: "v0.0.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  ca:
+    secretName: my-cert-manager-webhook-ace-ca
+---
+# Source: cert-manager-webhook-ace/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-cert-manager-webhook-ace-test-connection"
+  namespace: default
+  labels:
+
+    helm.sh/chart: cert-manager-webhook-ace-v2023.11.14
+    app.kubernetes.io/name: cert-manager-webhook-ace
+    app.kubernetes.io/instance: my-cert-manager-webhook-ace
+    app.kubernetes.io/version: "v0.0.1"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  containers:
+    - name: curl
+      image: ghcr.io/appscode/curl:alpine
+      command:
+      - curl
+      - --retry
+      - '5'
+      - --retry-max-time
+      - '120'
+      - -k
+      - 'https://my-cert-manager-webhook-ace:443'
+  restartPolicy: Never

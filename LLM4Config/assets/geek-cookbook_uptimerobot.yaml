@@ -1,0 +1,60 @@
+---
+# Source: uptimerobot/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-uptimerobot
+  labels:
+    app: uptimerobot
+    chart: uptimerobot-3.0.4
+    release: my-uptimerobot
+    heritage: Helm
+type: Opaque
+data:
+  uptimerobot-apikey: "c29tZWFwaWtleQ=="
+---
+# Source: uptimerobot/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-uptimerobot
+  labels:
+    app: uptimerobot
+    chart: "uptimerobot-3.0.4"
+    release: my-uptimerobot
+    heritage: Helm
+spec:
+  selector:
+    matchLabels:
+      app: uptimerobot
+      release: my-uptimerobot
+  replicas: 1
+  revisionHistoryLimit: 3
+  template:
+    metadata:
+      labels:
+        app: uptimerobot
+        release: my-uptimerobot
+    spec:
+      containers:
+        - name: uptimerobot
+          image: "billimek/node-influx-uptimerobot:latest"
+          imagePullPolicy: Always
+          env:
+            - name: UPTIMEROBOT_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: my-uptimerobot
+                  key: uptimerobot-apikey
+            - name: APPLICATION_INTERVAL
+              value: "300"
+            - name: INFLUX_HOST
+              value: "influxdb-influxdb"
+            - name: INFLUX_PORT
+              value: "8086"
+            - name: INFLUX_PROTOCOL
+              value: "http"
+            - name: INFLUX_DATABASE
+              value: "uptimerobot"
+          resources:
+            {}

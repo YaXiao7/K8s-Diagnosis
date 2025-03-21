@@ -1,0 +1,443 @@
+---
+# Source: sogo/charts/memcached/templates/networkpolicy.yaml
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: my-sogo-memcached
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-sogo
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: memcached
+    app.kubernetes.io/version: 1.6.27
+    helm.sh/chart: memcached-7.0.6
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: my-sogo
+      app.kubernetes.io/managed-by: Helm
+      app.kubernetes.io/name: memcached
+      app.kubernetes.io/version: 1.6.27
+      helm.sh/chart: memcached-7.0.6
+  policyTypes:
+    - Ingress
+    - Egress
+  egress:
+    - {}
+  ingress:
+    - ports:
+        - port: 11211
+---
+# Source: sogo/charts/memcached/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+automountServiceAccountToken: false
+metadata:
+  name: my-sogo-memcached
+  namespace: default
+  labels:
+    app.kubernetes.io/instance: my-sogo
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: memcached
+    app.kubernetes.io/version: 1.6.27
+    helm.sh/chart: memcached-7.0.6
+---
+# Source: sogo/templates/backup-cron.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-sogo-backup-cron
+  labels:
+    app.kubernetes.io/name: sogo
+    helm.sh/chart: sogo-0.1.10
+    app.kubernetes.io/instance: my-sogo
+    app.kubernetes.io/managed-by: Helm
+data:
+  cron: '30 0 * * * sogo  /usr/share/doc/sogo/sogo-backup.sh'
+---
+# Source: sogo/templates/config.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-sogo-config
+  labels:
+    app.kubernetes.io/name: sogo
+    helm.sh/chart: sogo-0.1.10
+    app.kubernetes.io/instance: my-sogo
+    app.kubernetes.io/managed-by: Helm
+data:
+  configs: |
+    SOGoForwardEnabled: true
+    SOGoLanguage: English
+    SOGoMailAuxiliaryUserAccountsEnabled: true
+    SOGoPageTitle: SOGo
+    SOGoSieveScriptsEnabled: true
+    SOGoTimeZone: America/Montreal
+    SOGoTrustProxyAuthentication: false
+    SOGoVacationEnabled: true
+    SOGoXSRFValidationEnabled: false
+    WOWorkersCount: 5
+  init-theme-configs: |
+    SOGoUIxDebugEnabled: true
+  internal-memcached: |
+    SOGoMemcachedHost: my-sogo-memcached
+---
+# Source: sogo/templates/email-alarms-cron.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-sogo-email-alarms-cron
+  labels:
+    app.kubernetes.io/name: sogo
+    helm.sh/chart: sogo-0.1.10
+    app.kubernetes.io/instance: my-sogo
+    app.kubernetes.io/managed-by: Helm
+data:
+  cron: '* * * * *  sogo	/usr/sbin/sogo-ealarms-notify > /dev/null 2>&1'
+---
+# Source: sogo/templates/session-cron.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-sogo-session-cron
+  labels:
+    app.kubernetes.io/name: sogo
+    helm.sh/chart: sogo-0.1.10
+    app.kubernetes.io/instance: my-sogo
+    app.kubernetes.io/managed-by: Helm
+data:
+  cron: '* * * * * sogo  /usr/sbin/sogo-tool expire-sessions %!d(float64=60) > /dev/null 2>&1'
+---
+# Source: sogo/templates/vacation-cron.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-sogo-vacation-cron
+  labels:
+    app.kubernetes.io/name: sogo
+    helm.sh/chart: sogo-0.1.10
+    app.kubernetes.io/instance: my-sogo
+    app.kubernetes.io/managed-by: Helm
+data:
+  cron: '*/5 * * * * sogo  /usr/sbin/sogo-tool update-autoreply -p /etc/sogo/sieve.creds'
+---
+# Source: sogo/charts/memcached/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-sogo-memcached
+  namespace: default
+  labels:
+    app.kubernetes.io/instance: my-sogo
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: memcached
+    app.kubernetes.io/version: 1.6.27
+    helm.sh/chart: memcached-7.0.6
+spec:
+  type: ClusterIP
+  ports:
+    - name: memcache
+      port: 11211
+      targetPort: memcache
+      nodePort: null
+  selector:
+    app.kubernetes.io/instance: my-sogo
+    app.kubernetes.io/name: memcached
+---
+# Source: sogo/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-sogo
+  labels:
+    app.kubernetes.io/name: sogo
+    helm.sh/chart: sogo-0.1.10
+    app.kubernetes.io/instance: my-sogo
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: app
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: 80
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: sogo
+    app.kubernetes.io/instance: my-sogo
+    app.kubernetes.io/component: app
+---
+# Source: sogo/charts/memcached/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-sogo-memcached
+  namespace: default
+  labels:
+    app.kubernetes.io/instance: my-sogo
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: memcached
+    app.kubernetes.io/version: 1.6.27
+    helm.sh/chart: memcached-7.0.6
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: my-sogo
+      app.kubernetes.io/name: memcached
+  replicas: 1
+  strategy:
+    rollingUpdate: {}
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: my-sogo
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: memcached
+        app.kubernetes.io/version: 1.6.27
+        helm.sh/chart: memcached-7.0.6
+      annotations:
+    spec:
+      
+      automountServiceAccountToken: false
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/instance: my-sogo
+                    app.kubernetes.io/name: memcached
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+        fsGroupChangePolicy: Always
+        supplementalGroups: []
+        sysctls: []
+      serviceAccountName: my-sogo-memcached
+      containers:
+        - name: memcached
+          image: docker.io/bitnami/memcached:1.6.27-debian-12-r2
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsGroup: 1001
+            runAsNonRoot: true
+            runAsUser: 1001
+            seLinuxOptions: {}
+            seccompProfile:
+              type: RuntimeDefault
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: MEMCACHED_PORT_NUMBER
+              value: "11211"
+          ports:
+            - name: memcache
+              containerPort: 11211
+          livenessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+            tcpSocket:
+              port: memcache
+          readinessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            successThreshold: 1
+            timeoutSeconds: 3
+            tcpSocket:
+              port: memcache
+          resources:
+            limits:
+              cpu: 150m
+              ephemeral-storage: 1024Mi
+              memory: 192Mi
+            requests:
+              cpu: 100m
+              ephemeral-storage: 50Mi
+              memory: 128Mi
+          volumeMounts:
+            - name: empty-dir
+              mountPath: /opt/bitnami/memcached/conf
+              subPath: app-conf-dir
+            - name: empty-dir
+              mountPath: /tmp
+              subPath: tmp-dir
+      volumes:
+        - name: empty-dir
+          emptyDir: {}
+---
+# Source: sogo/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-sogo
+  labels:
+    app.kubernetes.io/name: sogo
+    helm.sh/chart: sogo-0.1.10
+    app.kubernetes.io/instance: my-sogo
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: app
+spec:
+  replicas: 1
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sogo
+      app.kubernetes.io/instance: my-sogo
+      app.kubernetes.io/component: app
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: sogo
+        app.kubernetes.io/instance: my-sogo
+        app.kubernetes.io/component: app
+        my-sogo-memcached-client: "true"
+      annotations:
+        sogo-config-hash: 33263c1f5475a34f67e0652282809166669bea0db57c710ffc13ed854b00a9a7
+    spec:
+      containers:
+        - name: sogo
+          image: sonroyaalmerol/docker-sogo:5.10.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /SOGo
+              port:  80
+              httpHeaders:
+              - name: Host
+                value: "sogo.kube.home"
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /SOGo
+              port:  80
+              httpHeaders:
+              - name: Host
+                value: "sogo.kube.home"
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 3
+          resources:
+            {}
+          volumeMounts:
+            
+            - name: sogo-configs
+              mountPath: /etc/sogo/sogo.conf.d/99-helm.yaml
+              subPath: configs
+              readOnly: true
+            - name: sogo-configs
+              mountPath: /etc/sogo/sogo.conf.d/98-internal-memcached.yaml
+              subPath: internal-memcached
+              readOnly: true
+      initContainers:
+        - name: sogo-ext-secrets
+          image: sonroyaalmerol/docker-sogo:5.10.0
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: CSS_URL
+              value: 
+            - name: LOGO_URL
+              value: 
+            - name: FAVICON_URL
+              value: 
+          volumeMounts:
+            - name: my-sogo-tmp
+              mountPath: /secrets
+            - name: my-sogo-customizations
+              mountPath: /customizations
+          command:
+            - "sh"
+            - "-c"
+            - |
+              mkdir -p /existing-secrets
+              tmp_script=/tmp/generate_yaml.sh
+              touch "$tmp_script"
+              
+              cat << 'EOF' > "$tmp_script"
+              #!/bin/bash
+
+              output_file="/secrets/existing-secrets.yaml"
+              > "$output_file"
+
+              # Loop through each file in the directory
+              # Find all files within the existing-secrets directory and its subdirectories
+              find /existing-secrets -type f | while read -r file; do
+                is_yaml=false
+
+                # Get the filename without the directory path
+                filename=$(basename "$file")
+                if [[ $filename == *"__yaml" ]]; then
+                  is_yaml=true
+                  filename="${filename/__yaml/}"
+                fi
+
+                # Read the content of the file and indent each line with two spaces
+                content=$(cat "$file")
+                # Append the filename and content to the YAML file if the content is not empty
+                if [ -n "$content" ]; then
+                  if [ "$is_yaml" = true ]; then
+                    echo "$filename:" >> "$output_file"
+                  else
+                    echo "$filename: |-" >> "$output_file"
+                  fi
+                  while IFS= read -r line; do
+                    echo "  $line" >> "$output_file"
+                  done <<< "$content"
+                fi
+              done
+              EOF
+
+              chmod +x "$tmp_script"
+
+              # Generation of config file
+              bash "$tmp_script"
+
+              if [ -n "$CSS_URL" ]; then
+                curl -L -o /customizations/helm.css "$CSS_URL"
+              fi
+              if [ -n "$LOGO_URL" ]; then
+                curl -L -o /customizations/helm.svg "$LOGO_URL"
+              fi
+              if [ -n "$FAVICON_URL" ]; then
+                curl -L -o /customizations/helm.ico "$FAVICON_URL"
+              fi
+      volumes:
+        - name: sogo-configs
+          configMap:
+            name: my-sogo-config
+        - name: my-sogo-tmp
+          emptyDir: {}
+        - name: my-sogo-customizations
+          emptyDir: {}
+      securityContext:
+        # Will mount configuration files as www-data (id: 33) for sogo
+        fsGroup: 33

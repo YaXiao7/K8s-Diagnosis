@@ -1,0 +1,117 @@
+---
+# Source: mosquitto/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    helm.sh/chart: mosquitto-1.0.4
+    app.kubernetes.io/name: mosquitto
+    app.kubernetes.io/instance: my-mosquitto
+    app.kubernetes.io/version: "1.6.12"
+    app.kubernetes.io/managed-by: Helm
+  name: my-mosquitto
+data:
+  mosquitto.conf: |-
+    persistence false
+    persistence_location /mosquitto/data/
+    log_dest stdout
+    password_file /mosquitto/config/accounts.conf
+    acl_file /mosquitto/config/acls.conf
+    listener 1883
+    
+  accounts.conf: |-
+    
+  acls.conf: |-
+---
+# Source: mosquitto/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-mosquitto
+  labels:
+    helm.sh/chart: mosquitto-1.0.4
+    app.kubernetes.io/name: mosquitto
+    app.kubernetes.io/instance: my-mosquitto
+    app.kubernetes.io/version: "1.6.12"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 1883
+      targetPort: mqtt
+      protocol: TCP
+      name: mqtt
+    - port: 8883
+      targetPort: mqttssl
+      protocol: TCP
+      name: mqttssl
+    - port: 9001
+      targetPort: mqttws
+      protocol: TCP
+      name: mqttws
+  selector:
+    app.kubernetes.io/name: mosquitto
+    app.kubernetes.io/instance: my-mosquitto
+---
+# Source: mosquitto/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-mosquitto
+  labels:
+    helm.sh/chart: mosquitto-1.0.4
+    app.kubernetes.io/name: mosquitto
+    app.kubernetes.io/instance: my-mosquitto
+    app.kubernetes.io/version: "1.6.12"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mosquitto
+      app.kubernetes.io/instance: my-mosquitto
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mosquitto
+        app.kubernetes.io/instance: my-mosquitto
+    spec:
+      securityContext:
+        {}
+      containers:
+        - name: mosquitto
+          securityContext:
+            {}
+          image: "eclipse-mosquitto:1.6.12"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: mqtt
+              containerPort: 1883
+              protocol: TCP
+            - name: mqttssl
+              containerPort: 8883
+              protocol: TCP
+            - name: mqttws
+              containerPort: 9001
+              protocol: TCP
+          livenessProbe:
+            tcpSocket:
+              port: 1883
+          readinessProbe:
+            httpGet:
+            tcpSocket:
+              port: 1883
+          resources:
+            {}
+          volumeMounts:
+          - name: config-volume
+            mountPath: /mosquitto/config
+          - name: mosquitto-data
+            mountPath: /mosquitto/data/
+            subPath: 
+      volumes:
+        - name: config-volume
+          configMap:
+            name: my-mosquitto
+        - name: "mosquitto-data"
+          emptyDir: {}

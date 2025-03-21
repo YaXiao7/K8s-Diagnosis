@@ -1,0 +1,84 @@
+---
+# Source: nginx-video-player-ui-proxy/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-nginx-video-player-ui-proxy
+  labels:
+    helm.sh/chart: nginx-video-player-ui-proxy-0.2.0
+    app.kubernetes.io/name: nginx-video-player-ui-proxy
+    app.kubernetes.io/instance: my-nginx-video-player-ui-proxy
+    app.kubernetes.io/version: "0.2.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: nginx-video-player-ui-proxy/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-nginx-video-player-ui-proxy
+  labels:
+    helm.sh/chart: nginx-video-player-ui-proxy-0.2.0
+    app.kubernetes.io/name: nginx-video-player-ui-proxy
+    app.kubernetes.io/instance: my-nginx-video-player-ui-proxy
+    app.kubernetes.io/version: "0.2.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: nginx-video-player-ui-proxy
+    app.kubernetes.io/instance: my-nginx-video-player-ui-proxy
+---
+# Source: nginx-video-player-ui-proxy/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-nginx-video-player-ui-proxy
+  labels:
+    helm.sh/chart: nginx-video-player-ui-proxy-0.2.0
+    app.kubernetes.io/name: nginx-video-player-ui-proxy
+    app.kubernetes.io/instance: my-nginx-video-player-ui-proxy
+    app.kubernetes.io/version: "0.2.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: nginx-video-player-ui-proxy
+      app.kubernetes.io/instance: my-nginx-video-player-ui-proxy
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: nginx-video-player-ui-proxy
+        app.kubernetes.io/instance: my-nginx-video-player-ui-proxy
+    spec:
+      serviceAccountName: my-nginx-video-player-ui-proxy
+      securityContext:
+        {}
+      containers:
+        - name: nginx-video-player-ui-proxy
+          securityContext:
+            {}
+          image: docker.io/nlxio/nginx-video-player-ui-proxy:be1af99e
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: OUTWAY_PROXY_URL
+              value: 
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+          resources:
+            {}

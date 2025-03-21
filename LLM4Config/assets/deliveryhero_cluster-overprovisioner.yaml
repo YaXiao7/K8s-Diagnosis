@@ -1,0 +1,92 @@
+---
+# Source: cluster-overprovisioner/templates/priorityclass-default.yaml
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: default
+  labels:
+    app.kubernetes.io/name: cluster-overprovisioner
+    helm.sh/chart: cluster-overprovisioner-0.7.11
+    app.kubernetes.io/instance: my-cluster-overprovisioner
+    app.kubernetes.io/version: "3.9"
+    app.kubernetes.io/managed-by: Helm
+value: 0
+globalDefault: true
+description: "Default priority class for all pods"
+---
+# Source: cluster-overprovisioner/templates/priorityclass-overprovision.yaml
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: overprovisioning
+  labels:
+    app.kubernetes.io/name: cluster-overprovisioner
+    helm.sh/chart: cluster-overprovisioner-0.7.11
+    app.kubernetes.io/instance: my-cluster-overprovisioner
+    app.kubernetes.io/version: "3.9"
+    app.kubernetes.io/managed-by: Helm
+value: -1
+globalDefault: false
+description: "Priority class used for overprovision pods"
+---
+# Source: cluster-overprovisioner/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-cluster-overprovisioner
+  namespace: default
+  labels: 
+    app.kubernetes.io/name: cluster-overprovisioner
+    helm.sh/chart: cluster-overprovisioner-0.7.11
+    app.kubernetes.io/instance: my-cluster-overprovisioner
+    app.kubernetes.io/version: "3.9"
+    app.kubernetes.io/managed-by: Helm
+automountServiceAccountToken: true
+---
+# Source: cluster-overprovisioner/templates/deployments.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "my-cluster-overprovisioner-default"
+  namespace: default
+  labels:
+    app.kubernetes.io/name: cluster-overprovisioner
+    helm.sh/chart: cluster-overprovisioner-0.7.11
+    app.kubernetes.io/instance: my-cluster-overprovisioner
+    app.kubernetes.io/version: "3.9"
+    app.kubernetes.io/managed-by: Helm
+    app.cluster-overprovisioner/deployment: default
+spec:
+  strategy:
+    type: Recreate
+  replicas: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cluster-overprovisioner
+      app.kubernetes.io/instance: my-cluster-overprovisioner
+      app.cluster-overprovisioner/deployment: default
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: cluster-overprovisioner
+        helm.sh/chart: cluster-overprovisioner-0.7.11
+        app.kubernetes.io/instance: my-cluster-overprovisioner
+        app.kubernetes.io/version: "3.9"
+        app.kubernetes.io/managed-by: Helm
+        app.cluster-overprovisioner/deployment: default
+    spec:
+      serviceAccountName: my-cluster-overprovisioner
+      priorityClassName: overprovisioning
+      securityContext:
+        {}
+      containers:
+        - name: cluster-overprovisioner
+          image: "registry.k8s.io/pause:3.9"
+          imagePullPolicy: IfNotPresent
+          resources:
+            limits:
+              cpu: 1000m
+              memory: 1000Mi
+            requests:
+              cpu: 1000m
+              memory: 1000Mi

@@ -1,0 +1,329 @@
+---
+# Source: k8s-pause/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-k8s-pause
+  labels:
+    app.kubernetes.io/name: k8s-pause
+    app.kubernetes.io/instance: my-k8s-pause
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: k8s-pause-0.1.4
+  annotations:
+    {}
+---
+# Source: k8s-pause/templates/clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-k8s-pause
+  labels:
+    app.kubernetes.io/name: k8s-pause
+    app.kubernetes.io/instance: my-k8s-pause
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: k8s-pause-0.1.4
+  annotations:
+    {}
+rules:
+- apiGroups:
+  - ""
+  resources:
+    - namespaces
+  verbs:
+    - get
+    - list
+    - watch
+    - patch
+- apiGroups:
+  - ""
+  resources:
+    - pods
+  verbs:
+    - get
+    - list
+    - watch
+    - delete
+    - create
+- apiGroups:
+  - ""
+  resources:
+  - pods/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+---
+# Source: k8s-pause/templates/clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-k8s-pause
+  labels:
+    app.kubernetes.io/name: k8s-pause
+    app.kubernetes.io/instance: my-k8s-pause
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: k8s-pause-0.1.4
+  annotations:
+    {}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-k8s-pause
+subjects:
+- kind: ServiceAccount
+  name: my-k8s-pause
+  namespace: default
+---
+# Source: k8s-pause/templates/role.yaml
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-k8s-pause
+  labels:
+    app.kubernetes.io/name: k8s-pause
+    app.kubernetes.io/instance: my-k8s-pause
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: k8s-pause-0.1.4
+  annotations:
+    {}
+rules:
+  # leader election
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+    verbs:
+      - create
+      - delete
+      - update
+      - get
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+    verbs:
+      - delete
+      - get
+  - apiGroups:
+      - "coordination.k8s.io"
+    resources:
+      - leases
+    verbs:
+      - create
+      - delete
+      - update
+      - get
+---
+# Source: k8s-pause/templates/rolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: my-k8s-pause
+  labels:
+    app.kubernetes.io/name: k8s-pause
+    app.kubernetes.io/instance: my-k8s-pause
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: k8s-pause-0.1.4
+  annotations:
+    {}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: my-k8s-pause
+subjects:
+- kind: ServiceAccount
+  name: my-k8s-pause
+  namespace: default
+---
+# Source: k8s-pause/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-k8s-pause
+  labels:
+    app.kubernetes.io/name: k8s-pause
+    app.kubernetes.io/instance: my-k8s-pause
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: k8s-pause-0.1.4
+  annotations:
+    {}
+spec:
+  ports:
+    - port: 443
+      protocol: TCP
+      targetPort: 9443
+  selector:
+    app.kubernetes.io/name: k8s-pause
+    app.kubernetes.io/instance: my-k8s-pause
+---
+# Source: k8s-pause/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-k8s-pause
+  labels:
+    app.kubernetes.io/name: k8s-pause
+    app.kubernetes.io/instance: my-k8s-pause
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: k8s-pause-0.1.4
+  annotations:
+    {}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: k8s-pause
+      app.kubernetes.io/instance: my-k8s-pause
+  template:
+    metadata:
+      annotations:
+      labels:
+        app.kubernetes.io/name: k8s-pause
+        app.kubernetes.io/instance: my-k8s-pause
+    spec:
+      serviceAccountName: my-k8s-pause
+      containers:
+      - name: k8s-pause
+        env:
+        image: "ghcr.io/doodlescheduling/k8s-pause:v0.1.1"
+        imagePullPolicy: IfNotPresent
+        args:
+        ports:
+        - containerPort: 9443
+          name: webhook-server
+          protocol: TCP
+        - name: metrics
+          containerPort: 9556
+          protocol: TCP
+        - name: probes
+          containerPort: 9557
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: probes
+          initialDelaySeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: probes
+          initialDelaySeconds: 10
+        resources:
+          {}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - all
+          readOnlyRootFilesystem: true
+          runAsGroup: 10000
+          runAsNonRoot: true
+          runAsUser: 10000
+        volumeMounts:
+        - mountPath: /tmp/k8s-webhook-server/serving-certs
+          name: cert
+          readOnly: true
+      volumes:
+      - name: cert
+        secret:
+          defaultMode: 420
+          secretName: my-k8s-pause-serving-cert
+      affinity:
+        {}
+      imagePullSecrets:
+        []
+      nodeSelector:
+        {}
+      terminationGracePeriodSeconds: 30
+      tolerations:
+        []
+---
+# Source: k8s-pause/templates/certificate.yaml
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: my-k8s-pause-serving-cert
+  labels:
+    app.kubernetes.io/name: k8s-pause
+    app.kubernetes.io/instance: my-k8s-pause
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: k8s-pause-0.1.4
+  annotations:
+    {}
+spec:
+  dnsNames:
+  - my-k8s-pause.default.svc
+  - my-k8s-pause.default.svc.cluster.local
+  issuerRef:
+    kind: Issuer
+    name: my-k8s-pause-selfsigned-issuer
+  secretName: my-k8s-pause-serving-cert
+---
+# Source: k8s-pause/templates/certificate.yaml
+# The following manifests contain a self-signed issuer CR and a certificate CR.
+# More document can be found at https://docs.cert-manager.io
+# WARNING: Targets CertManager 0.11 check https://docs.cert-manager.io/en/latest/tasks/upgrading/index.html for breaking changes
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: my-k8s-pause-selfsigned-issuer
+  labels:
+    app.kubernetes.io/name: k8s-pause
+    app.kubernetes.io/instance: my-k8s-pause
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: k8s-pause-0.1.4
+  annotations:
+    {}
+spec:
+  selfSigned: {}
+---
+# Source: k8s-pause/templates/mutatingwebhook.yaml
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: my-k8s-pause
+  labels:
+    app.kubernetes.io/name: k8s-pause
+    app.kubernetes.io/instance: my-k8s-pause
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: k8s-pause-0.1.4
+  annotations:
+      cert-manager.io/inject-ca-from: default/my-k8s-pause-serving-cert
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: my-k8s-pause
+      namespace: default
+      path: /mutate-v1-pod
+  failurePolicy: Fail
+  name: k8s-pause.infra.doodle.com
+  rules:
+  - apiGroups:
+    - ""
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - pods
+  sideEffects: None
+  namespaceSelector:
+    matchExpressions:
+    - key: control-plane
+      operator: NotIn
+      values: ["controller-manager"]

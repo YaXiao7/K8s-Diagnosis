@@ -1,0 +1,1205 @@
+---
+# Source: typhoon/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-typhoon
+  labels:
+    helm.sh/chart: typhoon-0.1.52
+    app.kubernetes.io/name: typhoon
+    app.kubernetes.io/instance: my-typhoon
+    app.kubernetes.io/version: "0.1.52"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: typhoon
+---
+# Source: typhoon/templates/webhook/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-typhoon-webhook
+  labels:
+    helm.sh/chart: typhoon-0.1.52
+    app.kubernetes.io/name: typhoon
+    app.kubernetes.io/instance: my-typhoon
+    app.kubernetes.io/version: "0.1.52"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: typhoon
+    app: typhoon-webhook
+---
+# Source: typhoon/templates/webhook/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-typhoon-webhook-certs
+  labels:
+    helm.sh/chart: typhoon-0.1.52
+    app.kubernetes.io/name: typhoon
+    app.kubernetes.io/instance: my-typhoon
+    app.kubernetes.io/version: "0.1.52"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: typhoon
+    app: typhoon-webhook
+# The data is populated at install time.
+---
+# Source: typhoon/templates/clusterroles.yaml
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: typhoon-namespaced-admin
+  labels:
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+    helm.sh/chart: typhoon-0.1.52
+    app.kubernetes.io/name: typhoon
+    app.kubernetes.io/instance: my-typhoon
+    app.kubernetes.io/version: "0.1.52"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: typhoon
+    app: typhoon
+rules:
+  - apiGroups:
+      - flow.typhoon.zeiss.com
+      - routing.typhoon.zeiss.com
+      - sources.typhoon.zeiss.com
+      - targets.typhoon.zeiss.com
+    resources: ["*"]
+    verbs: ["*"]
+---
+# Source: typhoon/templates/clusterroles.yaml
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: typhoon-namespaced-edit
+  labels:
+    rbac.authorization.k8s.io/aggregate-to-edit: "true"
+    helm.sh/chart: typhoon-0.1.52
+    app.kubernetes.io/name: typhoon
+    app.kubernetes.io/instance: my-typhoon
+    app.kubernetes.io/version: "0.1.52"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: typhoon
+    app: typhoon
+rules:
+  - apiGroups:
+      - flow.typhoon.zeiss.com
+      - routing.typhoon.zeiss.com
+      - sources.typhoon.zeiss.com
+      - targets.typhoon.zeiss.com
+    resources: ["*"]
+    verbs:
+      - create
+      - update
+      - patch
+      - delete
+---
+# Source: typhoon/templates/clusterroles.yaml
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: typhoon-namespaced-view
+  labels:
+    rbac.authorization.k8s.io/aggregate-to-view: "true"
+    helm.sh/chart: typhoon-0.1.52
+    app.kubernetes.io/name: typhoon
+    app.kubernetes.io/instance: my-typhoon
+    app.kubernetes.io/version: "0.1.52"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: typhoon
+    app: typhoon
+rules:
+  - apiGroups:
+      - flow.typhoon.zeiss.com
+      - routing.typhoon.zeiss.com
+      - sources.typhoon.zeiss.com
+      - targets.typhoon.zeiss.com
+    resources: ["*"]
+    verbs:
+      - get
+      - list
+      - watch
+---
+# Source: typhoon/templates/clusterroles.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: typhoon-controller
+  labels:
+    helm.sh/chart: typhoon-0.1.52
+    app.kubernetes.io/name: typhoon
+    app.kubernetes.io/instance: my-typhoon
+    app.kubernetes.io/version: "0.1.52"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: typhoon
+    app: typhoon
+
+rules:
+  # Record Kubernetes events
+  - apiGroups:
+      - ''
+    resources:
+      - events
+    verbs:
+      - create
+      - patch
+      - update
+  # Manage receive-adapters
+  - apiGroups:
+      - apps
+    resources:
+      - deployments
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - delete
+      - patch
+  - apiGroups:
+      - serving.knative.dev
+    resources:
+      - services
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - delete
+      - patch
+  # Read reconciled typhoon resources and update their statuses
+  - apiGroups:
+      - sources.typhoon.zeiss.com
+    resources:
+      - cloudeventssources
+      - httppollersources
+      - kafkasources
+      - ocimetricssources
+      - webhooksources
+    verbs:
+      - list
+      - watch
+      - get
+  - apiGroups:
+      - sources.typhoon.zeiss.com
+    resources:
+      - cloudeventssources/status
+      - httppollersources/status
+      - kafkasources/status
+      - webhooksources/status
+    verbs:
+      - update
+  - apiGroups:
+      - targets.typhoon.zeiss.com
+    resources:
+      - cloudeventstargets
+      - datadogtargets
+      - httptargets
+      - logzmetricstargets
+      - logztargets
+      - splunktargets
+    verbs:
+      - list
+      - watch
+      - get
+  - apiGroups:
+      - targets.typhoon.zeiss.com
+    resources:
+      - datadogtargets/status
+      - httptargets/status
+      - logzmetricstargets/status
+      - logztargets/status
+      - splunktargets/status
+    verbs:
+      - update
+  - apiGroups:
+      - flow.typhoon.zeiss.com
+    resources:
+      - jqtransformations
+      - synchronizers
+      - transformations
+      - xmltojsontransformations
+      - xslttransformations
+    verbs:
+      - list
+      - watch
+      - get
+  - apiGroups:
+      - flow.typhoon.zeiss.com
+    resources:
+      - jqtransformations/status
+      - synchronizers/status
+      - transformations/status
+      - xmltojsontransformations/status
+      - xslttransformations/status
+    verbs:
+      - update
+  - apiGroups:
+      - extensions.typhoon.zeiss.com
+    resources:
+      - functions
+    verbs:
+      - list
+      - watch
+      - get
+  - apiGroups:
+      - extensions.typhoon.zeiss.com
+    resources:
+      - functions/status
+    verbs:
+      - update
+  - apiGroups:
+      - routing.typhoon.zeiss.com
+    resources:
+      - filters
+      - splitters
+    verbs:
+      - list
+      - watch
+      - get
+  - apiGroups:
+      - routing.typhoon.zeiss.com
+    resources:
+      - filters/status
+      - splitters/status
+    verbs:
+      - update
+  # Ensure compatibility with the OwnerReferencesPermissionEnforcement Admission Controller
+  # https://kubernetes.io/docs/reference/access-authn-authz/admission-controllers/#ownerreferencespermissionenforcement
+  - apiGroups:
+      - sources.typhoon.zeiss.com
+    resources:
+      - cloudeventssources/finalizers
+      - httppollersources/finalizers
+      - kafkasources/finalizers
+      - webhooksources/finalizers
+    verbs:
+      - update
+  - apiGroups:
+      - targets.typhoon.zeiss.com
+    resources:
+      - cloudeventstargets/finalizers
+      - datadogtargets/finalizers
+      - httptargets/finalizers
+      - logzmetricstargets/finalizers
+      - logztargets/finalizers
+    verbs:
+      - update
+  - apiGroups:
+      - flow.typhoon.zeiss.com
+    resources:
+      - jqtransformations/finalizers
+      - synchronizers/finalizers
+      - transformations/finalizers
+      - xmltojsontransformations/finalizers
+      - xslttransformations/finalizers
+    verbs:
+      - update
+  - apiGroups:
+      - extensions.typhoon.zeiss.com
+    resources:
+      - functions/finalizers
+    verbs:
+      - update
+  - apiGroups:
+      - routing.typhoon.zeiss.com
+    resources:
+      - filters/finalizers
+      - splitters/finalizers
+    verbs:
+      - update
+  # # Set finalizers
+  # - apiGroups:
+  #     - sources.typhoon.zeiss.com
+  #   resources:
+  #   verbs:
+  #     - patch
+  # Manage resource-specific ServiceAccounts and RoleBindings
+  - apiGroups:
+      - ''
+    resources:
+      - serviceaccounts
+      - serviceaccounts/finalizers
+    verbs:
+      - list
+      - watch
+      - create
+      - update
+      - delete
+  - apiGroups:
+      - rbac.authorization.k8s.io
+    resources:
+      - rolebindings
+    verbs:
+      - list
+      - watch
+      - create
+  # - apiGroups:
+  #     - rbac.authorization.k8s.io
+  #   resources:
+  #     - rolebindings
+  #   # Only multi-tenant components receive permissions via RoleBindings to
+  #   # interact with the Kubernetes API.
+  #   resourceNames:
+  #     - awssnssource-adapter
+  #     - zendesksource-adapter
+  #     - filter-adapter
+  #     - splitter-adapter
+  #   verbs:
+  #     - update
+  # Read credentials
+  - apiGroups:
+      - ''
+    resources:
+      - secrets
+    verbs:
+      - get
+  # Required by Function controller to store, and mount user's code
+  - apiGroups:
+      - ''
+    resources:
+      - configmaps
+    verbs:
+      - get
+      - list
+      - create
+      - update
+      - delete
+      - patch
+      - watch
+  # Read controller configurations
+  - apiGroups:
+      - ''
+    resources:
+      - configmaps
+    verbs:
+      - list
+      - watch
+  - apiGroups:
+      - ''
+    resources:
+      - configmaps
+    resourceNames:
+      - config-logging
+      - config-observability
+      - config-leader-election
+    verbs:
+      - get
+  # Acquire leases for leader election
+  - apiGroups:
+      - coordination.k8s.io
+    resources:
+      - leases
+    verbs:
+      - get
+      - create
+      - update
+  # Observe status of Pods and their ancestors
+  - apiGroups:
+      - ''
+    resources:
+      - pods
+    verbs:
+      - list
+      - watch
+  - apiGroups:
+      - apps
+    resources:
+      - replicasets
+    verbs:
+      - list
+      - watch
+---
+# Source: typhoon/templates/clusterroles.yaml
+# This role is used to grant receive adapters read-only access to per-component
+# configurations such as logging, observability and tracing.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: typhoon-config-watcher
+  labels:
+    app.kubernetes.io/part-of: typhoon
+rules:
+  - apiGroups:
+      - ''
+    resources:
+      - configmaps
+    verbs:
+      - list
+      - watch
+      - get
+---
+# Source: typhoon/templates/clusterroles.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: filter-adapter
+  labels:
+    helm.sh/chart: typhoon-0.1.52
+    app.kubernetes.io/name: typhoon
+    app.kubernetes.io/instance: my-typhoon
+    app.kubernetes.io/version: "0.1.52"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: typhoon
+    app: typhoon
+rules:
+  - apiGroups:
+      - ''
+    resources:
+      - events
+    verbs:
+      - create
+      - patch
+      - update
+  - apiGroups:
+      - ''
+    resources:
+      - configmaps
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - routing.typhoon.zeiss.com
+    resources:
+      - filters
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - coordination.k8s.io
+    resources:
+      - leases
+    verbs:
+      - get
+      - create
+      - update
+---
+# Source: typhoon/templates/clusterroles.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: splitter-adapter
+  labels:
+    helm.sh/chart: typhoon-0.1.52
+    app.kubernetes.io/name: typhoon
+    app.kubernetes.io/instance: my-typhoon
+    app.kubernetes.io/version: "0.1.52"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: typhoon
+    app: typhoon
+rules:
+  - apiGroups:
+      - ''
+    resources:
+      - events
+    verbs:
+      - create
+      - patch
+      - update
+  - apiGroups:
+      - ''
+    resources:
+      - configmaps
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - routing.typhoon.zeiss.com
+    resources:
+      - splitters
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - coordination.k8s.io
+    resources:
+      - leases
+    verbs:
+      - get
+      - create
+      - update
+---
+# Source: typhoon/templates/clusterroles.yaml
+# This role provides readonly access to "Source" duck types.
+# All the rules it contains get aggregated into the "source-observer" ClusterRole provided by Knative Eventing.
+# see https://github.com/knative/eventing/blob/release-0.26/docs/spec/sources.md#source-rbac
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: typhoon-source-observer
+  labels:
+    helm.sh/chart: typhoon-0.1.52
+    app.kubernetes.io/name: typhoon
+    app.kubernetes.io/instance: my-typhoon
+    app.kubernetes.io/version: "0.1.52"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: typhoon
+    app: typhoon
+    duck.knative.dev/source: 'true'
+rules:
+  - apiGroups:
+      - sources.typhoon.zeiss.com
+    resources:
+      - cloudeventssources
+      - httppollersources
+      - kafkasources
+      - webhooksources
+    verbs:
+      - get
+      - list
+      - watch
+  # - apiGroups:
+  #     - sources.typhoon.zeiss.com
+  #   resources:
+  #     - awscloudwatchlogssources/finalizers
+  #     - awscloudwatchsources/finalizers
+  #     - awscodecommitsources/finalizers
+  #     - awscognitoidentitysources/finalizers
+  #     - awscognitouserpoolsources/finalizers
+  #     - awsdynamodbsources/finalizers
+  #     - awskinesissources/finalizers
+  #     - awsperformanceinsightssources/finalizers
+  #     - awss3sources/finalizers
+  #     - awssnssources/finalizers
+  #     - awssqssources/finalizers
+  #     - azureactivitylogssources/finalizers
+  #     - azureblobstoragesources/finalizers
+  #     - azureeventgridsources/finalizers
+  #     - azureeventhubssources/finalizers
+  #     - azureiothubsources/finalizers
+  #     - azurequeuestoragesources/finalizers
+  #     - azureservicebusqueuesources/finalizers
+  #     - azureservicebussources/finalizers
+  #     - azureservicebustopicsources/finalizers
+  #     - googlecloudauditlogssources/finalizers
+  #     - googlecloudbillingsources/finalizers
+  #     - googlecloudpubsubsources/finalizers
+  #     - googlecloudsourcerepositoriessources/finalizers
+  #     - googlecloudstoragesources/finalizers
+  #   verbs:
+  #     - update
+---
+# Source: typhoon/templates/clusterroles.yaml
+# This role provides readonly access to "Addressable" duck types.
+# All the rules it contains get aggregated into the "addressable-resolver" ClusterRole.
+# https://github.com/knative/eventing/blob/release-0.26/config/core/roles/addressable-resolvers-clusterrole.yaml#L15-L28
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: typhoon-addressable-resolver
+  labels:
+    helm.sh/chart: typhoon-0.1.52
+    app.kubernetes.io/name: typhoon
+    app.kubernetes.io/instance: my-typhoon
+    app.kubernetes.io/version: "0.1.52"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: typhoon
+    app: typhoon
+    duck.knative.dev/addressable: 'true'
+rules:
+  - apiGroups:
+      - targets.typhoon.zeiss.com
+    resources:
+      - cloudeventstargets
+      - datadogtargets
+      - httptargets
+      - kafkatargets
+      - logzmetricstargets
+      - logztargets
+      - splunktargets
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - flow.typhoon.zeiss.com
+    resources:
+      - jqtransformations
+      - synchronizers
+      - transformations
+      - xmltojsontransformations
+      - xslttransformations
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - extensions.typhoon.zeiss.com
+    resources:
+      - functions
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - routing.typhoon.zeiss.com
+    resources:
+      - filters
+      - splitters
+    verbs:
+      - get
+      - list
+      - watch
+  # Allow resolving URLs of a few additional common types which are not supplied by typhoon.
+  - apiGroups:
+      - ''
+    resources:
+      - services
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - serving.knative.dev
+    resources:
+      - routes
+      - services
+    verbs:
+      - get
+      - list
+      - watch
+---
+# Source: typhoon/templates/webhook/clusterroles.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: typhoon-webhook
+  labels:
+    helm.sh/chart: typhoon-0.1.52
+    app.kubernetes.io/name: typhoon
+    app.kubernetes.io/instance: my-typhoon
+    app.kubernetes.io/version: "0.1.52"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: typhoon
+    app: typhoon-webhook
+rules:
+  # Routing admin
+  - apiGroups:
+      - routing.typhoon.io
+    resources:
+      - filters
+      - splitters
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+  # Routing statuses update
+  - apiGroups:
+      - routing.typhoon.io
+    resources:
+      - splitters/status
+      - filters/status
+    verbs:
+      - update
+  - apiGroups:
+      - flow.typhoon.io
+    resources:
+      - xslttransformations
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+  - apiGroups:
+      - flow.typhoon.io
+    resources:
+      - xslttransformations/status
+    verbs:
+      - update
+  # Events admin
+  - apiGroups:
+      - ''
+    resources:
+      - events
+      - configmaps
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+  # For manipulating certs into secrets.
+  - apiGroups:
+      - ''
+    resources:
+      - secrets
+    verbs:
+      - get
+      - create
+      - update
+      - list
+      - watch
+  # Validation webhook gets system namespace to use it as an owner.
+  - apiGroups:
+      - ''
+    resources:
+      - namespaces
+    verbs:
+      - get
+  - apiGroups:
+      - ''
+    resources:
+      - namespaces/finalizers
+    verbs:
+      - update
+  # For actually registering our webhook.
+  - apiGroups:
+      - admissionregistration.k8s.io
+    resources:
+      - mutatingwebhookconfigurations
+      - validatingwebhookconfigurations
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+  # Acquire leases for leader election
+  - apiGroups:
+      - coordination.k8s.io
+    resources:
+      - leases
+    verbs:
+      - get
+      - create
+      - update
+---
+# Source: typhoon/templates/clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-typhoon-controller
+  labels:
+    helm.sh/chart: typhoon-0.1.52
+    app.kubernetes.io/name: typhoon
+    app.kubernetes.io/instance: my-typhoon
+    app.kubernetes.io/version: "0.1.52"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: typhoon
+    app: typhoon
+subjects:
+  - kind: ServiceAccount
+    name: my-typhoon
+    namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: typhoon-controller
+---
+# Source: typhoon/templates/clusterrolebinding.yaml
+# Permissions not required by controllers directly, but granted to
+# receive-adapters via RoleBindings.
+#
+# Without them, the following error is thrown:
+#   "attempting to grant RBAC permissions not currently held"
+#
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: awssnssource-adapter
+  labels:
+    helm.sh/chart: typhoon-0.1.52
+    app.kubernetes.io/name: typhoon
+    app.kubernetes.io/instance: my-typhoon
+    app.kubernetes.io/version: "0.1.52"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: typhoon
+    app: typhoon
+subjects:
+  - kind: ServiceAccount
+    name: my-typhoon
+    namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: awssnssource-adapter
+---
+# Source: typhoon/templates/clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: zendesksource-adapter
+  labels:
+    helm.sh/chart: typhoon-0.1.52
+    app.kubernetes.io/name: typhoon
+    app.kubernetes.io/instance: my-typhoon
+    app.kubernetes.io/version: "0.1.52"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: typhoon
+    app: typhoon
+subjects:
+  - kind: ServiceAccount
+    name: my-typhoon
+    namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: zendesksource-adapter
+---
+# Source: typhoon/templates/clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: filter-adapter
+  labels:
+    helm.sh/chart: typhoon-0.1.52
+    app.kubernetes.io/name: typhoon
+    app.kubernetes.io/instance: my-typhoon
+    app.kubernetes.io/version: "0.1.52"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: typhoon
+    app: typhoon
+subjects:
+  - kind: ServiceAccount
+    name: my-typhoon
+    namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: filter-adapter
+---
+# Source: typhoon/templates/clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: splitter-adapter
+  labels:
+    helm.sh/chart: typhoon-0.1.52
+    app.kubernetes.io/name: typhoon
+    app.kubernetes.io/instance: my-typhoon
+    app.kubernetes.io/version: "0.1.52"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: typhoon
+    app: typhoon
+subjects:
+  - kind: ServiceAccount
+    name: my-typhoon
+    namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: splitter-adapter
+---
+# Source: typhoon/templates/clusterrolebinding.yaml
+# Resolve sink URIs when Knative is installed
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-typhoon-controller-addressable-resolver-from-knative
+  labels:
+    helm.sh/chart: typhoon-0.1.52
+    app.kubernetes.io/name: typhoon
+    app.kubernetes.io/instance: my-typhoon
+    app.kubernetes.io/version: "0.1.52"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: typhoon
+    app: typhoon
+subjects:
+  - kind: ServiceAccount
+    name: my-typhoon
+    namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: addressable-resolver
+---
+# Source: typhoon/templates/clusterrolebinding.yaml
+# Resolve sink URIs when typhoon Core is installed
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-typhoon-controller-addressable-resolver-from-typhoon
+  labels:
+    helm.sh/chart: typhoon-0.1.52
+    app.kubernetes.io/name: typhoon
+    app.kubernetes.io/instance: my-typhoon
+    app.kubernetes.io/version: "0.1.52"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: typhoon
+    app: typhoon
+subjects:
+- kind: ServiceAccount
+  name: my-typhoon
+  namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: addressable-resolver-typhoon
+---
+# Source: typhoon/templates/webhook/clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-typhoon-webhook
+  labels:
+    helm.sh/chart: typhoon-0.1.52
+    app.kubernetes.io/name: typhoon
+    app.kubernetes.io/instance: my-typhoon
+    app.kubernetes.io/version: "0.1.52"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: typhoon
+    app: typhoon-webhook
+subjects:
+  - kind: ServiceAccount
+    name: my-typhoon-webhook
+    namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: typhoon-webhook
+---
+# Source: typhoon/templates/webhook/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-typhoon-webhook
+  labels:
+    helm.sh/chart: typhoon-0.1.52
+    app.kubernetes.io/name: typhoon
+    app.kubernetes.io/instance: my-typhoon
+    app.kubernetes.io/version: "0.1.52"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: typhoon
+    app: typhoon-webhook
+spec:
+  ports:
+    - name: https-webhook
+      port: 443
+      targetPort: 8443
+  selector:
+    app.kubernetes.io/name: typhoon
+    app.kubernetes.io/instance: my-typhoon
+    app: typhoon-webhook
+---
+# Source: typhoon/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-typhoon-controller
+  labels:
+    helm.sh/chart: typhoon-0.1.52
+    app.kubernetes.io/name: typhoon
+    app.kubernetes.io/instance: my-typhoon
+    app.kubernetes.io/version: "0.1.52"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: typhoon
+    app: typhoon
+spec:
+  replicas: 
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: typhoon
+      app.kubernetes.io/instance: my-typhoon
+      app: typhoon
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: typhoon
+        app.kubernetes.io/instance: my-typhoon
+        app: typhoon
+    spec:
+      serviceAccountName: my-typhoon
+      securityContext:
+        null
+      containers:
+        - name: controller
+          terminationMessagePolicy: FallbackToLogsOnError
+          image: "ghcr.io/zeiss/typhoon/controller:0.1.52"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: SYSTEM_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            # Logging/observability configuration
+            - name: CONFIG_LOGGING_NAME
+              value: config-logging
+            - name: CONFIG_OBSERVABILITY_NAME
+              value: config-observability
+            - name: METRICS_DOMAIN
+              value: typhoon.zeiss.com
+            # Source adapters
+            - name: HTTPPOLLERSOURCE_IMAGE
+              value: "ghcr.io/zeiss/typhoon/httppollersource-adapter:0.1.52"
+            - name: KAFKASOURCE_IMAGE
+              value: "ghcr.io/zeiss/typhoon/kafkasource-adapter:0.1.52"
+            - name: WEBHOOKSOURCE_IMAGE
+              value: "ghcr.io/zeiss/typhoon/webhooksource-adapter:0.1.52"
+            - name: SALESFORCESOURCE_IMAGE
+              value: "ghcr.io/zeiss/typhoon/salesforcesource-adapter:0.1.52"
+            # Target adapters
+            - name: CLOUDEVENTSTARGET_IMAGE
+              value: "ghcr.io/zeiss/typhoon/cloudeventstarget-adapter:0.1.52"
+            - name: DATADOGTARGET_IMAGE
+              value: "ghcr.io/zeiss/typhoon/datadogtarget-adapter:0.1.52"
+            - name: HTTPTARGET_IMAGE
+              value: "ghcr.io/zeiss/typhoon/httptarget-adapter:0.1.52"
+            - name: SPLUNKTARGET_IMAGE
+              value: "ghcr.io/zeiss/typhoon/splunktarget-adapter:0.1.52"
+            - name: SERVICENOWTARGET_IMAGE
+              value: "ghcr.io/zeiss/typhoon/servicenowtarget-adapter:0.1.52"
+            - name: JIRATARGET_IMAGE
+              value: "ghcr.io/zeiss/typhoon/jiratarget-adapter:0.1.52"
+            # Flow adapters
+            - name: JQTRANSFORMATION_IMAGE
+              value: "ghcr.io/zeiss/typhoon/jqtransformation-adapter:0.1.52"
+            - name: SYNCHRONIZER_IMAGE
+              value: "ghcr.io/zeiss/typhoon/synchronizer-adapter:0.1.52"
+            - name: TRANSFORMATION_IMAGE
+              value: "ghcr.io/zeiss/typhoon/transformation-adapter:0.1.52"
+            - name: XMLTOJSONTRANSFORMATION_IMAGE
+              value: "ghcr.io/zeiss/typhoon/xmltojsontransformation-adapter:0.1.52"
+            # Routing adapters
+            - name: FILTER_IMAGE
+              value: "ghcr.io/zeiss/typhoon/filter-adapter:0.1.52"
+            - name: SPLITTER_IMAGE
+              value: "ghcr.io/zeiss/typhoon/splitter-adapter:0.1.52"
+            # Custom build adapters
+            - name: XSLTTRANSFORMATION_IMAGE
+              value: "ghcr.io/zeiss/typhoon/xslttransformation-adapter:0.1.52"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+          ports:
+            - name: metrics
+              containerPort: 9090
+            - name: profiling
+              containerPort: 8008
+          resources:
+            null
+---
+# Source: typhoon/templates/webhook/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-typhoon-webhook
+  labels:
+    helm.sh/chart: typhoon-0.1.52
+    app.kubernetes.io/name: typhoon
+    app.kubernetes.io/instance: my-typhoon
+    app.kubernetes.io/version: "0.1.52"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: typhoon
+    app: typhoon-webhook
+spec:
+  replicas: 
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: typhoon
+      app.kubernetes.io/instance: my-typhoon
+      app: typhoon-webhook
+  template:
+    metadata:
+      annotations:
+        sidecar.istio.io/inject: 'false'
+      labels:
+        app.kubernetes.io/name: typhoon
+        app.kubernetes.io/instance: my-typhoon
+        app: typhoon-webhook
+    spec:
+      serviceAccountName: my-typhoon-webhook
+      securityContext:
+        {}
+      containers:
+        - name: webhook
+          terminationMessagePolicy: FallbackToLogsOnError
+          securityContext:
+            {}
+          image: "ghcr.io/zeiss/typhoon/typhoon-webhook:0.1.52"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: SYSTEM_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: CONFIG_LOGGING_NAME
+              value: config-logging
+            - name: METRICS_DOMAIN
+              value: typhoon.io/sources
+            - name: WEBHOOK_NAME
+              value: my-typhoon-webhook
+          ports:
+            - name: metrics
+              containerPort: 9090
+          readinessProbe:
+            periodSeconds: 1
+            httpGet:
+              scheme: HTTPS
+              port: 8443
+              httpHeaders:
+                - name: k-kubelet-probe
+                  value: webhook
+          livenessProbe:
+            periodSeconds: 1
+            httpGet:
+              scheme: HTTPS
+              port: 8443
+              httpHeaders:
+                - name: k-kubelet-probe
+                  value: webhook
+---
+# Source: typhoon/templates/webhook/mutating-webhook.yaml
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: defaulting.webhook.typhoon.zeiss.com
+  labels:
+    helm.sh/chart: typhoon-0.1.52
+    app.kubernetes.io/name: typhoon
+    app.kubernetes.io/instance: my-typhoon
+    app.kubernetes.io/version: "0.1.52"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: typhoon
+    app: typhoon-webhook
+webhooks:
+  - admissionReviewVersions:
+      - v1beta1
+    clientConfig:
+      service:
+        name: my-typhoon-webhook
+        namespace: default
+    sideEffects: None
+    failurePolicy: Fail
+    name: defaulting.webhook.typhoon.zeiss.com
+---
+# Source: typhoon/templates/webhook/validating-webhook.yaml
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: validation.webhook.typhoon.zeiss.com
+  labels:
+    helm.sh/chart: typhoon-0.1.52
+    app.kubernetes.io/name: typhoon
+    app.kubernetes.io/instance: my-typhoon
+    app.kubernetes.io/version: "0.1.52"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: typhoon
+    app: typhoon-webhook
+webhooks:
+  - admissionReviewVersions:
+      - v1beta1
+    clientConfig:
+      service:
+        name: my-typhoon-webhook
+        namespace: default
+    sideEffects: None
+    failurePolicy: Fail
+    name: validation.webhook.typhoon.zeiss.com

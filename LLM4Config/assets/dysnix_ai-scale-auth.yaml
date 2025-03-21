@@ -1,0 +1,215 @@
+---
+# Source: ai-scale-auth/templates/base-all.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-ai-scale-auth
+  labels:
+    app.kubernetes.io/name: ai-scale-auth
+    helm.sh/chart: ai-scale-auth-0.1.1
+    app.kubernetes.io/instance: my-ai-scale-auth
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: ai-scale-auth/templates/base-all.yaml
+apiVersion: v1
+kind: ConfigMap
+immutable: false
+metadata:
+  name: my-ai-scale-auth
+  labels:
+    app.kubernetes.io/name: ai-scale-auth
+    helm.sh/chart: ai-scale-auth-0.1.1
+    app.kubernetes.io/instance: my-ai-scale-auth
+    app.kubernetes.io/managed-by: Helm
+data:
+  configs.yaml: |
+    debugMode: true
+    grpc:
+      compression:
+        enabled: false
+        type: Zstd
+      connection:
+        host: 0.0.0.0
+        insecure: true
+        maxMessageSize: 1MiB
+        port: 8091
+        readBufferSize: 4MiB
+        timeout: 15s
+        writeBufferSize: 4MiB
+      enabled: true
+      keepalive:
+        enforcementPolicy:
+          minTime: 20m
+          permitWithoutStream: false
+        time: 5m
+        timeout: 5m
+      useReflection: true
+    monitoring:
+      enabled: true
+    postgres:
+      database: ai-scale
+      host: my-ai-scale-auth-postgresql.default.svc.cluster.local
+      password: ""
+      pool:
+        connMaxLifetime: 1m
+        maxIdleConns: 1
+        maxOpenConns: 10
+      port: 5432
+      schema: public
+      sslmode: disable
+      username: ai-scale
+    profiling:
+      enabled: true
+    single:
+      buffer:
+        readBufferSize: 4MiB
+        writeBufferSize: 4MiB
+      concurrency: 100000
+      enabled: true
+      host: 0.0.0.0
+      httptransport:
+        maxIdleConnDuration: 15s
+        readTimeout: 7s
+        writeTimeout: 7s
+      name: pprof/monitoring server
+      port: 8097
+      tcpKeepalive:
+        enabled: true
+        period: 1s
+---
+# Source: ai-scale-auth/templates/base-all.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-ai-scale-auth
+  labels:
+    app.kubernetes.io/name: ai-scale-auth
+    helm.sh/chart: ai-scale-auth-0.1.1
+    app.kubernetes.io/instance: my-ai-scale-auth
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - name: grpc
+      port: 8091
+      protocol: TCP
+      targetPort: grpc
+    - name: monitoring
+      port: 8097
+      protocol: TCP
+      targetPort: monitoring
+  selector:
+    app.kubernetes.io/name: ai-scale-auth
+    app.kubernetes.io/instance: my-ai-scale-auth
+---
+# Source: ai-scale-auth/templates/base-all.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-ai-scale-auth
+  labels:
+    app.kubernetes.io/name: ai-scale-auth
+    helm.sh/chart: ai-scale-auth-0.1.1
+    app.kubernetes.io/instance: my-ai-scale-auth
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ai-scale-auth
+      app.kubernetes.io/instance: my-ai-scale-auth
+  template:
+    metadata:
+      annotations:
+        checksum/config: '41f8a0cf2ff0b517dc0b7e344b65c6ad4dc36dcee1601cb19c06223b933aa238'
+      labels:
+        app.kubernetes.io/name: ai-scale-auth
+        helm.sh/chart: ai-scale-auth-0.1.1
+        app.kubernetes.io/instance: my-ai-scale-auth
+        app.kubernetes.io/managed-by: Helm
+    spec:      
+      serviceAccountName: my-ai-scale-auth
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: ai-scale-auth
+                    app.kubernetes.io/instance: my-ai-scale-auth
+                namespaces:
+                  - "default"
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+      securityContext: 
+        fsGroup: 1001
+      initContainers:
+        - command:
+          - sh
+          - -c
+          - |
+            until printf "." && nc -z -w 2 my-ai-scale-auth-postgresql.default.svc.cluster.local 5432; do
+                sleep 2;
+            done;
+        
+            echo 'PostgreSQL OK ✓'
+          image: alpine:3.9.2
+          name: check-postgresql
+        - args:
+          - -source
+          - file://./migrations
+          - -database
+          - 'postgres://ai-scale:%!s(<nil>)@my-ai-scale-auth-postgresql.default.svc.cluster.local:5432/ai-scale?sslmode=disable'
+          - up
+          command:
+          - /usr/local/bin/migrate
+          image: alex6021710/ai-scale-migrator:latest
+          name: migrations
+      
+      containers:
+        -
+          name: ai-scale-auth
+          image: alex6021710/ai-scale-auth:latest
+          securityContext: 
+            runAsNonRoot: true
+            runAsUser: 1001
+          command:
+            - /app
+          args:
+            - -conf=/etc/auth/configs/configs.yaml
+          resources:
+            limits: {}
+            requests: {}
+          ports:  
+            - name: grpc
+              containerPort: 8091
+            - name: monitoring
+              containerPort: 8097
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /healthz
+              port: 8097
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /readyz
+              port: 8097
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+          volumeMounts:  
+            - mountPath: /etc/auth/configs
+              name: configs
+              readOnly: true
+      volumes:   
+        - configMap:
+            name: 'my-ai-scale-auth'
+          name: configs

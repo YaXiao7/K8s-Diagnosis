@@ -1,0 +1,193 @@
+---
+# Source: leantime/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-leantime
+  labels:
+    helm.sh/chart: leantime-1.2.1
+    app.kubernetes.io/name: leantime
+    app.kubernetes.io/instance: my-leantime
+    app.kubernetes.io/version: "3.1.4"
+    app.kubernetes.io/managed-by: Helm
+data:
+  database-root: "bGQ2YmRDRGlhb3dlbFpGdmQyUVpSVEsy"
+  database-user: "bGVhbnRpbWU="
+  database-password: "SmhUdmZTUnJZenhGYkV5cnllUGpVUDBT"
+  session-salt: "eGVUZmR2ZjdYSVJhZ0tQMDN5RHFrUUUxV3Z3UjFwM28="
+---
+# Source: leantime/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-leantime
+  labels:
+    helm.sh/chart: leantime-1.2.1
+    app.kubernetes.io/name: leantime
+    app.kubernetes.io/instance: my-leantime
+    app.kubernetes.io/version: "3.1.4"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: leantime
+    app.kubernetes.io/instance: my-leantime
+---
+# Source: leantime/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-leantime
+  labels:
+    helm.sh/chart: leantime-1.2.1
+    app.kubernetes.io/name: leantime
+    app.kubernetes.io/instance: my-leantime
+    app.kubernetes.io/version: "3.1.4"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: leantime
+      app.kubernetes.io/instance: my-leantime
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: leantime
+        app.kubernetes.io/instance: my-leantime
+    spec:
+      serviceAccountName: default
+      securityContext:
+        {}
+      containers:
+        - name: leantime
+          securityContext:
+            {}
+          image: "leantime/leantime:3.1.4"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: LEAN_SESSION_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-leantime
+                  key: session-salt
+            - name: LEAN_DB_HOST
+              value: "127.0.0.1"
+            - name: LEAN_DB_DATABASE
+              value: "leantime"
+            - name: LEAN_DB_PORT
+              value: "3306"
+            - name: LEAN_DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: my-leantime
+                  key: database-user
+            - name: LEAN_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-leantime
+                  key: database-password
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /auth/login
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /auth/login
+              port: http
+          volumeMounts:
+          - name: my-leantime
+            mountPath: /var/www/html/userfiles
+            subPath: userfiles
+          - name: my-leantime
+            mountPath: /var/www/html/public/userfiles
+            subPath: public-userfiles
+          - name: my-leantime-sessions
+            mountPath: /sessions
+          resources:
+            {}
+        - name: leantime-database
+          securityContext:
+            {}
+          image: "mariadb:10.6.17"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: MYSQL_DATABASE
+              value: "leantime"
+            - name: MYSQL_USER
+              valueFrom:
+                secretKeyRef:
+                  name: my-leantime
+                  key: database-user
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-leantime
+                  key: database-password
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-leantime
+                  key: database-root
+          ports:
+            - name: mysql
+              containerPort: 3306
+              protocol: TCP
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - mysqladmin status -uroot -p${MYSQL_ROOT_PASSWORD}
+            periodSeconds: 20
+            failureThreshold: 15
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - mysqladmin status -uroot -p${MYSQL_ROOT_PASSWORD}
+            periodSeconds: 20
+            failureThreshold: 15
+          volumeMounts:
+          - name: my-leantime-db
+            mountPath: /var/lib/mysql
+          resources:
+            {}
+      volumes:
+      - name: my-leantime
+        emptyDir: {}
+      - name: my-leantime-sessions
+        emptyDir: {}
+      - name: my-leantime-db
+        emptyDir: {}
+---
+# Source: leantime/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-leantime-test-connection"
+  labels:
+    helm.sh/chart: leantime-1.2.1
+    app.kubernetes.io/name: leantime
+    app.kubernetes.io/instance: my-leantime
+    app.kubernetes.io/version: "3.1.4"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-leantime:80']
+  restartPolicy: Never

@@ -1,0 +1,348 @@
+---
+# Source: permission-manager/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: permission-manager
+---
+# Source: permission-manager/templates/secret-auth.yaml
+# Created auth by using this command: "htpasswd -c auth admin",  than "base64 auth"
+apiVersion: v1
+data:
+  auth: YWRtaW46JGFwcjEkeFhoUWFsOXMkakY5T1RLRUpaRWNTSTdwSFJ2RGc4Lwo=
+kind: Secret
+metadata:
+  name: secret-auth
+type: Opaque
+---
+# Source: permission-manager/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: permission-manager
+type: Opaque
+stringData:
+  PORT: "4000"
+  CLUSTER_NAME: "verygoodcluster"
+  CONTROL_PLANE_ADDRESS: "https://kubernetes.example.com:8443"
+  
+  BASIC_AUTH_PASSWORD: "someverysecuredpassword"
+---
+# Source: permission-manager/templates/crd.yaml
+apiVersion: "apiextensions.k8s.io/v1"
+kind: "CustomResourceDefinition"
+metadata:
+  name: "permissionmanagerusers.permissionmanager.user"
+spec:
+  group: "permissionmanager.user"
+  versions:
+    - name: "v1alpha1"
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                name:
+                  type: string
+                  minLength: 2
+  scope: "Cluster"
+  names:
+    plural: "permissionmanagerusers"
+    singular: "permissionmanageruser"
+    kind: "Permissionmanageruser"
+---
+# Source: permission-manager/templates/clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: permission-manager
+rules:
+  # Allow full management of all the Permission Manager resources
+  - apiGroups: [ "permissionmanager.user" ]
+    resources:
+      - "*"
+    verbs: [ "get", "list", "create", "update", "delete", "watch" ]
+  # Allow full management of the RBAC resources
+  - apiGroups:
+      - "rbac.authorization.k8s.io"
+    resources:
+      - "clusterrolebindings"
+      - "clusterroles"
+      - "rolebindings"
+      - "roles"
+    verbs: [ "get", "list", "create", "update", "delete", "bind", "watch" ]
+  - apiGroups: [""]
+    resources:
+      - "serviceaccounts"
+      - "secrets"
+    verbs: [ "get", "list", "create", "update", "delete", "watch" ]
+  # Allow full management of certificates CSR, including their approval
+  - apiGroups: [ "certificates.k8s.io" ]
+    resources:
+      - "certificatesigningrequests"
+      - "certificatesigningrequests/approval"
+    verbs: [ "get", "list", "create", "update", "delete", "watch" ]
+  # Support legacy versions, before signerName was added
+  # (see https://github.com/kubernetes/kubernetes/pull/88246)
+  - apiGroups: [ "certificates.k8s.io" ]
+    resources:
+      - "signers"
+    resourceNames:
+      - "kubernetes.io/legacy-unknown"
+      - "kubernetes.io/kube-apiserver-client"
+    verbs: [ "approve" ]
+  # Allow to get and list Namespaces
+  - apiGroups: [ "" ]
+    resources:
+      - "namespaces"
+    verbs: [ "get", "list" ]
+---
+# Source: permission-manager/templates/seed.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: template-namespaced-resources___read-list
+rules:
+  - apiGroups: [ "*" ]
+    resources: [ "*" ]
+    verbs: [ "list" ]
+---
+# Source: permission-manager/templates/seed.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: template-namespaced-resources___read-list-apprepositories
+rules:
+  - apiGroups: [ "*" ]
+    resources:
+      - "apprepositories"
+    verbs: [ "list" ]
+---
+# Source: permission-manager/templates/seed.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: template-namespaced-resources___read-get-list-watch
+rules:
+  - apiGroups: [ "*" ]
+    resources: [ "*" ]
+    verbs: [ "get", "list", "watch" ]
+---
+# Source: permission-manager/templates/seed.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: template-namespaced-resources___port-forward
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["pods/portforward"]
+    verbs: ["get", "list", "create"]
+---
+# Source: permission-manager/templates/seed.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: template-namespaced-resources___exec-pods
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["get", "list", "create"]
+---
+# Source: permission-manager/templates/seed.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: template-namespaced-resources___rollout-deployments
+rules:
+  - apiGroups: ["apps", "extensions"]
+    resources: ["deployments"]
+    verbs: ["get", "patch"]
+---
+# Source: permission-manager/templates/seed.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: template-namespaced-resources___delete-pods
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "delete"]
+---
+# Source: permission-manager/templates/seed.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: template-namespaced-resources___admin
+rules:
+  - apiGroups: [ "*" ]
+    resources: [ "*" ]
+    verbs: [ "*" ]
+---
+# Source: permission-manager/templates/seed.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: template-namespaced-resources___read-write
+rules:
+  - apiGroups:
+      - "*"
+    resources: [
+        "pods",
+        "serviceaccounts",
+        "cronjobs",
+        "replicasets",
+        "deployments",
+        "replicationcontrollers",
+        "statefulsets",
+        "configmaps",
+        "services",
+        "ingresses",
+        "jobs",
+        "events",
+        "secrets",
+        "apprepositories",
+        "pods/exec",
+        "pods/portforward",
+        "pods/log",
+        "podtemplates",
+        "horizontalpodautoscalers",
+        "restics",
+        "repositories",
+        "recoveries",
+        "persistentvolumeclaims",
+        "roles",
+        "rolebindings",
+        "poddisruptionbudgets",
+        "certificates",
+        "issuers",
+    ]
+    verbs:
+      - "*"
+  - apiGroups:
+      - "*"
+    resources:
+      - "endpoints"
+      - "daemonsets"
+      - "namespaces"
+      - "limitranges"
+      - "resourcequotas"
+      - "networkpolicies"
+    verbs: [ "get", "list", "watch" ]
+---
+# Source: permission-manager/templates/seed.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: template-cluster-resources___read-only
+rules:
+  - apiGroups:
+      - "*"
+    resources:
+      - "componentstatuses"
+      - "nodes"
+      - "persistentvolumes"
+      - "mutatingwebhookconfigurations"
+      - "validatingwebhookconfigurations"
+      - "customresourcedefinitions"
+      - "apiservices"
+      - "tokenreviews"
+      - "selfsubjectaccessreviews"
+      - "selfsubjectrulesreviews"
+      - "subjectaccessreviews"
+      - "certificatesigningrequests"
+      - "runtimeclasses"
+      - "podsecuritypolicies"
+      - "clusterrolebindings"
+      - "clusterroles"
+      - "priorityclasses"
+      - "csidrivers"
+      - "csinodes"
+      - "storageclasses"
+      - "volumeattachment"
+      - "clusterserviceplans"
+      - "clusterservicebrokers"
+      - "clusterserviceclasses"
+    verbs: [ "get", "list", "watch" ]
+---
+# Source: permission-manager/templates/seed.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: template-cluster-resources___admin
+rules:
+  - apiGroups: [ "*" ]
+    resources: [ "*" ]
+    verbs: [ "*" ]
+---
+# Source: permission-manager/templates/clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: permission-manager
+roleRef:
+  kind: ClusterRole
+  name: permission-manager
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+  - kind: ServiceAccount
+    name: permission-manager
+    namespace: "default"
+---
+# Source: permission-manager/templates/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: permission-manager
+spec:
+  selector:
+    app: permission-manager
+  ports:
+    - protocol: TCP
+      port: 4000
+      targetPort: 4000
+---
+# Source: permission-manager/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: permission-manager
+  labels:
+    app: permission-manager
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: permission-manager
+  template:
+    metadata:
+      labels:
+        app: permission-manager
+      annotations:
+    spec:
+      securityContext:
+        fsGroup: 0
+      serviceAccountName: permission-manager
+      containers:
+        - name: permission-manager
+          securityContext:
+            runAsNonRoot: false
+            runAsUser: 0
+          image: "quay.io/sighup/permission-manager:v1.7.1-rc1"
+          ports:
+            - containerPort: 4000
+          envFrom:
+            - secretRef:
+                name: permission-manager
+            
+          resources:
+            {}

@@ -1,0 +1,95 @@
+---
+# Source: medusa/templates/common.yaml
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: my-medusa-config
+  labels:
+    helm.sh/chart: medusa-0.1.6
+    app.kubernetes.io/name: medusa
+    app.kubernetes.io/instance: my-medusa
+    app.kubernetes.io/version: "v0.5.17"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  accessModes:
+    - "ReadWriteOnce"
+  resources:
+    requests:
+      storage: "1Gi"
+---
+# Source: medusa/templates/common.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-medusa
+  labels:
+    helm.sh/chart: medusa-0.1.6
+    app.kubernetes.io/name: medusa
+    app.kubernetes.io/instance: my-medusa
+    app.kubernetes.io/version: "v0.5.17"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8081
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: medusa
+    app.kubernetes.io/instance: my-medusa
+---
+# Source: medusa/templates/common.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-medusa
+  labels:
+    helm.sh/chart: medusa-0.1.6
+    app.kubernetes.io/name: medusa
+    app.kubernetes.io/instance: my-medusa
+    app.kubernetes.io/version: "v0.5.17"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: medusa
+      app.kubernetes.io/instance: my-medusa
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: medusa
+        app.kubernetes.io/instance: my-medusa
+    spec:
+      serviceAccountName: default
+      dnsPolicy: ClusterFirst
+      containers:
+      - name: my-medusa
+        image: "ghcr.io/linuxserver/medusa:version-v0.5.17"
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 8081
+          protocol: TCP
+        volumeMounts:
+        - mountPath: /config
+          name: config
+        livenessProbe:
+          tcpSocket:
+            port: http
+          initialDelaySeconds: 30
+          failureThreshold: 5
+          timeoutSeconds: 10
+        readinessProbe:
+          tcpSocket:
+            port: http
+          initialDelaySeconds: 30
+          failureThreshold: 5
+          timeoutSeconds: 10
+      volumes:
+      - name: config
+        persistentVolumeClaim:
+          claimName: my-medusa-config

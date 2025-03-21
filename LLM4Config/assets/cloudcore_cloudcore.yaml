@@ -1,0 +1,258 @@
+---
+# Source: cloudcore/templates/rbac_cloudcore.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    k8s-app: kubeedge
+    kubeedge: cloudcore
+  name: cloudcore
+---
+# Source: cloudcore/templates/configmap_cloudcore.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cloudcore
+  labels:
+    k8s-app: kubeedge
+    kubeedge: cloudcore
+data:
+  cloudcore.yaml: |
+    apiVersion: cloudcore.config.kubeedge.io/v1alpha2
+    kind: CloudCore
+    kubeAPIConfig:
+      kubeConfig: ""
+      master: ""
+    modules:
+      cloudHub:
+        advertiseAddress:
+        - 
+        dnsNames:
+        - 
+        nodeLimit: 1000
+        tlsCAFile: /etc/kubeedge/ca/rootCA.crt
+        tlsCertFile: /etc/kubeedge/certs/edge.crt
+        tlsPrivateKeyFile: /etc/kubeedge/certs/edge.key
+        unixsocket:
+          address: unix:///var/lib/kubeedge/kubeedge.sock
+          enable: true
+        websocket:
+          address: 0.0.0.0
+          enable: true
+          port: 10000
+        quic:
+          address: 0.0.0.0
+          enable: false
+          maxIncomingStreams: 10000
+          port: 10001
+        https:
+          address: 0.0.0.0
+          enable: true
+          port: 10002
+      cloudStream:
+        enable: true
+        streamPort: 10003
+        tunnelPort: 10004
+      dynamicController:
+        enable: false
+      router:
+        enable: false
+      iptablesManager:
+        enable: true
+        mode: internal
+---
+# Source: cloudcore/templates/rbac_cloudcore.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cloudcore
+  labels:
+    k8s-app: kubeedge
+    kubeedge: cloudcore
+rules:
+- apiGroups: [""]
+  resources: ["nodes", "nodes/status", "serviceaccounts/token", "configmaps", "pods", "pods/status", "secrets", "endpoints", "services", "persistentvolumes", "persistentvolumeclaims"]
+  verbs: ["get", "list", "watch", "create", "update"]
+- apiGroups: [""]
+  resources: ["namespaces"]
+  verbs: ["get", "create", "list", "watch"]
+- apiGroups: [""]
+  resources: ["nodes", "pods/status"]
+  verbs: ["patch"]
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["delete"]
+- apiGroups: ["coordination.k8s.io"]
+  resources: ["leases"]
+  verbs: ["get", "list", "watch", "create", "update"]
+- apiGroups: ["devices.kubeedge.io"]
+  resources: ["devices", "devicemodels", "devices/status", "devicemodels/status"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: ["reliablesyncs.kubeedge.io"]
+  resources: ["objectsyncs", "clusterobjectsyncs", "objectsyncs/status", "clusterobjectsyncs/status"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: ["rules.kubeedge.io"]
+  resources: ["rules", "ruleendpoints", "rules/status", "ruleendpoints/status"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: ["apiextensions.k8s.io"]
+  resources: ["customresourcedefinitions"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: ["networking.istio.io"]
+  resources: ["*"]
+  verbs: ["get", "list", "watch"]
+---
+# Source: cloudcore/templates/rbac_cloudcore.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cloudcore
+  labels:
+    k8s-app: kubeedge
+    kubeedge: cloudcore
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cloudcore
+subjects:
+- kind: ServiceAccount
+  name: cloudcore
+  namespace: default
+---
+# Source: cloudcore/templates/service_cloudcore.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    k8s-app: kubeedge
+    kubeedge: cloudcore
+  name: cloudcore
+spec:
+  type: ClusterIP
+  ports:
+  - port: 10000
+    targetPort: 10000
+    name: cloudhub
+  - port: 10001
+    targetPort: 10001
+    name: cloudhub-quic
+  - port: 10002
+    targetPort: 10002
+    name: cloudhub-https
+  - port: 10003
+    targetPort: 10003
+    name: cloudstream
+  - port: 10004
+    targetPort: 10004
+    name: tunnelport
+  selector:
+    k8s-app: kubeedge
+    kubeedge: cloudcore
+---
+# Source: cloudcore/templates/deployment_cloudcore.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    k8s-app: kubeedge
+    kubeedge: cloudcore
+  name: cloudcore
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      k8s-app: kubeedge
+      kubeedge: cloudcore
+  template:
+    metadata:
+      labels:
+        k8s-app: kubeedge
+        kubeedge: cloudcore
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      restartPolicy: Always
+      affinity: 
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: node-role.kubernetes.io/edge
+                operator: DoesNotExist
+      serviceAccount: cloudcore  
+      containers:
+      - name: cloudcore
+        image: kubeedge/cloudcore:v1.9.1
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 10000
+          name: cloudhub
+          protocol: TCP
+        - containerPort: 10001
+          name: cloudhub-quic
+          protocol: TCP
+        - containerPort: 10002
+          name: cloudhub-https
+          protocol: TCP
+        - containerPort: 10003
+          name: cloudstream
+          protocol: TCP
+        - containerPort: 10004
+          name: tunnelport
+          protocol: TCP
+        volumeMounts:
+        - name: conf
+          mountPath: /etc/kubeedge/config
+        - name: certs
+          mountPath: /etc/kubeedge
+        - name: sock
+          mountPath: /var/lib/kubeedge
+        - mountPath: /etc/localtime
+          name: host-time
+          readOnly: true
+        securityContext: 
+          privileged: true
+        resources: 
+          limits:
+            cpu: 200m
+            memory: 1Gi
+          requests:
+            cpu: 100m
+            memory: 512Mi 
+      volumes:
+      - name: conf
+        configMap:
+          name: cloudcore
+      - name: certs
+        secret:
+          secretName: cloudcore
+          items:
+          - key: stream.crt
+            path: certs/stream.crt
+          - key: stream.key
+            path: certs/stream.key
+          - key: streamCA.crt
+            path: ca/streamCA.crt
+      - name: sock
+        hostPath:
+          path: /var/lib/kubeedge
+          type: DirectoryOrCreate
+      - hostPath:
+          path: /etc/localtime
+          type: ""
+        name: host-time
+---
+# Source: cloudcore/templates/secret_cloudcore.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cloudcore
+  labels:
+    k8s-app: kubeedge
+    kubeedge: cloudcore
+  annotations:
+    "helm.sh/hook": "pre-install"
+    "helm.sh/hook-delete-policy": "before-hook-creation"
+data:
+  streamCA.crt: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSURHVENDQWdHZ0F3SUJBZ0lRTDRYMkpVMzVLcHEvTm9WL0hRdytEakFOQmdrcWhraUc5dzBCQVFzRkFEQVgKTVJVd0V3WURWUVFERXd4amJHOTFaR052Y21VdFkyRXdIaGNOTWpRd09URTJNRGcwTVRFMVdoY05NalV3T1RFMgpNRGcwTVRFMVdqQVhNUlV3RXdZRFZRUURFd3hqYkc5MVpHTnZjbVV0WTJFd2dnRWlNQTBHQ1NxR1NJYjNEUUVCCkFRVUFBNElCRHdBd2dnRUtBb0lCQVFDM3JuVFdUQTNlT1VzNnJpRE5hdWlWVDYrSkxla3JFWHFlWVBjUUdxb2cKa3BNRkR3UGNodEpNM0xsaVVHclJlQXQ1bjJBa1c5R1RmRkZ1K2UzeENvZmtLeHErNEZmTE9INW1iOXo0dUlLNApFMWpvVys1MVBwb2pqdzNrN3JndHk3WDJuUHJ2OTAxeGRyT3EyS2x6MG1ZQjZUWGZRSTRuOWlBRXJobW9Hbm8rCmFlSUh1bEdvZjZrNEdJaXZXbkxZRHhza1d0L0hMamVzcTM1K211ekE2Y3EwVEdtcGdTMTkwZ1g1M3d3MGdyZlMKT2hOelI5WWJvcU9mUjNZV2krd3A1TGhyNGdQaUlDSTV1d3FGRFNvTXpIWDR3NW5Kdkk2YzRoUjE2UTVjNHUxVAp1dWJPUEg1Z3lnbWxHSjV5akh5ZGZlMFdwZ2VrS0lEa0srcU9ILzhhVDdIdEFnTUJBQUdqWVRCZk1BNEdBMVVkCkR3RUIvd1FFQXdJQ3BEQWRCZ05WSFNVRUZqQVVCZ2dyQmdFRkJRY0RBUVlJS3dZQkJRVUhBd0l3RHdZRFZSMFQKQVFIL0JBVXdBd0VCL3pBZEJnTlZIUTRFRmdRVUk1Tm5McDY5cFJrZDAzZlIxa3l6Y2tTR2loQXdEUVlKS29aSQpodmNOQVFFTEJRQURnZ0VCQUZwdDdyNXRWN05CNUU3YWRFOHRTSDU4WmRDL25DVHEvTno0SlBESmVoTzVQTDZ5Ckp5aTE4TWtiblNPWnJZWkJ5U2lJdlYvN2sxYis3Nk9Wd1JtbzR5czd4dndsVnBkS24zWWs4Rkw0ZVNNM2pGaFYKcUEwTGZoZVhXTmJmZTU0ODJQdUNsWkUzUkUvbDUxRFlnNWUvWHlJS1hEbWtaMTNIalJTV200ZUtvY0Zra2o2QQpDMDJQaVkrL2I2THhXM1k3T1QreXVZMEkwOU1Nb1MxTm1QQ25lQ2VoKzltOVIrRmk1RjlXcXYyV2pRUVZXamlXClA1UmpiV3pWdGp0VnE5TVBPdm5YNmRRK0puQ2hBdXBUYjNUL2RwYXN6UGRpVGNIYUtUaDkvTXEzd3AzaGdBNjUKc2poZnlVV0VZMEwrSFd5eEdNNVpaaEdGelF4b2U1cTIra0dFUTdZPQotLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0tCg==
+  stream.crt: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSURURENDQWpTZ0F3SUJBZ0lRZWM1cXNBVFIwQ0c5eWt3b0xXMzU2akFOQmdrcWhraUc5dzBCQVFzRkFEQVgKTVJVd0V3WURWUVFERXd4amJHOTFaR052Y21VdFkyRXdIaGNOTWpRd09URTJNRGcwTVRFMVdoY05NalV3T1RFMgpNRGcwTVRFMVdqQVVNUkl3RUFZRFZRUURFd2xqYkc5MVpHTnZjbVV3Z2dFaU1BMEdDU3FHU0liM0RRRUJBUVVBCkE0SUJEd0F3Z2dFS0FvSUJBUUNseXdpbCs5dEhNS3VSWHE0QmFSQW0rWTR4eTFOa1d2eFpnQUZ4eU16VEFNeGcKRTVYdFBSbTc3TlpSd3V3WHRhaUJodklxSXllNkJQVWp1bXBUU2tTM0c4OGI4V3NCZVdHa0MwcXFESkU0ZVVBRQpKejRLeFA0azVac3FtUDNFLy9maE5Cdk42ck4yLy8zcThxcDVhODdMVFBiYVRqekVWaWN5UkpvZ1hnT0prL0k3Cm9vYk1vRnRRbVZYMlJxYis0TDRBU2txVkFFNmRqNFBYUFhyblZQeG1pRUc1cFpCYi9EUUQ5bEw5UlpWMkhHQ2YKVTQwbUl5Z1JGY1JWWVg1b2M3S0g1R1hnSGowYlE4S0RQbmFzaHJNMWRxTGlZT292SC9kQ3Y0ZnRUUG9hd0hRbQpMM1dIc09idTN2L2hDbTdEYTl0NFprL3pNeGp1NE82dDFteVpWMDJaQWdNQkFBR2pnWll3Z1pNd0RnWURWUjBQCkFRSC9CQVFEQWdXZ01CMEdBMVVkSlFRV01CUUdDQ3NHQVFVRkJ3TUJCZ2dyQmdFRkJRY0RBakFNQmdOVkhSTUIKQWY4RUFqQUFNQjhHQTFVZEl3UVlNQmFBRkNPVFp5NmV2YVVaSGROMzBkWk1zM0pFaG9vUU1ETUdBMVVkRVFRcwpNQ3FDRVdOc2IzVmtZMjl5WlM1a1pXWmhkV3gwZ2hWamJHOTFaR052Y21VdVpHVm1ZWFZzZEM1emRtTXdEUVlKCktvWklodmNOQVFFTEJRQURnZ0VCQUVRSXJtdUNiaW8rSU10a0QrVE9Pb2o0OXgxaGZnNGJrNnlzTWxnTkYxaFQKS3JRaUQ3R0V5Nkl1ZzZHWTFYNlYrZFVkWGVFaEJxYmJYWTlqcEZrMlR4YnV4QmtlTURiaHhhZUlWSjVITVI2Ygo2ZHBON2lFbGpEUTZ4YXVobDJ1ZloxRmgycFZKbDZ3cW5uSlZLQW5lYUhndk1GNUMrbzlJbENxeElCMlhXZEUwCjlvc0Q5QUpkY01xeEhhMnpRZXJwUGpSV1lYcGFsL1BPdGxObTB6TG1kYWErOGF1Q1EyMkY2UDV0OXNjcUgyakUKaGxMZjVsL1l0aHVoUUN6RHhCMWhxVmF6bzNLNWxSVm5VU2lGM0UvMWVXdmhwRmVPZ0pQYkZUVzlSdnFUaWRLUQptamRFNk4xa29NcUQ4RVhMemxEVkpZaFQ5bEJDb0hQQmVFQXNvTXEzY3IwPQotLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0tCg==
+  stream.key: LS0tLS1CRUdJTiBSU0EgUFJJVkFURSBLRVktLS0tLQpNSUlFb2dJQkFBS0NBUUVBcGNzSXBmdmJSekNya1Y2dUFXa1FKdm1PTWN0VFpGcjhXWUFCY2NqTTB3RE1ZQk9WCjdUMFp1K3pXVWNMc0Y3V29nWWJ5S2lNbnVnVDFJN3BxVTBwRXR4dlBHL0ZyQVhsaHBBdEtxZ3lST0hsQUJDYysKQ3NUK0pPV2JLcGo5eFAvMzRUUWJ6ZXF6ZHYvOTZ2S3FlV3ZPeTB6MjJrNDh4RlluTWtTYUlGNERpWlB5TzZLRwp6S0JiVUpsVjlrYW0vdUMrQUVwS2xRQk9uWStEMXoxNjUxVDhab2hCdWFXUVcvdzBBL1pTL1VXVmRoeGduMU9OCkppTW9FUlhFVldGK2FIT3loK1JsNEI0OUcwUENnejUycklhek5YYWk0bURxTHgvM1FyK0g3VXo2R3NCMEppOTEKaDdEbTd0Ny80UXB1dzJ2YmVHWlA4ek1ZN3VEdXJkWnNtVmRObVFJREFRQUJBb0lCQUYrTk82ZkdGdVBadGhmcgpOR2dWc0R4Mk9iQ1RHYlhPQm9CaW1QS0dJeDQ4NkkwNjNIN0ZaeTU2Mmk1M0kvQ3FQcnFnRnJPWVhVNEZpMjhUCkFqS01yRHZJS0Q1WGppOWtVSlRsK1JzMmNQL1dTY0hiQ0JQVzR3NUswbm5qZ09ab0MrbmNTV1lOTFcrWkxET2IKdGdxU3lyVTYzMDZFSnR1Vk43UHQrOUpKdk1vdDcxYmlYRFExQlRncUZydHhBclBoTUhRZzczMDgrenAxWk9ITgpJRzFOU1JHY2hBb3lQZ3pOR3BrTDZzOW42aHVuNXVZZHVYVmhJRjExbWFpWmp2Sk5XL0U3d3B4WHFYMWwxQmx3Ck80VDhiVXhMZlhNZkZRQnp1bHRyaGJ5RjNxNUxKSXVCbnU3M0libm5VN2FPNzdwNnd4VjN3bmRRc2hsTUFScmEKaTcxdmhQRUNnWUVBd2UxUHdRSmd5UE56MGpPUWpRL21KZU1NTEw1S0pDUWl1TmVVUUJwdTdVRDFyaEg3ZyswNAo1ZDVUV0c1N096dWVHRVVvZWVwUjYxOVZkYTRMaUpZTEw1UVErUWRFamVNQllKdnR3MDZoV3liUzd4WnYrNENaCnZORU5ndi9sZVlKdVZtYjNvUEZDZHJzL2tTbXFHcUNNOG05c3h1cHhUWExvRWx6RjNtR1hxdjBDZ1lFQTJ0eGkKdThUTjZETzJZM0Rra1hINDBxMlZtd08vQWZST2x0dEt1OCtNK2o2OXJhN21vZlIxWVNhUHlzWGNheFNxdlpDKwpwOFhTRkVuZ2FZOUpmZ3d0M295Q1EzRUZadE91M05zVVNwcEQzUmtvN1IvODFVZzVTRkxsL1U4V1JUYnU4amtYCjVCZExqSUZKdGYzQ0ZvdG9EWTcyd2NOUHpnOVJmVnk3UDErQk5jMENnWUFZa0NOeThnY3FUTlBWd3h4REVjbDMKOFF0QXU1V09nRms1aW16SHRkRnBFYnBNb3hCMWhGMlptQkI4ZWZuMzViUS9wTHJjdmxaRDl0NVBPbzFSYnBmYQpIZW9NY09RNUNKRExHTlVEMFBqVkg5VEYzZFN2U1htdmxkY2RTYVphUHJBVkY1T3orZnNPS09lRFRvQ3lRTFc1Cm0yMXV3SkU3V3h1VC85WThOYVpOVFFLQmdBSGJWTXNiQkZRdi9DQWoyUXlTMXZXU20yNVJQZEdhYlFCQ3BBT3IKNHhwTVpmZVBRRTJuY1VkOXVFS1VJeWFWYWsxcGFQU3JiUGpYRjV4TnB1WDIzSHpDM0dnT0VXbXA2aFhkbGZKOApGSTlQbzFVL3JEbHkvMmxwcXFIWGhlellabmFQblhCRjhsSWkxcWxBbWVEdkZkYm5tNWhSTytBWHFTMVRHQk9WCmo5Y1JBb0dBS21QLytHcTB5LzRxTVZ5UXZkcUtRdDlNQkhEc2d3ZGoxUlBqYUZ0ZVJZay9FdVFVbDkyYU9MOGcKalBQWU5XR2R2dncyZWszTTl2SFExN2J3K0RYcURSUldCM1JxeWRSclk2NENscDVyeTJpa0xqckF4bHFlN2grQgp1YVBaVmd2RlkzSjl6Q2pGeFhPVjF0YjRXTjN2dEpVc082NFY4VVh0Q3p1Z1ZBekE1RFE9Ci0tLS0tRU5EIFJTQSBQUklWQVRFIEtFWS0tLS0tCg==

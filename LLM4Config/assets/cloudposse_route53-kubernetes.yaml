@@ -1,0 +1,39 @@
+---
+# Source: route53-kubernetes/templates/daemonset.yaml
+apiVersion: extensions/v1beta1
+kind: DaemonSet
+metadata:
+  name: my-route53-kubernetes-ro
+  labels:
+    chart: "route53-kubernetes-0.1.3"
+spec:
+  template:
+    metadata:
+      labels:
+        app: my-route53-kubernetes-ro
+    spec:
+      nodeSelector:
+        kubernetes.io/role: master
+      tolerations:
+      - key: "node-role.kubernetes.io/master"
+        effect: "NoSchedule"
+      hostNetwork: true
+      dnsPolicy: Default
+      containers:
+      - name: "route53-kubernetes"
+        image: "cloudposse/route53-kubernetes:latest"
+        imagePullPolicy: Always
+        env:
+          - name: INGRESS_SERVICE_SELECTOR
+            value: "k8s-addon=ingress-nginx.addons.k8s.io,role=entrypoint"
+          - name: DNS_RECORD_TYPE
+            value: "CNAME"
+          - name: DNS_RECORD_TTL
+            value: "300"
+        resources:
+          limits:
+            cpu: 100m
+            memory: 128Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi

@@ -1,0 +1,61 @@
+---
+# Source: azure-pipelines-agent/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-azure-pipelines-agent
+  labels:
+    helm.sh/chart: azure-pipelines-agent-2.2.26
+    app.kubernetes.io/name: azure-pipelines-agent
+    app.kubernetes.io/instance: my-azure-pipelines-agent
+    app.kubernetes.io/version: "2.2.26"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: azure-pipelines-agent/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-azure-pipelines-agent
+  labels:
+    helm.sh/chart: azure-pipelines-agent-2.2.26
+    app.kubernetes.io/name: azure-pipelines-agent
+    app.kubernetes.io/instance: my-azure-pipelines-agent
+    app.kubernetes.io/version: "2.2.26"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  podManagementPolicy: Parallel
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: azure-pipelines-agent
+      app.kubernetes.io/instance: my-azure-pipelines-agent
+  serviceName: my-azure-pipelines-agent
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: azure-pipelines-agent
+        app.kubernetes.io/instance: my-azure-pipelines-agent
+    spec:
+      serviceAccountName: my-azure-pipelines-agent
+      securityContext:
+        {}
+      containers:
+        - name: azure-pipelines-agent
+          image: "emberstack/azure-pipelines-agent:2.2.26"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: AZP_AGENT_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.name
+            - name: AZP_URL
+              value: ""
+            - name: AZP_POOL
+              value: "Default"
+            - name: AZP_WORK
+              value: "_work"
+            - name: AZP_TOKEN
+              value: ""
+          resources:
+            {}

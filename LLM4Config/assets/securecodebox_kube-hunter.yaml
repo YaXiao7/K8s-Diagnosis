@@ -1,0 +1,81 @@
+---
+# Source: kube-hunter/templates/cascading-rules.yaml
+# SPDX-FileCopyrightText: the secureCodeBox authors
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# We only want to import the default cascading rules if they are enabled
+---
+# Source: kube-hunter/templates/kube-hunter-parse-definition.yaml
+# SPDX-FileCopyrightText: the secureCodeBox authors
+#
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: "execution.securecodebox.io/v1"
+kind: ParseDefinition
+metadata:
+  name: "kube-hunter-json"
+spec:
+  image: "docker.io/securecodebox/parser-kube-hunter:4.8.0"
+  imagePullPolicy: IfNotPresent
+  ttlSecondsAfterFinished: 
+  env:
+    []
+  scopeLimiterAliases:
+    {}
+  affinity:
+    {}
+  tolerations:
+    []
+---
+# Source: kube-hunter/templates/kubehunter-scan-type.yaml
+# SPDX-FileCopyrightText: the secureCodeBox authors
+#
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: "execution.securecodebox.io/v1"
+kind: ScanType
+metadata:
+  name: "kube-hunter"
+spec:
+  extractResults:
+    type: kube-hunter-json
+    location: "/home/securecodebox/kube-hunter-results.json"
+  jobTemplate:
+    spec:
+      suspend: false
+      backoffLimit: 3
+      template:
+        spec:
+          restartPolicy: Never
+          affinity:
+            {}
+          tolerations:
+            []
+          securityContext:
+            {}
+          containers:
+            - name: kube-hunter
+              image: "docker.io/securecodebox/scanner-kube-hunter:0.6.8"
+              imagePullPolicy: IfNotPresent
+              command:
+                - "sh"
+                - "/wrapper.sh"
+                - "--report"
+                - "json"
+              resources:
+                {}
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                  - all
+                privileged: false
+                readOnlyRootFilesystem: true
+                runAsNonRoot: false
+              env:
+                []
+              volumeMounts:
+                []
+          volumes:
+            []

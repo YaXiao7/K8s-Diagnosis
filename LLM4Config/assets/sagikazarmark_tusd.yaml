@@ -1,0 +1,108 @@
+---
+# Source: tusd/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-tusd
+  labels:
+    helm.sh/chart: tusd-0.1.2
+    app.kubernetes.io/name: tusd
+    app.kubernetes.io/instance: my-tusd
+    app.kubernetes.io/version: "1.10.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: tusd/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-tusd
+  labels:
+    helm.sh/chart: tusd-0.1.2
+    app.kubernetes.io/name: tusd
+    app.kubernetes.io/instance: my-tusd
+    app.kubernetes.io/version: "1.10.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
+      appProtocol: http
+  selector:
+    app.kubernetes.io/name: tusd
+    app.kubernetes.io/instance: my-tusd
+---
+# Source: tusd/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-tusd
+  labels:
+    helm.sh/chart: tusd-0.1.2
+    app.kubernetes.io/name: tusd
+    app.kubernetes.io/instance: my-tusd
+    app.kubernetes.io/version: "1.10.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: tusd
+      app.kubernetes.io/instance: my-tusd
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: tusd
+        app.kubernetes.io/instance: my-tusd
+    spec:
+      serviceAccountName: my-tusd
+      securityContext:
+        {}
+      containers:
+        - name: tusd
+          securityContext:
+            {}
+          image: "tusproject/tusd:v1.10.0"
+          imagePullPolicy: IfNotPresent
+          args:
+            - "-host"
+            - "0.0.0.0"
+            - "-port"
+            - "1080"
+          ports:
+            - name: http
+              containerPort: 1080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+            {}
+---
+# Source: tusd/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-tusd-test-connection"
+  labels:
+    helm.sh/chart: tusd-0.1.2
+    app.kubernetes.io/name: tusd
+    app.kubernetes.io/instance: my-tusd
+    app.kubernetes.io/version: "1.10.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-tusd:80']
+  restartPolicy: Never

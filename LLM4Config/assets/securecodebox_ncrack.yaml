@@ -1,0 +1,80 @@
+---
+# Source: ncrack/templates/cascading-rules.yaml
+# SPDX-FileCopyrightText: the secureCodeBox authors
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# We only want to import the default cascading rules if they are enabled
+---
+# Source: ncrack/templates/ncrack-parse-definition.yaml
+# SPDX-FileCopyrightText: the secureCodeBox authors
+#
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: "execution.securecodebox.io/v1"
+kind: ParseDefinition
+metadata:
+  name: "ncrack-xml"
+spec:
+  image: "docker.io/securecodebox/parser-ncrack:4.8.0"
+  imagePullPolicy: IfNotPresent
+  ttlSecondsAfterFinished: 
+  env:
+    []
+  scopeLimiterAliases:
+    {}
+  affinity:
+    {}
+  tolerations:
+    []
+---
+# Source: ncrack/templates/ncrack-scan-type.yaml
+# SPDX-FileCopyrightText: the secureCodeBox authors
+#
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: "execution.securecodebox.io/v1"
+kind: ScanType
+metadata:
+  name: "ncrack"
+spec:
+  extractResults:
+    type: ncrack-xml
+    location: "/home/securecodebox/ncrack-results.xml"
+  jobTemplate:
+    spec:
+      suspend: false
+      backoffLimit: 3
+      template:
+        spec:
+          restartPolicy: OnFailure
+          affinity:
+            {}
+          tolerations:
+            []
+          securityContext:
+            {}
+          containers:
+            - name: ncrack
+              image: "docker.io/securecodebox/scanner-ncrack:0.7"
+              imagePullPolicy: IfNotPresent
+              command:
+                - "ncrack"
+                - "-oX"
+                - "/home/securecodebox/ncrack-results.xml"
+              resources:
+                {}
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                  - all
+                privileged: false
+                readOnlyRootFilesystem: true
+                runAsNonRoot: true
+              env:
+                []
+              volumeMounts:
+                []
+          volumes:
+            []

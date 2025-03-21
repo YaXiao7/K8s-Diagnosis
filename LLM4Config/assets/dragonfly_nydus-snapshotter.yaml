@@ -1,0 +1,204 @@
+---
+# Source: nydus-snapshotter/templates/nydus-snapshotter/snapshotter-rbac.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-nydus-snapshotter-sa
+  namespace: default
+---
+# Source: nydus-snapshotter/templates/nydus-snapshotter/snapshotter-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-nydus-snapshotter
+  labels:
+    app: my-nydus-snapshotter
+    chart: nydus-snapshotter-0.0.10
+    release: my-nydus-snapshotter
+    heritage: Helm
+    component: nydus-snapshotter
+data:
+  config.json: |-
+    {
+      "device": {
+        "backend": {
+          "type": "registry",
+          "config": {
+            "mirrors": [{"auth_through":false,"headers":{"X-Dragonfly-Registry":"https://index.docker.io"},"host":"http://127.0.0.1:4001","ping_url":"http://127.0.0.1:4003/healthy"}],
+            "timeout": 5,
+            "connect_timeout": 5,
+            "retry_limit": 2
+          }
+        },
+        "cache": {
+          "type": "blobcache",
+          "config": {
+            "work_dir": "/var/lib/nydus/cache/"
+          }
+        }
+      },
+      "mode": "direct",
+      "digest_validate": false,
+      "iostats_files": false,
+      "enable_xattr": true,
+      "fs_prefetch": {
+        "enable": true,
+        "threads_count": 8,
+        "merging_size": 1048576,
+        "prefetch_all": true
+      }
+    }
+---
+# Source: nydus-snapshotter/templates/nydus-snapshotter/snapshotter-rbac.yaml
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-nydus-snapshotter-role
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - get
+  - list
+  - watch
+---
+# Source: nydus-snapshotter/templates/nydus-snapshotter/snapshotter-rbac.yaml
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-nydus-snapshotter-role-binding
+roleRef:
+  kind: ClusterRole
+  name: my-nydus-snapshotter-role
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+- kind: ServiceAccount
+  name: my-nydus-snapshotter-sa
+  namespace: default
+---
+# Source: nydus-snapshotter/templates/nydus-snapshotter/snapshotter-daemonset.yaml
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: my-nydus-snapshotter
+  labels:
+    app: my-nydus-snapshotter
+    chart: nydus-snapshotter-0.0.10
+    release: my-nydus-snapshotter
+    heritage: Helm
+    component: "nydus-snapshotter"
+  annotations:
+spec:
+  selector:
+    matchLabels:
+      app: my-nydus-snapshotter
+      component: "nydus-snapshotter"
+      release: my-nydus-snapshotter
+  template:
+    metadata:
+      labels:
+        app: my-nydus-snapshotter
+        component: "nydus-snapshotter"
+        release: my-nydus-snapshotter
+    spec:
+      serviceAccountName: my-nydus-snapshotter-sa
+      hostNetwork: true
+      hostPID: true
+      dnsPolicy: "ClusterFirstWithHostNet"
+      containers:
+      - name: nydus-snapshotter
+        image: ghcr.io/containerd/nydus-snapshotter:v0.9.0
+        imagePullPolicy: Always
+        env:
+        - name: ENABLE_NYDUS_OVERLAY
+          value: "false"
+        resources:
+            limits:
+              cpu: "2"
+              memory: 2Gi
+            requests:
+              cpu: "0"
+              memory: "0"
+        lifecycle:
+          postStart:
+            exec:
+              command:
+              - "/bin/sh"
+              - "-c"
+              - |
+                # currently, without host pid in container, we can not nsenter with pid and can not invoke systemctl correctly.
+                nsenter -t 1 -m systemctl -- restart containerd.service
+        volumeMounts:
+        - name: config
+          mountPath: "/etc/nydus/"
+        - name: nydus-lib
+          mountPath: "/var/lib/containerd-nydus"
+          mountPropagation: Bidirectional
+        - name: nydus-run
+          mountPath: "/run/containerd-nydus"
+          mountPropagation: Bidirectional
+        - name: fuse
+          mountPath: "/dev/fuse"
+
+        securityContext:
+          privileged: true
+
+      initContainers:
+      - name: update-containerd
+        image: ghcr.io/liubin/toml-cli:v0.0.7
+        imagePullPolicy: Always
+        resources:
+            limits:
+              cpu: "2"
+              memory: 2Gi
+            requests:
+              cpu: "0"
+              memory: "0"
+        command:
+        - /bin/sh
+        - -cx
+        - |-
+          etcContainerd=/etc/containerd/config.toml
+
+          toml check $etcContainerd proxy_plugins.nydus
+          if [ $? -eq 0 ]; then
+            echo "nydus snapshotter has already configured."
+            exit 0
+          fi
+
+          toml set --overwrite $etcContainerd plugins.\"io.containerd.grpc.v1.cri\".containerd.discard_unpacked_layers false
+          toml set --overwrite $etcContainerd plugins.\"io.containerd.grpc.v1.cri\".containerd.disable_snapshot_annotations false
+          toml set --overwrite $etcContainerd plugins.\"io.containerd.grpc.v1.cri\".containerd.snapshotter nydus
+
+          # toml command not support to set block, so just use cat command.
+          cat << EOF >> $etcContainerd
+          [proxy_plugins]
+            [proxy_plugins.nydus]
+              type = "snapshot"
+              address = "/run/containerd-nydus/containerd-nydus-grpc.sock"
+          EOF
+
+        volumeMounts:
+        - name: containerd-conf
+          mountPath: /etc/containerd/config.toml
+
+      volumes:
+      - name: config
+        configMap:
+          name: my-nydus-snapshotter
+      - name: nydus-run
+        hostPath:
+          path: /run/containerd-nydus
+          type: DirectoryOrCreate
+      - name: nydus-lib
+        hostPath:
+          path: /var/lib/containerd-nydus
+          type: DirectoryOrCreate
+      - name: fuse
+        hostPath:
+          path: /dev/fuse
+      - name: containerd-conf
+        hostPath:
+          path: /etc/containerd/config.toml

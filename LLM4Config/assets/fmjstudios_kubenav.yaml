@@ -1,0 +1,70 @@
+---
+# Source: kubenav/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-kubenav
+  namespace: default
+  labels:
+    helm.sh/chart: kubenav-0.1.1
+    app.kubernetes.io/name: kubenav
+    app.kubernetes.io/instance: my-kubenav
+    app.kubernetes.io/managed-by: Helm
+automountServiceAccountToken: false
+secrets:
+  - name: my-kubenav-sa-token
+    namespace: default
+---
+# Source: kubenav/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-kubenav-sa-token
+  namespace: default
+  labels:
+    app.kubernetes.io/component: kubenav
+    helm.sh/chart: kubenav-0.1.1
+    app.kubernetes.io/name: kubenav
+    app.kubernetes.io/instance: my-kubenav
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    kubernetes.io/service-account.name: "my-kubenav"
+type: kubernetes.io/service-account-token
+---
+# Source: kubenav/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-kubenav
+  namespace: default
+  labels:
+    helm.sh/chart: kubenav-0.1.1
+    app.kubernetes.io/name: kubenav
+    app.kubernetes.io/instance: my-kubenav
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: kubenav
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get"]
+---
+# Source: kubenav/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-kubenav
+  namespace: default
+  labels:
+    helm.sh/chart: kubenav-0.1.1
+    app.kubernetes.io/name: kubenav
+    app.kubernetes.io/instance: my-kubenav
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: kubenav
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-kubenav
+subjects:
+  - kind: ServiceAccount
+    name: my-kubenav
+    namespace: default

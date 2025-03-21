@@ -1,0 +1,176 @@
+---
+# Source: argo-zombies/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-argo-zombies
+  labels:
+    helm.sh/chart: argo-zombies-0.1.24
+    app.kubernetes.io/name: argo-zombies
+    app.kubernetes.io/instance: my-argo-zombies
+    app.kubernetes.io/version: "0.1.19"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    argo-zombies/ignore: "true"
+---
+# Source: argo-zombies/templates/dashboard-tokens.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: argo-zombies-dashboard-tokens
+  labels:
+    helm.sh/chart: argo-zombies-0.1.24
+    app.kubernetes.io/name: argo-zombies
+    app.kubernetes.io/instance: my-argo-zombies
+    app.kubernetes.io/version: "0.1.19"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    argo-zombies/ignore: "true"
+stringData:
+  GITHUB_TOKEN: ""
+  GITLAB_TOKEN: ""
+---
+# Source: argo-zombies/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-argo-zombies
+  labels:
+    helm.sh/chart: argo-zombies-0.1.24
+    app.kubernetes.io/name: argo-zombies
+    app.kubernetes.io/instance: my-argo-zombies
+    app.kubernetes.io/version: "0.1.19"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    argo-zombies/ignore: "true"
+data:
+  .argo-zombies.yaml: |
+    dashboards:
+      github:
+        enabled: false
+        repo: ""
+      gitlab:
+        enabled: false
+        repo: ""
+
+    exclusions:
+      namespaces:
+        []
+      resources:
+        []
+      selectors:
+        []
+      gvrs:
+        []
+      bundles:
+        []
+---
+# Source: argo-zombies/templates/clusterroles.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-argo-zombies
+  labels:
+    helm.sh/chart: argo-zombies-0.1.24
+    app.kubernetes.io/name: argo-zombies
+    app.kubernetes.io/instance: my-argo-zombies
+    app.kubernetes.io/version: "0.1.19"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    argo-zombies/ignore: "true"
+rules:
+  - apiGroups:
+      - '*'
+    resources:
+      - '*'
+    verbs:
+      - get
+      - list
+  - nonResourceURLs:
+      - '*'
+    verbs:
+      - get
+      - list
+---
+# Source: argo-zombies/templates/clusterrolebindings.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-argo-zombies
+  labels:
+    helm.sh/chart: argo-zombies-0.1.24
+    app.kubernetes.io/name: argo-zombies
+    app.kubernetes.io/instance: my-argo-zombies
+    app.kubernetes.io/version: "0.1.19"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    argo-zombies/ignore: "true"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-argo-zombies
+subjects:
+  - kind: ServiceAccount
+    name: my-argo-zombies
+    namespace: default
+---
+# Source: argo-zombies/templates/cronjob.yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: my-argo-zombies
+  labels:
+    helm.sh/chart: argo-zombies-0.1.24
+    app.kubernetes.io/name: argo-zombies
+    app.kubernetes.io/instance: my-argo-zombies
+    app.kubernetes.io/version: "0.1.19"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    argo-zombies/ignore: "true"
+spec:
+  schedule: "0 * * * *"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: 60
+      backoffLimit: 3
+      template:
+        metadata:
+          annotations:
+            argo-zombies/ignore: "true"
+        spec:
+          restartPolicy: Never
+          serviceAccountName: my-argo-zombies
+          securityContext:
+            {}
+          volumes:
+            - name: argo-zombies-config
+              configMap:
+                name: my-argo-zombies
+          containers:
+            - name: argo-zombies
+              securityContext:
+                {}
+              image: "ghcr.io/henrywhitaker3/argo-zombies:v0.1.19"
+              imagePullPolicy: IfNotPresent
+              resources:
+                null
+              command:
+                - /argo-zombies
+                - detect
+                - --config
+                - /config/.argo-zombies.yaml
+              volumeMounts:
+                - name: argo-zombies-config
+                  mountPath: /config
+              env:
+                - name: GITHUB_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: argo-zombies-dashboard-tokens
+                      key: GITHUB_TOKEN
+                - name: GITLAB_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: argo-zombies-dashboard-tokens
+                      key: GITLAB_TOKEN

@@ -1,0 +1,183 @@
+---
+# Source: camunda-bpm-platform/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-camunda-bpm-platform
+  labels:
+    helm.sh/chart: camunda-bpm-platform-7.6.9
+    app.kubernetes.io/name: camunda-bpm-platform
+    app.kubernetes.io/instance: my-camunda-bpm-platform
+    
+    app.kubernetes.io/version: "7.x.x"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: camunda-bpm-platform/templates/secret.yaml
+# This secret is used for ephemeral H2 database only.
+# Create your own secret for external databases like PostgreSQL.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-camunda-bpm-platform
+  labels:
+    helm.sh/chart: camunda-bpm-platform-7.6.9
+    app.kubernetes.io/name: camunda-bpm-platform
+    app.kubernetes.io/instance: my-camunda-bpm-platform
+    
+    app.kubernetes.io/version: "7.x.x"
+    app.kubernetes.io/managed-by: Helm
+stringData:
+  # From Camunda offcial docs:
+  # https://docs.camunda.org/manual/latest/installation/full/tomcat/pre-packaged/#accessing-the-h2-console
+  DB_PASSWORD: "sa"
+  DB_USERNAME: "sa"
+---
+# Source: camunda-bpm-platform/templates/persistentvolumeclaim.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: my-camunda-bpm-platform-database-h2
+  labels:
+    helm.sh/chart: camunda-bpm-platform-7.6.9
+    app.kubernetes.io/name: camunda-bpm-platform
+    app.kubernetes.io/instance: my-camunda-bpm-platform
+    
+    app.kubernetes.io/version: "7.x.x"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1G
+---
+# Source: camunda-bpm-platform/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-camunda-bpm-platform
+  labels:
+    helm.sh/chart: camunda-bpm-platform-7.6.9
+    app.kubernetes.io/name: camunda-bpm-platform
+    app.kubernetes.io/instance: my-camunda-bpm-platform
+    
+    app.kubernetes.io/version: "7.x.x"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - name: "http"
+      protocol: TCP
+      targetPort: http
+      port: 8080
+
+
+  selector:
+    app.kubernetes.io/name: camunda-bpm-platform
+    app.kubernetes.io/instance: my-camunda-bpm-platform
+---
+# Source: camunda-bpm-platform/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-camunda-bpm-platform
+  labels:
+    helm.sh/chart: camunda-bpm-platform-7.6.9
+    app.kubernetes.io/name: camunda-bpm-platform
+    app.kubernetes.io/instance: my-camunda-bpm-platform
+    
+    app.kubernetes.io/version: "7.x.x"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: camunda-bpm-platform
+      app.kubernetes.io/instance: my-camunda-bpm-platform
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: camunda-bpm-platform
+        app.kubernetes.io/instance: my-camunda-bpm-platform
+        
+    spec:
+      serviceAccountName: my-camunda-bpm-platform
+      securityContext:
+        fsGroup: 1000
+      containers:
+        - name: camunda-bpm-platform
+          securityContext:
+            {}
+          image: "camunda/camunda-bpm-platform:latest"
+          
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: DEBUG
+              value: "false"
+            - name: JMX_PROMETHEUS
+              value: "false"
+            - name: DB_DRIVER
+              value: "org.h2.Driver"
+            - name: DB_URL
+              value: "jdbc:h2:./camunda-h2-dbs/process-engine"
+            - name: DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: my-camunda-bpm-platform
+                  key: DB_USERNAME
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-camunda-bpm-platform
+                  key: DB_PASSWORD
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          
+          readinessProbe:
+            httpGet:
+              path: /camunda/
+              port: http
+            initialDelaySeconds: 120
+            periodSeconds: 60
+          
+          resources:
+            {}
+          volumeMounts:
+            - name: my-camunda-bpm-platform-database-h2
+              mountPath: /camunda/camunda-h2-dbs
+      volumes:
+        - name: my-camunda-bpm-platform-database-h2
+          persistentVolumeClaim:
+            claimName: my-camunda-bpm-platform-database-h2
+---
+# Source: camunda-bpm-platform/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-camunda-bpm-platform-test-connection"
+  labels:
+    helm.sh/chart: camunda-bpm-platform-7.6.9
+    app.kubernetes.io/name: camunda-bpm-platform
+    app.kubernetes.io/instance: my-camunda-bpm-platform
+    
+    app.kubernetes.io/version: "7.x.x"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: curl
+      image: curlimages/curl
+      command: ['curl']
+      # Camunda BPM Platform service could take sometime to start, so setting a retry mechanism.
+      args: [
+        '--retry-connrefused',
+        '--connect-timeout', '5',
+        '--max-time', '10',
+        '--retry', '15',
+        '--retry-max-time', '300',
+        'my-camunda-bpm-platform:8080',
+      ]
+  restartPolicy: Never

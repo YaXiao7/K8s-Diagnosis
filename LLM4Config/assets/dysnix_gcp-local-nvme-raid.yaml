@@ -1,0 +1,72 @@
+---
+# Source: gcp-local-nvme-raid/templates/daemonset.yaml
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: my-gcp-local-nvme-raid
+  labels:
+    helm.sh/chart: gcp-local-nvme-raid-0.1.1
+    app.kubernetes.io/name: gcp-local-nvme-raid
+    app.kubernetes.io/instance: my-gcp-local-nvme-raid
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: gcp-local-nvme-raid
+      app.kubernetes.io/instance: my-gcp-local-nvme-raid
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: gcp-local-nvme-raid
+        app.kubernetes.io/instance: my-gcp-local-nvme-raid
+    spec:
+      securityContext:
+        {}
+      hostPID: true
+      containers:
+        - name: gcp-local-nvme-raid
+          securityContext:
+            privileged: true
+          image: "gcr.io/google-containers/startup-script:v1"
+          imagePullPolicy: IfNotPresent
+          env:
+          - name: STARTUP_SCRIPT
+            value: |
+              set -o errexit
+              set -o nounset
+              set -o pipefail
+
+              devices=()
+              for ssd in /dev/disk/by-id/google-local-ssd-block*; do
+                if [ -e "${ssd}" ]; then
+                  devices+=("${ssd}")
+                fi
+              done
+              if [ "${#devices[@]}" -eq 0 ]; then
+                echo "No Local NVMe SSD disks found."
+                exit 0
+              fi
+
+              raid_id="md0"
+              device="/dev/${raid_id}"
+              echo "Setting RAID array with Local SSDs on device ${device}"
+              if ! grep -q "$raid_id" /proc/mdstat; then
+                echo "y" | mdadm --create "${device}" --level=0 --force  --raid-devices=${#devices[@]} "${devices[@]}"
+              fi
+
+              if ! tune2fs -l "${device}" ; then
+                echo "Formatting '${device}'"
+                mkfs.ext4  "${device}"
+              fi
+
+              mountpoint=/mnt/disks/raid0
+              mkdir -p "${mountpoint}"
+              echo "Mounting '${device}' at '${mountpoint}'"
+              mount -o discard,defaults "${device}" "${mountpoint}"
+              chmod a+w "${mountpoint}"
+      nodeSelector:
+        cloud.google.com/gke-local-nvme-ssd: "true"
+      tolerations:
+        - effect: NoSchedule
+          operator: Exists

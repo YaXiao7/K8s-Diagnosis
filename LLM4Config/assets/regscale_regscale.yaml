@@ -1,0 +1,119 @@
+---
+# Source: regscale/templates/regscale-secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: regscale-secrets
+type: Opaque
+stringData:
+  JWTSecretKey: "JWTSecretKeyFromSomeWhere6789012"
+  SQLConn: ""
+  EncryptionKey: "YourEncryptionKeyFromSomeWhere12"
+---
+# Source: regscale/templates/regscale-cm.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: regscale-configmap
+data:
+  StoredFilesPath: "atlas-files"
+  FileSizeLimit: "104857600"
+---
+# Source: regscale/templates/regscale-pvc.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: regscale-pvclaim
+spec:
+  storageClassName: ""
+  volumeName: regscale-persistentvolume
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 1Gi
+---
+# Source: regscale/templates/regscale-svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: regscale-svc
+spec:
+  type: LoadBalancer 
+  ports: 
+    - port: 80
+      targetPort: 80
+      protocol: TCP
+      name: http
+  selector:
+    app: regscale-app
+---
+# Source: regscale/templates/regscale-deployment-app.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: regscale-app-deployment
+  labels: 
+    app: regscale-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: regscale-app
+  minReadySeconds: 60
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: regscale-app
+    spec:
+      containers:
+      - name: regscale-app-container
+        imagePullPolicy: Always
+        image: regscale/regscale:4.23.0
+        ports:
+        - containerPort: 80
+        envFrom:
+        - configMapRef:
+            name: regscale-configmap
+        - secretRef:
+            name: regscale-secrets
+        volumeMounts:
+          - name: regscale-assetstoragevolume
+            mountPath: "/app/atlas-files"
+      volumes:
+        - name: regscale-assetstoragevolume
+          emptyDir:
+            sizeLimit: "1Gi"
+---
+# Source: regscale/templates/regscale-deployment-cli.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: regscale-cli-deployment
+  labels:
+    app: regscale-cli
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: regscale-cli
+  minReadySeconds: 60
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: regscale-cli
+    spec:
+      containers:
+        - name: regscale-cli-container
+          command: ["/bin/sh"]
+          args: ["-c", "tail -f /dev/null"]
+          imagePullPolicy: Always
+          image: "regscale/regscale-cli:4.23.0"

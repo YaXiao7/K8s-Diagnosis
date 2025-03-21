@@ -1,0 +1,166 @@
+---
+# Source: container-registry/templates/container-registry.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: auth
+  namespace: default
+stringData:
+  htpasswd:
+---
+# Source: container-registry/templates/container-registry.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: registry
+  namespace: default
+  labels:
+    helm.sh/chart: container-registry-0.1.0
+    app.kubernetes.io/name: container-registry
+    app.kubernetes.io/instance: my-container-registry
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: container-registry
+    app.kubernetes.io/instance: my-container-registry
+  ports:
+  - name: registry
+    port: 5000
+    targetPort: 5000
+---
+# Source: container-registry/templates/container-registry.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: registry-node
+  namespace: default
+  labels:
+    helm.sh/chart: container-registry-0.1.0
+    app.kubernetes.io/name: container-registry
+    app.kubernetes.io/instance: my-container-registry
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: NodePort
+  selector:
+    app.kubernetes.io/name: container-registry
+    app.kubernetes.io/instance: my-container-registry
+  ports:
+  - name: registry
+    port: 5000
+    targetPort: 5000
+    nodePort: 30500
+---
+# Source: container-registry/templates/container-registry.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: registry
+  namespace: default
+  labels:
+    helm.sh/chart: container-registry-0.1.0
+    app.kubernetes.io/name: container-registry
+    app.kubernetes.io/instance: my-container-registry
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: container-registry
+      app.kubernetes.io/instance: my-container-registry
+  template:
+    metadata:
+      labels:
+        helm.sh/chart: container-registry-0.1.0
+        app.kubernetes.io/name: container-registry
+        app.kubernetes.io/instance: my-container-registry
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      containers:
+      - name: registry
+        image: registry:2.7.1
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: REGISTRY_AUTH
+          value: htpasswd
+        - name: REGISTRY_AUTH_HTPASSWD_REALM
+          value: Registry Realm
+        - name: REGISTRY_AUTH_HTPASSWD_PATH
+          value: /etc/registry/auth/htpasswd
+        volumeMounts:
+        - name: registry
+          mountPath: /var/lib/registry
+          readOnly: false
+        - name: auth
+          mountPath: /etc/registry/auth
+          readOnly: true
+        securityContext:
+          runAsUser: 1000
+          runAsNonRoot: true
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+        livenessProbe:
+          tcpSocket:
+            port: 5000
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        readinessProbe:
+          tcpSocket:
+            port: 5000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - name: registry
+        emptyDir: {}
+      - name: auth
+        secret:
+          secretName: auth
+---
+# Source: container-registry/templates/container-registry.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    kubernetes.io/ingress.class: traefik
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+  labels:
+    helm.sh/chart: container-registry-0.1.0
+    app.kubernetes.io/name: container-registry
+    app.kubernetes.io/instance: my-container-registry
+    app.kubernetes.io/managed-by: Helm
+  name: registry
+  namespace: default
+spec:
+  rules:
+  - host: 
+    http:
+      paths:
+      - backend:
+          service:
+            name: registry
+            port:
+              number: 5000
+        path: /
+        pathType: ImplementationSpecific
+  tls:
+  - hosts:
+    - 
+    secretName: epinio-registry-tls
+---
+# Source: container-registry/templates/certificate.yaml
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: epinio-registry
+  namespace: epinio-registry
+spec:
+  dnsNames:
+  - 
+  issuerRef:
+    kind: ClusterIssuer
+    name: 
+  secretName: epinio-registry-tls
+  secretTemplate:
+    annotations:
+      kubed.appscode.com/sync: "kubed-registry-tls-from=epinio-registry" # Sync certificate to matching namespaces

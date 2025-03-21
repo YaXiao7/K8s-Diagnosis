@@ -1,0 +1,373 @@
+---
+# Source: k8s-envoy-sidecar/templates/envoy-rbac.yaml.tpl
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-k8s-envoy-sidecar
+---
+# Source: k8s-envoy-sidecar/templates/configmap-envoy.yaml.tpl
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-k8s-envoy-sidecar-envoy
+data:
+  envoy.yaml: |
+    ---
+    admin:
+      address:
+        socket_address:
+          protocol: TCP
+          address: 0.0.0.0
+          port_value: 9901
+    node:
+      id: envoy
+      cluster: my-k8s-envoy-sidecar-envoy
+      locality:
+        region: ${REGION}
+        zone: ${ZONE}
+        sub_zone: ${NODE}
+    dynamic_resources:
+      lds_config:
+        resource_api_version: V3
+        path_config_source:
+          path: "/etc/envoy/lds.yaml"
+      cds_config:
+        resource_api_version: V3
+        path_config_source:
+          path: "/etc/envoy/cds.yaml"
+
+  lds.yaml: |
+    ---
+    version_info: '0'
+    resources:
+
+  cds.yaml.sh: |
+    #!/bin/bash
+    cat <<EOF > /etc/envoy/cds.yaml
+    ---
+    version_info: '0'
+    resources:
+    EOF
+
+  cds-eds-gen.sh: |
+    #!/bin/bash
+    UNIXTIME=$(date +%s)
+
+    CALLER=new-by-${1:-"empty"}
+    CDS_FILE=/etc/envoy/cds-${CALLER}.yaml
+
+    cmp_wrp(){
+      [ ! -f "$1" ] && return 1
+      return $(cmp $1 $2 &> /dev/null)
+    }
+
+    TMP_FILES=("$CDS_FILE")
+
+    cleanup(){
+      rm -f ${TMP_FILES[@]}
+    }
+    trap cleanup EXIT
+
+    cat <<EOF > ${CDS_FILE}
+    ---
+    version_info: "${UNIXTIME}"
+    resources:
+    EOF
+
+    if ! cmp_wrp /etc/envoy/cds.yaml ${CDS_FILE}; then
+      mv -vf ${CDS_FILE} /etc/envoy/cds.yaml
+    fi
+
+  k8s-event-bus.sh: |
+    #!/bin/bash
+    kubectl_wrp(){
+      timeout $(($RANDOM*10%86400)) kubectl -n $KUBE_NAMESPACE "${@}"
+    }
+    kubectl_watch_endpoint(){
+      kubectl_wrp get endpoints "${@}" -o jsonpath="{}{'\n'}" -w --watch-only=false
+    }
+
+    mkdir -p /tmp/k8s-event-bus/
+    wait
+
+  k8s-event-parser.sh: |
+    #!/bin/bash
+    kubectl_get_pod_node(){
+      [ -z "$1" ] && exit 1
+      kubectl get pods $1 -o jsonpath='{range .items[*]}{@.spec.nodeName}{"\n"}'
+    }
+
+    kubectl_get_node_lbl(){
+      [ -z "$1" ] && return 1
+      [ -z "$2" ] && return 1
+      node="$1"
+      label="$2"
+      cat /var/cache/node-${label}/$node 2> /dev/null || {
+        string=$(kubectl get node $1 -o jsonpath={@.metadata.labels.topology\\.kubernetes\\.io/${label}})
+        mkdir -p /var/cache/node-${label}
+        echo ${string} > /var/cache/node-${label}/$node
+        echo ${string}
+      }
+    }
+
+    # Update config with locality aware values
+    [ -f /run/local-node ] || kubectl_get_pod_node $(cat /etc/hostname) > /run/local-node
+    [ -f /run/local-zone ] || kubectl_get_node_lbl $(cat /run/local-node) zone > /run/local-zone
+    LOCAL_ZONE=$(cat /run/local-zone)
+
+    print_status(){
+      if [ -f "$2" ]; then
+        echo "$1"
+        cat "$2"
+      fi
+    }
+
+    ERR(){ echo "$@" >&2; exit 1; }
+
+    CLUSTER="$1"
+    [ -z "$CLUSTER" ] && ERR "Empty CLUSTER arg!"
+
+    FILE=/tmp/k8s-event-parser/${CLUSTER}.json
+
+    last_line_type(){
+      case "$1" in
+        ready)
+          cat $FILE | jq '.subsets[].addresses[] | select(.targetRef.kind == "Pod")' ;;
+        notReady)
+          # Can be null
+          cat $FILE | jq '.subsets[].notReadyAddresses[] | select(.targetRef.kind == "Pod")' 2> /dev/null ;;
+      esac
+    }
+
+    get_pods_type(){
+      type=$1
+      last_line_type ${type} | jq .targetRef.name -r
+    }
+
+    print_endpoint_line(){
+      ip=$1
+      node=$2
+      zone=$3
+      region=$4
+      echo $ip $node $zone $region
+    }
+
+    mkdir -p /tmp/k8s-event-parser/
+
+    while read -r messageline; do
+      echo "$messageline" > $FILE
+
+      rm -f /tmp/k8s-locality-gen.${CLUSTER}.local.list
+      rm -f /tmp/k8s-locality-gen.${CLUSTER}.remote.list
+      rm -f /tmp/k8s-locality-gen.${CLUSTER}.notReady.list
+
+      for pod in $(get_pods_type ready); do
+        [ -z "$pod" ] && continue
+        ip=$(last_line_type ready | jq -rc ". | select(.targetRef.name == \"$pod\") | .ip" | tail -n1)
+        node=$(last_line_type ready | jq -rc ". | select(.targetRef.name == \"$pod\") | .nodeName" | tail -n1)
+        zone=$(kubectl_get_node_lbl "${node}" zone)
+        region=$(kubectl_get_node_lbl "${node}" region)
+        if [ "$LOCAL_ZONE" == "$zone" ]; then
+          print_endpoint_line ${ip} ${node} ${zone} ${region} >> /tmp/k8s-locality-gen.${CLUSTER}.local.list
+        else
+          print_endpoint_line ${ip} ${node} ${zone} ${region} >> /tmp/k8s-locality-gen.${CLUSTER}.remote.list
+        fi
+      done
+
+      # Add not ready endpoints
+      for pod in $(get_pods_type notReady); do
+        [ -z "$pod" ] && continue
+        ip=$(last_line_type notReady | jq -rc ". | select(.targetRef.name == \"$pod\") | .ip" | tail -n1)
+        print_endpoint_line ${ip} >> /tmp/k8s-locality-gen.${CLUSTER}.notReady.list
+      done
+
+      echo         "## ${CLUSTER}"
+      print_status "## Local zone - $LOCAL_ZONE" /tmp/k8s-locality-gen.${CLUSTER}.local.list
+      print_status "## Remote zone" /tmp/k8s-locality-gen.${CLUSTER}.remote.list
+      print_status "## Not Ready" /tmp/k8s-locality-gen.${CLUSTER}.notReady.list
+
+      ./cds-eds-gen.sh $CLUSTER
+    done
+
+  mtr-event-bus.sh: |
+    #!/bin/bash
+    mkdir -p /tmp/mtr-event-bus
+
+    resolve(){
+      getent hosts $1 | awk '{print $1}'
+    }
+
+    cmp_wrp(){
+      [ ! -f "$1" ] && return 1
+      return $(cmp $1 $2 &> /dev/null)
+    }
+
+    while sleep $((5 + $RANDOM%11)); do
+      true # In case hosts are empty - no op
+    done
+
+  mtr-locality-gen.sh: |
+    #!/bin/bash
+    # Update config with locality aware valueses
+    collect_latency_info(){
+      xargs -n1 -P 16 mtr -i 0.1 -rwc 5 --tcp --port $1 --json;
+    }
+
+    filter_host_latency(){
+      jq -rc '. | [.report.mtr.dst, .report.hubs[-1].Best] | @csv';
+    }
+
+    filter_nearest_host(){
+      sort -n -k2 -t ','
+    }
+
+    FILE=$1
+    PORT=$2
+    RECORDS_COUNT=$(cat $1 | wc -l)
+
+    cat $FILE | \
+      collect_latency_info $PORT | \
+      filter_host_latency | \
+      filter_nearest_host > ${FILE}.raw
+    RECORDS_COUNT_RAW=$(cat ${FILE}.raw | wc -l)
+
+    if [ "$RECORDS_COUNT" -eq "$RECORDS_COUNT_RAW" ]; then
+      cut -d'"' -f2 ${FILE}.raw
+    else
+      # Return dns records on mtr error
+      cat $FILE
+    fi
+
+
+  run-envoy.sh: |
+    #!/bin/bash
+    cd "$(dirname $0)"
+
+    # Generate startup config
+    install -vDm644 ./envoy.yaml /etc/envoy/envoy.yaml
+    install -vDm644 ./lds.yaml /etc/envoy/lds.yaml
+    ./cds.yaml.sh # Support endpoint as ENV var
+
+    ./k8s-event-bus.sh &
+    ./mtr-event-bus.sh &
+
+    envoy -c /etc/envoy/envoy.yaml
+---
+# Source: k8s-envoy-sidecar/templates/envoy-rbac.yaml.tpl
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: default-my-k8s-envoy-sidecar
+rules:
+- apiGroups: [""]
+  resources: ["pods", "nodes", "services", "endpoints"]
+  verbs: ["get", "watch", "list"]
+---
+# Source: k8s-envoy-sidecar/templates/envoy-rbac.yaml.tpl
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: default-my-k8s-envoy-sidecar
+subjects:
+- kind: ServiceAccount
+  name: my-k8s-envoy-sidecar
+  apiGroup: ""
+  namespace: default
+roleRef:
+  kind: ClusterRole
+  name: default-my-k8s-envoy-sidecar
+  apiGroup: ""
+---
+# Source: k8s-envoy-sidecar/templates/service.yaml.tpl
+kind: Service
+apiVersion: v1
+metadata:
+  name: my-k8s-envoy-sidecar
+  annotations:
+  labels:
+    app: my-k8s-envoy-sidecar
+spec:
+  ports:
+    - name: http
+      port: 80
+      protocol: TCP
+      targetPort: http
+  selector:
+    app: my-k8s-envoy-sidecar
+  type: ClusterIP
+---
+# Source: k8s-envoy-sidecar/templates/service.yaml.tpl
+kind: Service
+apiVersion: v1
+metadata:
+  name: my-k8s-envoy-sidecar-headless
+  annotations:
+  labels:
+    app: my-k8s-envoy-sidecar
+spec:
+  ports:
+    - name: http
+      port: 80
+      protocol: TCP
+      targetPort: http
+  selector:
+    app: my-k8s-envoy-sidecar
+  clusterIP: None
+  type: ClusterIP
+---
+# Source: k8s-envoy-sidecar/templates/deployment.yaml.tpl
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: my-k8s-envoy-sidecar
+spec:
+  minReadySeconds: 10
+  selector:
+    matchLabels:
+      app: my-k8s-envoy-sidecar
+  template:
+    metadata:
+      labels:
+        app: my-k8s-envoy-sidecar
+    spec:
+      serviceAccountName: my-k8s-envoy-sidecar
+      serviceAccount: my-k8s-envoy-sidecar
+      containers:
+        - name: envoy
+          image: ghcr.io/nefelim4ag/k8s-envoy-sidecar:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+          - name: admin
+            containerPort: 9901
+          resources: {"requests":{"cpu":"30m","memory":"32Mi"}}
+          command:
+          - bash
+          - /etc/envoy_origin/run-envoy.sh
+          volumeMounts:
+          - name: envoy-src-config
+            mountPath: /etc/envoy_origin/
+      volumes:
+      - name: envoy-src-config
+        configMap:
+          name: my-k8s-envoy-sidecar-envoy
+          defaultMode: 0755
+      hostNetwork: false
+---
+# Source: k8s-envoy-sidecar/templates/servicemonitor.yaml.tpl
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: my-k8s-envoy-sidecar-envoy
+spec:
+  endpoints:
+    - path: /stats/prometheus
+      port: admin
+      interval: 30s
+      params:
+        usedonly: []
+  namespaceSelector:
+    matchNames:
+      - default
+  selector:
+    matchLabels:
+      app: my-k8s-envoy-sidecar

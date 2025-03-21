@@ -1,0 +1,98 @@
+---
+# Source: prom-label-proxy/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-prom-label-proxy
+  namespace: default
+  labels:
+    helm.sh/chart: prom-label-proxy-0.10.0
+    app.kubernetes.io/name: prom-label-proxy
+    app.kubernetes.io/instance: my-prom-label-proxy
+    app.kubernetes.io/version: "v0.11.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: prom-label-proxy/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-prom-label-proxy
+  namespace: default
+  labels:
+    helm.sh/chart: prom-label-proxy-0.10.0
+    app.kubernetes.io/name: prom-label-proxy
+    app.kubernetes.io/instance: my-prom-label-proxy
+    app.kubernetes.io/version: "v0.11.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: prom-label-proxy
+    app.kubernetes.io/instance: my-prom-label-proxy
+---
+# Source: prom-label-proxy/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-prom-label-proxy
+  namespace: default
+  labels:
+    helm.sh/chart: prom-label-proxy-0.10.0
+    app.kubernetes.io/name: prom-label-proxy
+    app.kubernetes.io/instance: my-prom-label-proxy
+    app.kubernetes.io/version: "v0.11.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: prom-label-proxy
+      app.kubernetes.io/instance: my-prom-label-proxy
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: prom-label-proxy
+        app.kubernetes.io/instance: my-prom-label-proxy
+    spec:
+      serviceAccountName: my-prom-label-proxy
+      securityContext:
+        {}
+      containers:
+        - name: prom-label-proxy
+          securityContext:
+            readOnlyRootFilesystem: true
+            runAsGroup: 65534
+            runAsNonRoot: true
+            runAsUser: 65534
+          image: "quay.io/prometheuscommunity/prom-label-proxy:v0.11.0"
+          imagePullPolicy: IfNotPresent
+          args:
+            - "--insecure-listen-address=0.0.0.0:8080"
+            - "--upstream=http://prometheus:9090"
+            - "--label=namespace"
+            - --enable-label-apis=true
+            - --error-on-replace=true
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          resources:
+            limits:
+              cpu: 200m
+              memory: 128Mi
+            requests:
+              cpu: 100m
+              memory: 64Mi

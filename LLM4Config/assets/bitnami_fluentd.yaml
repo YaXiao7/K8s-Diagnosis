@@ -1,0 +1,760 @@
+---
+# Source: fluentd/templates/aggregator-networkpolicy.yaml
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: my-fluentd-aggregator
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-fluentd
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: fluentd
+    app.kubernetes.io/version: 1.17.1
+    helm.sh/chart: fluentd-6.5.12
+    app.kubernetes.io/component: aggregator
+spec:
+  policyTypes:
+    - Ingress
+    - Egress
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: my-fluentd
+      app.kubernetes.io/name: fluentd
+      app.kubernetes.io/component: aggregator
+  egress:
+    - {}
+  ingress:
+    # Allow inbound connections
+    - ports:
+        - port: 9880
+        - port: 24224
+---
+# Source: fluentd/templates/forwarder-networkpolicy.yaml
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: my-fluentd-forwarder
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-fluentd
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: fluentd
+    app.kubernetes.io/version: 1.17.1
+    helm.sh/chart: fluentd-6.5.12
+    app.kubernetes.io/component: forwarder
+spec:
+  policyTypes:
+    - Ingress
+    - Egress
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: my-fluentd
+      app.kubernetes.io/name: fluentd
+      app.kubernetes.io/component: forwarder
+  egress:
+    - {}
+  ingress:
+    # Allow inbound connections
+    - ports:
+        - port: 9880
+---
+# Source: fluentd/templates/aggregator-pdb.yaml
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: my-fluentd
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-fluentd
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: fluentd
+    app.kubernetes.io/version: 1.17.1
+    helm.sh/chart: fluentd-6.5.12
+    app.kubernetes.io/component: aggregator
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: my-fluentd
+      app.kubernetes.io/name: fluentd
+      app.kubernetes.io/component: aggregator
+---
+# Source: fluentd/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-fluentd-forwarder
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-fluentd
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: fluentd
+    app.kubernetes.io/version: 1.17.1
+    helm.sh/chart: fluentd-6.5.12
+    app.kubernetes.io/part-of: forwarder
+automountServiceAccountToken: false
+---
+# Source: fluentd/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-fluentd-aggregator
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-fluentd
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: fluentd
+    app.kubernetes.io/version: 1.17.1
+    helm.sh/chart: fluentd-6.5.12
+    app.kubernetes.io/part-of: aggregator
+automountServiceAccountToken: false
+---
+# Source: fluentd/templates/aggregator-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-fluentd-aggregator-cm
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-fluentd
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: fluentd
+    app.kubernetes.io/version: 1.17.1
+    helm.sh/chart: fluentd-6.5.12
+    app.kubernetes.io/component: aggregator
+data:
+  fluentd-inputs.conf: |
+    # TCP input to receive logs from
+    <source>
+      @type forward
+      bind 0.0.0.0
+      port 24224
+    </source>
+    
+    # HTTP input for the liveness and readiness probes
+    <source>
+      @type http
+      bind 0.0.0.0
+      port 9880
+    </source>
+    
+  fluentd-output.conf: |
+    # Throw the healthcheck to the standard output
+    <match fluentd.healthcheck>
+      @type stdout
+    </match>
+    
+    # Send the logs to the standard output
+    <match **>
+      @type stdout
+    </match>
+    
+  fluentd.conf: |
+    # Ignore fluentd own events
+    <match fluent.**>
+      @type null
+    </match>
+    
+    @include fluentd-inputs.conf
+    @include fluentd-output.conf
+    
+  metrics.conf: |
+    # Prometheus Exporter Plugin
+    # input plugin that exports metrics
+    <source>
+      @type prometheus
+      port 24231
+    </source>
+    
+    # input plugin that collects metrics from MonitorAgent
+    <source>
+      @type prometheus_monitor
+      <labels>
+        host ${hostname}
+      </labels>
+    </source>
+    
+    # input plugin that collects metrics for output plugin
+    <source>
+      @type prometheus_output_monitor
+      <labels>
+        host ${hostname}
+      </labels>
+    </source>
+---
+# Source: fluentd/templates/forwarder-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-fluentd-forwarder-cm
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-fluentd
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: fluentd
+    app.kubernetes.io/version: 1.17.1
+    helm.sh/chart: fluentd-6.5.12
+    app.kubernetes.io/component: forwarder
+data:
+  fluentd-inputs.conf: |
+    # HTTP input for the liveness and readiness probes
+    <source>
+      @type http
+      port 9880
+    </source>
+    # Get the logs from the containers running in the node
+    <source>
+      @type tail
+      path /var/log/containers/*.log
+      # exclude Fluentd logs
+      exclude_path /var/log/containers/*fluentd*.log
+      pos_file /opt/bitnami/fluentd/logs/buffers/fluentd-docker.pos
+      tag kubernetes.*
+      read_from_head true
+      <parse>
+        @type json
+        time_key time
+        time_format %Y-%m-%dT%H:%M:%S.%NZ
+      </parse>
+    </source>
+    # enrich with kubernetes metadata
+    <filter kubernetes.**>
+      @type kubernetes_metadata
+    </filter>
+    
+  fluentd-output.conf: |
+    # Throw the healthcheck to the standard output instead of forwarding it
+    <match fluentd.healthcheck>
+      @type stdout
+    </match>
+    # Forward all logs to the aggregators
+    <match **>
+      @type forward
+      <server>
+        host my-fluentd-0.my-fluentd-headless.default.svc.cluster.local
+        port 24224
+      </server>
+      <buffer>
+        @type file
+        path /opt/bitnami/fluentd/logs/buffers/logs.buffer
+        flush_thread_count 2
+        flush_interval 5s
+      </buffer>
+    </match>
+    
+  fluentd.conf: |
+    # Ignore fluentd own events
+    <match fluent.**>
+      @type null
+    </match>
+    
+    @include fluentd-inputs.conf
+    @include fluentd-output.conf
+    
+  metrics.conf: |
+    # Prometheus Exporter Plugin
+    # input plugin that exports metrics
+    <source>
+      @type prometheus
+      port 24231
+    </source>
+    # input plugin that collects metrics from MonitorAgent
+    <source>
+      @type prometheus_monitor
+      <labels>
+        host ${hostname}
+      </labels>
+    </source>
+    # input plugin that collects metrics for output plugin
+    <source>
+      @type prometheus_output_monitor
+      <labels>
+        host ${hostname}
+      </labels>
+    </source>
+    # input plugin that collects metrics for in_tail plugin
+    <source>
+      @type prometheus_tail_monitor
+      <labels>
+        host ${hostname}
+      </labels>
+    </source>
+---
+# Source: fluentd/templates/forwarder-clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-fluentd-default
+  labels:
+    app.kubernetes.io/instance: my-fluentd
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: fluentd
+    app.kubernetes.io/version: 1.17.1
+    helm.sh/chart: fluentd-6.5.12
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - "namespaces"
+      - "pods"
+    verbs:
+      - "get"
+      - "watch"
+      - "list"
+---
+# Source: fluentd/templates/forwarder-clusterrolebinding.yaml
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-fluentd-default
+  labels:
+    app.kubernetes.io/instance: my-fluentd
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: fluentd
+    app.kubernetes.io/version: 1.17.1
+    helm.sh/chart: fluentd-6.5.12
+roleRef:
+  kind: ClusterRole
+  apiGroup: rbac.authorization.k8s.io
+  name: my-fluentd-default
+subjects:
+  - kind: ServiceAccount
+    name: my-fluentd-forwarder
+    namespace: "default"
+---
+# Source: fluentd/templates/aggregator-svc-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-fluentd-headless
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-fluentd
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: fluentd
+    app.kubernetes.io/version: 1.17.1
+    helm.sh/chart: fluentd-6.5.12
+    app.kubernetes.io/component: aggregator
+    app: aggregator
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: http
+      
+      port: 9880
+      protocol: TCP
+      targetPort: http
+    - name: tcp
+      
+      port: 24224
+      protocol: TCP
+      targetPort: tcp
+  selector:
+    app.kubernetes.io/instance: my-fluentd
+    app.kubernetes.io/name: fluentd
+    app.kubernetes.io/component: aggregator
+---
+# Source: fluentd/templates/aggregator-svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-fluentd-aggregator
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-fluentd
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: fluentd
+    app.kubernetes.io/version: 1.17.1
+    helm.sh/chart: fluentd-6.5.12
+    app.kubernetes.io/component: aggregator
+    app: aggregator
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+    - name: http
+      
+      port: 9880
+      protocol: TCP
+      targetPort: http
+    - name: tcp
+      
+      port: 24224
+      protocol: TCP
+      targetPort: tcp
+  selector:
+    app.kubernetes.io/instance: my-fluentd
+    app.kubernetes.io/name: fluentd
+    app.kubernetes.io/component: aggregator
+---
+# Source: fluentd/templates/forwarder-svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-fluentd-forwarder
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-fluentd
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: fluentd
+    app.kubernetes.io/version: 1.17.1
+    helm.sh/chart: fluentd-6.5.12
+    app.kubernetes.io/component: forwarder
+    app: forwarder
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+    - name: http
+      
+      port: 9880
+      protocol: TCP
+      targetPort: http
+  selector:
+    app.kubernetes.io/instance: my-fluentd
+    app.kubernetes.io/name: fluentd
+    app.kubernetes.io/component: forwarder
+---
+# Source: fluentd/templates/forwarder-daemonset.yaml
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: my-fluentd
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-fluentd
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: fluentd
+    app.kubernetes.io/version: 1.17.1
+    helm.sh/chart: fluentd-6.5.12
+    app.kubernetes.io/component: forwarder
+    ## Istio Labels: https://istio.io/docs/ops/deployment/requirements/
+    app: forwarder
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: my-fluentd
+      app.kubernetes.io/name: fluentd
+      app.kubernetes.io/component: forwarder
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: my-fluentd
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: fluentd
+        app.kubernetes.io/version: 1.17.1
+        helm.sh/chart: fluentd-6.5.12
+        app.kubernetes.io/component: forwarder
+        app: forwarder
+      annotations:
+        checksum/config: 59ade8164d22093578b57e44830da6ef0417ebf33e6140ee566d00530780ba41
+    spec:
+      
+      automountServiceAccountToken: true
+      serviceAccountName: my-fluentd-forwarder
+      priorityClassName: ""
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 0
+        fsGroupChangePolicy: Always
+        supplementalGroups: []
+        sysctls: []
+      initContainers:
+        # Source: https://github.com/fluent/fluentd-kubernetes-daemonset/issues/1393
+        - name: tmp-dir-permissions
+          image: docker.io/bitnami/fluentd:1.17.1-debian-12-r0
+          imagePullPolicy: "IfNotPresent"
+          command:
+            - sh
+            - -c
+          args:
+            - |-
+              #!/bin/sh
+              chmod o-rwx /tmp
+          resources:
+            limits:
+              cpu: 150m
+              ephemeral-storage: 2Gi
+              memory: 192Mi
+            requests:
+              cpu: 100m
+              ephemeral-storage: 50Mi
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsUser: 0
+          volumeMounts:
+            - name: empty-dir
+              mountPath: /tmp
+              subPath: tmp-dir
+      terminationGracePeriodSeconds: 30
+      hostNetwork: false
+      containers:
+        - name: fluentd
+          image: docker.io/bitnami/fluentd:1.17.1-debian-12-r0
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsGroup: 0
+            runAsUser: 0
+            seLinuxOptions: {}
+            seccompProfile:
+              type: RuntimeDefault
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: FLUENTD_CONF
+              value: fluentd.conf
+            - name: FLUENTD_OPT
+              value: ""
+            - name: FLUENTD_DAEMON_USER
+              value: "root"
+            - name: FLUENTD_DAEMON_GROUP
+              value: "root"
+          envFrom:
+          resources:
+            limits:
+              cpu: 150m
+              ephemeral-storage: 2Gi
+              memory: 192Mi
+            requests:
+              cpu: 100m
+              ephemeral-storage: 50Mi
+              memory: 128Mi
+          ports:
+            - containerPort: 9880
+              name: http
+              protocol: TCP
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          readinessProbe:
+            httpGet:
+              path: /fluentd.healthcheck?json=%7B%22ping%22%3A+%22pong%22%7D
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          volumeMounts:
+            - name: fluentd-config
+              mountPath: /opt/bitnami/fluentd/conf
+            - name: buffer
+              mountPath: /opt/bitnami/fluentd/logs/buffers
+            - name: varlog
+              mountPath: /var/log
+            - name: varlibdockercontainers
+              mountPath: /var/lib/docker/containers
+              readOnly: true
+            - name: empty-dir
+              mountPath: /tmp
+              subPath: tmp-dir
+      volumes:
+        - name: empty-dir
+          emptyDir: {}
+        - name: fluentd-config
+          configMap:
+            name: my-fluentd-forwarder-cm
+        - name: buffer
+          emptyDir: {}
+        - name: varlog
+          hostPath:
+            path: /var/log
+        - name: varlibdockercontainers
+          hostPath:
+            path: /var/lib/docker/containers
+---
+# Source: fluentd/templates/aggregator-statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-fluentd
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-fluentd
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: fluentd
+    app.kubernetes.io/version: 1.17.1
+    helm.sh/chart: fluentd-6.5.12
+    app.kubernetes.io/component: aggregator
+    ## Istio Labels: https://istio.io/docs/ops/deployment/requirements/
+    app: aggregator
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: my-fluentd
+      app.kubernetes.io/name: fluentd
+      app.kubernetes.io/component: aggregator
+  serviceName: my-fluentd-headless
+  podManagementPolicy: 
+  replicas: 1
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: my-fluentd
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: fluentd
+        app.kubernetes.io/version: 1.17.1
+        helm.sh/chart: fluentd-6.5.12
+        app.kubernetes.io/component: aggregator
+        app: aggregator
+      annotations:
+        checksum/config: 6b154ad85d3b9c4cca469330ea42241e539d59e2c2b7aff86f72189861570861
+    spec:
+      
+      automountServiceAccountToken: false
+      serviceAccountName: my-fluentd-aggregator
+      securityContext:
+        fsGroup: 1001
+        fsGroupChangePolicy: Always
+        supplementalGroups: []
+        sysctls: []
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/instance: my-fluentd
+                    app.kubernetes.io/name: fluentd
+                    app.kubernetes.io/component: aggregator
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      initContainers:
+        # Source: https://github.com/fluent/fluentd-kubernetes-daemonset/issues/1393
+        - name: tmp-dir-permissions
+          image: docker.io/bitnami/fluentd:1.17.1-debian-12-r0
+          imagePullPolicy: "IfNotPresent"
+          command:
+            - sh
+            - -c
+          args:
+            - |-
+              #!/bin/sh
+              chmod o-rwx /tmp
+          resources:
+            limits:
+              cpu: 150m
+              ephemeral-storage: 2Gi
+              memory: 192Mi
+            requests:
+              cpu: 100m
+              ephemeral-storage: 50Mi
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsUser: 0
+          volumeMounts:
+            - name: empty-dir
+              mountPath: /tmp
+              subPath: tmp-dir
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: fluentd
+          image: docker.io/bitnami/fluentd:1.17.1-debian-12-r0
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsGroup: 1001
+            runAsUser: 1001
+            seLinuxOptions: {}
+            seccompProfile:
+              type: RuntimeDefault
+          
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: FLUENTD_CONF
+              value: fluentd.conf
+            - name: FLUENTD_OPT
+              value: ""
+          envFrom:
+          resources:
+            limits:
+              cpu: 150m
+              ephemeral-storage: 2Gi
+              memory: 192Mi
+            requests:
+              cpu: 100m
+              ephemeral-storage: 50Mi
+              memory: 128Mi
+          ports:
+            - name: tcp
+              containerPort: 24224
+              protocol: TCP
+            - containerPort: 9880
+              name: http
+              protocol: TCP
+          startupProbe:
+            httpGet:
+              path: /fluentd.healthcheck?json=%7B%22ping%22%3A+%22pong%22%7D
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          readinessProbe:
+            httpGet:
+              path: /fluentd.healthcheck?json=%7B%22ping%22%3A+%22pong%22%7D
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          volumeMounts:
+            - name: fluentd-config
+              mountPath: /opt/bitnami/fluentd/conf
+            - name: buffer
+              mountPath: /opt/bitnami/fluentd/logs/buffers
+            - name: empty-dir
+              mountPath: /tmp
+              subPath: tmp-dir
+      volumes:
+        - name: empty-dir
+          emptyDir: {}
+        - name: fluentd-config
+          configMap:
+            name: my-fluentd-aggregator-cm
+        - name: buffer
+          emptyDir: {}

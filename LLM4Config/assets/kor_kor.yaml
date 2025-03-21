@@ -1,0 +1,202 @@
+---
+# Source: kor/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-kor
+  labels:
+    helm.sh/chart: kor-0.1.13
+    app.kubernetes.io/name: kor
+    app.kubernetes.io/instance: my-kor
+    app.kubernetes.io/version: "0.5.5"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: kor/templates/role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-kor-read-resources-clusterrole
+  labels:
+    helm.sh/chart: kor-0.1.13
+    app.kubernetes.io/name: kor
+    app.kubernetes.io/instance: my-kor
+    app.kubernetes.io/version: "0.5.5"
+    app.kubernetes.io/managed-by: Helm
+rules:
+  - apiGroups: ["*"]
+    resources:
+      - pods
+      - configmaps
+      - secrets
+      - services
+      - serviceaccounts
+      - deployments
+      - statefulsets
+      - roles
+      - rolebindings
+      - horizontalpodautoscalers
+      - persistentvolumeclaims
+      - ingresses
+      - poddisruptionbudgets
+      - endpoints
+      - jobs
+      - replicasets
+      - daemonsets
+      - networkpolicies
+      
+      - namespaces
+      - clusterroles
+      - clusterrolebindings
+      - persistentvolumes
+      - customresourcedefinitions
+      - storageclasses
+    verbs:
+      - get
+      - list
+      - watch
+---
+# Source: kor/templates/rolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-kor-read-resources-clusterrolebinding
+  labels:
+    helm.sh/chart: kor-0.1.13
+    app.kubernetes.io/name: kor
+    app.kubernetes.io/instance: my-kor
+    app.kubernetes.io/version: "0.5.5"
+    app.kubernetes.io/managed-by: Helm
+subjects:
+  - kind: ServiceAccount
+    name: my-kor
+    namespace: default
+roleRef:
+  kind: ClusterRole
+  name: my-kor-read-resources-clusterrole
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: kor/templates/role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: my-kor-read-resources-role
+  labels:
+    helm.sh/chart: kor-0.1.13
+    app.kubernetes.io/name: kor
+    app.kubernetes.io/instance: my-kor
+    app.kubernetes.io/version: "0.5.5"
+    app.kubernetes.io/managed-by: Helm
+rules:
+  - apiGroups: ["*"]
+    resources:
+      - pods
+      - configmaps
+      - secrets
+      - services
+      - serviceaccounts
+      - deployments
+      - statefulsets
+      - roles
+      - rolebindings
+      - horizontalpodautoscalers
+      - persistentvolumeclaims
+      - ingresses
+      - poddisruptionbudgets
+      - endpoints
+      - jobs
+      - replicasets
+      - daemonsets
+      - networkpolicies
+    verbs:
+      - get
+      - list
+      - watch
+---
+# Source: kor/templates/rolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: my-kor-read-resources-role-binding
+  labels:
+    helm.sh/chart: kor-0.1.13
+    app.kubernetes.io/name: kor
+    app.kubernetes.io/instance: my-kor
+    app.kubernetes.io/version: "0.5.5"
+    app.kubernetes.io/managed-by: Helm
+subjects:
+  - kind: ServiceAccount
+    name: my-kor
+roleRef:
+  kind: Role
+  name: my-kor-read-resources-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: kor/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: kor-exporter
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/path: /metrics
+    prometheus.io/port: "8080"
+  labels:
+    helm.sh/chart: kor-0.1.13
+    app.kubernetes.io/name: kor
+    app.kubernetes.io/instance: my-kor
+    app.kubernetes.io/version: "0.5.5"
+    app.kubernetes.io/managed-by: Helm
+    app: kor-exporter
+spec:
+  type: ClusterIP
+  selector:
+    app: kor-exporter
+  ports:
+    - name: metrics
+      port: 8080
+      targetPort: http
+---
+# Source: kor/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kor-exporter
+  labels:
+    helm.sh/chart: kor-0.1.13
+    app.kubernetes.io/name: kor
+    app.kubernetes.io/instance: my-kor
+    app.kubernetes.io/version: "0.5.5"
+    app.kubernetes.io/managed-by: Helm
+    app: kor-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kor-exporter
+  template:
+    metadata:
+      labels:
+        helm.sh/chart: kor-0.1.13
+        app.kubernetes.io/name: kor
+        app.kubernetes.io/instance: my-kor
+        app.kubernetes.io/version: "0.5.5"
+        app.kubernetes.io/managed-by: Helm
+        app: kor-exporter
+    spec: 
+      serviceAccountName: my-kor
+      containers:
+        - name: "kor-exporter-container"
+          image: "yonahdissen/kor:latest"
+          command:
+            - kor
+          args:
+            - exporter
+          ports:
+          - containerPort: 8080
+            name: http
+            protocol: TCP
+          terminationMessagePath: "/dev/termination-log"
+          imagePullPolicy: Always
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
+      dnsPolicy: ClusterFirst

@@ -1,0 +1,124 @@
+---
+# Source: syslog-ng/templates/common.yaml
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: my-syslog-ng-config
+  labels:
+    app.kubernetes.io/instance: my-syslog-ng
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: syslog-ng
+    app.kubernetes.io/version: 3.30.1
+    helm.sh/chart: syslog-ng-1.1.2
+  annotations:
+spec:
+  accessModes:
+    - "ReadWriteOnce"
+  resources:
+    requests:
+      storage: "1Gi"
+---
+# Source: syslog-ng/templates/common.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-syslog-ng
+  labels:
+    app.kubernetes.io/instance: my-syslog-ng
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: syslog-ng
+    app.kubernetes.io/version: 3.30.1
+    helm.sh/chart: syslog-ng-1.1.2
+  annotations:
+spec:
+  type: ClusterIP
+  ports:
+  - port: 601
+    targetPort: 6601
+    protocol: TCP
+    name: syslog-tcp
+  - port: 514
+    targetPort: 5514
+    protocol: UDP
+    name: syslog-udp
+  selector:
+    app.kubernetes.io/name: syslog-ng
+    app.kubernetes.io/instance: my-syslog-ng
+---
+# Source: syslog-ng/templates/common.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-syslog-ng
+  labels:
+    app.kubernetes.io/instance: my-syslog-ng
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: syslog-ng
+    app.kubernetes.io/version: 3.30.1
+    helm.sh/chart: syslog-ng-1.1.2
+spec:
+  revisionHistoryLimit: 3
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: syslog-ng
+      app.kubernetes.io/instance: my-syslog-ng
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: syslog-ng
+        app.kubernetes.io/instance: my-syslog-ng
+    spec:
+      
+      serviceAccountName: default
+      automountServiceAccountToken: true
+      dnsPolicy: ClusterFirst
+      enableServiceLinks: true
+      containers:
+        - name: my-syslog-ng
+          image: "ghcr.io/linuxserver/syslog-ng:3.30.1"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: PGID
+              value: "1001"
+            - name: PUID
+              value: "1001"
+            - name: TZ
+              value: UTC
+          ports:
+            - name: syslog-tcp
+              containerPort: 6601
+              protocol: TCP
+            - name: syslog-udp
+              containerPort: 5514
+              protocol: UDP
+          volumeMounts:
+            - name: config
+              mountPath: /config
+          livenessProbe:
+            tcpSocket:
+              port: 6601
+            initialDelaySeconds: 0
+            failureThreshold: 3
+            timeoutSeconds: 1
+            periodSeconds: 10
+          readinessProbe:
+            tcpSocket:
+              port: 6601
+            initialDelaySeconds: 0
+            failureThreshold: 3
+            timeoutSeconds: 1
+            periodSeconds: 10
+          startupProbe:
+            tcpSocket:
+              port: 6601
+            initialDelaySeconds: 0
+            failureThreshold: 30
+            timeoutSeconds: 1
+            periodSeconds: 5
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: my-syslog-ng-config

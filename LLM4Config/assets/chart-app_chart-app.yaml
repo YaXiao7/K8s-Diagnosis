@@ -1,0 +1,461 @@
+---
+# Source: chart-app/charts/mysql/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-chart-app-mysql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: mysql
+    helm.sh/chart: mysql-9.4.5
+    app.kubernetes.io/instance: my-chart-app
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+automountServiceAccountToken: true
+secrets:
+  - name: my-chart-app-mysql
+---
+# Source: chart-app/templates/appli/appli-serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: appli-sva
+automountServiceAccountToken: true
+---
+# Source: chart-app/charts/mysql/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-chart-app-mysql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: mysql
+    helm.sh/chart: mysql-9.4.5
+    app.kubernetes.io/instance: my-chart-app
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  mysql-root-password: "cm9vdA=="
+  mysql-password: "dGVzdDEyMzQ1"
+---
+# Source: chart-app/templates/mysql/mysql-secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: laravel-db-secret
+  namespace: sample-app-ns
+type: Opaque
+data:
+  DB_ROOT_PASSWORD: InJvb3Qi
+  DB_PASSWORD: InRlc3QxMjM0NSI=
+---
+# Source: chart-app/charts/mysql/templates/primary/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-chart-app-mysql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: mysql
+    helm.sh/chart: mysql-9.4.5
+    app.kubernetes.io/instance: my-chart-app
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: primary
+data:
+  my.cnf: |-
+    [mysqld]
+    default_authentication_plugin=mysql_native_password
+    skip-name-resolve
+    explicit_defaults_for_timestamp
+    basedir=/opt/bitnami/mysql
+    plugin_dir=/opt/bitnami/mysql/lib/plugin
+    port=3306
+    socket=/opt/bitnami/mysql/tmp/mysql.sock
+    datadir=/bitnami/mysql/data
+    tmpdir=/opt/bitnami/mysql/tmp
+    max_allowed_packet=16M
+    bind-address=*
+    pid-file=/opt/bitnami/mysql/tmp/mysqld.pid
+    log-error=/opt/bitnami/mysql/logs/mysqld.log
+    character-set-server=UTF8
+    collation-server=utf8_general_ci
+    slow_query_log=0
+    slow_query_log_file=/opt/bitnami/mysql/logs/mysqld.log
+    long_query_time=10.0
+    
+    [client]
+    port=3306
+    socket=/opt/bitnami/mysql/tmp/mysql.sock
+    default-character-set=UTF8
+    plugin_dir=/opt/bitnami/mysql/lib/plugin
+    
+    [manager]
+    port=3306
+    socket=/opt/bitnami/mysql/tmp/mysql.sock
+    pid-file=/opt/bitnami/mysql/tmp/mysqld.pid
+---
+# Source: chart-app/templates/appli/appli-ConfigMap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: application-configmap
+  namespace: sample-app-ns
+data:
+    APP_DEBUG: "true"
+    APP_ENV: "dev"
+    APP_KEY: "base64:DJYTvaRkEZ/YcQsX3TMpB0iCjgme2rhlIOus9A1hnj4="
+---
+# Source: chart-app/templates/mysql/mysql-ConfigMap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: laravel-db-configmap
+  namespace: sample-app-ns
+data:
+  DB_HOST: chart-app-mysql
+  DB_DATABASE: laravel
+  DB_USERNAME: mysqluser
+---
+# Source: chart-app/charts/mysql/templates/primary/svc-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-chart-app-mysql-headless
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: mysql
+    helm.sh/chart: mysql-9.4.5
+    app.kubernetes.io/instance: my-chart-app
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: primary
+spec:
+  type: ClusterIP
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+    - name: mysql
+      port: 3306
+      targetPort: mysql
+  selector: 
+    app.kubernetes.io/name: mysql
+    app.kubernetes.io/instance: my-chart-app
+    app.kubernetes.io/component: primary
+---
+# Source: chart-app/charts/mysql/templates/primary/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-chart-app-mysql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: mysql
+    helm.sh/chart: mysql-9.4.5
+    app.kubernetes.io/instance: my-chart-app
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: primary
+  annotations:
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+    - name: mysql
+      port: 3306
+      protocol: TCP
+      targetPort: mysql
+      nodePort: null
+  selector: 
+    app.kubernetes.io/name: mysql
+    app.kubernetes.io/instance: my-chart-app
+    app.kubernetes.io/component: primary
+---
+# Source: chart-app/templates/appli/appli-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-chart-app-application
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app: sample-app
+---
+# Source: chart-app/templates/appli/appli-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sample-app
+  labels:
+    app: sample-app
+    app.kubernetes.io/component: kubequest-app-deployment
+    app.kubernetes.io/instance: chart-app
+    owner: kubequest.lil-0
+  annotations:
+    kubequest.lil/owner: kubequest.lil-0
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: sample-app
+  template:
+    metadata:
+      labels:
+        app: sample-app
+        app.kubernetes.io/component: kubequest-app
+        app.kubernetes.io/instance: chart-app
+        owner: kubequest.lil-0
+    spec:
+      affinity:
+        podsAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - sample-app
+        topologyKey: "kubernetes.io/hostname"
+      containers:
+      - name: sample-app
+        image: "n22107670/sample-app:0.4.0"
+        resources:
+          requests:
+            cpu: 300m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        command: ["sh", "-c", "php artisan migrate --force --no-interaction && php artisan db:seed --force --no-interaction && apache2-foreground"]
+        ports:
+        - containerPort: 80
+          name: http
+        env:
+        - name: APP_ENV
+          valueFrom:
+            configMapKeyRef:
+              name: application-configmap
+              key: APP_ENV
+        - name: APP_DEBUG
+          valueFrom:
+            configMapKeyRef:
+              name: application-configmap
+              key: APP_DEBUG
+        - name: APP_KEY
+          valueFrom:
+            configMapKeyRef:
+              name: application-configmap
+              key: APP_KEY
+        - name: DB_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: laravel-db-configmap
+              key: DB_HOST
+        - name: DB_PORT
+          value: "3306"
+        - name: DB_DATABASE
+          valueFrom:
+            configMapKeyRef:
+              name: laravel-db-configmap
+              key: DB_DATABASE
+        - name: DB_USERNAME
+          valueFrom:
+            configMapKeyRef:
+              name: laravel-db-configmap
+              key: DB_USERNAME
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: laravel-db-secret
+              key: DB_PASSWORD
+        - name: DB_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: laravel-db-secret
+              key: DB_ROOT_PASSWORD
+      serviceAccountName: appli-sva
+---
+# Source: chart-app/charts/mysql/templates/primary/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-chart-app-mysql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: mysql
+    helm.sh/chart: mysql-9.4.5
+    app.kubernetes.io/instance: my-chart-app
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: primary
+spec:
+  replicas: 1
+  podManagementPolicy: ""
+  selector:
+    matchLabels: 
+      app.kubernetes.io/name: mysql
+      app.kubernetes.io/instance: my-chart-app
+      app.kubernetes.io/component: primary
+  serviceName: my-chart-app-mysql
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations:
+        checksum/configuration: e05d359a1ee9a7afbe7f3013dd9a6b14bd98d29c95e9a01b8b77cc40244905a0
+      labels:
+        app.kubernetes.io/name: mysql
+        helm.sh/chart: mysql-9.4.5
+        app.kubernetes.io/instance: my-chart-app
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/component: primary
+        app: mysql
+    spec:
+      serviceAccountName: my-chart-app-mysql
+      
+      affinity:
+        podsAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - mysql
+        topologyKey: kubernetes.io/hostname
+      securityContext:
+        fsGroup: 1001
+      initContainers:
+      containers:
+        - name: mysql
+          image: docker.io/mysql:8
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-chart-app-mysql
+                  key: mysql-root-password
+            - name: MYSQL_USER
+              value: "mysqluser"
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-chart-app-mysql
+                  key: mysql-password
+            - name: MYSQL_DATABASE
+              value: "laravel"
+          envFrom:
+          ports:
+            - name: mysql
+              containerPort: 3306
+          livenessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+            exec:
+              command:
+                - /bin/bash
+                - -ec
+                - |
+                  password_aux="${MYSQL_ROOT_PASSWORD:-}"
+                  if [[ -f "${MYSQL_ROOT_PASSWORD_FILE:-}" ]]; then
+                      password_aux=$(cat "$MYSQL_ROOT_PASSWORD_FILE")
+                  fi
+                  mysqladmin status -uroot -p"${password_aux}"
+          readinessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+            exec:
+              command:
+                - /bin/bash
+                - -ec
+                - |
+                  password_aux="${MYSQL_ROOT_PASSWORD:-}"
+                  if [[ -f "${MYSQL_ROOT_PASSWORD_FILE:-}" ]]; then
+                      password_aux=$(cat "$MYSQL_ROOT_PASSWORD_FILE")
+                  fi
+                  mysqladmin status -uroot -p"${password_aux}"
+          startupProbe:
+            failureThreshold: 10
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+            exec:
+              command:
+                - /bin/bash
+                - -ec
+                - |
+                  password_aux="${MYSQL_ROOT_PASSWORD:-}"
+                  if [[ -f "${MYSQL_ROOT_PASSWORD_FILE:-}" ]]; then
+                      password_aux=$(cat "$MYSQL_ROOT_PASSWORD_FILE")
+                  fi
+                  mysqladmin status -uroot -p"${password_aux}"
+          resources: 
+            limits:
+              cpu: 500m
+              memory: 512Mi
+            requests:
+              cpu: 300m
+              memory: 256Mi
+          volumeMounts:
+            - name: data
+              mountPath: /bitnami/mysql
+            - name: config
+              mountPath: /opt/bitnami/mysql/conf/my.cnf
+              subPath: my.cnf
+      volumes:
+        - name: config
+          configMap:
+            name: my-chart-app-mysql
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels: 
+          app.kubernetes.io/name: mysql
+          app.kubernetes.io/instance: my-chart-app
+          app.kubernetes.io/component: primary
+        annotations:
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "8Gi"
+---
+# Source: chart-app/templates/appli/appli-ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: my-chart-app
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-kubequest
+    cert-manager.io/common-name: kubequest.k3s.lifoto.co
+spec:
+  tls:
+    - hosts:
+        - "kubequest.k3s.lifoto.co"
+      secretName: kubequest-tls
+  rules:
+    - host: "kubequest.k3s.lifoto.co"
+      http:
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: my-chart-app-application
+                port:
+                  number: 80

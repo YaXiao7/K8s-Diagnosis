@@ -1,0 +1,542 @@
+---
+# Source: mlhub/templates/singleuser/netpol.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: singleuser
+  labels:
+    component: singleuser
+    app: mlhub
+    release: my-mlhub
+    chart: mlhub-2.0.0
+    heritage: Helm
+spec:
+  podSelector:
+    matchLabels:
+      component: singleuser-server
+      app: mlhub
+      release: my-mlhub
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              hub.jupyter.org/network-access-singleuser: "true"
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              component: hub
+              app: mlhub
+              release: my-mlhub
+      ports:
+        - protocol: TCP
+          port: 8081
+    - to:
+      - ipBlock:
+          cidr: 0.0.0.0/0
+          except:
+          - 169.254.169.254/32
+---
+# Source: mlhub/templates/hub/pdb.yaml
+apiVersion: policy/v1beta1
+kind: PodDisruptionBudget
+metadata:
+  name: hub
+  labels:
+    component: hub
+    app: mlhub
+    release: my-mlhub
+    chart: mlhub-2.0.0
+    heritage: Helm
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      component: hub
+      app: mlhub
+      release: my-mlhub
+---
+# Source: mlhub/templates/proxy/pdb.yaml
+apiVersion: policy/v1beta1
+kind: PodDisruptionBudget
+metadata:
+  name: proxy
+  labels:
+    component: proxy
+    app: mlhub
+    release: my-mlhub
+    chart: mlhub-2.0.0
+    heritage: Helm
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      component: proxy
+      app: mlhub
+      release: my-mlhub
+---
+# Source: mlhub/templates/hub/rbac.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: hub
+  labels:
+    component: hub
+    app: mlhub
+    release: my-mlhub
+    chart: mlhub-2.0.0
+    heritage: Helm
+---
+# Source: mlhub/templates/hub/secret.yaml
+kind: Secret
+apiVersion: v1
+metadata:
+  name: hub-secret
+  labels:
+    component: hub
+    app: mlhub
+    release: my-mlhub
+    chart: mlhub-2.0.0
+    heritage: Helm
+type: Opaque
+data:
+  proxy.token: "NWlNdE5Tc1RBUVRiZkhaS3VZV1Y3YlhZNFpnQUdhYkw="
+  values.yaml: "aHViOiB7fQ=="
+---
+# Source: mlhub/templates/hub/configmap.yaml
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: hub-config
+  labels:
+    component: hub
+    app: mlhub
+    release: my-mlhub
+    chart: mlhub-2.0.0
+    heritage: Helm
+data:
+# trim secret values. Update here if new secrets are added!
+# make a copy of values.auth to avoid modifying the original
+  values.yaml: |
+    Chart:
+      Name: mlhub
+      Version: 2.0.0
+    Release:
+      Name: my-mlhub
+      Namespace: default
+      Service: Helm
+    custom: {}
+    hub:
+      annotations: {}
+      db:
+        pvc:
+          accessModes:
+          - ReadWriteOnce
+          annotations: {}
+          selector: {}
+          storage: 1Gi
+          storageClassName: null
+          subPath: null
+        type: ""
+        upgrade: null
+      deploymentStrategy:
+        rollingUpdate: null
+        type: Recreate
+      extraContainers: []
+      extraVolumeMounts: []
+      extraVolumes: []
+      fsGid: 0
+      image:
+        name: mltooling/ml-hub
+        tag: $VERSION
+      imagePullSecret:
+        email: null
+        enabled: false
+        password: null
+        registry: null
+        username: null
+      initContainers: []
+      labels: {}
+      networkPolicy:
+        egress:
+        - to:
+          - ipBlock:
+              cidr: 0.0.0.0/0
+        enabled: false
+      nodeSelector: {}
+      pdb:
+        enabled: true
+        minAvailable: 1
+      resources:
+        requests:
+          cpu: 200m
+          memory: 512Mi
+      service:
+        annotations: {}
+        loadBalancerIP: null
+        ports:
+          nodePort: null
+        type: ClusterIP
+      uid: 0
+    mlhub:
+      baseUrl: /
+      debug: false
+      secretToken: ""
+    singleuser:
+      cloudMetadata:
+        enabled: false
+        ip: 169.254.169.254
+      networkPolicy:
+        egress:
+        - to:
+          - ipBlock:
+              cidr: 0.0.0.0/0
+              except:
+              - 169.254.169.254/32
+        enabled: true
+      networkTools:
+        image:
+          name: jupyterhub/k8s-network-tools
+          tag: 0.8.2
+---
+# Source: mlhub/templates/hub/user-configmap.yaml
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: hub-user-config
+  labels:
+    component: hub
+    app: mlhub
+    release: my-mlhub
+    chart: mlhub-2.0.0
+    heritage: Helm
+data:
+  jupyterhub_user_config.py: |
+---
+# Source: mlhub/templates/hub/rbac.yaml
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: hub
+  labels:
+    component: hub
+    app: mlhub
+    release: my-mlhub
+    chart: mlhub-2.0.0
+    heritage: Helm
+rules:
+  - apiGroups: [""]       # "" indicates the core API group
+    resources: ["pods", "persistentvolumeclaims"]
+    verbs: ["get", "watch", "list", "create", "delete"]
+  - apiGroups: [""]       # "" indicates the core API group
+    resources: ["events"]
+    verbs: ["get", "watch", "list"]
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["list", "create", "delete"]
+---
+# Source: mlhub/templates/hub/rbac.yaml
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: hub
+  labels:
+    component: hub
+    app: mlhub
+    release: my-mlhub
+    chart: mlhub-2.0.0
+    heritage: Helm
+subjects:
+  - kind: ServiceAccount
+    name: hub
+    namespace: default
+roleRef:
+  kind: Role
+  name: hub
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: mlhub/templates/hub/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: hub
+  labels:
+    component: hub
+    app: mlhub
+    release: my-mlhub
+    chart: mlhub-2.0.0
+    heritage: Helm
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/path: //hub/metrics
+spec:
+  type: ClusterIP
+  selector:
+    component: hub
+    app: mlhub
+    release: my-mlhub
+  ports:
+    - protocol: TCP
+      port: 8081
+      targetPort: 8081
+      name: hub
+    - protocol: TCP
+      port: 22
+      targetPort: 22
+      name: ssh
+---
+# Source: mlhub/templates/proxy/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: proxy-api
+  labels:
+    component: proxy-api
+    app: mlhub
+    release: my-mlhub
+    chart: mlhub-2.0.0
+    heritage: Helm
+spec:
+  selector:
+    component: proxy
+    app: mlhub
+    release: my-mlhub
+  ports:
+    - protocol: TCP
+      port: 8001
+      targetPort: 8001
+---
+# Source: mlhub/templates/proxy/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: proxy-public
+  labels:
+    component: proxy-public
+    app: mlhub
+    release: my-mlhub
+    chart: mlhub-2.0.0
+    heritage: Helm
+spec:
+  selector:
+    # TODO: Refactor to utilize the helpers
+    component: proxy
+    release: my-mlhub
+  ports:
+    - name: http
+      port: 80
+      protocol: TCP
+      targetPort: 8080
+      # allow proxy.service.nodePort for http
+  type: LoadBalancer
+---
+# Source: mlhub/templates/hub/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hub
+  labels:
+    component: hub
+    app: mlhub
+    release: my-mlhub
+    chart: mlhub-2.0.0
+    heritage: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      component: hub
+      app: mlhub
+      release: my-mlhub
+  strategy:
+    rollingUpdate: null
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        component: hub
+        app: mlhub
+        release: my-mlhub
+        hub.jupyter.org/network-access-proxy-api: "true"
+        hub.jupyter.org/network-access-proxy-http: "true"
+        hub.jupyter.org/network-access-singleuser: "true"
+      annotations:
+        # This lets us autorestart when the secret changes!
+        checksum/config-map: 79974b223ca105f79df3f36d0a5251573354a6ebab64fcc9c83b09f7bd1e28f9
+        checksum/user-config-map: 606c9f262fe721c4c46cb7301ca8630946dda14faea22ccc06eed8047eee7701
+        checksum/secret: f1db642de819ba02dceeeae7d14056c25098efc5cb77640cdb770d2a87c2df3f
+    spec:
+      nodeSelector: {}
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: hub.jupyter.org/node-purpose
+                    operator: In
+                    values: [core]
+      volumes:
+        - name: config
+          configMap:
+            name: hub-config
+        - name: secret
+          secret:
+            secretName: hub-secret
+        - name: user-config
+          configMap:
+            name: hub-user-config
+      serviceAccountName: hub
+      securityContext:
+        fsGroup: 0
+      containers:
+        - name: hub
+          image: mltooling/ml-hub:$VERSION
+          volumeMounts:
+            - mountPath: /etc/jupyterhub/config/
+              name: config
+            - mountPath: /etc/jupyterhub/secret/
+              name: secret
+            - mountPath: /resources/jupyterhub_user_config.py
+              name: user-config
+              subPath: jupyterhub_user_config.py
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+          securityContext:
+            runAsUser: 0
+            # Don't allow any process to execute as root inside the container
+            allowPrivilegeEscalation: false
+          env:
+            - name: ADDITIONAL_ARGS
+              value: "--config /resources/jupyterhub_config.py"
+            - name: START_NGINX
+              value: "false"
+            - name: EXECUTION_MODE
+              value: "k8s"
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: HELM_RELEASE_NAME
+              value: "my-mlhub"
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: CONFIGPROXY_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: hub-secret
+                  key: proxy.token
+          ports:
+            - containerPort: 8081
+              name: hub
+            - containerPort: 22
+              name: ssh
+          ## livenessProbe notes:
+          ## We don't know how long hub database upgrades could take
+          ## so having a liveness probe could be a bit risky unless we put
+          ## a initialDelaySeconds value with long enough margin for that
+          ## to not be an issue. If it is too short, we could end up aborting
+          ## database upgrades midway or ending up in an infinite restart
+          ## loop.
+          # livenessProbe:
+          #   initialDelaySeconds: 30
+          #   httpGet:
+          #     path: //hub/health
+          #     port: hub
+          readinessProbe:
+            httpGet:
+              path: //hub/health
+              port: hub
+---
+# Source: mlhub/templates/proxy/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: proxy
+  labels:
+    component: proxy
+    app: mlhub
+    release: my-mlhub
+    chart: mlhub-2.0.0
+    heritage: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      component: proxy
+      app: mlhub
+      release: my-mlhub
+  template:
+    metadata:
+      labels:
+        component: proxy
+        app: mlhub
+        release: my-mlhub
+        hub.jupyter.org/network-access-hub: "true"
+        hub.jupyter.org/network-access-singleuser: "true"
+      annotations:
+        # This lets us autorestart when the secret changes!
+        checksum/hub-secret: 0d64dc4d166f5842f32ae82b6eb84848bb1249384a3b2929c48a717d6cc74249
+        checksum/proxy-secret: 01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b
+    spec:
+      terminationGracePeriodSeconds: 60
+      #priorityClassName: my-mlhub-default-priority
+      nodeSelector: {}
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: hub.jupyter.org/node-purpose
+                    operator: In
+                    values: [core]
+      containers:
+        - name: chp
+          image: mltooling/ml-hub:$VERSION
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+          securityContext:
+            # Don't allow any process to execute as root inside the container
+            allowPrivilegeEscalation: false
+          env:
+            - name: ADDITIONAL_ARGS
+              value: "--ip=0.0.0.0 --api-ip=0.0.0.0 --api-port=8001 --port=8000 --default-target=http://$(HUB_SERVICE_HOST):$(HUB_SERVICE_PORT) --error-target=http://$(HUB_SERVICE_HOST):$(HUB_SERVICE_PORT)/hub/error"
+            - name: CONFIGPROXY_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: hub-secret
+                  key: proxy.token
+            - name: EXECUTION_MODE
+              value: "k8s"
+            - name: SSHD_TARGET
+              value: hub:22
+            - name: START_SSH
+              value: "false"
+            - name: START_JHUB
+              value: "false"
+            - name: START_CHP
+              value: "true"
+          ports:
+            - containerPort: 8000
+              name: proxy-public
+            - containerPort: 8001
+              name: api
+          livenessProbe:
+            httpGet:
+              path: /_chp_healthz
+              port: proxy-public
+          readinessProbe:
+            httpGet:
+              path: /_chp_healthz
+              port: proxy-public

@@ -1,0 +1,650 @@
+---
+# Source: visual-regression-tracker/charts/postgresql/templates/primary/networkpolicy.yaml
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: vrt-postgresql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-visual-regression-tracker
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/version: 16.3.0
+    helm.sh/chart: postgresql-15.5.10
+    app.kubernetes.io/component: primary
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: my-visual-regression-tracker
+      app.kubernetes.io/name: postgresql
+      app.kubernetes.io/component: primary
+  policyTypes:
+    - Ingress
+    - Egress
+  egress:
+    - {}
+  ingress:
+    - ports:
+        - port: 5432
+---
+# Source: visual-regression-tracker/charts/postgresql/templates/primary/pdb.yaml
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: vrt-postgresql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-visual-regression-tracker
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/version: 16.3.0
+    helm.sh/chart: postgresql-15.5.10
+    app.kubernetes.io/component: primary
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: my-visual-regression-tracker
+      app.kubernetes.io/name: postgresql
+      app.kubernetes.io/component: primary
+---
+# Source: visual-regression-tracker/charts/postgresql/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vrt-postgresql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-visual-regression-tracker
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/version: 16.3.0
+    helm.sh/chart: postgresql-15.5.10
+automountServiceAccountToken: false
+---
+# Source: visual-regression-tracker/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-visual-regression-tracker
+  labels:
+    helm.sh/chart: visual-regression-tracker-5.0.0
+    app.kubernetes.io/name: visual-regression-tracker
+    app.kubernetes.io/instance: my-visual-regression-tracker
+    app.kubernetes.io/version: "5.0.4"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: visual-regression-tracker/charts/postgresql/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: vrt-postgresql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-visual-regression-tracker
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/version: 16.3.0
+    helm.sh/chart: postgresql-15.5.10
+type: Opaque
+data:
+  postgres-password: "eWZoMElVQ09DbQ=="
+  password: "dnJ0LWRiLXBhc3N3b3Jk"
+  # We don't auto-generate LDAP password when it's not provided as we do for other passwords
+---
+# Source: visual-regression-tracker/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-visual-regression-tracker-jwt-pass
+  labels:
+    helm.sh/chart: visual-regression-tracker-5.0.0
+    app.kubernetes.io/name: visual-regression-tracker
+    app.kubernetes.io/instance: my-visual-regression-tracker
+    app.kubernetes.io/version: "5.0.4"
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  jwt-pass: "and0UHJpdmF0ZUtleQ=="
+---
+# Source: visual-regression-tracker/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-visual-regression-tracker-pg-pass
+  labels:
+    helm.sh/chart: visual-regression-tracker-5.0.0
+    app.kubernetes.io/name: visual-regression-tracker
+    app.kubernetes.io/instance: my-visual-regression-tracker
+    app.kubernetes.io/version: "5.0.4"
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  pg-pass: "dnJ0LWRiLXBhc3N3b3Jk"
+---
+# Source: visual-regression-tracker/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-visual-regression-tracker-vrt
+  labels:
+    helm.sh/chart: visual-regression-tracker-5.0.0
+    app.kubernetes.io/name: visual-regression-tracker
+    app.kubernetes.io/instance: my-visual-regression-tracker
+    app.kubernetes.io/version: "5.0.4"
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  seed.ts: LyoqCiogQHNlZSBodHRwczovL3d3dy5wcmlzbWEuaW8vZG9jcy9ndWlkZXMvbWlncmF0ZS9zZWVkLWRhdGFiYXNlCiovCmltcG9ydCB7IFByaXNtYUNsaWVudCwgUm9sZSB9IGZyb20gJ0BwcmlzbWEvY2xpZW50JzsKaW1wb3J0IHsgZ2VuU2FsdCwgaGFzaCB9IGZyb20gJ2JjcnlwdGpzJzsKCmNvbnN0IHByaXNtYSA9IG5ldyBQcmlzbWFDbGllbnQoewogICAgLy8gJ2luZm8nIHwgJ3F1ZXJ5JyB8ICd3YXJuJyB8ICdlcnJvcicKICAgIGxvZzogWydxdWVyeSddLAp9KTsKCmFzeW5jIGZ1bmN0aW9uIHNlZWQoKSB7CiAgICBhd2FpdCBwcmlzbWEuJGNvbm5lY3QoKTsKICAgIGNvbnNvbGUubG9nKCdTZWVkaW5nIGRlZmF1bHQgZGF0YS4uLicpOwogICAgYXdhaXQgUHJvbWlzZS5hbGwoW2NyZWF0ZURlZmF1bHRVc2VyKCksIGNyZWF0ZURlZmF1bHRQcm9qZWN0KCldKTsKICAgIGF3YWl0IHByaXNtYS4kZGlzY29ubmVjdCgpOwp9CgpzZWVkKCkKICAgIC5jYXRjaCgoZSkgPT4gY29uc29sZS5lcnJvcignZScsIGUpKQogICAgLmZpbmFsbHkoYXN5bmMgKCkgPT4gYXdhaXQgcHJpc21hLiRkaXNjb25uZWN0KCkpOwoKYXN5bmMgZnVuY3Rpb24gY3JlYXRlRGVmYXVsdFVzZXIoKSB7CiAgICBsZXQgdXNlckxpc3QgPSBbXTsKICAgIHRyeSB7CiAgICB1c2VyTGlzdCA9IGF3YWl0IHByaXNtYS51c2VyLmZpbmRNYW55KCk7CiAgICBjb25zb2xlLmxvZyh1c2VyTGlzdCk7CiAgICB9CiAgICBjYXRjaCAoZXJyb3IpIHsKICAgIC8vIEV4cGVjdGVkIHRvIHNlZSB0aGF0ICJ1c2VyIiB0YWJsZSBkb2VzIG5vdCBleGlzdAogICAgY29uc29sZS5sb2coZXJyb3IubWVzc2FnZSk7CiAgICB9CgogICAgY29uc3QgZGVmYXVsdEFwaUtleSA9ICdERUZBVUxUX1VTRVJfQVBJX0tFWV9UT19CRV9DSEFOR0VEJzsKICAgIGNvbnN0IGRlZmF1bHRFbWFpbCA9ICdhZG1pbkBleGFtcGxlLmNvbSc7CiAgICBjb25zdCBkZWZhdWx0UGFzc3dvcmQgPSAnQ2hhbmdlX01lJzsKICAgIGNvbnN0IHNhbHQgPSBhd2FpdCBnZW5TYWx0KDEwKTsKCiAgICBhd2FpdCBwcmlzbWEudXNlcgogICAgLnVwc2VydCh7CiAgICAgICAgd2hlcmU6IHsKICAgICAgICBlbWFpbDogZGVmYXVsdEVtYWlsLAogICAgICAgIH0sCiAgICAgICAgdXBkYXRlOiB7CiAgICAgICAgcm9sZTogUm9sZS5hZG1pbiwKICAgICAgICB9LAogICAgICAgIGNyZWF0ZTogewogICAgICAgIGVtYWlsOiBkZWZhdWx0RW1haWwsCiAgICAgICAgZmlyc3ROYW1lOiAnZm5hbWUnLAogICAgICAgIGxhc3ROYW1lOiAnbG5hbWUnLAogICAgICAgIHJvbGU6IFJvbGUuYWRtaW4sCiAgICAgICAgYXBpS2V5OiBkZWZhdWx0QXBpS2V5LAogICAgICAgIHBhc3N3b3JkOiBhd2FpdCBoYXNoKGRlZmF1bHRQYXNzd29yZCwgc2FsdCksCiAgICAgICAgfSwKICAgIH0pCiAgICAudGhlbigodXNlcikgPT4gewogICAgICAgIGNvbnNvbGUubG9nKCcjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMnKTsKICAgICAgICBjb25zb2xlLmxvZygnIyMjIyMjIyBERUZBVUxUIFVTRVIgIyMjIyMjJyk7CiAgICAgICAgY29uc29sZS5sb2coJyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIycpOwogICAgICAgIGNvbnNvbGUubG9nKCcnKTsKICAgICAgICBjb25zb2xlLmxvZygKICAgICAgICBgVGhlIHVzZXIgd2l0aCB0aGUgZW1haWwgIiR7ZGVmYXVsdEVtYWlsfSIgYW5kIHBhc3N3b3JkICIke2RlZmF1bHRQYXNzd29yZH0iIHdhcyBjcmVhdGVkIChpZiBub3QgY2hhbmdlZCBiZWZvcmUpYAogICAgICAgICk7CiAgICAgICAgY29uc29sZS5sb2coYFRoZSBBcGkga2V5IGlzOiAke3VzZXIuYXBpS2V5fWApOwogICAgfSk7Cn0KCmFzeW5jIGZ1bmN0aW9uIGNyZWF0ZURlZmF1bHRQcm9qZWN0KCkgewogICAgbGV0IHByb2plY3RMaXN0ID0gW107CiAgICB0cnkgewogICAgcHJvamVjdExpc3QgPSBhd2FpdCBwcmlzbWEucHJvamVjdC5maW5kTWFueSgpOwogICAgY29uc29sZS5sb2cocHJvamVjdExpc3QpOwogICAgfQogICAgY2F0Y2ggKGVycm9yKSB7CiAgICAvLyBFeHBlY3RlZCB0byBzZWUgdGhhdCAicHJvamVjdCIgdGFibGUgZG9lcyBub3QgZXhpc3QKICAgIGNvbnNvbGUubG9nKGVycm9yLm1lc3NhZ2UpOwogICAgfQoKICAgIGNvbnN0IGRlZmF1bHRQcm9qZWN0ID0gJ0RlZmF1bHQnOwoKICAgIGlmIChwcm9qZWN0TGlzdC5sZW5ndGggPT09IDApIHsKICAgIGF3YWl0IHByaXNtYS5wcm9qZWN0CiAgICAgICAgLmNyZWF0ZSh7CiAgICAgICAgZGF0YTogewogICAgICAgICAgICBuYW1lOiBkZWZhdWx0UHJvamVjdCwKICAgICAgICB9LAogICAgICAgIH0pCiAgICAgICAgLnRoZW4oKHByb2plY3QpID0+IHsKICAgICAgICBjb25zb2xlLmxvZygnIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjJyk7CiAgICAgICAgY29uc29sZS5sb2coJyMjIENSRUFUSU5HIERFRkFVTFQgUFJPSkVDVCAjIycpOwogICAgICAgIGNvbnNvbGUubG9nKCcjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMnKTsKICAgICAgICBjb25zb2xlLmxvZygnJyk7CiAgICAgICAgY29uc29sZS5sb2coYFByb2plY3Qga2V5OiAke3Byb2plY3QuaWR9YCk7CiAgICAgICAgY29uc29sZS5sb2coYFByb2plY3QgbmFtZSAke3Byb2plY3QubmFtZX1gKTsKICAgICAgICBjb25zb2xlLmxvZyhgUHJvamVjdCBuYW1lICR7cHJvamVjdC5tYWluQnJhbmNoTmFtZX1gKTsKICAgICAgICB9KTsKICAgIH0KfQo=
+---
+# Source: visual-regression-tracker/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-visual-regression-tracker-env-config
+  labels:
+    helm.sh/chart: visual-regression-tracker-5.0.0
+    app.kubernetes.io/name: visual-regression-tracker
+    app.kubernetes.io/instance: my-visual-regression-tracker
+    app.kubernetes.io/version: "5.0.4"
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  env-config.js: d2luZG93Ll9lbnZfID0gewogICAgUkVBQ1RfQVBQX0FQSV9VUkw6ICJodHRwOi8vbG9jYWxob3N0OjQyMDAiLAogICAgUE9SVDogIjgwODAiLAogICAgVlJUX1ZFUlNJT046ICI1LjAuNCIsCn0K
+---
+# Source: visual-regression-tracker/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-visual-regression-tracker-env-config
+  labels:
+    helm.sh/chart: visual-regression-tracker-5.0.0
+    app.kubernetes.io/name: visual-regression-tracker
+    app.kubernetes.io/instance: my-visual-regression-tracker
+    app.kubernetes.io/version: "5.0.4"
+    app.kubernetes.io/managed-by: Helm
+data:
+  env.sh: |
+    #!/bin/sh
+    # dummy file which replaces env-config.js creation to be able to use rofs
+    cat env-config.js
+---
+# Source: visual-regression-tracker/charts/postgresql/templates/primary/svc-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: vrt-postgresql-hl
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-visual-regression-tracker
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/version: 16.3.0
+    helm.sh/chart: postgresql-15.5.10
+    app.kubernetes.io/component: primary
+  annotations:
+spec:
+  type: ClusterIP
+  clusterIP: None
+  # We want all pods in the StatefulSet to have their addresses published for
+  # the sake of the other Postgresql pods even before they're ready, since they
+  # have to be able to talk to each other in order to become ready.
+  publishNotReadyAddresses: true
+  ports:
+    - name: tcp-postgresql
+      port: 5432
+      targetPort: tcp-postgresql
+  selector:
+    app.kubernetes.io/instance: my-visual-regression-tracker
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/component: primary
+---
+# Source: visual-regression-tracker/charts/postgresql/templates/primary/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: vrt-postgresql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-visual-regression-tracker
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/version: 16.3.0
+    helm.sh/chart: postgresql-15.5.10
+    app.kubernetes.io/component: primary
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+    - name: tcp-postgresql
+      port: 5432
+      targetPort: tcp-postgresql
+      nodePort: null
+  selector:
+    app.kubernetes.io/instance: my-visual-regression-tracker
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/component: primary
+---
+# Source: visual-regression-tracker/templates/service-api.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-visual-regression-tracker-api
+  labels:
+    helm.sh/chart: visual-regression-tracker-5.0.0
+    app.kubernetes.io/name: visual-regression-tracker
+    app.kubernetes.io/instance: my-visual-regression-tracker
+    app.kubernetes.io/version: "5.0.4"
+    app.kubernetes.io/managed-by: Helm
+    component: api
+spec:
+  type: ClusterIP
+  ports:
+    - port: 4200
+      targetPort: api
+      protocol: TCP
+      name: api
+  selector:
+    app.kubernetes.io/name: visual-regression-tracker
+    app.kubernetes.io/instance: my-visual-regression-tracker
+---
+# Source: visual-regression-tracker/templates/service-ui.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-visual-regression-tracker-ui
+  labels:
+    helm.sh/chart: visual-regression-tracker-5.0.0
+    app.kubernetes.io/name: visual-regression-tracker
+    app.kubernetes.io/instance: my-visual-regression-tracker
+    app.kubernetes.io/version: "5.0.4"
+    app.kubernetes.io/managed-by: Helm
+    component: ui
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: visual-regression-tracker
+    app.kubernetes.io/instance: my-visual-regression-tracker
+---
+# Source: visual-regression-tracker/charts/postgresql/templates/primary/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: vrt-postgresql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-visual-regression-tracker
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/version: 16.3.0
+    helm.sh/chart: postgresql-15.5.10
+    app.kubernetes.io/component: primary
+spec:
+  replicas: 1
+  serviceName: vrt-postgresql-hl
+  updateStrategy:
+    rollingUpdate: {}
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: my-visual-regression-tracker
+      app.kubernetes.io/name: postgresql
+      app.kubernetes.io/component: primary
+  template:
+    metadata:
+      name: vrt-postgresql
+      labels:
+        app.kubernetes.io/instance: my-visual-regression-tracker
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: postgresql
+        app.kubernetes.io/version: 16.3.0
+        helm.sh/chart: postgresql-15.5.10
+        app.kubernetes.io/component: primary
+    spec:
+      serviceAccountName: vrt-postgresql
+      
+      automountServiceAccountToken: false
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/instance: my-visual-regression-tracker
+                    app.kubernetes.io/name: postgresql
+                    app.kubernetes.io/component: primary
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+        fsGroupChangePolicy: Always
+        supplementalGroups: []
+        sysctls: []
+      hostNetwork: false
+      hostIPC: false
+      containers:
+        - name: postgresql
+          image: docker.io/bitnami/postgresql:16.3.0-debian-12-r15
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsGroup: 1001
+            runAsNonRoot: true
+            runAsUser: 1001
+            seLinuxOptions: {}
+            seccompProfile:
+              type: RuntimeDefault
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: POSTGRESQL_PORT_NUMBER
+              value: "5432"
+            - name: POSTGRESQL_VOLUME_DIR
+              value: "/bitnami/postgresql"
+            - name: PGDATA
+              value: "/bitnami/postgresql/data"
+            # Authentication
+            - name: POSTGRES_USER
+              value: "vrt"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: vrt-postgresql
+                  key: password
+            - name: POSTGRES_POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: vrt-postgresql
+                  key: postgres-password
+            - name: POSTGRES_DATABASE
+              value: "vrt"
+            # Replication
+            # Initdb
+            # Standby
+            # LDAP
+            - name: POSTGRESQL_ENABLE_LDAP
+              value: "no"
+            # TLS
+            - name: POSTGRESQL_ENABLE_TLS
+              value: "no"
+            # Audit
+            - name: POSTGRESQL_LOG_HOSTNAME
+              value: "false"
+            - name: POSTGRESQL_LOG_CONNECTIONS
+              value: "false"
+            - name: POSTGRESQL_LOG_DISCONNECTIONS
+              value: "false"
+            - name: POSTGRESQL_PGAUDIT_LOG_CATALOG
+              value: "off"
+            # Others
+            - name: POSTGRESQL_CLIENT_MIN_MESSAGES
+              value: "error"
+            - name: POSTGRESQL_SHARED_PRELOAD_LIBRARIES
+              value: "pgaudit"
+          ports:
+            - name: tcp-postgresql
+              containerPort: 5432
+          livenessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - exec pg_isready -U "vrt" -d "dbname=vrt" -h 127.0.0.1 -p 5432
+          readinessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - -e
+                - |
+                  exec pg_isready -U "vrt" -d "dbname=vrt" -h 127.0.0.1 -p 5432
+                  [ -f /opt/bitnami/postgresql/tmp/.initialized ] || [ -f /bitnami/postgresql/.initialized ]
+          resources:
+            limits:
+              cpu: 150m
+              ephemeral-storage: 1024Mi
+              memory: 192Mi
+            requests:
+              cpu: 100m
+              ephemeral-storage: 50Mi
+              memory: 128Mi
+          volumeMounts:
+            - name: empty-dir
+              mountPath: /tmp
+              subPath: tmp-dir
+            - name: empty-dir
+              mountPath: /opt/bitnami/postgresql/conf
+              subPath: app-conf-dir
+            - name: empty-dir
+              mountPath: /opt/bitnami/postgresql/tmp
+              subPath: app-tmp-dir
+            - name: dshm
+              mountPath: /dev/shm
+            - name: data
+              mountPath: /bitnami/postgresql
+      volumes:
+        - name: empty-dir
+          emptyDir: {}
+        - name: dshm
+          emptyDir:
+            medium: Memory
+  volumeClaimTemplates:
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: data
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "8Gi"
+---
+# Source: visual-regression-tracker/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-visual-regression-tracker
+  labels:
+    helm.sh/chart: visual-regression-tracker-5.0.0
+    app.kubernetes.io/name: visual-regression-tracker
+    app.kubernetes.io/instance: my-visual-regression-tracker
+    app.kubernetes.io/version: "5.0.4"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  serviceName: visual-regression-tracker
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: visual-regression-tracker
+      app.kubernetes.io/instance: my-visual-regression-tracker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: visual-regression-tracker
+        app.kubernetes.io/instance: my-visual-regression-tracker
+    spec:
+      serviceAccountName: my-visual-regression-tracker
+      securityContext:
+        fsGroup: 1000
+        runAsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: visual-regression-tracker-migration
+          env:
+            - name: POSTGRES_DB
+              value: "vrt"
+            - name: POSTGRES_HOST
+              value: "vrt-postgresql"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-visual-regression-tracker-pg-pass
+                  key: pg-pass
+            - name: POSTGRES_PORT
+              value: "5432"
+            - name: POSTGRES_USER
+              value: "vrt"
+            - name: DATABASE_URL
+              value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT)/$(POSTGRES_DB)"
+          image: "visualregressiontracker/migration:5.0.1"
+          imagePullPolicy: IfNotPresent
+          resources:
+            {}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+          volumeMounts:
+            - name: vrt
+              mountPath: /app/seed.ts
+              subPath: seed.ts
+      containers:
+        - name: visual-regression-tracker-api
+          env:
+            - name: APP_FRONTEND_URL
+              value: "http://localhost:8080"
+            - name: BODY_PARSER_JSON_LIMIT
+              value: "5mb"
+            - name: JWT_LIFE_TIME
+              value: "1d"
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: my-visual-regression-tracker-jwt-pass
+                  key: jwt-pass
+            - name: POSTGRES_DB
+              value: "vrt"
+            - name: POSTGRES_HOST
+              value: "vrt-postgresql"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-visual-regression-tracker-pg-pass
+                  key: pg-pass
+            - name: POSTGRES_PORT
+              value: "5432"
+            - name: POSTGRES_USER
+              value: "vrt"
+            - name: DATABASE_URL
+              value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT)/$(POSTGRES_DB)"
+          image: "visualregressiontracker/api:5.0.5"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: api
+              containerPort: 3000
+              protocol: TCP
+          livenessProbe:
+            failureThreshold: 10
+            httpGet:
+              path: /health
+              port: api
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: api
+          resources:
+            {}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+          volumeMounts:
+            - name: my-visual-regression-tracker
+              mountPath: /imageUploads
+        - name: visual-regression-tracker-ui
+          env:
+            - name: REACT_APP_API_URL
+              value: "http://localhost:4200"
+            - name: VRT_VERSION
+              value: "5.0.4"
+          image: "visualregressiontracker/ui:5.0.2"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            failureThreshold: 10
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+            {}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+          volumeMounts:
+            - name: env
+              mountPath: /usr/share/nginx/html/static/imageUploads
+            - name: env
+              mountPath: /usr/share/nginx/html/env.sh
+              subPath: env.sh
+            - name: env-config
+              mountPath: /usr/share/nginx/html/env-config.js
+              subPath: env-config.js
+            - name: tmp
+              mountPath: /var/cache/nginx
+            - name: tmp
+              mountPath: /var/run
+      volumes:
+        - name: env
+          configMap:
+            name: my-visual-regression-tracker-env-config
+            defaultMode: 0777
+        - name: env-config
+          secret:
+            secretName: my-visual-regression-tracker-env-config
+        - name: tmp
+          emptyDir:
+            sizeLimit: 100Mi
+        - name: vrt
+          secret:
+            secretName: my-visual-regression-tracker-vrt
+  volumeClaimTemplates:
+    - metadata:
+        name: my-visual-regression-tracker
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "10Gi"

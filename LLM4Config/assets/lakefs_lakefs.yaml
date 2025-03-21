@@ -1,0 +1,106 @@
+---
+# Source: lakefs/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-lakefs
+data:
+  config.yaml:
+  |
+    database:
+      type: local
+    blockstore:
+      type: local
+---
+# Source: lakefs/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-lakefs
+  labels:
+    helm.sh/chart: lakefs-1.3.9
+    app: lakefs
+    app.kubernetes.io/name: lakefs
+    app.kubernetes.io/instance: my-lakefs
+    app.kubernetes.io/version: "1.33.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app: lakefs
+    app.kubernetes.io/name: lakefs
+    app.kubernetes.io/instance: my-lakefs
+---
+# Source: lakefs/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-lakefs
+  labels:
+    helm.sh/chart: lakefs-1.3.9
+    app: lakefs
+    app.kubernetes.io/name: lakefs
+    app.kubernetes.io/instance: my-lakefs
+    app.kubernetes.io/version: "1.33.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: lakefs
+      app.kubernetes.io/name: lakefs
+      app.kubernetes.io/instance: my-lakefs
+  template:
+    metadata:
+      annotations:
+        checksum/config: 2dde95d5a2b50bddc89371d1692db1005db9407701085531ea77ce14b56c6ec1
+      labels:
+        app: lakefs
+        app.kubernetes.io/name: lakefs
+        app.kubernetes.io/instance: my-lakefs
+    spec:
+      serviceAccountName: default
+      securityContext:
+        null
+      containers:
+        - name: lakefs
+          args: ["run", "--config", "/etc/lakefs/config.yaml"]
+          securityContext:
+            null
+          image: "treeverse/lakefs:1.33.0"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          readinessProbe:   
+            httpGet:
+              path: /_health
+              port: http
+          livenessProbe:                                                
+            httpGet:
+              path: /_health
+              port: http
+          resources:
+            {}
+          volumeMounts:
+            - name: config-volume
+              mountPath: /etc/lakefs
+          env:
+            - name: LAKEFS_AUTH_ENCRYPT_SECRET_KEY
+              value: asdjfhjaskdhuioaweyuiorasdsjbaskcbkj
+        
+        
+      volumes:
+        
+        - name: config-volume
+          configMap:
+            name: my-lakefs
+            items:
+              - key: config.yaml
+                path: config.yaml

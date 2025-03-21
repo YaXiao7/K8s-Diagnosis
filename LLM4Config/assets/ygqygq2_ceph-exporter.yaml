@@ -1,0 +1,118 @@
+---
+# Source: ceph-exporter/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-ceph-exporter
+  labels:
+    app: ceph-exporter
+    chart: ceph-exporter-1.0.0
+    release: my-ceph-exporter
+    heritage: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9128
+      targetPort: 9128
+      protocol: TCP
+      name: http-metrics
+  selector:
+    app: ceph-exporter
+    release: my-ceph-exporter
+---
+# Source: ceph-exporter/templates/deployment.yaml
+apiVersion: apps/v1beta2
+kind: Deployment
+metadata:
+  name: my-ceph-exporter
+  labels:
+    app: ceph-exporter
+    chart: ceph-exporter-1.0.0
+    release: my-ceph-exporter
+    heritage: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ceph-exporter
+      release: my-ceph-exporter
+  template:
+    metadata:
+      labels:
+        app: ceph-exporter
+        release: my-ceph-exporter
+    spec:
+      containers:
+        - name: ceph-exporter
+          image: "digitalocean/ceph_exporter:latest"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http-metrics
+              containerPort: 9128
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http-metrics
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http-metrics
+          volumeMounts:
+          - name: ceph-conf
+            mountPath: /etc/ceph
+      volumes:
+      - name: ceph-conf
+        hostPath:
+          path: /etc/ceph
+          readOnly: true
+---
+# Source: ceph-exporter/templates/prometheusrule.yaml
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  labels:
+    app: "prometheus"
+    chart: ceph-exporter-1.0.0
+    release: my-ceph-exporter
+    heritage: Helm
+    prometheus: my-ceph-exporter
+    release: prometheus-operator 
+  name: my-ceph-exporter
+spec:
+  
+  groups:
+  - name: ceph-exporter.rules
+    rules:
+    - alert: CephExporterDown
+      expr: absent(up{job="ceph-exporter"} == 1)
+      for: 5m
+      labels:
+        severity: critical
+      annotations:
+        description: There is no running ceph exporter.
+        summary: Ceph exporter is down
+---
+# Source: ceph-exporter/templates/servicemonitor.yaml
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: ServiceMonitor
+metadata:
+  labels:
+    app: ceph-exporter
+    chart: "ceph-exporter-1.0.0"
+    heritage: "Helm"
+    release: 
+    prometheus: my-ceph-exporter
+    release: prometheus-operator    
+  name: my-ceph-exporter
+spec:
+  selector:
+    matchLabels:
+      app: ceph-exporter
+      release: "my-ceph-exporter"
+  namespaceSelector:
+    matchNames:
+      - "default"
+  endpoints:
+  - port: http-metrics
+    interval: 30s

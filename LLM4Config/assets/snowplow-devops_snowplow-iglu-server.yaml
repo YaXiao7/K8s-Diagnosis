@@ -1,0 +1,164 @@
+---
+# Source: snowplow-iglu-server/charts/dockerconfigjson/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  namespace: default
+  name: snowplow-iglu-server-dockerhub
+type: kubernetes.io/dockerconfigjson
+data:
+  ".dockerconfigjson": ewogICJhdXRocyI6ewogICAgImh0dHBzOi8vaW5kZXguZG9ja2VyLmlvL3YxLyI6ewogICAgICAidXNlcm5hbWUiOiIiLAogICAgICAicGFzc3dvcmQiOiIiLAogICAgICAiZW1haWwiOiIiLAogICAgICAiYXV0aCI6Ik9nPT0iCiAgICB9CiAgfQp9Cg==
+---
+# Source: snowplow-iglu-server/templates/iglu-secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  namespace: default
+  name: my-snowplow-iglu-server-secret
+  labels:
+    helm.sh/chart: snowplow-iglu-server-0.8.0
+    app.kubernetes.io/version: "0.8.0"
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  CONFIG_FORCE_iglu_superApiKey: "ZDhhZWQzNzAtYjIyZi00YzE2LWJkOWMtOGI1MzZhODA3YTQ4"
+  CONFIG_FORCE_iglu_database_password: ""
+  CONFIG_FORCE_iglu_database_username: ""
+---
+# Source: snowplow-iglu-server/templates/iglu-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-snowplow-iglu-server-app
+  labels:
+    helm.sh/chart: snowplow-iglu-server-0.8.0
+    app.kubernetes.io/version: "0.8.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+spec:
+  type: NodePort
+  selector:
+    app: my-snowplow-iglu-server-app
+  ports:
+  - name: http-port
+    port: 8080
+    protocol: TCP
+    targetPort: 8080
+---
+# Source: snowplow-iglu-server/templates/iglu-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-snowplow-iglu-server-app
+  labels:
+    helm.sh/chart: snowplow-iglu-server-0.8.0
+    app.kubernetes.io/version: "0.8.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+    matchLabels:
+      app: my-snowplow-iglu-server-app
+  template:
+    metadata:
+      labels:
+        app: my-snowplow-iglu-server-app
+        helm.sh/chart: snowplow-iglu-server-0.8.0
+        app.kubernetes.io/version: "0.8.0"
+        app.kubernetes.io/managed-by: Helm
+      annotations:
+        checksum/config: "2ac9dddae86448ce6f84d7d6094d5441999951abff2098b9ebb1b607eb00d24c"
+    spec:
+      automountServiceAccountToken: true
+      terminationGracePeriodSeconds: 630
+
+      volumes:
+
+      containers:
+      - name: my-snowplow-iglu-server-app
+        image: snowplow/iglu-server:0.12.0-distroless
+        imagePullPolicy: IfNotPresent
+
+        args:
+        - "--config"
+        -  "/dev/null" 
+
+        ports:
+        - containerPort: 8080
+          protocol: TCP
+
+        env:
+        - name: "ACCEPT_LIMITED_USE_LICENSE"
+          value: "no"
+        - name : "CONFIG_FORCE_iglu_repoServer_port"
+          value: "8080"
+        - name : "CONFIG_FORCE_iglu_repoServer_maxConnections"
+          value: "16384"
+        - name : "CONFIG_FORCE_iglu_repoServer_idleTimeout"
+          value: "65 seconds"
+        - name : "CONFIG_FORCE_iglu_repoServer_hsts_enable"
+          value: "true"
+        - name : "CONFIG_FORCE_iglu_database_type"
+          value: "dummy"
+        - name : "CONFIG_FORCE_iglu_database_host"
+          value: ""
+        - name : "CONFIG_FORCE_iglu_database_port"
+          value: "5432"
+        - name : "CONFIG_FORCE_iglu_database_dbname"
+          value: ""
+        - name : "CONFIG_FORCE_iglu_patchesAllowed"
+          value: "false"
+        - name : "JDK_JAVA_OPTIONS"
+          value: "-Dconfig.override_with_env_vars=true "
+
+        envFrom:
+        - secretRef:
+            name: my-snowplow-iglu-server-secret
+
+        livenessProbe:
+          httpGet:
+            path: /api/meta/health
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 5
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        readinessProbe:
+          httpGet:
+            path: /api/meta/health
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 5
+          failureThreshold: 3
+          successThreshold: 2 
+
+        resources:
+          limits:
+            cpu: 746m
+            memory: 900Mi
+          requests:
+            cpu: 400m
+            memory: 512Mi
+
+        volumeMounts:
+---
+# Source: snowplow-iglu-server/templates/iglu-hpa.yaml
+apiVersion: autoscaling/v1
+kind: HorizontalPodAutoscaler
+metadata:
+  name: my-snowplow-iglu-server-app
+  labels:
+    helm.sh/chart: snowplow-iglu-server-0.8.0
+    app.kubernetes.io/version: "0.8.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: my-snowplow-iglu-server-app
+  minReplicas: 1
+  maxReplicas: 1
+  targetCPUUtilizationPercentage: 75

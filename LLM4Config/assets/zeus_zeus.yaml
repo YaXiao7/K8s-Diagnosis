@@ -1,0 +1,112 @@
+---
+# Source: zeus/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: zeus-rotations
+  labels:
+    helm.sh/chart: zeus-0.1.13
+    app.kubernetes.io/name: zeus
+    app.kubernetes.io/instance: my-zeus
+    app.kubernetes.io/version: "v1.0.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: zeus/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: zeus-rotations
+  labels:
+    helm.sh/chart: zeus-0.1.13
+    app.kubernetes.io/name: zeus
+    app.kubernetes.io/instance: my-zeus
+    app.kubernetes.io/version: "v1.0.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+  schedules: |
+---
+# Source: zeus/templates/clusterrole.yaml
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: zeus-rotations
+rules:
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get", "update"]
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "update"]
+---
+# Source: zeus/templates/clusterrolebinding.yaml
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: zeus-rotations-binding
+subjects:
+- kind: ServiceAccount
+  name: zeus-rotations
+  namespace: default
+roleRef:
+  kind: ClusterRole
+  name: zeus-rotations
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: zeus/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zeus-rotations
+  labels:
+    helm.sh/chart: zeus-0.1.13
+    app.kubernetes.io/name: zeus
+    app.kubernetes.io/instance: my-zeus
+    app.kubernetes.io/version: "v1.0.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: zeus
+      app.kubernetes.io/instance: my-zeus
+  template:
+    metadata:
+      annotations:
+        checksum/config: ca2261e3082e5e3cdeaa40f137d628d94ebdaa2d7c43b805f8c9b0c820f298fc
+      labels:
+        app.kubernetes.io/name: zeus
+        app.kubernetes.io/instance: my-zeus
+    spec:
+      serviceAccountName: zeus-rotations
+      securityContext:
+        {}
+      volumes:
+        - configMap:
+            items:
+              - key: schedules
+                path: schedules.yaml
+            name: zeus-rotations
+          name: zeus-rotations-configmap
+      containers:
+        - name: zeus
+          securityContext:
+            {}
+          image: "mrnim94/zeus-rotations:v1.0.0"
+          imagePullPolicy: IfNotPresent
+          # ports:
+          #   - name: http
+          #     containerPort: 80
+          #     protocol: TCP
+          # livenessProbe:
+          #   httpGet:
+          #     path: /
+          #     port: http
+          # readinessProbe:
+          #   httpGet:
+          #     path: /
+          #     port: http
+          resources:
+            {}
+          volumeMounts:
+            - mountPath: /go/src/zeus/config_file
+              name: zeus-rotations-configmap

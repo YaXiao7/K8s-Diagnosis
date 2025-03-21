@@ -1,0 +1,115 @@
+---
+# Source: prometheus-consul-exporter/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-prometheus-consul-exporter
+  labels:
+    app: prometheus-consul-exporter
+    chart: prometheus-consul-exporter-1.0.0
+    release: "my-prometheus-consul-exporter"
+    heritage: "Helm"
+---
+# Source: prometheus-consul-exporter/templates/role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: my-prometheus-consul-exporter
+  labels:
+    app: prometheus-consul-exporter
+    chart: prometheus-consul-exporter-1.0.0
+    heritage: Helm
+    release: my-prometheus-consul-exporter
+rules:
+- apiGroups:      ['extensions']
+  resources:      ['podsecuritypolicies']
+  verbs:          ['use']
+  resourceNames:  [my-prometheus-consul-exporter]
+---
+# Source: prometheus-consul-exporter/templates/rolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: my-prometheus-consul-exporter
+  labels:
+    app: prometheus-consul-exporter
+    chart: prometheus-consul-exporter-1.0.0
+    heritage: Helm
+    release: my-prometheus-consul-exporter
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: my-prometheus-consul-exporter
+subjects:
+- kind: ServiceAccount
+  name: my-prometheus-consul-exporter
+---
+# Source: prometheus-consul-exporter/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-prometheus-consul-exporter
+  labels:
+    app: prometheus-consul-exporter
+    chart: prometheus-consul-exporter-1.0.0
+    release: my-prometheus-consul-exporter
+    heritage: Helm
+  annotations:
+    {}
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9107
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app: prometheus-consul-exporter
+    release: my-prometheus-consul-exporter
+---
+# Source: prometheus-consul-exporter/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-prometheus-consul-exporter
+  labels:
+    app: prometheus-consul-exporter
+    chart: prometheus-consul-exporter-1.0.0
+    release: my-prometheus-consul-exporter
+    heritage: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus-consul-exporter
+      release: my-prometheus-consul-exporter
+  template:
+    metadata:
+      labels:
+        app: prometheus-consul-exporter
+        release: my-prometheus-consul-exporter
+    spec:
+      serviceAccountName: my-prometheus-consul-exporter
+      containers:
+        - name: prometheus-consul-exporter
+          image: "prom/consul-exporter:v0.4.0"
+          imagePullPolicy: IfNotPresent
+          command: ["consul_exporter"]
+          args:
+            - "--consul.server=host:port"
+          ports:
+            - name: http
+              containerPort: 9107
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 30
+            timeoutSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 30
+            timeoutSeconds: 10

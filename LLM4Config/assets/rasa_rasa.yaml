@@ -1,0 +1,594 @@
+---
+# Source: rasa/charts/postgresql/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-rasa-postgresql
+  labels:
+    app.kubernetes.io/name: postgresql
+    helm.sh/chart: postgresql-10.16.2
+    app.kubernetes.io/instance: my-rasa
+    app.kubernetes.io/managed-by: Helm
+  namespace: default
+type: Opaque
+data:
+  postgresql-password: "cGFzc3dvcmQ="
+---
+# Source: rasa/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-rasa
+  labels:
+    helm.sh/chart: rasa-1.17.7
+    app.kubernetes.io/name: rasa
+    app.kubernetes.io/instance: my-rasa
+    app.kubernetes.io/version: "3.2.6"
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  model-server-token: "dG9rZW4="
+  rasa-x-token: "cmFzYVhUb2tlbg=="
+  rasa-token: "cmFzYVRva2Vu"
+  jwt-secret: "VU5TRVQ="
+---
+# Source: rasa/templates/config-map.yaml
+apiVersion: "v1"
+kind: "ConfigMap"
+metadata:
+  name: my-rasa
+  labels:
+    helm.sh/chart: rasa-1.17.7
+    app.kubernetes.io/name: rasa
+    app.kubernetes.io/instance: my-rasa
+    app.kubernetes.io/version: "3.2.6"
+    app.kubernetes.io/managed-by: Helm
+data:
+  credentials: |
+  endpoints: |
+    tracker_store:
+      db: ${DB_DATABASE}
+      dialect: postgresql
+      login_db: ${DB_DATABASE}
+      password: ${DB_PASSWORD}
+      port: ${DB_PORT}
+      type: sql
+      url: ${DB_HOST}
+      username: ${DB_USER}
+---
+# Source: rasa/templates/nginx-config-map.yaml
+apiVersion: "v1"
+kind: "ConfigMap"
+metadata:
+  name: my-rasa-nginx-config
+  labels:
+    helm.sh/chart: rasa-1.17.7
+    app.kubernetes.io/name: rasa
+    app.kubernetes.io/instance: my-rasa
+    app.kubernetes.io/version: "3.2.6"
+    app.kubernetes.io/managed-by: Helm
+data:
+  rasa.nginx.conf: |
+    upstream rasa-oss {
+      server 127.0.0.1:5005 max_fails=0;
+    }
+    
+    server {
+      listen            80;
+    
+      keepalive_timeout   30;
+      client_max_body_size 800M;
+    
+      location / {
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Host $host;
+        proxy_pass http://rasa-oss/;
+      }
+    
+      location /socket.io {
+        proxy_http_version 1.1;
+        proxy_buffering off;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "Upgrade";
+        proxy_pass http://rasa-oss/;
+      }
+    
+      location /robots.txt {
+        return 200 "User-agent: *\nDisallow: /\n";
+      }
+    
+    }
+  nginx.conf: |
+    worker_processes  auto;
+    worker_rlimit_nofile 10000;
+    error_log /dev/stdout info;
+    pid "/etc/nginx/nginx.pid";
+    
+    events {
+        worker_connections 4096;
+    }
+    
+    
+    http {
+        include       /etc/nginx/mime.types;
+        default_type  application/octet-stream;
+    
+        log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+                          '$status $body_bytes_sent "$http_referer" '
+                          '"$http_user_agent" "$http_x_forwarded_for"';
+    
+        access_log /dev/stdout;
+    
+        client_body_temp_path  "/etc/nginx/client_body" 1 2;
+        proxy_temp_path        "/etc/nginx/proxy" 1 2;
+        fastcgi_temp_path      "/etc/nginx/fastcgi" 1 2;
+        scgi_temp_path         "/etc/nginx/scgi" 1 2;
+        uwsgi_temp_path        "/etc/nginx/uwsgi" 1 2;
+    
+        sendfile        on;
+    
+        keepalive_timeout  65;
+    
+        gzip on;
+        gzip_vary on;
+        gzip_min_length 1400;
+        gzip_proxied expired no-cache no-store private auth;
+        gzip_types text/plain text/css text/xml text/javascript application/javascript application/json application/x-javascript application/xml;
+    
+        include /etc/nginx/conf.d/*.nginx.conf;
+    
+        # allow the server to close connection on non responding client, this will free up memory
+        reset_timedout_connection on;
+    
+        # request timed out -- default 60
+        client_body_timeout 10;
+    
+        # if client stop responding, free up memory -- default 60
+        send_timeout 2;
+    
+        # server will close connection after this time -- default 75
+        proxy_read_timeout 3600;
+    
+        # number of requests client can make over keep-alive -- for testing environment
+        keepalive_requests 100000;
+    
+        # whether the connection with a proxied server should be closed
+        # when a client closes the connection without waiting for a response
+        # default is off
+        proxy_ignore_client_abort on;
+        server_tokens off;
+    
+        # Disallow indexing
+        add_header X-Robots-Tag none;
+    }
+  ssl.conf: |
+---
+# Source: rasa/charts/postgresql/templates/svc-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-rasa-postgresql-headless
+  labels:
+    app.kubernetes.io/name: postgresql
+    helm.sh/chart: postgresql-10.16.2
+    app.kubernetes.io/instance: my-rasa
+    app.kubernetes.io/managed-by: Helm
+    # Use this annotation in addition to the actual publishNotReadyAddresses
+    # field below because the annotation will stop being respected soon but the
+    # field is broken in some versions of Kubernetes:
+    # https://github.com/kubernetes/kubernetes/issues/58662
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+  namespace: default
+spec:
+  type: ClusterIP
+  clusterIP: None
+  # We want all pods in the StatefulSet to have their addresses published for
+  # the sake of the other Postgresql pods even before they're ready, since they
+  # have to be able to talk to each other in order to become ready.
+  publishNotReadyAddresses: true
+  ports:
+    - name: tcp-postgresql
+      port: 5432
+      targetPort: tcp-postgresql
+  selector:
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/instance: my-rasa
+---
+# Source: rasa/charts/postgresql/templates/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-rasa-postgresql
+  labels:
+    app.kubernetes.io/name: postgresql
+    helm.sh/chart: postgresql-10.16.2
+    app.kubernetes.io/instance: my-rasa
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+  namespace: default
+spec:
+  type: ClusterIP
+  ports:
+    - name: tcp-postgresql
+      port: 5432
+      targetPort: tcp-postgresql
+  selector:
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/instance: my-rasa
+    role: primary
+---
+# Source: rasa/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-rasa
+  labels:
+    helm.sh/chart: rasa-1.17.7
+    app.kubernetes.io/name: rasa
+    app.kubernetes.io/instance: my-rasa
+    app.kubernetes.io/version: "3.2.6"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5005
+      targetPort: http
+      protocol: TCP
+      name: http
+    - port: 80
+      targetPort: http-nginx
+      protocol: TCP
+      name: http-nginx
+  selector:
+      app.kubernetes.io/name: rasa
+      app.kubernetes.io/instance: my-rasa
+---
+# Source: rasa/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-rasa
+  labels:
+    helm.sh/chart: rasa-1.17.7
+    app.kubernetes.io/name: rasa
+    app.kubernetes.io/instance: my-rasa
+    app.kubernetes.io/version: "3.2.6"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: rasa
+      app.kubernetes.io/instance: my-rasa
+  template:
+    metadata:
+      annotations:
+        checksum/secret: 49d249b0e5f08b62aceec8ed968501ef127ad15b45d61e2772d1eb5816147ebb
+        checksum/config: 25e8b44586134f9c44a2c37f4f7cba3d1a44100753f5d2877e85fb11c2f1d6da
+        checksum/nginx-config: 100f6b3e770bf7cfe1d7ebb026faf73af21643aae42c802fa7e8925432d092c8
+      labels:
+        app.kubernetes.io/name: rasa
+        app.kubernetes.io/instance: my-rasa
+    spec:
+      serviceAccountName: "default"
+      securityContext:
+        {}
+      initContainers:
+        - name: download-initial-model
+          image: "alpine"
+          command: ["/bin/sh", "-c"]
+          args:
+            - cd /app/models/ && wget https://github.com/RasaHQ/rasa-x-demo/blob/master/models/model.tar.gz?raw=true -O model.tar.gz
+          volumeMounts:
+            - mountPath: /app/models
+              name: models
+      containers:
+        
+        - name: nginx
+          image: nginx:1.20
+          securityContext:
+            {}
+          livenessProbe:
+            failureThreshold: 6
+            httpGet:
+              path: /
+              port: http-nginx
+              scheme: HTTP
+            initialDelaySeconds: 15
+            periodSeconds: 15
+            successThreshold: 1
+            timeoutSeconds: 5
+          readinessProbe:
+            failureThreshold: 6
+            httpGet:
+              path: /
+              port: http-nginx
+              scheme: HTTP
+            initialDelaySeconds: 15
+            periodSeconds: 15
+            successThreshold: 1
+            timeoutSeconds: 5
+          resources:
+            {}
+          ports:
+          - name: http-nginx
+            containerPort: 80
+            protocol: TCP
+          volumeMounts:
+          - mountPath: "/etc/nginx/nginx.conf"
+            subPath: "nginx.conf"
+            name: my-rasa-nginx-config
+            readOnly: true
+          - mountPath: "/etc/nginx/conf.d/rasa.nginx.conf"
+            subPath: "rasa.nginx.conf"
+            name: my-rasa-nginx-config
+            readOnly: true
+        - name: rasa-oss
+          args:
+            - run
+            - --enable-api
+            - --port
+            - "5005"
+            - --cors
+            - "*"
+            - --jwt-method
+            - HS256
+            - --jwt-secret
+            - "$(JWT_SECRET)"
+            - --auth-token
+            - "$(RASA_TOKEN)"
+            
+          securityContext:
+            {}
+          image: "docker.io/rasa/rasa:3.2.6"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 5005
+              protocol: TCP
+          livenessProbe:
+            failureThreshold: 6
+            httpGet:
+              path: /
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 15
+            periodSeconds: 15
+            successThreshold: 1
+            timeoutSeconds: 5
+          readinessProbe:
+            failureThreshold: 6
+            httpGet:
+              path: /
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 15
+            periodSeconds: 15
+            successThreshold: 1
+            timeoutSeconds: 5
+          resources:
+            {}
+          env:
+            
+            - name: "DB_USER"
+              value: "postgres"
+            - name: "DB_HOST"
+              value: "my-rasa-postgresql"
+            - name: "DB_PORT"
+              value: "5432"
+            - name: "DB_DATABASE"
+              value: "rasa"
+            - name: "DB_PASSWORD"
+              valueFrom:
+                secretKeyRef:
+                  name: "my-rasa-postgresql"
+                  key: postgresql-password
+            - name: "RASA_TELEMETRY_ENABLED"
+              value: "true"
+            - name: "MPLCONFIGDIR"
+              value: "/tmp/.matplotlib"
+            - name: "TF_CPP_MIN_LOG_LEVEL"
+              value: "2"
+            - name: "RASA_TOKEN"
+              valueFrom:
+                secretKeyRef:
+                  name: my-rasa
+                  key: "rasa-token"
+            - name: "JWT_SECRET"
+              valueFrom:
+                secretKeyRef:
+                  name: my-rasa
+                  key: "jwt-secret"
+          volumeMounts:
+            - mountPath: /app/models
+              name: models
+            # Mount the temporary directory for the Rasa global configuration
+            - name: "config-dir"
+              mountPath: "/.config"
+            - mountPath: "/app/endpoints.yml"
+              subPath: "endpoints.yml"
+              name: "rasa-configuration"
+              readOnly: true
+            - mountPath: "/app/credentials.yml"
+              subPath: "credentials.yml"
+              name: "rasa-configuration"
+              readOnly: true
+      volumes:
+        - name: models
+          emptyDir: {}
+        - name: app-dir
+          emptyDir: {}
+        - name: config-dir
+          emptyDir: {}
+        - name: "rasa-configuration"
+          configMap:
+            name: my-rasa
+            items:
+              - key: "endpoints"
+                path: "endpoints.yml"
+              - key: "credentials"
+                path: "credentials.yml"
+        - name: "my-rasa-nginx-config"
+          configMap:
+            name: "my-rasa-nginx-config"
+            items:
+              - key: "nginx.conf"
+                path: "nginx.conf"
+              - key: "rasa.nginx.conf"
+                path: "rasa.nginx.conf"
+---
+# Source: rasa/charts/postgresql/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-rasa-postgresql
+  labels:
+    app.kubernetes.io/name: postgresql
+    helm.sh/chart: postgresql-10.16.2
+    app.kubernetes.io/instance: my-rasa
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: primary
+  annotations:
+  namespace: default
+spec:
+  serviceName: my-rasa-postgresql-headless
+  replicas: 1
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgresql
+      app.kubernetes.io/instance: my-rasa
+      role: primary
+  template:
+    metadata:
+      name: my-rasa-postgresql
+      labels:
+        app.kubernetes.io/name: postgresql
+        helm.sh/chart: postgresql-10.16.2
+        app.kubernetes.io/instance: my-rasa
+        app.kubernetes.io/managed-by: Helm
+        role: primary
+        app.kubernetes.io/component: primary
+    spec:      
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: postgresql
+                    app.kubernetes.io/instance: my-rasa
+                    app.kubernetes.io/component: primary
+                namespaces:
+                  - "default"
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+      automountServiceAccountToken: false
+      containers:
+        - name: my-rasa-postgresql
+          image: docker.io/bitnami/postgresql:11.14.0-debian-10-r28
+          imagePullPolicy: "IfNotPresent"
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+          securityContext:
+            runAsUser: 1001
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: POSTGRESQL_PORT_NUMBER
+              value: "5432"
+            - name: POSTGRESQL_VOLUME_DIR
+              value: "/bitnami/postgresql"
+            - name: PGDATA
+              value: "/bitnami/postgresql/data"
+            - name: POSTGRES_USER
+              value: "postgres"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-rasa-postgresql
+                  key: postgresql-password
+            - name: POSTGRES_DB
+              value: "rasa"
+            - name: POSTGRESQL_ENABLE_LDAP
+              value: "no"
+            - name: POSTGRESQL_ENABLE_TLS
+              value: "no"
+            - name: POSTGRESQL_LOG_HOSTNAME
+              value: "false"
+            - name: POSTGRESQL_LOG_CONNECTIONS
+              value: "false"
+            - name: POSTGRESQL_LOG_DISCONNECTIONS
+              value: "false"
+            - name: POSTGRESQL_PGAUDIT_LOG_CATALOG
+              value: "off"
+            - name: POSTGRESQL_CLIENT_MIN_MESSAGES
+              value: "error"
+            - name: POSTGRESQL_SHARED_PRELOAD_LIBRARIES
+              value: "pgaudit"
+          ports:
+            - name: tcp-postgresql
+              containerPort: 5432
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - exec pg_isready -U "postgres" -d "dbname=rasa" -h 127.0.0.1 -p 5432
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - -e
+                - |
+                  exec pg_isready -U "postgres" -d "dbname=rasa" -h 127.0.0.1 -p 5432
+                  [ -f /opt/bitnami/postgresql/tmp/.initialized ] || [ -f /bitnami/postgresql/.initialized ]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          volumeMounts:
+            - name: dshm
+              mountPath: /dev/shm
+            - name: data
+              mountPath: /bitnami/postgresql
+              subPath: 
+      volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "8Gi"

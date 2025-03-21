@@ -1,0 +1,42 @@
+---
+# Source: minio-cluster/templates/cluster.yaml
+apiVersion: apps.kubeblocks.io/v1alpha1
+kind: Cluster
+metadata:
+  name: my-minio-cluster
+  namespace: default
+  labels: 
+    helm.sh/chart: minio-cluster-8.0.17
+    app.kubernetes.io/version: "master"
+    app.kubernetes.io/instance: my-minio-cluster
+spec:
+  clusterVersionRef: 
+  terminationPolicy: Delete  
+  affinity:
+    podAntiAffinity: Preferred
+    topologyKeys:
+      - kubernetes.io/hostname
+    tenancy: SharedNode
+  clusterDefinitionRef: minio-8.0.17
+  componentSpecs:
+    - name: minio
+      componentDefRef: minio
+      replicas: 1      
+      disableExporter: true
+      serviceAccountName:       
+      resources:
+        limits:
+          cpu: "0.5"
+          memory: "0.5Gi"
+        requests:
+          cpu: "0.5"
+          memory: "0.5Gi"      
+      volumeClaimTemplates:
+        - name: data # ref clusterDefinition components.containers.volumeMounts.name
+          spec:
+            accessModes:
+              - ReadWriteOnce
+            resources:
+              requests:
+                storage: 1Gi      
+      services:

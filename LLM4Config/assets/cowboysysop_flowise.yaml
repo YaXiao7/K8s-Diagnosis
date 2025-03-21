@@ -1,0 +1,188 @@
+---
+# Source: flowise/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-flowise
+  labels:
+    helm.sh/chart: flowise-3.8.0
+    app.kubernetes.io/name: flowise
+    app.kubernetes.io/instance: my-flowise
+    app.kubernetes.io/version: "2.0.7"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: flowise/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-flowise
+  labels:
+    helm.sh/chart: flowise-3.8.0
+    app.kubernetes.io/name: flowise
+    app.kubernetes.io/instance: my-flowise
+    app.kubernetes.io/version: "2.0.7"
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+---
+# Source: flowise/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-flowise
+  labels:
+    helm.sh/chart: flowise-3.8.0
+    app.kubernetes.io/name: flowise
+    app.kubernetes.io/instance: my-flowise
+    app.kubernetes.io/version: "2.0.7"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+    - port: 3000
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: flowise
+    app.kubernetes.io/instance: my-flowise
+---
+# Source: flowise/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-flowise
+  labels:
+    helm.sh/chart: flowise-3.8.0
+    app.kubernetes.io/name: flowise
+    app.kubernetes.io/instance: my-flowise
+    app.kubernetes.io/version: "2.0.7"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: flowise
+      app.kubernetes.io/instance: my-flowise
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: flowise
+        app.kubernetes.io/instance: my-flowise
+      annotations:
+        checksum/secret: cbcc464df2efc6b03bf084b02d6c9ce98f6f7b780b7272760e79d173ca1550d3
+    spec:
+      
+      serviceAccountName: my-flowise
+      securityContext:
+        {}
+      initContainers:
+      containers:
+        - name: flowise
+          securityContext:
+            {}
+          image: docker.io/flowiseai/flowise:2.0.7
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: PORT
+              value: "3000"
+            - name: APIKEY_PATH
+              value: /data
+            - name: BLOB_STORAGE_PATH
+              value: /data/storage
+            - name: SECRETKEY_PATH
+              value: /data
+            - name: DATABASE_PATH
+              value: /data
+            - name: DISABLE_FLOWISE_TELEMETRY
+              value: "true"
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /api/v1/ping
+              port: http
+            initialDelaySeconds: 0
+            periodSeconds: 10
+            timeoutSeconds: 1
+            failureThreshold: 3
+            successThreshold: 1
+          readinessProbe:
+            httpGet:
+              path: /api/v1/ping
+              port: http
+            initialDelaySeconds: 0
+            periodSeconds: 10
+            timeoutSeconds: 1
+            failureThreshold: 3
+            successThreshold: 1
+          resources:
+            {}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          emptyDir: {}
+---
+# Source: flowise/templates/tests/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-flowise-tests
+  labels:
+    helm.sh/chart: flowise-3.8.0
+    app.kubernetes.io/name: flowise
+    app.kubernetes.io/instance: my-flowise
+    app.kubernetes.io/version: "2.0.7"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: tests
+  annotations:
+    helm.sh/hook: test
+data:
+  test_all.py: |
+    import requests
+
+
+    def test_service_connection():
+        url = "http://my-flowise:3000/"
+
+        response = requests.get(url)
+
+        assert response.status_code == 200
+---
+# Source: flowise/templates/tests/pod.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-flowise-tests
+  labels:
+    helm.sh/chart: flowise-3.8.0
+    app.kubernetes.io/name: flowise
+    app.kubernetes.io/instance: my-flowise
+    app.kubernetes.io/version: "2.0.7"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: tests
+  annotations:
+    helm.sh/hook: test
+spec:
+  
+  containers:
+    - name: tests
+      image: ghcr.io/cowboysysop/pytest:1.0.41
+      imagePullPolicy: IfNotPresent
+      volumeMounts:
+        - name: tests
+          mountPath: /tests
+          readOnly: true
+      workingDir: /tests
+  restartPolicy: Never
+  volumes:
+    - name: tests
+      configMap:
+        name: my-flowise-tests

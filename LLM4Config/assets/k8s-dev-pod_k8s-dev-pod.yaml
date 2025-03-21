@@ -1,0 +1,90 @@
+---
+# Source: k8s-dev-pod/templates/persistence.yaml
+### Home Directory
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: my-k8s-dev-pod-home
+spec:
+  accessModes:
+    - ReadWriteOnce
+  volumeMode: Filesystem
+  resources:
+    requests:
+      storage: 20Gi
+---
+# Source: k8s-dev-pod/templates/persistence.yaml
+### Dropbear State
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: my-k8s-dev-pod-dropbear
+spec:
+  accessModes:
+    - ReadWriteOnce
+  volumeMode: Filesystem
+  resources:
+    requests:
+      storage: 1Mi
+---
+# Source: k8s-dev-pod/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-k8s-dev-pod
+  labels:
+    helm.sh/chart: k8s-dev-pod-0.3.0
+    app.kubernetes.io/name: k8s-dev-pod
+    app.kubernetes.io/instance: my-k8s-dev-pod
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: k8s-dev-pod
+      app.kubernetes.io/instance: my-k8s-dev-pod
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: k8s-dev-pod
+        app.kubernetes.io/instance: my-k8s-dev-pod
+    spec:
+      securityContext:
+        null
+      volumes:
+      - name: home
+        persistentVolumeClaim:
+          claimName: my-k8s-dev-pod-home
+      - name: dropbear
+        persistentVolumeClaim:
+          claimName: my-k8s-dev-pod-dropbear
+      containers:
+        - name: k8s-dev-pod
+          securityContext:
+            null
+          image: "ghcr.io/bryopsida/k8s-dev-pod:main"
+          imagePullPolicy: Always
+          env:
+            - name: PASSWORD_LOGIN_ENABLED
+              value: "true"
+            - name: NVM_INSTALL_ENABLED
+              value: "true"
+            - name: NVM_VERSION
+              value: "v0.39.7"
+            - name: SDK_MAN_INSTALL_ENABLED
+              value: "true"
+            - name: OH_MY_ZSH_INSTALL_ENABLED
+              value: "true"
+          ports:
+            - name: ssh
+              containerPort: 3022
+              protocol: TCP
+          resources:
+            null
+          volumeMounts:
+            - name: home
+              mountPath: /home/developer
+              readOnly: false
+            - name: dropbear
+              mountPath: /etc/dropbear
+              readOnly: false

@@ -1,0 +1,143 @@
+---
+# Source: rstudio-connect/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-rstudio-connect-config
+  namespace: default
+data:
+  rstudio-connect.gcfg: |
+    [Authentication]
+    Provider = password
+    
+    [HTTP]
+    Listen = :3939
+    
+    [Logging]
+    AccessLog = STDOUT
+    AccessLogFormat = COMMON
+    ServiceLog = STDOUT
+    ServiceLogFormat = TEXT
+    ServiceLogLevel = INFO
+    
+    [Metrics]
+    Enabled = true
+    PrometheusListen = :3232
+    
+    [Python]
+    Enabled = true
+    Executable = /opt/python/3.12.1/bin/python
+    Executable = /opt/python/3.11.7/bin/python
+    
+    [Quarto]
+    Enabled = true
+    Executable = /opt/quarto/1.4.557/bin/quarto
+    
+    [RPackageRepository "CRAN"]
+    URL = https://packagemanager.rstudio.com/cran/__linux__/jammy/latest
+    
+    [RPackageRepository "RSPM"]
+    URL = https://packagemanager.rstudio.com/cran/__linux__/jammy/latest
+    
+    [Scheduler]
+    InitTimeout = 5m
+    
+    [Server]
+    Address = http://localhost:3939
+    DataDir = /var/lib/rstudio-connect
+    
+    [TensorFlow]
+    Enabled = true
+    Executable = /usr/bin/tensorflow_model_server
+---
+# Source: rstudio-connect/templates/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-rstudio-connect
+  namespace: default
+  labels:
+    helm.sh/chart: rstudio-connect-0.7.8
+    app.kubernetes.io/name: rstudio-connect
+    app.kubernetes.io/instance: my-rstudio-connect
+    app.kubernetes.io/version: "2024.08.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: rstudio-connect
+    app.kubernetes.io/instance: my-rstudio-connect
+  ports:
+  - name: http
+    protocol: TCP
+    port: 80
+    targetPort: 3939
+  - name: metrics
+    targetPort: metrics
+    port: 3232
+---
+# Source: rstudio-connect/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-rstudio-connect
+  namespace: default
+spec:
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 100%
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: rstudio-connect
+      app.kubernetes.io/instance: my-rstudio-connect
+  template:
+    metadata:
+      annotations:
+        checksum/config: eb7fd77cccf6b7b64468fc0c564148da21474e9b7747f4f4ac7e85bd041309d2
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "3232"
+        
+      labels:
+        app.kubernetes.io/name: rstudio-connect
+        app.kubernetes.io/instance: my-rstudio-connect
+    spec:
+      
+      serviceAccountName: ""
+      containers:
+      - name: connect
+        image: "ghcr.io/rstudio/rstudio-connect:ubuntu2204-2024.08.0"
+        env:
+        - name: RSTUDIO_CONNECT_HASTE
+          value: enabled
+        
+        imagePullPolicy: "IfNotPresent"
+        ports:
+        - containerPort: 3939
+          name: http
+        - containerPort: 3232
+          name: metrics
+        securityContext:
+          privileged: true
+        volumeMounts:
+          - name: rstudio-connect-config
+            mountPath: "/etc/rstudio-connect/rstudio-connect.gcfg"
+            subPath: "rstudio-connect.gcfg"
+                    
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /__ping__
+            port: 3939
+          initialDelaySeconds: 3
+          periodSeconds: 3
+          successThreshold: 1
+          timeoutSeconds: 1
+      terminationGracePeriodSeconds: 120
+      volumes:
+      - name: rstudio-connect-config
+        configMap:
+          name: my-rstudio-connect-config

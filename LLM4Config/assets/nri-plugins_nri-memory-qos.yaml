@@ -1,0 +1,78 @@
+---
+# Source: nri-memory-qos/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nri-memory-qos-config.default
+  namespace: default
+  labels:
+    helm.sh/chart: nri-memory-qos-v0.7.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: nri-memory-qos
+    app.kubernetes.io/instance: my-nri-memory-qos
+data:
+  config.yaml: |
+    classes:
+    - name: bronze
+      swaplimitratio: 0.5
+    - name: silver
+      swaplimitratio: 0.2
+    unifiedannotations:
+    - memory.swap.max
+    - memory.high
+---
+# Source: nri-memory-qos/templates/daemonset.yaml
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  labels:
+    helm.sh/chart: nri-memory-qos-v0.7.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: nri-memory-qos
+    app.kubernetes.io/instance: my-nri-memory-qos
+  name: nri-memory-qos
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: nri-memory-qos
+      app.kubernetes.io/instance: my-nri-memory-qos
+  template:
+    metadata:
+      labels:
+        helm.sh/chart: nri-memory-qos-v0.7.0
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: nri-memory-qos
+        app.kubernetes.io/instance: my-nri-memory-qos
+    spec:
+      nodeSelector:
+        kubernetes.io/os: "linux"
+      containers:
+        - name: nri-memory-qos
+          command:
+            - nri-memory-qos
+            - --idx
+            - "90"
+            - --config
+            - /etc/nri/memory-qos/config.yaml
+            - -v
+          image: ghcr.io/containers/nri-plugins/nri-memory-qos:v0.7.0
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              cpu: 10m
+              memory: 100Mi
+          volumeMounts:
+          - name: memory-qos-config-vol
+            mountPath: /etc/nri/memory-qos
+          - name: nrisockets
+            mountPath: /var/run/nri
+      priorityClassName: system-node-critical
+      volumes:
+      - name: memory-qos-config-vol
+        configMap:
+          name: nri-memory-qos-config.default
+      - name: nrisockets
+        hostPath:
+          path: /var/run/nri
+          type: DirectoryOrCreate

@@ -1,0 +1,86 @@
+---
+# Source: jougan/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-jougan
+  labels:
+    helm.sh/chart: jougan-0.2.0
+    app.kubernetes.io/name: jougan
+    app.kubernetes.io/instance: my-jougan
+    app.kubernetes.io/version: "v0.0.2"
+    app.kubernetes.io/managed-by: Helm
+automountServiceAccountToken: true
+---
+# Source: jougan/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-jougan
+  labels:
+    helm.sh/chart: jougan-0.2.0
+    app.kubernetes.io/name: jougan
+    app.kubernetes.io/instance: my-jougan
+    app.kubernetes.io/version: "v0.0.2"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 1994
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: jougan
+    app.kubernetes.io/instance: my-jougan
+---
+# Source: jougan/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-jougan
+  labels:
+    helm.sh/chart: jougan-0.2.0
+    app.kubernetes.io/name: jougan
+    app.kubernetes.io/instance: my-jougan
+    app.kubernetes.io/version: "v0.0.2"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: jougan
+      app.kubernetes.io/instance: my-jougan
+  template:
+    metadata:
+      labels:
+        helm.sh/chart: jougan-0.2.0
+        app.kubernetes.io/name: jougan
+        app.kubernetes.io/instance: my-jougan
+        app.kubernetes.io/version: "v0.0.2"
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      serviceAccountName: my-jougan
+      securityContext:
+        {}
+      containers:
+        - name: jougan
+          securityContext:
+            {}
+          image: "mrnim94/jougan:v0.0.2"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 1994
+              protocol: TCP
+          env:
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+            {}

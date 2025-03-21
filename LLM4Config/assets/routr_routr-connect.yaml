@@ -1,0 +1,1672 @@
+---
+# Source: routr-connect/charts/redis/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+automountServiceAccountToken: true
+metadata:
+  name: my-routr-connect-redis
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: redis
+    helm.sh/chart: redis-17.7.3
+    app.kubernetes.io/instance: my-routr-connect
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: routr-connect/charts/postgresql/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-routr-connect-postgresql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: postgresql
+    helm.sh/chart: postgresql-12.1.15
+    app.kubernetes.io/instance: my-routr-connect
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  postgres-password: "OVpKZnRRZlJtRg=="
+  password: "Y2hhbmdlbWU="
+  # We don't auto-generate LDAP password when it's not provided as we do for other passwords
+---
+# Source: routr-connect/templates/apiserver/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-routr-connect-routr-database-url
+  namespace: default  
+type: Opaque
+stringData:  
+  DATABASE_URL: postgresql://routr:changeme@my-routr-connect-postgresql.default:5432/routr?schema=public
+---
+# Source: routr-connect/templates/edgeport/secrets.yaml
+apiVersion: v1
+kind: Secret
+type: Opaque
+metadata:
+  name: my-routr-connect-routr-edgeport-config
+  namespace: default
+  labels:
+    helm.sh/chart: routr-connect-0.4.2
+    app.kubernetes.io/name: routr-connect
+    app.kubernetes.io/instance: my-routr-connect
+    app.kubernetes.io/version: "2.9.0"
+    app.kubernetes.io/managed-by: Helm
+stringData:
+  edgeport.yaml: |
+    kind: EdgePort
+    apiVersion: v2beta1
+    ref: placeholder
+    metadata:
+      region: default
+    spec:
+      unknownMethodAction: Discard
+      processor:
+        addr: my-routr-connect-routr-dispatcher.default:51901  
+      securityContext:
+        client:
+          protocols:
+            - SSLv3
+            - TLSv1.2
+          authType: DisabledAll
+        keyStorePassword: changeme
+        trustStorePassword: changeme
+        keyStore: "/etc/routr/certs/signaling.p12"
+        trustStore: "/etc/routr/certs/signaling.p12"
+        keyStoreType: pkcs12
+      methods:
+        - REGISTER
+        - MESSAGE
+        - INVITE
+        - ACK
+        - BYE
+        - CANCEL
+      transport:
+        - protocol: udp
+          port: 5060
+---
+# Source: routr-connect/templates/edgeport/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-routr-connect-routr-edgeport-pkcs12-password
+  namespace: default
+  labels:
+    helm.sh/chart: routr-connect-0.4.2
+    app.kubernetes.io/name: routr-connect
+    app.kubernetes.io/instance: my-routr-connect
+    app.kubernetes.io/version: "2.9.0"
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  password: Y2hhbmdlbWU=
+---
+# Source: routr-connect/charts/redis/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-routr-connect-redis-configuration
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: redis
+    helm.sh/chart: redis-17.7.3
+    app.kubernetes.io/instance: my-routr-connect
+    app.kubernetes.io/managed-by: Helm
+data:
+  redis.conf: |-
+    # User-supplied common configuration:
+    # Enable AOF https://redis.io/topics/persistence#append-only-file
+    appendonly yes
+    # Disable RDB persistence, AOF persistence already enabled.
+    save ""
+    # End of common configuration
+  master.conf: |-
+    dir /data
+    # User-supplied master configuration:
+    rename-command FLUSHDB ""
+    rename-command FLUSHALL ""
+    # End of master configuration
+  replica.conf: |-
+    dir /data
+    # User-supplied replica configuration:
+    rename-command FLUSHDB ""
+    rename-command FLUSHALL ""
+    # End of replica configuration
+---
+# Source: routr-connect/charts/redis/templates/health-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-routr-connect-redis-health
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: redis
+    helm.sh/chart: redis-17.7.3
+    app.kubernetes.io/instance: my-routr-connect
+    app.kubernetes.io/managed-by: Helm
+data:
+  ping_readiness_local.sh: |-
+    #!/bin/bash
+
+    [[ -f $REDIS_PASSWORD_FILE ]] && export REDIS_PASSWORD="$(< "${REDIS_PASSWORD_FILE}")"
+    [[ -n "$REDIS_PASSWORD" ]] && export REDISCLI_AUTH="$REDIS_PASSWORD"
+    response=$(
+      timeout -s 3 $1 \
+      redis-cli \
+        -h localhost \
+        -p $REDIS_PORT \
+        ping
+    )
+    if [ "$?" -eq "124" ]; then
+      echo "Timed out"
+      exit 1
+    fi
+    if [ "$response" != "PONG" ]; then
+      echo "$response"
+      exit 1
+    fi
+  ping_liveness_local.sh: |-
+    #!/bin/bash
+
+    [[ -f $REDIS_PASSWORD_FILE ]] && export REDIS_PASSWORD="$(< "${REDIS_PASSWORD_FILE}")"
+    [[ -n "$REDIS_PASSWORD" ]] && export REDISCLI_AUTH="$REDIS_PASSWORD"
+    response=$(
+      timeout -s 3 $1 \
+      redis-cli \
+        -h localhost \
+        -p $REDIS_PORT \
+        ping
+    )
+    if [ "$?" -eq "124" ]; then
+      echo "Timed out"
+      exit 1
+    fi
+    responseFirstWord=$(echo $response | head -n1 | awk '{print $1;}')
+    if [ "$response" != "PONG" ] && [ "$responseFirstWord" != "LOADING" ] && [ "$responseFirstWord" != "MASTERDOWN" ]; then
+      echo "$response"
+      exit 1
+    fi
+  ping_readiness_master.sh: |-
+    #!/bin/bash
+
+    [[ -f $REDIS_MASTER_PASSWORD_FILE ]] && export REDIS_MASTER_PASSWORD="$(< "${REDIS_MASTER_PASSWORD_FILE}")"
+    [[ -n "$REDIS_MASTER_PASSWORD" ]] && export REDISCLI_AUTH="$REDIS_MASTER_PASSWORD"
+    response=$(
+      timeout -s 3 $1 \
+      redis-cli \
+        -h $REDIS_MASTER_HOST \
+        -p $REDIS_MASTER_PORT_NUMBER \
+        ping
+    )
+    if [ "$?" -eq "124" ]; then
+      echo "Timed out"
+      exit 1
+    fi
+    if [ "$response" != "PONG" ]; then
+      echo "$response"
+      exit 1
+    fi
+  ping_liveness_master.sh: |-
+    #!/bin/bash
+
+    [[ -f $REDIS_MASTER_PASSWORD_FILE ]] && export REDIS_MASTER_PASSWORD="$(< "${REDIS_MASTER_PASSWORD_FILE}")"
+    [[ -n "$REDIS_MASTER_PASSWORD" ]] && export REDISCLI_AUTH="$REDIS_MASTER_PASSWORD"
+    response=$(
+      timeout -s 3 $1 \
+      redis-cli \
+        -h $REDIS_MASTER_HOST \
+        -p $REDIS_MASTER_PORT_NUMBER \
+        ping
+    )
+    if [ "$?" -eq "124" ]; then
+      echo "Timed out"
+      exit 1
+    fi
+    responseFirstWord=$(echo $response | head -n1 | awk '{print $1;}')
+    if [ "$response" != "PONG" ] && [ "$responseFirstWord" != "LOADING" ]; then
+      echo "$response"
+      exit 1
+    fi
+  ping_readiness_local_and_master.sh: |-
+    script_dir="$(dirname "$0")"
+    exit_status=0
+    "$script_dir/ping_readiness_local.sh" $1 || exit_status=$?
+    "$script_dir/ping_readiness_master.sh" $1 || exit_status=$?
+    exit $exit_status
+  ping_liveness_local_and_master.sh: |-
+    script_dir="$(dirname "$0")"
+    exit_status=0
+    "$script_dir/ping_liveness_local.sh" $1 || exit_status=$?
+    "$script_dir/ping_liveness_master.sh" $1 || exit_status=$?
+    exit $exit_status
+---
+# Source: routr-connect/charts/redis/templates/scripts-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-routr-connect-redis-scripts
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: redis
+    helm.sh/chart: redis-17.7.3
+    app.kubernetes.io/instance: my-routr-connect
+    app.kubernetes.io/managed-by: Helm
+data:
+  start-master.sh: |
+    #!/bin/bash
+
+    [[ -f $REDIS_PASSWORD_FILE ]] && export REDIS_PASSWORD="$(< "${REDIS_PASSWORD_FILE}")"
+    if [[ -f /opt/bitnami/redis/mounted-etc/master.conf ]];then
+        cp /opt/bitnami/redis/mounted-etc/master.conf /opt/bitnami/redis/etc/master.conf
+    fi
+    if [[ -f /opt/bitnami/redis/mounted-etc/redis.conf ]];then
+        cp /opt/bitnami/redis/mounted-etc/redis.conf /opt/bitnami/redis/etc/redis.conf
+    fi
+    ARGS=("--port" "${REDIS_PORT}")
+    ARGS+=("--protected-mode" "no")
+    ARGS+=("--include" "/opt/bitnami/redis/etc/redis.conf")
+    ARGS+=("--include" "/opt/bitnami/redis/etc/master.conf")
+    exec redis-server "${ARGS[@]}"
+---
+# Source: routr-connect/templates/dispatcher/configmaps.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-routr-connect-routr-dispatcher-config
+  namespace: default
+  labels:
+    helm.sh/chart: routr-connect-0.4.2
+    app.kubernetes.io/name: routr-connect
+    app.kubernetes.io/instance: my-routr-connect
+    app.kubernetes.io/version: "2.9.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+  dispatcher.yaml: |-
+    kind: MessageDispatcher
+    apiVersion: v2beta1
+    ref: message-dispatcher
+    spec:
+      bindAddr: 0.0.0.0:51901
+      processors:
+        - ref: connect-processor
+          addr: my-routr-connect-routr-connect.default:51904
+          matchFunc: "req => true"
+          methods:
+            - REGISTER
+            - MESSAGE
+            - INVITE
+            - ACK
+            - BYE
+            - CANCEL
+---
+# Source: routr-connect/templates/edgeport/configmaps.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-routr-connect-routr-edgeport-log4j2
+  namespace: default
+  labels:
+    helm.sh/chart: routr-connect-0.4.2
+    app.kubernetes.io/name: routr-connect
+    app.kubernetes.io/instance: my-routr-connect
+    app.kubernetes.io/version: "2.9.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+  log4j2.yaml: |-
+    Configuration:
+      Appenders:
+        Console:
+          PatternLayout:
+            pattern: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%-4level{lowerCase=true}]: (${sys:serviceName}) %c{1}.java %msg%n"
+          name: Console
+          target: SYSTEM_OUT
+        RollingFile:
+          - name: LogToRollingFile
+            fileName: logs/routr.log
+            filePattern: "logs/routr-%d{MM-dd-yyyy}-%i.log.gz"
+            PatternLayout:
+              pattern: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%-4level{lowerCase=true}]: (${sys:serviceName}) %c{1}.java %msg%n"
+            Policies:
+              SizeBasedTriggeringPolicy:
+                size: 10MB
+            DefaultRollOverStrategy:
+              max: 10
+      Loggers:
+        Logger:
+          - name: io.routr
+            level: info
+            AppenderRef:
+              - ref: Console
+              - ref: LogToRollingFile
+        Root:
+          level: error
+          AppenderRef:
+            - ref: LogToRollingFile
+---
+# Source: routr-connect/templates/location/configmaps.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-routr-connect-routr-location-config
+  namespace: default
+  labels:
+    helm.sh/chart: routr-connect-0.4.2
+    app.kubernetes.io/name: routr-connect
+    app.kubernetes.io/instance: my-routr-connect
+    app.kubernetes.io/version: "2.9.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+  location.yaml: |-
+    kind: Location
+    apiVersion: v2beta1
+    metadata:
+      region: default
+    spec:
+      bindAddr: 0.0.0.0:51902
+      cache:
+        provider: redis
+        parameters: host=my-routr-connect-redis-master.default,port=6379
+---
+# Source: routr-connect/templates/registry/configmaps.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-routr-connect-routr-registry-config
+  namespace: default
+  labels:
+    helm.sh/chart: routr-connect-0.4.2
+    app.kubernetes.io/name: routr-connect
+    app.kubernetes.io/instance: my-routr-connect
+    app.kubernetes.io/version: "2.9.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+  registry.yaml: |-
+    kind: Registry
+    apiVersion: v2beta1
+    spec:
+      requesterAddr: my-routr-connect-routr-requester.default:51909
+      apiAddr: my-routr-connect-routr-apiserver.default:51907
+      registerInterval: 20
+      cache:
+        provider: redis
+        parameters: host=my-routr-connect-redis-master.default,port=6379
+      methods:
+        - INVITE
+        - MESSAGE
+      edgePorts:
+        - address: my-routr-connect-routr-edgeport.default:5060
+---
+# Source: routr-connect/templates/requester/configmaps.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-routr-connect-routr-requester-config
+  namespace: default
+  labels:
+    helm.sh/chart: routr-connect-0.4.2
+    app.kubernetes.io/name: routr-connect
+    app.kubernetes.io/instance: my-routr-connect
+    app.kubernetes.io/version: "2.9.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+  log4j2.yaml: |-
+    Configuration:
+      Appenders:
+        Console:
+          PatternLayout:
+            pattern: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%-4level{lowerCase=true}]: (${sys:serviceName}) %c{1}.java %msg%n"
+          name: Console
+          target: SYSTEM_OUT
+        RollingFile:
+          - name: LogToRollingFile
+            fileName: logs/routr.log
+            filePattern: "logs/routr-%d{MM-dd-yyyy}-%i.log.gz"
+            PatternLayout:
+              pattern: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%-4level{lowerCase=true}]: (${sys:serviceName}) %c{1}.java %msg%n"
+            Policies:
+              SizeBasedTriggeringPolicy:
+                size: 10MB
+            DefaultRollOverStrategy:
+              max: 10
+      Loggers:
+        Logger:
+          - name: io.routr
+            level: debug
+            AppenderRef:
+              - ref: Console
+              - ref: LogToRollingFile
+        Root:
+          level: error
+          AppenderRef:
+            - ref: LogToRollingFile
+---
+# Source: routr-connect/charts/postgresql/templates/primary/svc-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-routr-connect-postgresql-hl
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: postgresql
+    helm.sh/chart: postgresql-12.1.15
+    app.kubernetes.io/instance: my-routr-connect
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: primary
+    # Use this annotation in addition to the actual publishNotReadyAddresses
+    # field below because the annotation will stop being respected soon but the
+    # field is broken in some versions of Kubernetes:
+    # https://github.com/kubernetes/kubernetes/issues/58662
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+spec:
+  type: ClusterIP
+  clusterIP: None
+  # We want all pods in the StatefulSet to have their addresses published for
+  # the sake of the other Postgresql pods even before they're ready, since they
+  # have to be able to talk to each other in order to become ready.
+  publishNotReadyAddresses: true
+  ports:
+    - name: tcp-postgresql
+      port: 5432
+      targetPort: tcp-postgresql
+  selector:
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/instance: my-routr-connect
+    app.kubernetes.io/component: primary
+---
+# Source: routr-connect/charts/postgresql/templates/primary/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-routr-connect-postgresql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: postgresql
+    helm.sh/chart: postgresql-12.1.15
+    app.kubernetes.io/instance: my-routr-connect
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: primary
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+    - name: tcp-postgresql
+      port: 5432
+      targetPort: tcp-postgresql
+      nodePort: null
+  selector:
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/instance: my-routr-connect
+    app.kubernetes.io/component: primary
+---
+# Source: routr-connect/charts/redis/templates/headless-svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-routr-connect-redis-headless
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: redis
+    helm.sh/chart: redis-17.7.3
+    app.kubernetes.io/instance: my-routr-connect
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: tcp-redis
+      port: 6379
+      targetPort: redis
+  selector:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/instance: my-routr-connect
+---
+# Source: routr-connect/charts/redis/templates/master/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-routr-connect-redis-master
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: redis
+    helm.sh/chart: redis-17.7.3
+    app.kubernetes.io/instance: my-routr-connect
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: master
+spec:
+  type: ClusterIP
+  internalTrafficPolicy: Cluster
+  sessionAffinity: None
+  ports:
+    - name: tcp-redis
+      port: 6379
+      targetPort: redis
+      nodePort: null
+  selector:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/instance: my-routr-connect
+    app.kubernetes.io/component: master
+---
+# Source: routr-connect/templates/apiserver/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-routr-connect-routr-apiserver
+  namespace: default
+  labels:
+    helm.sh/chart: routr-connect-0.4.2
+    app.kubernetes.io/name: routr-connect
+    app.kubernetes.io/instance: my-routr-connect
+    app.kubernetes.io/version: "2.9.0"
+    app.kubernetes.io/managed-by: Helm
+    service: apiserver
+spec:
+  ports:
+  - name: internal
+    port: 51907
+    targetPort: 51907
+  # External secure port
+  - name: external
+    port: 51908
+    targetPort: 51908
+  selector:
+    app.kubernetes.io/name: routr-connect
+    app.kubernetes.io/instance: my-routr-connect
+    service: apiserver
+---
+# Source: routr-connect/templates/connect/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-routr-connect-routr-connect
+  namespace: default
+  labels:
+    helm.sh/chart: routr-connect-0.4.2
+    app.kubernetes.io/name: routr-connect
+    app.kubernetes.io/instance: my-routr-connect
+    app.kubernetes.io/version: "2.9.0"
+    app.kubernetes.io/managed-by: Helm
+    service: connect
+spec:
+  ports:
+  - port: 51904
+    targetPort: 51904
+  selector:
+    app.kubernetes.io/name: routr-connect
+    app.kubernetes.io/instance: my-routr-connect
+    service: connect
+---
+# Source: routr-connect/templates/dispatcher/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-routr-connect-routr-dispatcher
+  namespace: default
+  labels:
+    helm.sh/chart: routr-connect-0.4.2
+    app.kubernetes.io/name: routr-connect
+    app.kubernetes.io/instance: my-routr-connect
+    app.kubernetes.io/version: "2.9.0"
+    app.kubernetes.io/managed-by: Helm
+    service: dispatcher
+spec:
+  ports:
+  - port: 51901
+    targetPort: 51901
+  selector:
+    app.kubernetes.io/name: routr-connect
+    app.kubernetes.io/instance: my-routr-connect
+    service: dispatcher
+---
+# Source: routr-connect/templates/edgeport/service-udp.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-routr-connect-routr-edgeport-udp
+  namespace: default
+  labels:
+    helm.sh/chart: routr-connect-0.4.2
+    app.kubernetes.io/name: routr-connect
+    app.kubernetes.io/instance: my-routr-connect
+    app.kubernetes.io/version: "2.9.0"
+    app.kubernetes.io/managed-by: Helm
+    service: edgeport-udp
+spec:
+  type: NodePort
+  externalTrafficPolicy: Cluster
+  ports:
+  - name: sipudp
+    protocol: UDP
+    port: 5060
+    targetPort: 5060
+  selector:
+    app.kubernetes.io/name: routr-connect
+    app.kubernetes.io/instance: my-routr-connect
+    service: edgeport
+---
+# Source: routr-connect/templates/location/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-routr-connect-routr-location
+  namespace: default
+  labels:
+    helm.sh/chart: routr-connect-0.4.2
+    app.kubernetes.io/name: routr-connect
+    app.kubernetes.io/instance: my-routr-connect
+    app.kubernetes.io/version: "2.9.0"
+    app.kubernetes.io/managed-by: Helm
+    service: location
+spec:
+  selector:
+    app.kubernetes.io/name: routr-connect
+    app.kubernetes.io/instance: my-routr-connect
+    service: location
+  ports:
+  - port: 51902
+    targetPort: 51902
+---
+# Source: routr-connect/templates/requester/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-routr-connect-routr-requester
+  namespace: default
+  labels:
+    helm.sh/chart: routr-connect-0.4.2
+    app.kubernetes.io/name: routr-connect
+    app.kubernetes.io/instance: my-routr-connect
+    app.kubernetes.io/version: "2.9.0"
+    app.kubernetes.io/managed-by: Helm
+    service: requester
+spec:
+  selector:
+    app.kubernetes.io/name: routr-connect
+    app.kubernetes.io/instance: my-routr-connect
+    service: requester
+  ports:
+  - port: 51909
+    targetPort: 51909
+---
+# Source: routr-connect/templates/apiserver/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-routr-connect-routr-apiserver
+  namespace: default  
+  labels:
+    helm.sh/chart: routr-connect-0.4.2
+    app.kubernetes.io/name: routr-connect
+    app.kubernetes.io/instance: my-routr-connect
+    app.kubernetes.io/version: "2.9.0"
+    app.kubernetes.io/managed-by: Helm
+    service: apiserver
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: routr-connect
+      app.kubernetes.io/instance: my-routr-connect
+      service: apiserver
+  template:
+    metadata:
+      annotations:
+      labels:
+        app.kubernetes.io/name: routr-connect
+        app.kubernetes.io/instance: my-routr-connect
+        service: apiserver
+    spec:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 3000
+        fsGroup: 2000
+      initContainers:
+        - name: wait-for-database
+          image: "fonoster/routr-pgdata-migrations:2.9.0"
+          imagePullPolicy: IfNotPresent
+          resources:
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              until pg_isready -h my-routr-connect-postgresql.default -p 5432 -U routr >/dev/null 2>&1; do
+                echo "Waiting for the database..."
+                sleep 2
+              done
+      containers:
+        - name: apiserver
+          image: "fonoster/routr-pgdata:2.9.0"
+          imagePullPolicy: IfNotPresent
+          livenessProbe:
+            grpc:
+              port: 51907
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            successThreshold: 1
+            failureThreshold: 2
+            timeoutSeconds: 4
+          envFrom:
+            - secretRef:
+                name: my-routr-connect-routr-database-url
+          env:
+            - name: LOGS_LEVEL
+              value: info
+            - name: OTEL_EXPORTER_JAEGER_ENDPOINT
+              value: 
+            - name: TLS_ON
+              value: "true"
+            - name: VERIFY_CLIENT_CERT
+              value: "false"
+            - name: CLOAK_ENCRYPTION_KEY
+              value: ""
+          ports:
+            - containerPort: 51907
+            # External port for the API server
+            - containerPort: 51908
+          resources:
+          securityContext:
+            allowPrivilegeEscalation: false
+---
+# Source: routr-connect/templates/connect/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-routr-connect-routr-connect
+  namespace: default  
+  labels:
+    helm.sh/chart: routr-connect-0.4.2
+    app.kubernetes.io/name: routr-connect
+    app.kubernetes.io/instance: my-routr-connect
+    app.kubernetes.io/version: "2.9.0"
+    app.kubernetes.io/managed-by: Helm
+    service: connect
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: routr-connect
+      app.kubernetes.io/instance: my-routr-connect
+      service: connect
+  template:
+    metadata:
+      annotations:    
+      labels:
+        app.kubernetes.io/name: routr-connect
+        app.kubernetes.io/instance: my-routr-connect
+        service: connect
+    spec:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 3000
+        fsGroup: 2000
+      containers:
+        - name: connect
+          image: "fonoster/routr-connect:2.9.0"
+          imagePullPolicy: IfNotPresent
+          livenessProbe:
+            grpc:
+              port: 51904
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            successThreshold: 1
+            failureThreshold: 2
+            timeoutSeconds: 1          
+          env:
+            - name: LOCATION_ADDR
+              value: my-routr-connect-routr-location.default:51902
+            - name: API_ADDR
+              value: my-routr-connect-routr-apiserver.default:51907
+            - name: LOGS_LEVEL
+              value: info
+            - name: OTEL_EXPORTER_JAEGER_ENDPOINT
+              value: 
+          ports:
+            - containerPort: 51904
+          resources:
+          securityContext:
+            allowPrivilegeEscalation: false
+---
+# Source: routr-connect/templates/dispatcher/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-routr-connect-routr-dispatcher
+  namespace: default  
+  labels:
+    helm.sh/chart: routr-connect-0.4.2
+    app.kubernetes.io/name: routr-connect
+    app.kubernetes.io/instance: my-routr-connect
+    app.kubernetes.io/version: "2.9.0"
+    app.kubernetes.io/managed-by: Helm
+    service: dispatcher
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: routr-connect
+      app.kubernetes.io/instance: my-routr-connect
+      service: dispatcher
+  template:
+    metadata:
+      annotations:
+        checksum/config: 1b14fadaeb06bc6a3e6438bbf91788966b2d01db36247987a612a49183627f5a
+      labels:
+        app.kubernetes.io/name: routr-connect
+        app.kubernetes.io/instance: my-routr-connect
+        service: dispatcher
+    spec:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 3000
+        fsGroup: 2000
+      containers:
+        - name: dispatcher
+          image: "fonoster/routr-dispatcher:2.9.0"
+          imagePullPolicy: IfNotPresent
+          livenessProbe:
+            grpc:
+              port: 51901
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            successThreshold: 1
+            failureThreshold: 2
+            timeoutSeconds: 1
+          env:
+            - name: LOGS_LEVEL
+              value: info
+            - name: OTEL_EXPORTER_JAEGER_ENDPOINT
+              value: 
+          ports:
+            - containerPort: 51901
+          volumeMounts:
+            - name: config
+              mountPath: /etc/routr/dispatcher.yaml
+              subPath: dispatcher.yaml
+          resources:
+          securityContext:
+            allowPrivilegeEscalation: false
+      volumes:
+        - name: config
+          configMap:
+            name: my-routr-connect-routr-dispatcher-config
+---
+# Source: routr-connect/templates/location/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-routr-connect-routr-location
+  namespace: default  
+  labels:
+    helm.sh/chart: routr-connect-0.4.2
+    app.kubernetes.io/name: routr-connect
+    app.kubernetes.io/instance: my-routr-connect
+    app.kubernetes.io/version: "2.9.0"
+    app.kubernetes.io/managed-by: Helm
+    service: location
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: routr-connect
+      app.kubernetes.io/instance: my-routr-connect
+      service: location
+  template:
+    metadata:
+      annotations:
+        checksum/config: 132324db79025d8c5225e6b26b6014e145505e0a16360d5a52a0836400c541b2      
+      labels:
+        app.kubernetes.io/name: routr-connect
+        app.kubernetes.io/instance: my-routr-connect
+        service: location
+    spec:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 3000
+        fsGroup: 2000
+      containers:
+        - name: location
+          image: "fonoster/routr-location:2.9.0"
+          imagePullPolicy: IfNotPresent
+          livenessProbe:
+            grpc:
+              port: 51902
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            successThreshold: 1
+            failureThreshold: 2
+            timeoutSeconds: 1
+          env:
+            - name: LOGS_LEVEL
+              value: info
+            - name: OTEL_EXPORTER_JAEGER_ENDPOINT
+              value: 
+          ports:
+            - containerPort: 51902
+          volumeMounts:
+            - name: config
+              mountPath: /etc/routr/location.yaml
+              subPath: location.yaml
+          resources:
+          securityContext:
+            allowPrivilegeEscalation: false          
+      volumes:
+        - name: config
+          configMap:
+            name: my-routr-connect-routr-location-config
+---
+# Source: routr-connect/templates/registry/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-routr-connect-routr-registry
+  labels:
+    helm.sh/chart: routr-connect-0.4.2
+    app.kubernetes.io/name: routr-connect
+    app.kubernetes.io/instance: my-routr-connect
+    app.kubernetes.io/version: "2.9.0"
+    app.kubernetes.io/managed-by: Helm
+    service: registry
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: routr-connect
+      app.kubernetes.io/instance: my-routr-connect
+      service: registry
+  template:
+    metadata:
+      annotations:
+        checksum/config: ef834d45b6c8bf3bef96d72ac8157dca7ff04e266e2c35575c5a695d0b4c3974    
+      labels:
+        app.kubernetes.io/name: routr-connect
+        app.kubernetes.io/instance: my-routr-connect
+        service: registry
+    spec:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 3000
+        fsGroup: 2000
+      containers:
+        - name: registry
+          image: "fonoster/routr-registry:2.9.0"
+          imagePullPolicy: IfNotPresent
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            successThreshold: 1
+            failureThreshold: 2
+            timeoutSeconds: 2          
+          env:
+            - name: LOGS_LEVEL
+              value: info
+            - name: OTEL_EXPORTER_JAEGER_ENDPOINT
+              value: 
+          ports:
+            - containerPort: 8080
+            - containerPort: 51901
+          volumeMounts:
+            - name: config
+              mountPath: /etc/routr/registry.yaml
+              subPath: registry.yaml
+          resources:
+          securityContext:
+            allowPrivilegeEscalation: false           
+      volumes:
+        - name: config
+          configMap:
+            name: my-routr-connect-routr-registry-config
+---
+# Source: routr-connect/templates/requester/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-routr-connect-routr-requester
+  labels:
+    helm.sh/chart: routr-connect-0.4.2
+    app.kubernetes.io/name: routr-connect
+    app.kubernetes.io/instance: my-routr-connect
+    app.kubernetes.io/version: "2.9.0"
+    app.kubernetes.io/managed-by: Helm
+    service: requester
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: routr-connect
+      app.kubernetes.io/instance: my-routr-connect
+      service: requester
+  template:
+    metadata:
+      annotations:
+        checksum/config: 735ac5c44ce4281fc3ab1c01355721779cf52a13338faf770287f83c9b893806      
+      labels:
+        app.kubernetes.io/name: routr-connect
+        app.kubernetes.io/instance: my-routr-connect
+        service: requester
+    spec:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 3000
+        fsGroup: 2000
+      containers:
+        - name: requester
+          image: "fonoster/routr-requester:2.9.0"
+          imagePullPolicy: IfNotPresent
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            successThreshold: 1
+            failureThreshold: 2
+            timeoutSeconds: 2
+          env:
+            - name: LOGS_LEVEL
+              value: info
+            - name: OTEL_EXPORTER_JAEGER_ENDPOINT
+              value: 
+            - name: ENABLE_HEALTHCHECKS
+              value: "true"
+          ports:
+            - containerPort: 8080
+            - containerPort: 51909
+          volumeMounts:
+            - name: config
+              mountPath: /etc/routr/log4j2.yaml
+              subPath: log4j2.yaml
+          resources:
+          securityContext:
+            allowPrivilegeEscalation: false         
+      volumes:
+        - name: config
+          configMap:
+            name: my-routr-connect-routr-requester-config
+---
+# Source: routr-connect/templates/apiserver/autoscaling.yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: my-routr-connect-routr-apiserver-hpa
+  namespace: default
+  labels:
+    helm.sh/chart: routr-connect-0.4.2
+    app.kubernetes.io/name: routr-connect
+    app.kubernetes.io/instance: my-routr-connect
+    app.kubernetes.io/version: "2.9.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: my-routr-connect-routr-apiserver
+  minReplicas: 1
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 50
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 70
+---
+# Source: routr-connect/templates/connect/autoscaling.yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: my-routr-connect-routr-connect-hpa
+  namespace: default
+  labels:
+    helm.sh/chart: routr-connect-0.4.2
+    app.kubernetes.io/name: routr-connect
+    app.kubernetes.io/instance: my-routr-connect
+    app.kubernetes.io/version: "2.9.0"
+    app.kubernetes.io/managed-by: Helm  
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: my-routr-connect-routr-connect
+  minReplicas: 1
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 50
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 70
+---
+# Source: routr-connect/templates/dispatcher/autoscaling.yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: my-routr-connect-routr-dispatcher-hpa
+  namespace: default
+  labels:
+    helm.sh/chart: routr-connect-0.4.2
+    app.kubernetes.io/name: routr-connect
+    app.kubernetes.io/instance: my-routr-connect
+    app.kubernetes.io/version: "2.9.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: my-routr-connect-routr-dispatcher
+  minReplicas: 1
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 50
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 70
+---
+# Source: routr-connect/templates/location/autoscaling.yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: my-routr-connect-routr-location-hpa
+  namespace: default
+  labels:
+    helm.sh/chart: routr-connect-0.4.2
+    app.kubernetes.io/name: routr-connect
+    app.kubernetes.io/instance: my-routr-connect
+    app.kubernetes.io/version: "2.9.0"
+    app.kubernetes.io/managed-by: Helm  
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: my-routr-connect-routr-location
+  minReplicas: 1
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 50
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 70
+---
+# Source: routr-connect/templates/requester/autoscaling.yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: my-routr-connect-routr-requester-hpa
+  namespace: default
+  labels:
+    helm.sh/chart: routr-connect-0.4.2
+    app.kubernetes.io/name: routr-connect
+    app.kubernetes.io/instance: my-routr-connect
+    app.kubernetes.io/version: "2.9.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: my-routr-connect-routr-requester
+  minReplicas: 1
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 50
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 70
+---
+# Source: routr-connect/charts/postgresql/templates/primary/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-routr-connect-postgresql
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: postgresql
+    helm.sh/chart: postgresql-12.1.15
+    app.kubernetes.io/instance: my-routr-connect
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: primary
+spec:
+  replicas: 1
+  serviceName: my-routr-connect-postgresql-hl
+  updateStrategy:
+    rollingUpdate: {}
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgresql
+      app.kubernetes.io/instance: my-routr-connect
+      app.kubernetes.io/component: primary
+  template:
+    metadata:
+      name: my-routr-connect-postgresql
+      labels:
+        app.kubernetes.io/name: postgresql
+        helm.sh/chart: postgresql-12.1.15
+        app.kubernetes.io/instance: my-routr-connect
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/component: primary
+    spec:
+      serviceAccountName: default
+      
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: postgresql
+                    app.kubernetes.io/instance: my-routr-connect
+                    app.kubernetes.io/component: primary
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+      hostNetwork: false
+      hostIPC: false
+      containers:
+        - name: postgresql
+          image: docker.io/bitnami/postgresql:15.2.0-debian-11-r0
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            runAsUser: 1001
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: POSTGRESQL_PORT_NUMBER
+              value: "5432"
+            - name: POSTGRESQL_VOLUME_DIR
+              value: "/bitnami/postgresql"
+            - name: PGDATA
+              value: "/bitnami/postgresql/data"
+            # Authentication
+            - name: POSTGRES_USER
+              value: "routr"
+            - name: POSTGRES_POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-routr-connect-postgresql
+                  key: postgres-password
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-routr-connect-postgresql
+                  key: password
+            # Replication
+            # Initdb
+            # Standby
+            # LDAP
+            - name: POSTGRESQL_ENABLE_LDAP
+              value: "no"
+            # TLS
+            - name: POSTGRESQL_ENABLE_TLS
+              value: "no"
+            # Audit
+            - name: POSTGRESQL_LOG_HOSTNAME
+              value: "false"
+            - name: POSTGRESQL_LOG_CONNECTIONS
+              value: "false"
+            - name: POSTGRESQL_LOG_DISCONNECTIONS
+              value: "false"
+            - name: POSTGRESQL_PGAUDIT_LOG_CATALOG
+              value: "off"
+            # Others
+            - name: POSTGRESQL_CLIENT_MIN_MESSAGES
+              value: "error"
+            - name: POSTGRESQL_SHARED_PRELOAD_LIBRARIES
+              value: "pgaudit"
+          ports:
+            - name: tcp-postgresql
+              containerPort: 5432
+          livenessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - exec pg_isready -U "routr" -h 127.0.0.1 -p 5432
+          readinessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - -e
+                
+                - |
+                  exec pg_isready -U "routr" -h 127.0.0.1 -p 5432
+                  [ -f /opt/bitnami/postgresql/tmp/.initialized ] || [ -f /bitnami/postgresql/.initialized ]
+          resources:
+            limits: {}
+            requests:
+              cpu: 250m
+              memory: 256Mi
+          volumeMounts:
+            - name: dshm
+              mountPath: /dev/shm
+            - name: data
+              mountPath: /bitnami/postgresql
+      volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "8Gi"
+---
+# Source: routr-connect/charts/redis/templates/master/application.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-routr-connect-redis-master
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: redis
+    helm.sh/chart: redis-17.7.3
+    app.kubernetes.io/instance: my-routr-connect
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: master
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: redis
+      app.kubernetes.io/instance: my-routr-connect
+      app.kubernetes.io/component: master
+  serviceName: my-routr-connect-redis-headless
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: redis
+        helm.sh/chart: redis-17.7.3
+        app.kubernetes.io/instance: my-routr-connect
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/component: master
+      annotations:
+        checksum/configmap: af8962b0cd570d46fcbd5862806749fc38c748eff381c873e2fcc97080840302
+        checksum/health: 70cee0b7126c05beb20956f1a5a0e95d53e05d3619d488c3a263b3e91cabeb78
+        checksum/scripts: 8b62d3b1d3e16f8a4c8cca00484124cabbd72d34c4588717385f59f81eaeb197
+        checksum/secret: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+    spec:
+      
+      securityContext:
+        fsGroup: 1001
+      serviceAccountName: my-routr-connect-redis
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: redis
+                    app.kubernetes.io/instance: my-routr-connect
+                    app.kubernetes.io/component: master
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: redis
+          image: docker.io/bitnami/redis:7.0.8-debian-11-r0
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            runAsUser: 1001
+          command:
+            - /bin/bash
+          args:
+            - -c
+            - /opt/bitnami/scripts/start-scripts/start-master.sh
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: REDIS_REPLICATION_MODE
+              value: master
+            - name: ALLOW_EMPTY_PASSWORD
+              value: "yes"
+            - name: REDIS_TLS_ENABLED
+              value: "no"
+            - name: REDIS_PORT
+              value: "6379"
+          ports:
+            - name: redis
+              containerPort: 6379
+          livenessProbe:
+            initialDelaySeconds: 20
+            periodSeconds: 5
+            # One second longer than command timeout should prevent generation of zombie processes.
+            timeoutSeconds: 6
+            successThreshold: 1
+            failureThreshold: 5
+            exec:
+              command:
+                - sh
+                - -c
+                - /health/ping_liveness_local.sh 5
+          readinessProbe:
+            initialDelaySeconds: 20
+            periodSeconds: 5
+            timeoutSeconds: 2
+            successThreshold: 1
+            failureThreshold: 5
+            exec:
+              command:
+                - sh
+                - -c
+                - /health/ping_readiness_local.sh 1
+          resources:
+            limits: {}
+            requests: {}
+          volumeMounts:
+            - name: start-scripts
+              mountPath: /opt/bitnami/scripts/start-scripts
+            - name: health
+              mountPath: /health
+            - name: redis-data
+              mountPath: /data
+            - name: config
+              mountPath: /opt/bitnami/redis/mounted-etc
+            - name: redis-tmp-conf
+              mountPath: /opt/bitnami/redis/etc/
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: start-scripts
+          configMap:
+            name: my-routr-connect-redis-scripts
+            defaultMode: 0755
+        - name: health
+          configMap:
+            name: my-routr-connect-redis-health
+            defaultMode: 0755
+        - name: config
+          configMap:
+            name: my-routr-connect-redis-configuration
+        - name: redis-tmp-conf
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: redis-data
+        labels:
+          app.kubernetes.io/name: redis
+          app.kubernetes.io/instance: my-routr-connect
+          app.kubernetes.io/component: master
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "8Gi"
+---
+# Source: routr-connect/templates/edgeport/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-routr-connect-routr-edgeport
+  namespace: default
+  labels:
+    helm.sh/chart: routr-connect-0.4.2
+    app.kubernetes.io/name: routr-connect
+    app.kubernetes.io/instance: my-routr-connect
+    app.kubernetes.io/version: "2.9.0"
+    app.kubernetes.io/managed-by: Helm
+    service: edgeport
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: routr-connect
+      app.kubernetes.io/instance: my-routr-connect
+      service: edgeport
+  serviceName: edgeport
+  minReadySeconds: 10
+  template:
+    metadata:
+      annotations:
+        checksum/config: 5a230fd3745c0fc89dc2ff88b8748b4ef6a17f4b9b30d04c189b92ff0e0577fa
+        checksum/secrets: 201b04d9446e9b76c7fbd74a1f3493d6c1a71eb9d3b43db9601654eb5f2754d4          
+      labels:
+        app.kubernetes.io/name: routr-connect
+        app.kubernetes.io/instance: my-routr-connect
+        service: edgeport
+    spec:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 3000
+        fsGroup: 2000
+      terminationGracePeriodSeconds: 10
+      containers:
+        - name: edgeport
+          image: "fonoster/routr-edgeport:2.9.0"
+          imagePullPolicy: IfNotPresent
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            successThreshold: 1
+            failureThreshold: 2
+            timeoutSeconds: 1
+          env:
+            - name: PKCS12_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-routr-connect-routr-edgeport-pkcs12-password
+                  key: password
+            - name: LOGS_LEVEL
+              value: info
+            - name: OTEL_EXPORTER_JAEGER_ENDPOINT
+              value: 
+            - name: HEPLIFY_OPTIONS
+              value: 
+            - name: ENABLE_HEALTHCHECKS
+              value: "true"
+          ports:
+            - containerPort: 8080
+            - name: sipudp
+              protocol: UDP
+              containerPort: 5060
+          volumeMounts:
+            - name: log4j2
+              mountPath: /etc/routr/log4j2.yaml
+              subPath: log4j2.yaml
+            - name: config
+              mountPath: /etc/routr/edgeport.yaml
+              subPath: edgeport.yaml
+          resources:
+          securityContext:
+            allowPrivilegeEscalation: false
+      volumes:
+        - name: config
+          secret:
+            secretName: my-routr-connect-routr-edgeport-config
+        - name: log4j2
+          configMap:
+            name: my-routr-connect-routr-edgeport-log4j2
+---
+# Source: routr-connect/templates/apiserver/migration.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-routr-connect-routr-apiserver-migrations
+  namespace: default
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  initContainers:
+    - name: wait-for-database
+      image: "fonoster/routr-pgdata-migrations:2.9.0"
+      imagePullPolicy: IfNotPresent
+      command: ["/bin/sh", "-c"]
+      args:
+        - |
+          until pg_isready -h my-routr-connect-postgresql.default -p 5432 -U routr >/dev/null 2>&1; do
+            echo "Waiting for the database..."
+            sleep 2
+          done
+  containers:
+    - name: migrations
+      image: "fonoster/routr-pgdata-migrations:2.9.0"
+      imagePullPolicy: IfNotPresent
+      envFrom:
+        - secretRef:
+            name: my-routr-connect-routr-database-url
+  restartPolicy: Never
+  terminationGracePeriodSeconds: 0

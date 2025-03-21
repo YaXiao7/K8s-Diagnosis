@@ -1,0 +1,122 @@
+---
+# Source: focalboard/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-focalboard-config
+  labels:
+    helm.sh/chart: focalboard-4.4.2
+    app.kubernetes.io/name: focalboard
+    app.kubernetes.io/instance: my-focalboard
+    app.kubernetes.io/version: "0.9.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+  config.json: |
+    {
+      "serverRoot": "http://localhost:8000",
+      "port": 8000,
+      "dbtype": "sqlite3",
+      "dbconfig": "/data/focalboard.db",
+      "postgres_dbconfig": "dbname=focalboard sslmode=disable",
+      "useSSL": false,
+      "webpath": "./pack",
+      "filespath": "/data/files",
+      "telemetry": true,
+      "session_expire_time": 2592000,
+      "session_refresh_time": 18000,
+      "localOnly": false,
+      "enableLocalMode": true,
+      "localModeSocketLocation": "/var/tmp/focalboard_local.socket"
+    }
+---
+# Source: focalboard/templates/common.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-focalboard
+  labels:
+    app.kubernetes.io/instance: my-focalboard
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: focalboard
+    app.kubernetes.io/version: 0.9.0
+    helm.sh/chart: focalboard-4.4.2
+  annotations:
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8000
+    targetPort: http
+    protocol: TCP
+    name: http
+  selector:
+    app.kubernetes.io/name: focalboard
+    app.kubernetes.io/instance: my-focalboard
+---
+# Source: focalboard/templates/common.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-focalboard
+  labels:
+    app.kubernetes.io/instance: my-focalboard
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: focalboard
+    app.kubernetes.io/version: 0.9.0
+    helm.sh/chart: focalboard-4.4.2
+spec:
+  revisionHistoryLimit: 3
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: focalboard
+      app.kubernetes.io/instance: my-focalboard
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: focalboard
+        app.kubernetes.io/instance: my-focalboard
+    spec:
+      
+      serviceAccountName: default
+      automountServiceAccountToken: true
+      dnsPolicy: ClusterFirst
+      enableServiceLinks: true
+      containers:
+        - name: my-focalboard
+          image: "mattermost/focalboard:0.9.0"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          volumeMounts:
+            - name: focal-config
+              mountPath: /opt/focalboard/config.json
+              subPath: config.json
+          livenessProbe:
+            tcpSocket:
+              port: 8000
+            initialDelaySeconds: 0
+            failureThreshold: 3
+            timeoutSeconds: 1
+            periodSeconds: 10
+          readinessProbe:
+            tcpSocket:
+              port: 8000
+            initialDelaySeconds: 0
+            failureThreshold: 3
+            timeoutSeconds: 1
+            periodSeconds: 10
+          startupProbe:
+            tcpSocket:
+              port: 8000
+            initialDelaySeconds: 0
+            failureThreshold: 30
+            timeoutSeconds: 1
+            periodSeconds: 5
+      volumes:
+        - name: focal-config
+          configMap:
+            name: my-focalboard-config

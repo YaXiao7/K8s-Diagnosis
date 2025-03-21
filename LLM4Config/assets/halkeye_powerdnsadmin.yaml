@@ -1,0 +1,137 @@
+---
+# Source: powerdnsadmin/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-powerdnsadmin
+  labels:
+    helm.sh/chart: powerdnsadmin-0.3.1
+    app.kubernetes.io/name: powerdnsadmin
+    app.kubernetes.io/instance: my-powerdnsadmin
+    app.kubernetes.io/version: "0.2.3"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: powerdnsadmin/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-powerdnsadmin
+  labels:
+    helm.sh/chart: powerdnsadmin-0.3.1
+    app.kubernetes.io/name: powerdnsadmin
+    app.kubernetes.io/instance: my-powerdnsadmin
+    app.kubernetes.io/version: "0.2.3"
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  SQLALCHEMY_DATABASE_URI: "cG9zdGdyZXM6Ly9wZG5zOkBsb2NhbGhvc3Q6NTQzMi9wZG5z"
+---
+# Source: powerdnsadmin/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-powerdnsadmin
+  labels:
+    helm.sh/chart: powerdnsadmin-0.3.1
+    app.kubernetes.io/name: powerdnsadmin
+    app.kubernetes.io/instance: my-powerdnsadmin
+    app.kubernetes.io/version: "0.2.3"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  externalTrafficPolicy: 
+  ports:
+    - port: 9191
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: powerdnsadmin
+    app.kubernetes.io/instance: my-powerdnsadmin
+---
+# Source: powerdnsadmin/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-powerdnsadmin
+  labels:
+    helm.sh/chart: powerdnsadmin-0.3.1
+    app.kubernetes.io/name: powerdnsadmin
+    app.kubernetes.io/instance: my-powerdnsadmin
+    app.kubernetes.io/version: "0.2.3"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: powerdnsadmin
+      app.kubernetes.io/instance: my-powerdnsadmin
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: powerdnsadmin
+        app.kubernetes.io/instance: my-powerdnsadmin
+      annotations:
+        checksum/secret: "7f5af150987d6a1c0016b64ad108141447ec7aeffef9da1085c023161ada7bd4"
+    spec:
+      serviceAccountName: my-powerdnsadmin
+      securityContext:
+        {}
+      containers:
+        - name: powerdnsadmin
+          securityContext:
+            {}
+          image: "ngoduykhanh/powerdns-admin:0.2.3"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: SQLALCHEMY_DATABASE_URI
+              valueFrom:
+                secretKeyRef:
+                  name: my-powerdnsadmin
+                  key: SQLALCHEMY_DATABASE_URI
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            failureThreshold: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            failureThreshold: 5
+            periodSeconds: 10
+          startupProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            failureThreshold: 30
+            periodSeconds: 10
+          resources:
+            {}
+---
+# Source: powerdnsadmin/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-powerdnsadmin-test-connection"
+  labels:
+    helm.sh/chart: powerdnsadmin-0.3.1
+    app.kubernetes.io/name: powerdnsadmin
+    app.kubernetes.io/instance: my-powerdnsadmin
+    app.kubernetes.io/version: "0.2.3"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args:  ['my-powerdnsadmin:9191']
+  restartPolicy: Never

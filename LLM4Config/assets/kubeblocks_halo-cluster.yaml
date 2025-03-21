@@ -1,0 +1,44 @@
+---
+# Source: halo-cluster/templates/cluster.yaml
+apiVersion: apps.kubeblocks.io/v1alpha1
+kind: Cluster
+metadata:
+  name: my-halo-cluster
+  namespace: default
+  labels: 
+    helm.sh/chart: halo-cluster-0.2.0
+    app.kubernetes.io/version: "0.2.0"
+    app.kubernetes.io/instance: my-halo-cluster
+spec:
+  clusterVersionRef: halo-14.10
+  terminationPolicy: Delete  
+  affinity:
+    podAntiAffinity: Preferred
+    topologyKeys:
+      - kubernetes.io/hostname
+    tenancy: SharedNode
+  clusterDefinitionRef: halo
+  componentSpecs:
+    - name: halo
+      componentDefRef: halo      
+      disableExporter: true      
+      replicas: 3
+      serviceAccountName: 
+      switchPolicy:
+        type: Noop      
+      resources:
+        limits:
+          cpu: "1"
+          memory: "2Gi"
+        requests:
+          cpu: "1"
+          memory: "2Gi"      
+      volumeClaimTemplates:
+        - name: data # ref clusterDefinition components.containers.volumeMounts.name
+          spec:
+            accessModes:
+              - ReadWriteOnce
+            resources:
+              requests:
+                storage: 50Gi      
+      services:

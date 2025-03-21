@@ -1,0 +1,244 @@
+---
+# Source: snowplow/templates/secret.yaml
+kind: Secret
+apiVersion: v1
+metadata:
+  name: my-snowplow
+  labels:
+    app.kubernetes.io/name: snowplow
+    app.kubernetes.io/instance: my-snowplow
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: snowplow-0.0.1
+data:
+  credentials.json:
+---
+# Source: snowplow/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-snowplow
+  labels:
+    app.kubernetes.io/name: snowplow
+    app.kubernetes.io/instance: my-snowplow
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: snowplow-0.0.1
+data:
+  application.conf: |
+    collector {
+      interface = 0.0.0.0
+      port = 8080
+
+      p3p {
+        policyRef = /w3c/p3p.xml
+        CP = NOI DSP COR NID PSA OUR IND COM NAV STA
+      }
+
+      crossDomain {
+        enabled = false
+        domains = [ "*" ]
+        secure = true
+      }
+
+      prometheusMetrics {
+        enabled = false
+        durationBucketsInSeconds = [0.1, 3, 10]
+      }
+
+      cors {
+        accessControlMaxAge = 5 seconds
+      }
+
+      paths {
+        "/com.acme/track" = "/com.snowplowanalytics.snowplow/tp2"
+        "/com.acme/redirect" = "/r/tp2"
+        "/com.acme/iglu" = "/com.snowplowanalytics.iglu/v1"
+      }
+
+      cookie {
+        enabled = true
+        expiration = 365 days
+        name = _sp_cookie
+        domain = example.com
+        secure = false
+        httpOnly = false
+      }
+
+      doNotTrackCookie {
+        enabled = false
+        name = dnt_cookie
+        value = true
+      }
+      cookieBounce {
+        enabled = false
+        name = n3pc
+        fallbackNetworkUserId = 00000000-0000-4000-A000-000000000000
+        forwardedProtocolHeader = X-Forwarded-Proto
+      }
+
+      redirectMacro {
+        enabled = false
+        placeholder = "[TOKEN]"
+      }
+
+      rootResponse {
+        enabled = false
+        statusCode = 302
+        headers = {
+            Location = "https://127.0.0.1"
+            X-Custom = something
+        }
+        body = "302, redirecting"
+      }
+
+      streams {
+        good = good
+        bad = bad
+
+        useIpAddressAsPartitionKey = false
+
+        sink {
+          enabled = google-pub-sub
+          region = "none"
+          customEndpoint = "none"
+          threadPoolSize = 10
+          googleProjectId = "default"
+          backoffPolicy {
+            minBackoff = 1000
+            maxBackoff = 5000
+            totalBackoff = 10000
+            multiplier = 2
+          }
+        }
+
+        buffer {
+          byteLimit = 1
+          recordLimit = 1
+          timeLimit = 1
+        }
+      }
+    }
+
+    akka {
+      loglevel = DEBUG
+      loggers = ["akka.event.slf4j.Slf4jLogger"]
+
+      http.server {
+        remote-address-header = on
+        raw-request-uri-header = on
+
+        parsing {
+          max-uri-length = 32768
+          uri-parsing-mode = relaxed
+        }
+      }
+    }
+---
+# Source: snowplow/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-snowplow
+  labels:
+    app.kubernetes.io/name: snowplow
+    app.kubernetes.io/instance: my-snowplow
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: snowplow-0.0.1
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8080
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: snowplow
+    app.kubernetes.io/instance: my-snowplow
+---
+# Source: snowplow/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-snowplow
+  labels:
+    app.kubernetes.io/name: snowplow
+    app.kubernetes.io/instance: my-snowplow
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: snowplow-0.0.1
+spec:
+  replicas: 5
+  revisionHistoryLimit: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: snowplow
+      app.kubernetes.io/instance: my-snowplow
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: snowplow
+        app.kubernetes.io/instance: my-snowplow
+      annotations:
+        checksum/config: 113738b1dff7f5dcda1131c3869d475ea57251bb43c935d44a3011259c699dd
+    spec:
+      containers:
+        - name: snowplow
+          image: "snowplow/scala-stream-collector-pubsub:2.2.0"
+          imagePullPolicy: IfNotPresent
+          args: ["--config=/snowplow/config/application.conf"]
+          env:
+            - name: GOOGLE_APPLICATION_CREDENTIALS
+              value: /snowplow/config/credentials.json
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 0
+            periodSeconds: 10
+            timeoutSeconds: 1
+            successThreshold: 1
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 0
+            periodSeconds: 10
+            timeoutSeconds: 1
+            successThreshold: 1
+            failureThreshold: 3
+          volumeMounts:
+            - name: secret-key
+              mountPath: /snowplow/config/credentials.json
+              subPath: credentials.json
+            - name: config
+              mountPath: /snowplow/config/application.conf
+              subPath: application.conf
+      volumes:
+        - name: secret-key
+          secret:
+            secretName: my-snowplow
+        - name: config
+          configMap:
+            name: my-snowplow
+---
+# Source: snowplow/templates/ingress.yaml
+apiVersion: networking.k8s.io/v1beta1
+kind: Ingress
+metadata:
+  name: my-snowplow
+  labels:
+    app.kubernetes.io/name: snowplow
+    app.kubernetes.io/instance: my-snowplow
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: snowplow-0.0.1
+spec:
+  rules:
+    - host: example.local
+      http:
+        paths:
+          - path: /
+            backend:
+              serviceName: my-snowplow
+              servicePort: http

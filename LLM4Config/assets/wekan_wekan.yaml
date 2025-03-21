@@ -1,0 +1,548 @@
+---
+# Source: wekan/charts/mongodb/templates/networkpolicy.yaml
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: my-wekan-mongodb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-wekan
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: mongodb
+    app.kubernetes.io/version: 7.0.14
+    helm.sh/chart: mongodb-15.6.22
+    app.kubernetes.io/component: mongodb
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: my-wekan
+      app.kubernetes.io/name: mongodb
+      app.kubernetes.io/component: mongodb
+  policyTypes:
+    - Ingress
+    - Egress
+  egress:
+    - {}
+  ingress:
+    - ports:
+        - port: 27017
+---
+# Source: wekan/charts/mongodb/templates/standalone/pdb.yaml
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: my-wekan-mongodb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-wekan
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: mongodb
+    app.kubernetes.io/version: 7.0.14
+    helm.sh/chart: mongodb-15.6.22
+    app.kubernetes.io/component: mongodb
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: my-wekan
+      app.kubernetes.io/name: mongodb
+      app.kubernetes.io/component: mongodb
+---
+# Source: wekan/charts/mongodb/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-wekan-mongodb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-wekan
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: mongodb
+    app.kubernetes.io/version: 7.0.14
+    helm.sh/chart: mongodb-15.6.22
+secrets:
+  - name: my-wekan-mongodb
+automountServiceAccountToken: false
+---
+# Source: wekan/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    app: wekan
+    chart: wekan-7.59.0
+    component: wekan
+    heritage: Helm
+    release: my-wekan
+  name: my-wekan
+---
+# Source: wekan/charts/mongodb/templates/common-scripts-cm.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-wekan-mongodb-common-scripts
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-wekan
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: mongodb
+    app.kubernetes.io/version: 7.0.14
+    helm.sh/chart: mongodb-15.6.22
+    app.kubernetes.io/component: mongodb
+data:
+  startup-probe.sh: |
+    #!/bin/bash
+    exec mongosh  $TLS_OPTIONS --port $MONGODB_PORT_NUMBER --eval 'if (!(db.hello().isWritablePrimary || db.hello().secondary)) { throw new Error("Not ready") }'
+  readiness-probe.sh: |
+    #!/bin/bash
+    # Run the proper check depending on the version
+    [[ $(mongod -version | grep "db version") =~ ([0-9]+\.[0-9]+\.[0-9]+) ]] && VERSION=${BASH_REMATCH[1]}
+    . /opt/bitnami/scripts/libversion.sh
+    VERSION_MAJOR="$(get_sematic_version "$VERSION" 1)"
+    VERSION_MINOR="$(get_sematic_version "$VERSION" 2)"
+    VERSION_PATCH="$(get_sematic_version "$VERSION" 3)"
+    readiness_test='db.isMaster().ismaster || db.isMaster().secondary'
+    if [[ ( "$VERSION_MAJOR" -ge 5 ) || ( "$VERSION_MAJOR" -ge 4 && "$VERSION_MINOR" -ge 4 && "$VERSION_PATCH" -ge 2 ) ]]; then
+        readiness_test='db.hello().isWritablePrimary || db.hello().secondary'
+    fi
+    exec mongosh  $TLS_OPTIONS --port $MONGODB_PORT_NUMBER --eval "if (!(${readiness_test})) { throw new Error(\"Not ready\") }"
+  ping-mongodb.sh: |
+    #!/bin/bash
+    exec mongosh  $TLS_OPTIONS --port $MONGODB_PORT_NUMBER --eval "db.adminCommand('ping')"
+---
+# Source: wekan/charts/mongodb/templates/standalone/pvc.yaml
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: my-wekan-mongodb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-wekan
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: mongodb
+    app.kubernetes.io/version: 7.0.14
+    helm.sh/chart: mongodb-15.6.22
+    app.kubernetes.io/component: mongodb
+  annotations:
+spec:
+  accessModes:
+    - "ReadWriteOnce"
+  resources:
+    requests:
+      storage: "8Gi"
+---
+# Source: wekan/templates/data-pvc.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: my-wekan-shared-data
+  labels:
+    app: wekan
+    chart: wekan-7.59.0
+    component: wekan
+    heritage: Helm
+    release: my-wekan
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+# Source: wekan/charts/mongodb/templates/standalone/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-wekan-mongodb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-wekan
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: mongodb
+    app.kubernetes.io/version: 7.0.14
+    helm.sh/chart: mongodb-15.6.22
+    app.kubernetes.io/component: mongodb
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+    - name: "mongodb"
+      port: 27017
+      targetPort: mongodb
+      nodePort: null
+  selector:
+    app.kubernetes.io/instance: my-wekan
+    app.kubernetes.io/name: mongodb
+    app.kubernetes.io/component: mongodb
+---
+# Source: wekan/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-wekan
+  labels:
+    app: wekan
+    chart: wekan-7.59.0
+    component: wekan
+    heritage: Helm
+    release: my-wekan
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app: wekan
+    component: wekan
+    release: my-wekan
+---
+# Source: wekan/charts/mongodb/templates/standalone/dep-sts.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-wekan-mongodb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/instance: my-wekan
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: mongodb
+    app.kubernetes.io/version: 7.0.14
+    helm.sh/chart: mongodb-15.6.22
+    app.kubernetes.io/component: mongodb
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: my-wekan
+      app.kubernetes.io/name: mongodb
+      app.kubernetes.io/component: mongodb
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: my-wekan
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: mongodb
+        app.kubernetes.io/version: 7.0.14
+        helm.sh/chart: mongodb-15.6.22
+        app.kubernetes.io/component: mongodb
+    spec:
+      
+      automountServiceAccountToken: false
+      serviceAccountName: my-wekan-mongodb
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/instance: my-wekan
+                    app.kubernetes.io/name: mongodb
+                    app.kubernetes.io/component: mongodb
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+        fsGroupChangePolicy: Always
+        supplementalGroups: []
+        sysctls: []
+      
+      enableServiceLinks: true
+      initContainers:
+        
+        - name: log-dir
+          image: docker.io/bitnami/mongodb:7.0.14-debian-12-r0
+          imagePullPolicy: "IfNotPresent"
+          command:
+            - /bin/bash
+          args:
+            - -ec
+            - |
+              ln -sf /dev/stdout "/opt/bitnami/mongodb/logs/mongodb.log"
+          securityContext:
+                    allowPrivilegeEscalation: false
+                    capabilities:
+                      drop:
+                      - ALL
+                    privileged: false
+                    readOnlyRootFilesystem: true
+                    runAsGroup: 1001
+                    runAsNonRoot: true
+                    runAsUser: 1001
+                    seLinuxOptions: {}
+                    seccompProfile:
+                      type: RuntimeDefault
+          resources:
+                    limits:
+                      cpu: 750m
+                      ephemeral-storage: 2Gi
+                      memory: 768Mi
+                    requests:
+                      cpu: 500m
+                      ephemeral-storage: 50Mi
+                      memory: 512Mi
+          volumeMounts:
+            - name: empty-dir
+              mountPath: /opt/bitnami/mongodb/logs
+              subPath: app-logs-dir
+      containers:
+        - name: mongodb
+          image: docker.io/bitnami/mongodb:7.0.14-debian-12-r0
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsGroup: 1001
+            runAsNonRoot: true
+            runAsUser: 1001
+            seLinuxOptions: {}
+            seccompProfile:
+              type: RuntimeDefault
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: ALLOW_EMPTY_PASSWORD
+              value: "yes"
+            - name: MONGODB_SYSTEM_LOG_VERBOSITY
+              value: "0"
+            - name: MONGODB_DISABLE_SYSTEM_LOG
+              value: "no"
+            - name: MONGODB_DISABLE_JAVASCRIPT
+              value: "no"
+            - name: MONGODB_ENABLE_JOURNAL
+              value: "yes"
+            - name: MONGODB_PORT_NUMBER
+              value: "27017"
+            - name: MONGODB_ENABLE_IPV6
+              value: "no"
+            - name: MONGODB_ENABLE_DIRECTORY_PER_DB
+              value: "no"
+          ports:
+            - name: mongodb
+              containerPort: 27017
+          livenessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            successThreshold: 1
+            timeoutSeconds: 10
+            exec:
+              command:
+                - /bitnami/scripts/ping-mongodb.sh
+          readinessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+            exec:
+              command:
+                - /bitnami/scripts/readiness-probe.sh
+          resources:
+            limits:
+              cpu: 750m
+              ephemeral-storage: 2Gi
+              memory: 768Mi
+            requests:
+              cpu: 500m
+              ephemeral-storage: 50Mi
+              memory: 512Mi
+          volumeMounts:
+            - name: empty-dir
+              mountPath: /tmp
+              subPath: tmp-dir
+            - name: empty-dir
+              mountPath: /opt/bitnami/mongodb/conf
+              subPath: app-conf-dir
+            - name: empty-dir
+              mountPath: /opt/bitnami/mongodb/tmp
+              subPath: app-tmp-dir
+            - name: empty-dir
+              mountPath: /opt/bitnami/mongodb/logs
+              subPath: app-logs-dir
+            - name: empty-dir
+              mountPath: /.mongodb
+              subPath: mongosh-home
+            - name: datadir
+              mountPath: /bitnami/mongodb
+              subPath: 
+            - name: common-scripts
+              mountPath: /bitnami/scripts
+      volumes:
+        - name: empty-dir
+          emptyDir: {}
+        - name: common-scripts
+          configMap:
+            name: my-wekan-mongodb-common-scripts
+            defaultMode: 0550
+        - name: datadir
+          persistentVolumeClaim:
+            claimName: my-wekan-mongodb
+---
+# Source: wekan/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-wekan
+  labels:
+    app: wekan
+    chart: wekan-7.59.0
+    component: wekan
+    release: my-wekan
+    heritage: Helm
+spec:
+  strategy:
+  
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+    type: RollingUpdate
+  replicas: 1
+  selector:
+    matchLabels:
+      app: wekan
+      component: wekan
+      release: my-wekan
+  template:
+    metadata:
+      annotations:
+      labels:
+        app: wekan
+        component: wekan
+        release: my-wekan
+    spec:
+      serviceAccountName: my-wekan
+      initContainers:
+        - name: volume-permissions
+          image: "docker.io/busybox:latest"
+          imagePullPolicy: IfNotPresent
+          command: ['sh', '-c', 'chown -R 999:999 /data']
+          volumeMounts:
+            - name: shared-data-volume
+              mountPath: /data
+          resources:
+            limits:
+              cpu: 100m
+              memory: 256Mi
+            requests:
+              cpu: 50m
+              memory: 128Mi
+      containers:
+        - name: wekan
+          image: "ghcr.io/wekan/wekan:v7.59"
+          imagePullPolicy: IfNotPresent
+          terminationMessagePolicy: FallbackToLogsOnError
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: ROOT_URL
+              value: "https://wekan.local"
+            - name: MONGO_URL
+              value: "mongodb://my-wekan-mongodb-0.my-wekan-mongodb:27017,my-wekan-mongodb-1.my-wekan-mongodb:27017/wekan?replicaSet=rs0"
+            - name: MONGO_URL
+              value: "mongodb://wekan-mongodb:27017"
+          envFrom:
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 20
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 60
+          
+          volumeMounts:
+            - name: shared-data-volume
+              mountPath: /data
+          
+          resources:
+            limits:
+              cpu: 500m
+              memory: 1Gi
+            requests:
+              cpu: 300m
+              memory: 128Mi
+      
+      volumes:
+      - name: shared-data-volume
+        persistentVolumeClaim:
+          claimName: my-wekan-shared-data
+---
+# Source: wekan/templates/hpa.yaml
+apiVersion: autoscaling/v1
+kind: HorizontalPodAutoscaler
+metadata:
+  name: my-wekan
+  labels:
+    app: wekan
+    chart: wekan-7.59.0
+    component: wekan
+    heritage: Helm
+    release: my-wekan
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: my-wekan
+  maxReplicas: 16
+  minReplicas: 1
+  targetCPUUtilizationPercentage: 80
+---
+# Source: wekan/templates/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: my-wekan
+  labels:
+    app: wekan
+    chart: wekan-7.59.0
+    component: wekan
+    heritage: Helm
+    release: my-wekan
+spec:
+  rules:
+    - host: wekan.local
+      http:
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: my-wekan
+                port:
+                  number: 8080
+---
+# Source: wekan/templates/tests/test-http.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-wekan-test-http"
+  labels:
+    app: wekan
+    chart: wekan-7.59.0
+    component: wekan
+    release: my-wekan
+    heritage: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: "docker.io/busybox:latest"
+      command: ['wget', '-O', '/dev/stdout']
+      args: ['my-wekan:8080']
+  restartPolicy: Never

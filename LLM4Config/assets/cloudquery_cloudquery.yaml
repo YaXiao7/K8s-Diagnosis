@@ -1,0 +1,177 @@
+---
+# Source: cloudquery/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-cloudquery-secret
+  labels:
+    helm.sh/chart: cloudquery-34.0.2
+    app.kubernetes.io/name: cloudquery
+    app.kubernetes.io/instance: my-cloudquery
+    app.kubernetes.io/version: "6.0"
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+---
+# Source: cloudquery/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-cloudquery-config
+  labels:
+    helm.sh/chart: cloudquery-34.0.2
+    app.kubernetes.io/name: cloudquery
+    app.kubernetes.io/instance: my-cloudquery
+    app.kubernetes.io/version: "6.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+  cloudquery.yml: |-
+    kind: source
+    spec:
+      name: aws
+      path: cloudquery/aws
+      version: "v27.8.0" # latest version of aws plugin
+      tables: ["aws_ec2_instances"]
+      destinations: ["postgresql"]
+    ---
+    kind: destination
+    spec:
+      name: postgresql
+      path: cloudquery/postgresql
+      version: "v8.0.6" # latest version of postgresql plugin
+      spec:
+        connection_string: ${CQ_DSN}
+---
+# Source: cloudquery/templates/admin-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-cloudquery-admin
+  labels:
+    helm.sh/chart: cloudquery-34.0.2
+    app.kubernetes.io/name: cloudquery
+    app.kubernetes.io/instance: my-cloudquery
+    app.kubernetes.io/version: "6.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+        app.kubernetes.io/name: cloudquery
+        app.kubernetes.io/instance: my-cloudquery
+  template:
+    metadata:
+      labels:
+        helm.sh/chart: cloudquery-34.0.2
+        app.kubernetes.io/name: cloudquery
+        app.kubernetes.io/instance: my-cloudquery
+        app.kubernetes.io/version: "6.0"
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      securityContext:
+        fsGroup: 1001
+      containers:
+        - name: cloudquery
+          env:
+          - name: CQ_INSTALL_SRC
+            value: "HELM"
+          envFrom:
+          - secretRef:
+              name: my-cloudquery-secret
+          image: "ghcr.io/cloudquery/cloudquery:6.0"
+          imagePullPolicy: Always
+          command: ["/bin/sh"]
+          # we want users to be able to exec into this pod and be able to debug and investigate cloudquery binary, envs and runtime
+          args: ["-c", "echo admin container is running. run 'kubectl exec -it deploy/cloudquery-admin -- /bin/sh' to debug; while true; do sleep 10000; done"]
+          resources:
+            requests:
+              cpu: 1000m
+              memory: 1024Mi
+          volumeMounts:
+          - name: config
+            mountPath: /app/config
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - all
+      volumes:
+      - name: config
+        configMap:
+          name: my-cloudquery-config
+          items:
+          - key: cloudquery.yml
+            path: cloudquery.yml
+---
+# Source: cloudquery/templates/cronjob.yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: my-cloudquery-cron
+  labels:
+    helm.sh/chart: cloudquery-34.0.2
+    app.kubernetes.io/name: cloudquery
+    app.kubernetes.io/instance: my-cloudquery
+    app.kubernetes.io/version: "6.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  schedule: "0 */6 * * *"
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    metadata:
+      labels:
+        helm.sh/chart: cloudquery-34.0.2
+        app.kubernetes.io/name: cloudquery
+        app.kubernetes.io/instance: my-cloudquery
+        app.kubernetes.io/version: "6.0"
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      backoffLimit: 0
+      template:
+        metadata:
+          labels:
+            helm.sh/chart: cloudquery-34.0.2
+            app.kubernetes.io/name: cloudquery
+            app.kubernetes.io/instance: my-cloudquery
+            app.kubernetes.io/version: "6.0"
+            app.kubernetes.io/managed-by: Helm
+        spec:
+          securityContext:
+            fsGroup: 1001
+          containers:
+            - name: cloudquery
+              env:
+              - name: CQ_INSTALL_SRC
+                value: "HELM"
+              envFrom:
+              - secretRef:
+                  name: my-cloudquery-secret
+              image: "ghcr.io/cloudquery/cloudquery:6.0"
+              imagePullPolicy: Always
+              args:
+              - "sync"
+              - "/app/config/cloudquery.yml"
+              - "--log-console"
+              resources:
+                requests:
+                  cpu: 1000m
+                  memory: 1024Mi
+              volumeMounts:
+              - name: config
+                mountPath: /app/config
+                readOnly: true
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                  - all
+          volumes:
+          - name: config
+            configMap:
+              name: my-cloudquery-config
+              items:
+              - key: cloudquery.yml
+                path: cloudquery.yml
+          restartPolicy: Never

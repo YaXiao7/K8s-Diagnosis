@@ -1,0 +1,154 @@
+---
+# Source: function-evaluator/templates/networkpolicy.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: function-evaluator-my-function-evaluator
+  labels:
+    app: function-evaluator
+    chart: function-evaluator-0.3.6
+    release: my-function-evaluator
+    heritage: Helm
+spec:
+  podSelector:
+    matchLabels:
+      app: function-evaluator
+      release: my-function-evaluator
+  policyTypes:
+    - Egress
+    - Ingress
+  ingress:
+    - ports:
+      - port: 6927
+        protocol: TCP
+      - port: 9090
+        protocol: TCP      
+  egress:
+---
+# Source: function-evaluator/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: function-evaluator-my-function-evaluator-secret-config
+  labels:
+    app: function-evaluator
+    chart: function-evaluator-0.3.6
+    release: my-function-evaluator
+    heritage: Helm
+type: Opaque
+---
+# Source: function-evaluator/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: function-evaluator-my-function-evaluator
+  labels:
+    app: function-evaluator
+    chart: function-evaluator-0.3.6
+    release: my-function-evaluator
+    heritage: Helm
+spec:
+  type: ClusterIP
+  selector:
+    app: function-evaluator
+    routed_via: my-function-evaluator
+  ports:
+    - name: http
+      targetPort: 6927
+      port: 6927
+---
+# Source: function-evaluator/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: function-evaluator-my-function-evaluator
+  labels:
+    app: function-evaluator
+    chart: function-evaluator-0.3.6
+    release: my-function-evaluator
+    heritage: Helm
+spec:
+  selector:
+    matchLabels:
+      app: function-evaluator
+      release: my-function-evaluator
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: function-evaluator
+        release: my-function-evaluator
+        routed_via: my-function-evaluator
+      annotations:
+        container.apparmor.security.beta.kubernetes.io/function-evaluator-my-function-evaluator: localhost/wikifunctions-evaluator
+        checksum/secrets: 4d2107662ba7ff234501d4044f2e74f341b848a0f9ed16a2f713c655e5d6ac85
+        prometheus.io/port: "9090"
+        prometheus.io/scrape: "true"        
+    spec:
+      automountServiceAccountToken: false
+      containers:        
+        # The main application container
+        - name: function-evaluator-my-function-evaluator
+          image: "docker-registry.wikimedia.org/repos/abstract-wiki/wikifunctions/function-evaluator/some-such-image:versionNumberGoesHere"
+          imagePullPolicy: IfNotPresent  
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+               drop:
+               - ALL
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+            readOnlyRootFilesystem: true
+          ports:
+            - containerPort: 6927
+          livenessProbe:
+            tcpSocket:
+              port: 6927
+          readinessProbe:
+            httpGet:
+              path: /_info
+              port: 6927
+          env:
+            - name: SERVICE_IDENTIFIER
+              value: function-evaluator-my-function-evaluator
+            - name: FUNCTION_EVALUATOR_TIMEOUT_MS
+              value: "10000"
+          
+          resources:
+            requests:
+              cpu: 400m
+              memory: 800Mi
+            limits:
+              cpu: 1
+              memory: 1Gi
+                  
+      volumes:        
+          
+        
+        []
+---
+# Source: function-evaluator/templates/tests/test-service-checker.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: 'function-evaluator-my-function-evaluator-service-checker'
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  containers:
+  - name: 'function-evaluator-my-function-evaluator-service-checker'
+    image: "docker-registry.wikimedia.org/service-checker"
+    imagePullPolicy: IfNotPresent
+    args: ["-t", "5", '$(FUNCTION_EVALUATOR_MY_FUNCTION_EVALUATOR_SERVICE_HOST)', 'http://function-evaluator-my-function-evaluator:6927']    
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+         drop:
+         - ALL
+      runAsNonRoot: true
+      seccompProfile:
+        type: RuntimeDefault
+  dnsPolicy: ClusterFirst
+  restartPolicy: Never

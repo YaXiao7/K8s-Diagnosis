@@ -1,0 +1,156 @@
+---
+# Source: livekit-server/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-livekit-server
+data:
+  config.yaml: |
+    keys: {}
+    log_level: info
+    port: 7880
+    redis: {}
+    rtc:
+      port_range_end: 60000
+      port_range_start: 50000
+      tcp_port: 7881
+      use_external_ip: true
+    turn:
+      enabled: false
+      loadBalancerType: disable
+      tls_port: 5349
+      udp_port: 443
+---
+# Source: livekit-server/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-livekit-server
+  labels:
+    helm.sh/chart: livekit-server-1.0.0
+    app.kubernetes.io/name: livekit-server
+    app.kubernetes.io/instance: my-livekit-server
+    app.kubernetes.io/version: "v1.0.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: livekit-server
+    app.kubernetes.io/instance: my-livekit-server
+---
+# Source: livekit-server/templates/daemonset.yaml
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: my-livekit-server-sysctl
+  labels:
+    helm.sh/chart: livekit-server-1.0.0
+    app.kubernetes.io/name: livekit-server
+    app.kubernetes.io/instance: my-livekit-server
+    app.kubernetes.io/version: "v1.0.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: livekit-server-sysctl
+      app.kubernetes.io/instance: my-livekit-server
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: livekit-server-sysctl
+        app.kubernetes.io/instance: my-livekit-server
+    spec:
+      hostPID: true
+      containers:
+      - name: daemonset
+        image: gcr.io/google-containers/startup-script:v2
+        imagePullPolicy: Always
+        securityContext:
+          privileged: true
+        env:
+        - name: STARTUP_SCRIPT
+          value: |
+            #! /bin/bash
+            set -x
+            sysctl -w vm.max_map_count=262144
+            sysctl -w fs.file-max=2097152
+            sysctl -w net.core.somaxconn=65535
+            sysctl -w net.core.netdev_max_backlog=65536
+            sysctl -w net.core.optmem_max=25165824
+            sysctl -w net.core.rmem_max=25165824
+            sysctl -w net.core.wmem_max=25165824
+            sysctl -w net.core.rmem_default=1048576
+            sysctl -w net.core.wmem_default=1048576
+            sysctl -w net.ipv4.udp_mem="65536 131072 262144"
+            sysctl -w net.ipv4.udp_rmem_min=16384
+            sysctl -w net.ipv4.udp_wmem_min=16384
+            sysctl -w net.ipv4.tcp_tw_reuse=1
+            sysctl -w fs.inotify.max_user_instances=524288
+            echo "done"
+---
+# Source: livekit-server/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-livekit-server
+  labels:
+    helm.sh/chart: livekit-server-1.0.0
+    app.kubernetes.io/name: livekit-server
+    app.kubernetes.io/instance: my-livekit-server
+    app.kubernetes.io/version: "v1.0.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: livekit-server
+      app.kubernetes.io/instance: my-livekit-server
+  template:
+    metadata:
+      annotations:
+        linkerd.io/inject: disabled
+        sidecar.istio.io/inject: "false"
+      labels:
+        app.kubernetes.io/name: livekit-server
+        app.kubernetes.io/instance: my-livekit-server
+    spec:
+      serviceAccountName: default
+      securityContext:
+        {}
+      dnsPolicy: ClusterFirstWithHostNet
+      hostNetwork: true
+      terminationGracePeriodSeconds: 18000 # 5 hours
+      containers:
+        - name: livekit-server
+          securityContext:
+            {}
+          image: "livekit/livekit-server:v1.0.0"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: LIVEKIT_CONFIG
+              valueFrom:
+                configMapKeyRef:
+                  name: my-livekit-server
+                  key: config.yaml
+          ports:
+            - name: http
+              containerPort: 7880
+              protocol: TCP
+            - name: rtc-tcp
+              containerPort: 7881
+              hostPort: 7881
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+            {}

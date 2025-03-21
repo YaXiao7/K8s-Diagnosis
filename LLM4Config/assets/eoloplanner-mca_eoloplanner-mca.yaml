@@ -1,0 +1,712 @@
+---
+# Source: eoloplanner-mca/templates/global-np.yml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: my-eoloplanner-mca-default-deny
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+---
+# Source: eoloplanner-mca/templates/global-np.yml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: my-eoloplanner-mca-dns-egress
+spec:
+  podSelector:
+    matchLabels:
+      my-eoloplanner-mca-dns-policy: enabled
+  egress:
+  - ports:
+    - port: 53
+      protocol: UDP
+    - port: 53
+      protocol: TCP
+---
+# Source: eoloplanner-mca/templates/mongodb.yml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: my-eoloplanner-mca-mongodb-from-topo
+spec:
+  podSelector:
+    matchLabels:
+      app: my-eoloplanner-mca-mongodb
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: my-eoloplanner-mca-toposervice
+    ports:
+    - port: 27017
+      protocol: TCP
+---
+# Source: eoloplanner-mca/templates/mysql.yml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: my-eoloplanner-mca-mysql-from-server
+spec:
+  podSelector:
+    matchLabels:
+      app: my-eoloplanner-mca-mysql
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: my-eoloplanner-mca-server
+    ports:
+    - port: 3306
+      protocol: TCP
+---
+# Source: eoloplanner-mca/templates/planner.yml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: my-eoloplanner-mca-planner-to-rabbit-weather-topo
+spec:
+  podSelector:
+    matchLabels:
+      app: my-eoloplanner-mca-planner
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: my-eoloplanner-mca-rabbitmq
+    ports:
+    - port: 5672
+      protocol: TCP
+  - to:
+    - podSelector:
+        matchLabels:
+          app: my-eoloplanner-mca-weatherservice
+    ports:
+    - port: 9090
+      protocol: TCP
+  - to:
+    - podSelector:
+        matchLabels:
+          app: my-eoloplanner-mca-toposervice
+    ports:
+    - port: 8080
+      protocol: TCP
+---
+# Source: eoloplanner-mca/templates/rabbitmq.yml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: my-eoloplanner-mca-rabbitmq-from-planner-server
+spec:
+  podSelector:
+    matchLabels:
+      app: my-eoloplanner-mca-rabbitmq
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: my-eoloplanner-mca-planner
+    - podSelector:
+        matchLabels:
+          app: my-eoloplanner-mca-server
+    ports:
+    - port: 5672
+      protocol: TCP
+---
+# Source: eoloplanner-mca/templates/server.yml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: my-eoloplanner-mca-server-to-mysql-rabbit
+spec:
+  podSelector:
+    matchLabels:
+      app: my-eoloplanner-mca-server
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: my-eoloplanner-mca-mysql
+    ports:
+    - port: 3306
+      protocol: TCP
+  - to:
+    - podSelector:
+        matchLabels:
+          app: my-eoloplanner-mca-rabbitmq
+    ports:
+    - port: 5672
+      protocol: TCP
+---
+# Source: eoloplanner-mca/templates/server.yml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: my-eoloplanner-mca-server-from-nodeport
+spec:
+  podSelector:
+    matchLabels:
+      app: my-eoloplanner-mca-server
+  ingress:
+    - ports:
+      - port: 3000
+---
+# Source: eoloplanner-mca/templates/toposervice.yml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: my-eoloplanner-mca-topo-to-mongodb
+spec:
+  podSelector:
+    matchLabels:
+      app: my-eoloplanner-mca-toposervice
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: my-eoloplanner-mca-mongodb
+    ports:
+    - port: 27017
+      protocol: TCP
+---
+# Source: eoloplanner-mca/templates/toposervice.yml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: my-eoloplanner-mca-topo-from-nodeport
+spec:
+  podSelector:
+    matchLabels:
+      app: my-eoloplanner-mca-toposervice
+  ingress:
+    - ports:
+      - port: 8080
+---
+# Source: eoloplanner-mca/templates/weatherservice.yml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: my-eoloplanner-mca-weather-from-planner
+spec:
+  podSelector:
+    matchLabels:
+      app: my-eoloplanner-mca-weatherservice
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: my-eoloplanner-mca-planner
+    ports:
+    - port: 9090
+      protocol: TCP
+---
+# Source: eoloplanner-mca/templates/secrets.yml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-eoloplanner-mca-mysql-secret
+type: Opaque
+data:
+  password: VDZWZW1yWDhDYUMxaHl2bHk0Vjg=
+---
+# Source: eoloplanner-mca/templates/secrets.yml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-eoloplanner-mca-mongodb-secret
+type: Opaque
+data:
+  password: Z0x6b3hxTTJ5Q1RDQUVDQzZ5OWc=
+---
+# Source: eoloplanner-mca/templates/secrets.yml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-eoloplanner-mca-rabbitmq-secret
+type: Opaque
+data:
+  password: aUVoQzBSTHVKUFZaMWxjdmdpOHQ=
+  url: YW1xcDovL3Jvb3Q6aUVoQzBSTHVKUFZaMWxjdmdpOHRAbXktZW9sb3BsYW5uZXItbWNhLXJhYmJpdG1xLXNlcnZpY2U=
+---
+# Source: eoloplanner-mca/templates/mongo-pv.yml
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: my-eoloplanner-mca-mongo-pv
+spec:
+  storageClassName: my-eoloplanner-mca-mongo
+  accessModes:
+    - ReadWriteOnce
+  capacity:
+    storage: 1Gi
+  hostPath:
+    path: /db/my-eoloplanner-mca/mongo
+---
+# Source: eoloplanner-mca/templates/mysql-pv.yml
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: my-eoloplanner-mca-mysql-pv
+spec:
+  storageClassName: my-eoloplanner-mca-mysql
+  accessModes:
+  - ReadWriteOnce
+  capacity:
+    storage: 1Gi
+  hostPath:
+    path: /db/my-eoloplanner-mca/mysql
+---
+# Source: eoloplanner-mca/templates/rabbitmq-pv.yml
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: my-eoloplanner-mca-rabbit-pv
+spec:
+  storageClassName: my-eoloplanner-mca-rabbit
+  accessModes:
+  - ReadWriteOnce
+  capacity:
+    storage: 1Gi
+  hostPath:
+    path: /db/my-eoloplanner-mca/rabbitmq
+---
+# Source: eoloplanner-mca/templates/mongodb.yml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: my-eoloplanner-mca-mongo-pvc
+spec: 
+  storageClassName: my-eoloplanner-mca-mongo
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+# Source: eoloplanner-mca/templates/mysql.yml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: my-eoloplanner-mca-mysql-pvc
+spec: 
+  storageClassName: my-eoloplanner-mca-mysql
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+# Source: eoloplanner-mca/templates/rabbitmq.yml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: my-eoloplanner-mca-rabbit-pvc
+spec: 
+  storageClassName: my-eoloplanner-mca-rabbit
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+# Source: eoloplanner-mca/templates/mongodb.yml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-eoloplanner-mca-mongodb-service
+  labels:
+    app: my-eoloplanner-mca-mongodb
+spec:
+  ports:
+  - port: 27017
+    targetPort: 27017
+    protocol: TCP
+    name: mongodb-port-27017
+  - port: 27018
+    targetPort: 27018
+    protocol: TCP
+    name: mongodb-port-27018
+  - port: 27019
+    targetPort: 27019
+    protocol: TCP
+    name: mongodb-port-27019
+  selector:
+    app: my-eoloplanner-mca-mongodb
+  type: ClusterIP
+---
+# Source: eoloplanner-mca/templates/mysql.yml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-eoloplanner-mca-mysql-service
+  labels:
+    app: my-eoloplanner-mca-mysql
+spec:
+  ports:
+  - port: 3306
+    targetPort: 3306
+    protocol: TCP
+    name: mysql-port
+  selector:
+    app: my-eoloplanner-mca-mysql
+  type: ClusterIP
+---
+# Source: eoloplanner-mca/templates/rabbitmq.yml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-eoloplanner-mca-rabbitmq-service
+  labels:
+    app: my-eoloplanner-mca-rabbitmq
+spec:
+  ports:
+  - port: 5672
+    targetPort: 5672
+    protocol: TCP
+    name: rabbitmq-port-5672
+  - port: 15672
+    targetPort: 15672
+    protocol: TCP
+    name: rabbitmq-port-15672
+  selector:
+    app: my-eoloplanner-mca-rabbitmq
+  type: ClusterIP
+---
+# Source: eoloplanner-mca/templates/server.yml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-eoloplanner-mca-server-service
+  labels:
+    app: my-eoloplanner-mca-server
+spec:
+  ports:
+  - port: 3000
+    targetPort: 3000
+    protocol: TCP
+    name: server-port
+  selector:
+    app: my-eoloplanner-mca-server
+  type: NodePort
+---
+# Source: eoloplanner-mca/templates/toposervice.yml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-eoloplanner-mca-toposervice-service
+  labels:
+    app: my-eoloplanner-mca-toposervice
+spec:
+  ports:
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
+    name: toposervice-port
+  selector:
+    app: my-eoloplanner-mca-toposervice
+  type: NodePort
+---
+# Source: eoloplanner-mca/templates/weatherservice.yml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-eoloplanner-mca-weatherservice-service
+  labels:
+    app: my-eoloplanner-mca-weatherservice
+spec:
+  ports:
+  - port: 9090
+    targetPort: 9090
+    protocol: TCP
+    name: weatherservice-port
+  selector:
+    app: my-eoloplanner-mca-weatherservice
+  type: ClusterIP
+---
+# Source: eoloplanner-mca/templates/mongodb.yml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-eoloplanner-mca-mongodb-deploy
+spec:
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: my-eoloplanner-mca-mongodb
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: my-eoloplanner-mca-mongodb
+    spec:
+      containers:
+      - name: my-eoloplanner-mca-mongodb
+        image: mongo:4.2.12-bionic
+        env:
+        - name: MONGO_INITDB_DATABASE
+          value: topoDB
+        - name: MONGO_INITDB_ROOT_USERNAME
+          value: root
+        - name: MONGO_INITDB_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: my-eoloplanner-mca-mongodb-secret
+              key: password
+        ports:
+        - containerPort: 27017
+        - containerPort: 27018
+        - containerPort: 27019
+        volumeMounts:
+        - mountPath: /data/db
+          name: my-eoloplanner-mca-datadb
+      volumes:
+      - name: my-eoloplanner-mca-datadb
+        persistentVolumeClaim:
+          claimName: my-eoloplanner-mca-mongo-pvc
+---
+# Source: eoloplanner-mca/templates/mysql.yml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-eoloplanner-mca-mysql-deploy
+spec:
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: my-eoloplanner-mca-mysql
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: my-eoloplanner-mca-mysql
+    spec:
+      containers:
+      - name: my-eoloplanner-mca-mysql
+        image: mysql:8.0.22
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: my-eoloplanner-mca-mysql-secret
+              key: password
+        - name: MYSQL_DATABASE
+          value: eoloplantsDB
+        ports:
+        - containerPort: 3306
+        volumeMounts:
+        - mountPath: /var/lib/mysql
+          name: my-eoloplanner-mca-datadb
+      volumes:
+      - name: my-eoloplanner-mca-datadb
+        persistentVolumeClaim:
+          claimName: my-eoloplanner-mca-mysql-pvc
+---
+# Source: eoloplanner-mca/templates/planner.yml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-eoloplanner-mca-planner-deploy
+spec:
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: my-eoloplanner-mca-planner
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: my-eoloplanner-mca-planner
+        my-eoloplanner-mca-dns-policy: enabled
+    spec:
+      securityContext:
+        runAsUser: 1001
+      restartPolicy: Always
+      containers:
+      - name: my-eoloplanner-mca-planner
+        image: franrobles8/planner:v3.0
+        env:
+        - name: TOPO_HOST
+          value: my-eoloplanner-mca-toposervice-service
+        - name: TOPO_PORT
+          value: "8080"
+        - name: GRPC_CLIENT_WEATHERSERVER_ADDRESS
+          value: static://my-eoloplanner-mca-weatherservice-service:9090
+        - name: SPRING_RABBITMQ_HOST
+          value: my-eoloplanner-mca-rabbitmq-service
+        - name: SPRING_RABBITMQ_PORT
+          value: "5672"
+        - name: SPRING_RABBITMQ_USERNAME
+          value: root
+        - name: SPRING_RABBITMQ_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: my-eoloplanner-mca-rabbitmq-secret
+              key: password
+---
+# Source: eoloplanner-mca/templates/rabbitmq.yml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-eoloplanner-mca-rabbitmq-deploy
+spec:
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: my-eoloplanner-mca-rabbitmq
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: my-eoloplanner-mca-rabbitmq
+    spec:
+      containers:
+      - name: my-eoloplanner-mca-rabbitmq
+        image: rabbitmq:3-management
+        env:
+        - name: RABBITMQ_DEFAULT_USER
+          value: root
+        - name: RABBITMQ_DEFAULT_PASS
+          valueFrom:
+            secretKeyRef:
+              name: my-eoloplanner-mca-rabbitmq-secret
+              key: password
+        ports:
+        - containerPort: 5672
+        - containerPort: 15672
+        volumeMounts:
+        - mountPath: /var/lib/rabbitmq/mnesia
+          name: my-eoloplanner-mca-datarabbit
+      volumes:
+      - name: my-eoloplanner-mca-datarabbit
+        persistentVolumeClaim:
+          claimName: my-eoloplanner-mca-rabbit-pvc
+---
+# Source: eoloplanner-mca/templates/server.yml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-eoloplanner-mca-server-deploy
+spec:
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: my-eoloplanner-mca-server
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: my-eoloplanner-mca-server
+        my-eoloplanner-mca-dns-policy: enabled
+    spec:
+      securityContext:
+        runAsUser: 1001
+      restartPolicy: Always
+      containers:
+      - name: my-eoloplanner-mca-server
+        image: oscarsotosanchez/server:v1.0
+        command: ["bash"]
+        args:
+        - "-c"
+        - "./wait-for-it.sh my-eoloplanner-mca-mysql-service:3306 -t 500 -- ./wait-for-it.sh my-eoloplanner-mca-rabbitmq-service:5672 -t 500 -- node src/server.js"
+        env:
+        - name: MYSQL_HOST
+          value: my-eoloplanner-mca-mysql-service
+        - name: MYSQL_DB
+          value: eoloplantsDB
+        - name: MYSQL_USER
+          value: root
+        - name: MYSQL_PASS
+          valueFrom:
+            secretKeyRef:
+              name: my-eoloplanner-mca-mysql-secret
+              key: password
+        - name: RABBITMQ_URL
+          valueFrom:
+            secretKeyRef:
+              name: my-eoloplanner-mca-rabbitmq-secret
+              key: url
+        ports:
+        - containerPort: 3000
+---
+# Source: eoloplanner-mca/templates/toposervice.yml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-eoloplanner-mca-toposervice-deploy
+spec:
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: my-eoloplanner-mca-toposervice
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: my-eoloplanner-mca-toposervice
+        my-eoloplanner-mca-dns-policy: enabled
+    spec:
+      securityContext:
+        runAsUser: 1001
+      restartPolicy: Always
+      containers:
+      - name: my-eoloplanner-mca-toposervice
+        image: oscarsotosanchez/toposervice:v1.0
+        env:
+        - name: SPRING_DATA_MONGODB_HOST
+          value: my-eoloplanner-mca-mongodb-service
+        - name: SPRING_DATA_MONGODB_PORT
+          value: "27017"
+        - name: SPRING_DATA_MONGODB_DATABASE
+          value: topoDB
+        - name: SPRING_DATA_MONGODB_AUTHENTICATION-DATABASE
+          value: admin
+        - name: SPRING_DATA_MONGODB_USERNAME
+          value: root
+        - name: SPRING_DATA_MONGODB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: my-eoloplanner-mca-mongodb-secret
+              key: password
+        ports:
+        - containerPort: 8080
+---
+# Source: eoloplanner-mca/templates/weatherservice.yml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-eoloplanner-mca-weatherservice-deploy
+spec:
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: my-eoloplanner-mca-weatherservice
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: my-eoloplanner-mca-weatherservice
+    spec:
+      securityContext:
+        runAsUser: 1001
+      restartPolicy: Always
+      containers:
+      - name: my-eoloplanner-mca-weatherservice
+        image: oscarsotosanchez/weatherservice:v1.0
+        env:
+        - name: GRPC_HOST
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: GRPC_PORT
+          value: "9090"
+        ports:
+        - containerPort: 9090

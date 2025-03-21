@@ -1,0 +1,320 @@
+---
+# Source: terraform/templates/sync-workspace-serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-terraform-terraform-sync-workspace
+  labels:
+    app: terraform
+    chart: terraform-helm
+    heritage: Helm
+    release: my-terraform
+---
+# Source: terraform/templates/sync-workspace-role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: my-terraform-terraform-sync-workspace
+  labels:
+    app: terraform
+    chart: terraform-helm
+    heritage: Helm
+    release: my-terraform    
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  - services
+  - services/finalizers
+  - endpoints
+  - persistentvolumeclaims
+  - events
+  - configmaps
+  - secrets
+  verbs:
+  - '*'
+- apiGroups:
+  - ""
+  resources:
+  - configmaps/status
+  verbs:
+  - get
+  - update
+  - patch
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  - daemonsets
+  - replicasets
+  - statefulsets
+  verbs:
+  - '*'
+- apiGroups:
+  - monitoring.coreos.com
+  resources:
+  - servicemonitors
+  verbs:
+  - get
+  - create
+- apiGroups:
+  - apps
+  resourceNames:
+  - terraform-k8s
+  resources:
+  - deployments/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - get
+- apiGroups:
+  - apps
+  resources:
+  - replicasets
+  verbs:
+  - get
+- apiGroups:
+  - app.terraform.io
+  resources:
+  - '*'
+  - workspaces
+  verbs:
+  - '*'
+- apiGroups:
+    - coordination.k8s.io
+  resources:
+    - leases
+  verbs:
+    - create
+    - get
+    - update
+---
+# Source: terraform/templates/sync-workspace-rolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: my-terraform-terraform-sync-workspace
+  labels:
+    app: terraform
+    chart: terraform-helm
+    heritage: Helm
+    release: my-terraform    
+subjects:
+- kind: ServiceAccount
+  name: my-terraform-terraform-sync-workspace
+  namespace: default
+roleRef:
+  kind: Role
+  name: my-terraform-terraform-sync-workspace
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: terraform/templates/sync-workspace-deployment.yaml
+# The deployment for running the sync-catalog pod
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-terraform-terraform-sync-workspace
+  namespace: default
+  labels:
+    app: terraform
+    chart: terraform-helm
+    heritage: Helm
+    release: my-terraform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: terraform
+      chart: terraform-helm
+      release: my-terraform
+      component: sync-workspace
+  template:
+    metadata:
+      labels:
+        app: terraform
+        chart: terraform-helm
+        release: my-terraform
+        component: sync-workspace
+    spec:
+      serviceAccountName: my-terraform-terraform-sync-workspace
+      containers:
+        - name: terraform-sync-workspace
+          image: "hashicorp/terraform-k8s:1.1.2"
+          imagePullPolicy: "IfNotPresent"
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: OPERATOR_NAME
+              value: "terraform-k8s"
+            - name: TF_VERSION
+              value: "latest"
+            - name: TF_CLI_CONFIG_FILE
+              value: "/etc/terraform/.terraformrc"
+            - name: TF_URL
+              value: ""
+          volumeMounts:
+          - name: terraformrc
+            mountPath: "/etc/terraform"
+            readOnly: true
+          - name: sensitivevars
+            mountPath: "/tmp/secrets"
+            readOnly: true
+          command:
+            - /bin/terraform-k8s
+          args:
+            - --enable-leader-election
+            - --k8s-watch-namespace=default
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: 8383
+              scheme: HTTP
+            failureThreshold: 3
+            initialDelaySeconds: 30
+            periodSeconds: 5
+            successThreshold: 1
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: 8383
+              scheme: HTTP
+            failureThreshold: 5
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            successThreshold: 1
+            timeoutSeconds: 5
+      volumes:
+        - name: terraformrc
+          secret:
+            secretName: terraformrc
+            items:
+            - key: credentials
+              path: ".terraformrc"
+        - name: sensitivevars
+          secret:
+            secretName: workspacesecrets
+---
+# Source: terraform/templates/tests/test-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "my-terraform-terraform-test"
+  labels:
+    app: terraform
+    chart: terraform-helm
+    heritage: Helm
+    release: my-terraform
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+data:
+  some_key: "for random pets"
+  backend: |
+    organization = tf-operator
+    workspaces { name = "default-my-terraform-terraform-test" }
+---
+# Source: terraform/templates/tests/test-runner.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-terraform-terraform-test"
+  labels:
+    app: terraform
+    chart: terraform-helm
+    heritage: Helm
+    release: my-terraform
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-weight": "2"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  containers:
+    - name: terraform-test
+      image: "hashicorp/terraform-k8s:1.1.2"
+      imagePullPolicy: "IfNotPresent"
+      env:
+        - name: HOST_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.hostIP
+      volumeMounts:
+        - name: terraformrc
+          mountPath: "/etc/terraform"
+          readOnly: true
+        - name: backend
+          mountPath: "/tmp/terraform-test"
+          readOnly: true
+      command:
+        - "/bin/sh"
+        - "-ec"
+        - |
+            sleep 60
+            terraform init -backend-config=/tmp/terraform-test/backend
+            terraform output pet
+            terraform output list_of_pets
+  restartPolicy: Never
+  volumes:
+    - name: terraformrc
+      secret:
+        secretName: terraformrc
+        items:
+        - key: credentials
+          path: ".terraformrc"
+    - name: backend
+      configMap:
+        name: "my-terraform-terraform-test"
+---
+# Source: terraform/templates/tests/test-workspace.yaml
+apiVersion: app.terraform.io/v1alpha1
+kind: Workspace
+metadata:
+  name: "my-terraform-terraform-test"
+  labels:
+    app: terraform
+    chart: terraform-helm
+    heritage: Helm
+    release: my-terraform
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  organization: "tf-operator"
+  secretsMountPath: "/tmp/secrets"
+  module:
+    source: "git::https://github.com/hashicorp/terraform-helm.git//test/module"
+  outputs:
+    - key: pet
+      moduleOutputName: pet
+    - key: list_of_pets
+      moduleOutputName: list_of_pets
+  variables:
+    - key: hellos
+      value: |
+        {
+          hello="world"
+          second_hello="universe"
+        }
+      hcl: true
+      sensitive: false
+      environmentVariable: false
+    - key: some_key
+      valueFrom:
+        configMapKeyRef:
+          name: "my-terraform-terraform-test"
+          key: some_key
+      sensitive: false
+      environmentVariable: false
+    - key: CONFIRM_DESTROY
+      value: "1"
+      sensitive: false
+      environmentVariable: true

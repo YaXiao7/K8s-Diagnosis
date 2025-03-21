@@ -1,0 +1,145 @@
+---
+# Source: docker-registry/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-docker-registry-secret
+  namespace: default
+  labels:
+    app: docker-registry
+    chart: docker-registry-2.2.3
+    heritage: Helm
+    release: my-docker-registry
+type: Opaque
+data:
+  haSharedSecret: "S2RKbWg2NXZ2cmdLMmk1Vg=="
+  proxyUsername: ""
+  proxyPassword: ""
+---
+# Source: docker-registry/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-docker-registry-config
+  namespace: default
+  labels:
+    app: docker-registry
+    chart: docker-registry-2.2.3
+    heritage: Helm
+    release: my-docker-registry
+data:
+  config.yml: |-
+    health:
+      storagedriver:
+        enabled: true
+        interval: 10s
+        threshold: 3
+    http:
+      addr: :5000
+      debug:
+        addr: :5001
+        prometheus:
+          enabled: false
+          path: /metrics
+      headers:
+        X-Content-Type-Options:
+        - nosniff
+    log:
+      fields:
+        service: registry
+    storage:
+      cache:
+        blobdescriptor: inmemory
+    version: 0.1
+---
+# Source: docker-registry/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-docker-registry
+  namespace: default
+  labels:
+    app: docker-registry
+    chart: docker-registry-2.2.3
+    release: my-docker-registry
+    heritage: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5000
+      protocol: TCP
+      name: http-5000
+      targetPort: 5000
+  selector:
+    app: docker-registry
+    release: my-docker-registry
+---
+# Source: docker-registry/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-docker-registry
+  namespace: default
+  labels:
+    app: docker-registry
+    chart: docker-registry-2.2.3
+    release: my-docker-registry
+    heritage: Helm
+spec:
+  selector:
+    matchLabels:
+      app: docker-registry
+      release: my-docker-registry
+  replicas: 1
+  minReadySeconds: 5
+  template:
+    metadata:
+      labels:
+        app: docker-registry
+        release: my-docker-registry
+      annotations:
+        checksum/config: d672dbba32f53709f38cb50e5f1e49b5e6108e8241386819e140087cd54bd3e1
+        checksum/secret: bcc8571b49563100a89f6c61ac22ad529486d8477d9eb965d8fa5e2174183fb2
+    spec:
+      securityContext: 
+        fsGroup: 1000
+        runAsUser: 1000
+      containers:
+        - name: docker-registry
+          image: "registry:2.8.1"
+          imagePullPolicy: IfNotPresent
+          command:
+          - /bin/registry
+          - serve
+          - /etc/docker/registry/config.yml
+          ports:
+            - containerPort: 5000
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 5000
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 5000
+          resources: 
+            {}
+          env: 
+            - name: REGISTRY_HTTP_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: my-docker-registry-secret
+                  key: haSharedSecret
+            - name: REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY
+              value: "/var/lib/registry"
+          volumeMounts: 
+            - name: "my-docker-registry-config"
+              mountPath: "/etc/docker/registry"
+            - name: data
+              mountPath: /var/lib/registry/
+      volumes: 
+        - name: my-docker-registry-config
+          configMap:
+            name: my-docker-registry-config
+        - name: data
+          emptyDir: {}

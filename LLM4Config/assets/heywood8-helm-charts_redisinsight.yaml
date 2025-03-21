@@ -1,0 +1,111 @@
+---
+# Source: redisinsight/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-redisinsight
+  labels:
+    helm.sh/chart: redisinsight-0.4.5
+    app.kubernetes.io/name: redisinsight
+    app.kubernetes.io/instance: my-redisinsight
+    app.kubernetes.io/version: "2.28.0"
+    app.kubernetes.io/managed-by: Helm
+automountServiceAccountToken: false
+---
+# Source: redisinsight/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-redisinsight
+  labels:
+    helm.sh/chart: redisinsight-0.4.5
+    app.kubernetes.io/name: redisinsight
+    app.kubernetes.io/instance: my-redisinsight
+    app.kubernetes.io/version: "2.28.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5000
+      targetPort: 5000
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: redisinsight
+    app.kubernetes.io/instance: my-redisinsight
+---
+# Source: redisinsight/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-redisinsight
+  labels:
+    helm.sh/chart: redisinsight-0.4.5
+    app.kubernetes.io/name: redisinsight
+    app.kubernetes.io/instance: my-redisinsight
+    app.kubernetes.io/version: "2.28.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: redisinsight
+      app.kubernetes.io/instance: my-redisinsight
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: redisinsight
+        app.kubernetes.io/instance: my-redisinsight
+    spec:
+      serviceAccountName: my-redisinsight
+      securityContext:
+        fsGroup: 65534
+        runAsUser: 1000
+      volumes:
+        - name: redisinsight
+
+          emptyDir: {}
+
+      containers:
+        - env:
+            - name: RILOGLEVEL
+              value: DEBUG
+            - name: RITRUSTEDORIGINS
+              value: 
+            - name: APP_FOLDER_ABSOLUTE_PATH
+              value: /redisinsight/
+          name: redisinsight
+          securityContext:
+            capabilities:
+              add:
+              - IPC_LOCK
+            runAsNonRoot: true
+            runAsUser: 1000
+          image: "heywood8/redisinsight:2.28.0"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 5000
+              protocol: TCP
+          livenessProbe:
+            failureThreshold: 2
+            periodSeconds: 10
+            tcpSocket:
+              port: http
+          readinessProbe:
+            failureThreshold: 2
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            tcpSocket:
+              port: http
+          resources:
+            limits:
+              memory: 300Mi
+            requests:
+              cpu: 1m
+              memory: 200Mi
+          volumeMounts:
+            - name: redisinsight
+              mountPath: /redisinsight/

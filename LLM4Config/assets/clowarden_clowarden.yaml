@@ -1,0 +1,416 @@
+---
+# Source: clowarden/templates/server_serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: server
+---
+# Source: clowarden/charts/postgresql/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-clowarden-postgresql
+  labels:
+    app: postgresql
+    chart: postgresql-8.2.1
+    release: "my-clowarden"
+    heritage: "Helm"
+type: Opaque
+data:
+  postgresql-password: "cG9zdGdyZXM="
+---
+# Source: clowarden/templates/dbmigrator_secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: dbmigrator-config
+type: Opaque
+stringData:
+  tern.conf: |-
+    [database]
+    host = my-clowarden-postgresql.default
+    port = 5432
+    database = clowarden
+    user = postgres
+    password = postgres
+---
+# Source: clowarden/templates/server_secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: server-config
+type: Opaque
+stringData:
+  clowarden.yml: |-
+    db:
+      host: my-clowarden-postgresql.default
+      port: 5432
+      dbname: clowarden
+      user: postgres
+      password: postgres
+    log:
+      format: json
+    server:
+      addr: 0.0.0.0:9000
+      staticPath: /home/clowarden/web/build
+      basicAuth:
+        enabled: false
+        username: clowarden
+        password: changeme
+      githubApp:
+        appId: 
+        privateKey: 
+        webhookSecret: 
+    services:
+      github:
+        enabled: true
+    organizations: 
+      []
+---
+# Source: clowarden/templates/server_serviceaccount.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: job-reader
+rules:
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "watch"]
+---
+# Source: clowarden/templates/server_serviceaccount.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: server-job-reader
+subjects:
+  - kind: ServiceAccount
+    name: server
+roleRef:
+  kind: Role
+  name: job-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: clowarden/charts/postgresql/templates/svc-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-clowarden-postgresql-headless
+  labels:
+    app: postgresql
+    chart: postgresql-8.2.1
+    release: "my-clowarden"
+    heritage: "Helm"
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: tcp-postgresql
+      port: 5432
+      targetPort: tcp-postgresql
+  selector:
+    app: postgresql
+    release: "my-clowarden"
+---
+# Source: clowarden/charts/postgresql/templates/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-clowarden-postgresql
+  labels:
+    app: postgresql
+    chart: postgresql-8.2.1
+    release: "my-clowarden"
+    heritage: "Helm"
+spec:
+  type: ClusterIP
+  ports:
+    - name: tcp-postgresql
+      port: 5432
+      targetPort: tcp-postgresql
+  selector:
+    app: postgresql
+    release: "my-clowarden"
+    role: master
+---
+# Source: clowarden/templates/server_service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: server
+  labels:
+    app.kubernetes.io/component: server
+    helm.sh/chart: clowarden-0.1.3
+    app.kubernetes.io/name: clowarden
+    app.kubernetes.io/instance: my-clowarden
+    app.kubernetes.io/version: "0.1.3"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: NodePort
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/component: server
+    app.kubernetes.io/name: clowarden
+    app.kubernetes.io/instance: my-clowarden
+---
+# Source: clowarden/templates/server_deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: server
+  labels:
+    app.kubernetes.io/component: server
+    helm.sh/chart: clowarden-0.1.3
+    app.kubernetes.io/name: clowarden
+    app.kubernetes.io/instance: my-clowarden
+    app.kubernetes.io/version: "0.1.3"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: server
+      app.kubernetes.io/name: clowarden
+      app.kubernetes.io/instance: my-clowarden
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: server
+        app.kubernetes.io/name: clowarden
+        app.kubernetes.io/instance: my-clowarden
+    spec:
+      serviceAccountName: server
+      initContainers:
+        -
+          name: check-db-ready
+          image: artifacthub/postgres:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: PGHOST
+              value: my-clowarden-postgresql.default
+            - name: PGPORT
+              value: "5432"
+            - name: PGUSER
+              value: "postgres"
+          command: ['sh', '-c', 'until pg_isready; do echo waiting for database; sleep 2; done;']
+        - name: check-dbmigrator-run
+          image: "bitnami/kubectl:1.31"
+          imagePullPolicy: IfNotPresent
+          command: ['kubectl', 'wait', '--namespace=default', '--for=condition=complete', 'job/dbmigrator-install', '--timeout=60s']
+      containers:
+        - name: server
+          image: public.ecr.aws/g6m3a0y9/clowarden-server:v0.1.3
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - name: server-config
+              mountPath: "/home/clowarden/.config/clowarden"
+              readOnly: true
+          ports:
+            - name: http
+              containerPort: 9000
+              protocol: TCP
+          resources:
+            {}
+          command: ['clowarden-server', '-c', '/home/clowarden/.config/clowarden/clowarden.yml']
+      volumes:
+        - name: server-config
+          secret:
+            secretName: server-config
+---
+# Source: clowarden/charts/postgresql/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-clowarden-postgresql
+  labels:
+    app: postgresql
+    chart: postgresql-8.2.1
+    release: "my-clowarden"
+    heritage: "Helm"
+spec:
+  serviceName: my-clowarden-postgresql-headless
+  replicas: 1
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: postgresql
+      release: "my-clowarden"
+      role: master
+  template:
+    metadata:
+      name: my-clowarden-postgresql
+      labels:
+        app: postgresql
+        chart: postgresql-8.2.1
+        release: "my-clowarden"
+        heritage: "Helm"
+        role: master
+    spec:      
+      securityContext:
+        fsGroup: 1001
+      initContainers:
+        - name: init-chmod-data
+          image: docker.io/bitnami/minideb:stretch
+          imagePullPolicy: "Always"
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+          command:
+            - /bin/sh
+            - -c
+            - |
+              mkdir -p /data/data
+              chmod 700 /data/data
+              find /data -mindepth 0 -maxdepth 1 -not -name ".snapshot" -not -name "lost+found" | \
+                xargs chown -R 1001:1001
+              chmod -R 777 /dev/shm
+          securityContext:
+            runAsUser: 0
+          volumeMounts:
+            - name: data
+              mountPath: /data
+              subPath: 
+            - name: dshm
+              mountPath: /dev/shm
+      containers:
+        - name: my-clowarden-postgresql
+          image: docker.io/artifacthub/postgres:latest
+          imagePullPolicy: "IfNotPresent"
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+          securityContext:
+            runAsUser: 1001
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: POSTGRESQL_PORT_NUMBER
+              value: "5432"
+            - name: POSTGRESQL_VOLUME_DIR
+              value: "/data"
+            - name: PGDATA
+              value: "/data/pgdata"
+            - name: POSTGRES_USER
+              value: "postgres"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-clowarden-postgresql
+                  key: postgresql-password
+            - name: POSTGRES_DB
+              value: "clowarden"
+            - name: POSTGRESQL_ENABLE_LDAP
+              value: "no"
+          ports:
+            - name: tcp-postgresql
+              containerPort: 5432
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - exec pg_isready -U "postgres" -d "clowarden" -h 127.0.0.1 -p 5432
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - -e
+                - |
+                  exec pg_isready -U "postgres" -d "clowarden" -h 127.0.0.1 -p 5432
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          volumeMounts:
+            - name: dshm
+              mountPath: /dev/shm
+            - name: data
+              mountPath: /data
+              subPath: 
+      volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Gi
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "8Gi"
+---
+# Source: clowarden/templates/dbmigrator_job.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: dbmigrator-install
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      initContainers:
+        -
+          name: check-db-ready
+          image: artifacthub/postgres:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: PGHOST
+              value: my-clowarden-postgresql.default
+            - name: PGPORT
+              value: "5432"
+            - name: PGUSER
+              value: "postgres"
+          command: ['sh', '-c', 'until pg_isready; do echo waiting for database; sleep 2; done;']
+      containers:
+        - name: dbmigrator
+          image: public.ecr.aws/g6m3a0y9/clowarden-dbmigrator:v0.1.3
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: TERN_CONF
+              value: /home/clowarden/.config/clowarden/tern.conf
+          volumeMounts:
+            - name: dbmigrator-config
+              mountPath: /home/clowarden/.config/clowarden
+              readOnly: true
+          command: ["./migrate.sh"]
+      volumes:
+        - name: dbmigrator-config
+          secret:
+            secretName: dbmigrator-config
+---
+# Source: clowarden/templates/server_ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: server
+  labels:
+    app.kubernetes.io/component: server
+    helm.sh/chart: clowarden-0.1.3
+    app.kubernetes.io/name: clowarden
+    app.kubernetes.io/instance: my-clowarden
+    app.kubernetes.io/version: "0.1.3"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    kubernetes.io/ingress.class: nginx
+spec:
+  defaultBackend:
+    service:
+      name: server
+      port:
+        number: 80

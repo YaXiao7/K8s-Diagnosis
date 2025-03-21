@@ -1,0 +1,249 @@
+---
+# Source: service-gateway-presets/templates/gateway/gw.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: backend
+  namespace: default
+---
+# Source: service-gateway-presets/templates/cluster-tls/ca.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ace-ca
+  # https://cert-manager.io/docs/configuration/#cluster-resource-namespace
+  namespace: cert-manager
+  labels:
+    helm.sh/chart: service-gateway-presets-v2024.2.11
+    app.kubernetes.io/name: service-gateway-presets
+    app.kubernetes.io/instance: my-service-gateway-presets
+    app.kubernetes.io/version: "v2024.2.11"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    vcluster.loft.sh/force-sync: "true"
+type: kubernetes.io/tls
+stringData: {"tls.crt":"","tls.key":""}
+---
+# Source: service-gateway-presets/templates/gateway-tls/ca.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-service-gateway-presets-ca
+  namespace: default
+  labels:
+    helm.sh/chart: service-gateway-presets-v2024.2.11
+    app.kubernetes.io/name: service-gateway-presets
+    app.kubernetes.io/instance: my-service-gateway-presets
+    app.kubernetes.io/version: "v2024.2.11"
+    app.kubernetes.io/managed-by: Helm
+type: kubernetes.io/tls
+stringData: {"tls.crt":"","tls.key":""}
+---
+# Source: service-gateway-presets/templates/gateway/gw.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: default
+  labels:
+    app: backend
+    service: backend
+spec:
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000
+  selector:
+    app: backend
+---
+# Source: service-gateway-presets/templates/gateway/gw.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend
+      version: v1
+  template:
+    metadata:
+      labels:
+        app: backend
+        version: v1
+    spec:
+      serviceAccountName: backend
+      securityContext:
+        null
+      containers:
+        - image: gcr.io/k8s-staging-ingressconformance/echoserver:v20221109-7ee2f3e
+          imagePullPolicy: IfNotPresent
+          name: backend
+          ports:
+            - containerPort: 3000
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          securityContext:
+            null
+---
+# Source: service-gateway-presets/templates/cluster-tls/caprovicerclass.yaml
+apiVersion: cacerts.csi.cert-manager.io/v1alpha1
+kind: CAProviderClass
+metadata:
+  name: ace
+  namespace: default
+  labels:
+    helm.sh/chart: service-gateway-presets-v2024.2.11
+    app.kubernetes.io/name: service-gateway-presets
+    app.kubernetes.io/instance: my-service-gateway-presets
+    app.kubernetes.io/version: "v2024.2.11"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  refs:
+  - apiGroup: ""
+    kind: Secret
+    namespace: cert-manager
+    name: ace-ca
+    key: "tls.crt"
+---
+# Source: service-gateway-presets/templates/gateway-tls/caprovicerclass.yaml
+apiVersion: cacerts.csi.cert-manager.io/v1alpha1
+kind: CAProviderClass
+metadata:
+  name: my-service-gateway-presets
+  namespace: default
+  labels:
+    helm.sh/chart: service-gateway-presets-v2024.2.11
+    app.kubernetes.io/name: service-gateway-presets
+    app.kubernetes.io/instance: my-service-gateway-presets
+    app.kubernetes.io/version: "v2024.2.11"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  refs:
+  - apiGroup: ""
+    kind: Secret
+    namespace: default
+    name: my-service-gateway-presets-cert
+    key: "ca.crt"
+---
+# Source: service-gateway-presets/templates/gateway-tls/certificate.yaml
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: my-service-gateway-presets
+  namespace: default
+  labels:
+    helm.sh/chart: service-gateway-presets-v2024.2.11
+    app.kubernetes.io/name: service-gateway-presets
+    app.kubernetes.io/instance: my-service-gateway-presets
+    app.kubernetes.io/version: "v2024.2.11"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  secretName: my-service-gateway-presets-cert
+  secretTemplate:
+    annotations:
+      vcluster.loft.sh/force-sync: "true"
+  issuerRef:
+    group: cert-manager.io
+    kind: Issuer
+    name: my-service-gateway-presets
+  commonName: "gw-c1.chart-example.local"
+  dnsNames:
+    - "gw-c1.chart-example.local"
+  usages:
+    - key agreement
+    - digital signature
+    - server auth
+---
+# Source: service-gateway-presets/templates/cluster-tls/issuer.yaml
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: ace
+  labels:
+    helm.sh/chart: service-gateway-presets-v2024.2.11
+    app.kubernetes.io/name: service-gateway-presets
+    app.kubernetes.io/instance: my-service-gateway-presets
+    app.kubernetes.io/version: "v2024.2.11"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  ca:
+    secretName: ace-ca
+---
+# Source: service-gateway-presets/templates/gateway/gwclass.yaml
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: ace-gw-proxy-config
+  namespace: default
+spec:
+  mergeGateways: true
+  provider:
+    type: Kubernetes
+    kubernetes:
+      envoyDeployment:
+        container:
+          image: ghcr.io/voyagermesh/envoy:v1.30.2-ac
+          # securityContext:
+          #   runAsUser: 1000
+      envoyService:
+        annotations:
+          external-dns.alpha.kubernetes.io/hostname: "gw-c1.chart-example.local"
+---
+# Source: service-gateway-presets/templates/gateway/gw.yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: backend
+  namespace: default
+spec:
+  gatewayClassName: ace
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+---
+# Source: service-gateway-presets/templates/gateway/gwclass.yaml
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: GatewayClass
+metadata:
+  name: ace
+spec:
+  controllerName: gateway.voyagermesh.com/service-gateway
+  parametersRef:
+    group: gateway.envoyproxy.io
+    kind: EnvoyProxy
+    name: ace-gw-proxy-config
+    namespace: default
+---
+# Source: service-gateway-presets/templates/gateway/gw.yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: backend
+  namespace: default
+spec:
+  parentRefs:
+    - name: backend
+  hostnames:
+    - "gw-c1.chart-example.local"
+  rules:
+    - backendRefs:
+        - group: ""
+          kind: Service
+          name: backend
+          port: 3000
+          weight: 1
+      matches:
+        - path:
+            type: Exact
+            value: /info

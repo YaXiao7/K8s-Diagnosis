@@ -1,0 +1,412 @@
+---
+# Source: jasperreports/charts/mariadb/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-jasperreports-mariadb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: mariadb
+    helm.sh/chart: mariadb-11.3.1
+    app.kubernetes.io/instance: my-jasperreports
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+automountServiceAccountToken: false
+---
+# Source: jasperreports/charts/mariadb/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-jasperreports-mariadb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: mariadb
+    helm.sh/chart: mariadb-11.3.1
+    app.kubernetes.io/instance: my-jasperreports
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  mariadb-root-password: "czhJUzRQVks3ag=="
+  mariadb-password: "Q3JzYmZmNkpGUw=="
+---
+# Source: jasperreports/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-jasperreports
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: jasperreports
+    helm.sh/chart: jasperreports-14.3.4
+    app.kubernetes.io/instance: my-jasperreports
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  jasperreports-password: "Skc2d2QwN0tIcw=="
+---
+# Source: jasperreports/charts/mariadb/templates/primary/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-jasperreports-mariadb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: mariadb
+    helm.sh/chart: mariadb-11.3.1
+    app.kubernetes.io/instance: my-jasperreports
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: primary
+data:
+  my.cnf: |-
+    [mysqld]
+    skip-name-resolve
+    explicit_defaults_for_timestamp
+    basedir=/opt/bitnami/mariadb
+    plugin_dir=/opt/bitnami/mariadb/plugin
+    port=3306
+    socket=/opt/bitnami/mariadb/tmp/mysql.sock
+    tmpdir=/opt/bitnami/mariadb/tmp
+    max_allowed_packet=16M
+    bind-address=*
+    pid-file=/opt/bitnami/mariadb/tmp/mysqld.pid
+    log-error=/opt/bitnami/mariadb/logs/mysqld.log
+    character-set-server=UTF8
+    collation-server=utf8_general_ci
+    slow_query_log=0
+    slow_query_log_file=/opt/bitnami/mariadb/logs/mysqld.log
+    long_query_time=10.0
+    
+    [client]
+    port=3306
+    socket=/opt/bitnami/mariadb/tmp/mysql.sock
+    default-character-set=UTF8
+    plugin_dir=/opt/bitnami/mariadb/plugin
+    
+    [manager]
+    port=3306
+    socket=/opt/bitnami/mariadb/tmp/mysql.sock
+    pid-file=/opt/bitnami/mariadb/tmp/mysqld.pid
+---
+# Source: jasperreports/templates/pvc.yaml
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: my-jasperreports
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: jasperreports
+    helm.sh/chart: jasperreports-14.3.4
+    app.kubernetes.io/instance: my-jasperreports
+    app.kubernetes.io/managed-by: Helm
+spec:
+  accessModes:
+    - "ReadWriteOnce"
+  resources:
+    requests:
+      storage: "8Gi"
+---
+# Source: jasperreports/charts/mariadb/templates/primary/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-jasperreports-mariadb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: mariadb
+    helm.sh/chart: mariadb-11.3.1
+    app.kubernetes.io/instance: my-jasperreports
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: primary
+  annotations:
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+    - name: mysql
+      port: 3306
+      protocol: TCP
+      targetPort: mysql
+      nodePort: null
+  selector: 
+    app.kubernetes.io/name: mariadb
+    app.kubernetes.io/instance: my-jasperreports
+    app.kubernetes.io/component: primary
+---
+# Source: jasperreports/templates/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-jasperreports
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: jasperreports
+    helm.sh/chart: jasperreports-14.3.4
+    app.kubernetes.io/instance: my-jasperreports
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: "Cluster"
+  sessionAffinity: None
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+  selector: 
+    app.kubernetes.io/name: jasperreports
+    app.kubernetes.io/instance: my-jasperreports
+---
+# Source: jasperreports/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-jasperreports
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: jasperreports
+    helm.sh/chart: jasperreports-14.3.4
+    app.kubernetes.io/instance: my-jasperreports
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: jasperreports
+      app.kubernetes.io/instance: my-jasperreports
+  strategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: jasperreports
+        helm.sh/chart: jasperreports-14.3.4
+        app.kubernetes.io/instance: my-jasperreports
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: jasperreports
+                    app.kubernetes.io/instance: my-jasperreports
+                namespaces:
+                  - "default"
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      priorityClassName: ""
+      securityContext:
+        fsGroup: 1001
+      containers:
+        - name: jasperreports
+          image: marketplace.azurecr.io/bitnami/jasperreports:8.1.0-debian-11-r9
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+          env:
+            - name: ALLOW_EMPTY_PASSWORD
+              value: "no"
+            - name: JASPERREPORTS_DATABASE_TYPE
+              value: "mariadb"
+            - name: JASPERREPORTS_DATABASE_HOST
+              value: "my-jasperreports-mariadb"
+            - name: JASPERREPORTS_DATABASE_PORT_NUMBER
+              value: "3306"
+            - name: JASPERREPORTS_DATABASE_NAME
+              value: "bitnami_jasperreports"
+            - name: JASPERREPORTS_DATABASE_USER
+              value: "bn_jasperreports"
+            - name: JASPERREPORTS_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-jasperreports-mariadb
+                  key: mariadb-password
+            - name: JASPERREPORTS_USERNAME
+              value: "jasperadmin"
+            - name: JASPERREPORTS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-jasperreports
+                  key: jasperreports-password
+            - name: JASPERREPORTS_EMAIL
+              value: "user@example.com"
+          ports:
+            - name: http
+              containerPort: 8080
+          livenessProbe:
+            httpGet:
+              path: /jasperserver/login.html
+              port: http
+            initialDelaySeconds: 450
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          readinessProbe:
+            httpGet:
+              path: /jasperserver/login.html
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          resources:
+            limits: {}
+            requests:
+              cpu: 300m
+              memory: 512Mi
+          volumeMounts:
+            - name: jasperreports-data
+              mountPath: /bitnami/jasperreports
+      volumes:
+        - name: jasperreports-data
+          persistentVolumeClaim:
+            claimName: my-jasperreports
+---
+# Source: jasperreports/charts/mariadb/templates/primary/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-jasperreports-mariadb
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: mariadb
+    helm.sh/chart: mariadb-11.3.1
+    app.kubernetes.io/instance: my-jasperreports
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: primary
+spec:
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels: 
+      app.kubernetes.io/name: mariadb
+      app.kubernetes.io/instance: my-jasperreports
+      app.kubernetes.io/component: primary
+  serviceName: my-jasperreports-mariadb
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations:
+        checksum/configuration: e4b775ef62190e6ac8bed3960926b8364a4b074ef62734e45f9764ae127e2af7
+      labels:
+        app.kubernetes.io/name: mariadb
+        helm.sh/chart: mariadb-11.3.1
+        app.kubernetes.io/instance: my-jasperreports
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/component: primary
+    spec:
+      
+      serviceAccountName: my-jasperreports-mariadb
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: mariadb
+                    app.kubernetes.io/instance: my-jasperreports
+                    app.kubernetes.io/component: primary
+                namespaces:
+                  - "default"
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+      containers:
+        - name: mariadb
+          image: marketplace.azurecr.io/bitnami/mariadb:10.6.10-debian-11-r0
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: MARIADB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-jasperreports-mariadb
+                  key: mariadb-root-password
+            - name: MARIADB_USER
+              value: "bn_jasperreports"
+            - name: MARIADB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-jasperreports-mariadb
+                  key: mariadb-password
+            - name: MARIADB_DATABASE
+              value: "bitnami_jasperreports"
+          ports:
+            - name: mysql
+              containerPort: 3306
+          livenessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 120
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+            exec:
+              command:
+                - /bin/bash
+                - -ec
+                - |
+                  password_aux="${MARIADB_ROOT_PASSWORD:-}"
+                  if [[ -f "${MARIADB_ROOT_PASSWORD_FILE:-}" ]]; then
+                      password_aux=$(cat "$MARIADB_ROOT_PASSWORD_FILE")
+                  fi
+                  mysqladmin status -uroot -p"${password_aux}"
+          readinessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+            exec:
+              command:
+                - /bin/bash
+                - -ec
+                - |
+                  password_aux="${MARIADB_ROOT_PASSWORD:-}"
+                  if [[ -f "${MARIADB_ROOT_PASSWORD_FILE:-}" ]]; then
+                      password_aux=$(cat "$MARIADB_ROOT_PASSWORD_FILE")
+                  fi
+                  mysqladmin status -uroot -p"${password_aux}"
+          resources: 
+            limits: {}
+            requests: {}
+          volumeMounts:
+            - name: data
+              mountPath: /bitnami/mariadb
+            - name: config
+              mountPath: /opt/bitnami/mariadb/conf/my.cnf
+              subPath: my.cnf
+      volumes:
+        - name: config
+          configMap:
+            name: my-jasperreports-mariadb
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels: 
+          app.kubernetes.io/name: mariadb
+          app.kubernetes.io/instance: my-jasperreports
+          app.kubernetes.io/component: primary
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "8Gi"

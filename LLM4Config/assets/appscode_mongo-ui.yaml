@@ -1,0 +1,191 @@
+---
+# Source: mongo-ui/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-mongo-ui
+  namespace: default
+  labels:
+    helm.sh/chart: mongo-ui-v2024.6.4
+    app.kubernetes.io/name: mongo-ui
+    app.kubernetes.io/instance: my-mongo-ui
+    app.kubernetes.io/version: "v2024.6.4"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: mongo-ui/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-mongo-ui
+  namespace: default
+  labels:
+    helm.sh/chart: mongo-ui-v2024.6.4
+    app.kubernetes.io/name: mongo-ui
+    app.kubernetes.io/instance: my-mongo-ui
+    app.kubernetes.io/version: "v2024.6.4"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: mongo-ui
+    app.kubernetes.io/instance: my-mongo-ui
+---
+# Source: mongo-ui/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-mongo-ui
+  namespace: default
+  labels:
+    helm.sh/chart: mongo-ui-v2024.6.4
+    app.kubernetes.io/name: mongo-ui
+    app.kubernetes.io/instance: my-mongo-ui
+    app.kubernetes.io/version: "v2024.6.4"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mongo-ui
+      app.kubernetes.io/instance: my-mongo-ui
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mongo-ui
+        app.kubernetes.io/instance: my-mongo-ui
+    spec:
+      serviceAccountName: my-mongo-ui
+      securityContext:
+        {}
+      containers:
+        - name: mongo-ui
+          securityContext:
+            {}
+          image: "ugleiton/mongo-gui:latest"
+          imagePullPolicy: Always
+          env:
+            - name: MONGO_URL
+              value: mongodb://root:***@*.*.svc:27017?retryWrites=true&w=majority
+          ports:
+            - name: http
+              containerPort: 4321
+              protocol: TCP
+          # livenessProbe:
+          #   httpGet:
+          #     path: /
+          #     port: http
+          # readinessProbe:
+          #   httpGet:
+          #     path: /
+          #     port: http
+          resources:
+            {}
+---
+# Source: mongo-ui/templates/gw.yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: my-mongo-ui
+  namespace: default
+spec:
+  gatewayClassName: ace
+  listeners:
+    - name: my-mongo-ui
+      protocol: HTTPS
+      port: 10000
+      tls:
+        certificateRefs:
+        - group: ""
+          kind: Secret
+          name: service-presets-cert
+          namespace: ace
+        mode: Terminate
+---
+# Source: mongo-ui/templates/gw.yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: my-mongo-ui
+  namespace: default
+spec:
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: my-mongo-ui
+      namespace: default
+      sectionName: my-mongo-ui
+  rules:
+    - backendRefs:
+        - group: ""
+          kind: Service
+          name: keda-add-ons-http-interceptor-proxy
+          namespace: keda
+          port: 8080
+          weight: 1
+      matches:
+        - path:
+            type: PathPrefix
+            value: /
+      filters:
+        - type: URLRewrite
+          urlRewrite:
+            hostname: "....kubedb.test"
+---
+# Source: mongo-ui/templates/keda.yaml
+kind: HTTPScaledObject
+apiVersion: http.keda.sh/v1alpha1
+metadata:
+    name: my-mongo-ui
+    namespace: default
+spec:
+    hosts:
+      - "....kubedb.test"
+    pathPrefixes:
+      - "/"
+    targetPendingRequests: 200
+    scaleTargetRef:
+        name: my-mongo-ui
+        kind: Deployment
+        apiVersion: apps/v1
+        service: my-mongo-ui
+        port: 80
+    replicas:
+        min: 0
+        max: 1
+---
+# Source: mongo-ui/templates/gw.yaml
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: dbui-cert-default
+  namespace: ace
+spec:
+  from:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    namespace: default
+  to:
+  - group: ""
+    kind: Secret
+    name: service-presets-cert
+---
+# Source: mongo-ui/templates/gw.yaml
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: dbui-httproute-default
+  namespace: keda
+spec:
+  from:
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    namespace: default
+  to:
+  - group: ""
+    kind: Service
+    name: keda-add-ons-http-interceptor-proxy

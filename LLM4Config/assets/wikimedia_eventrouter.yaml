@@ -1,0 +1,140 @@
+---
+# Source: eventrouter/templates/networkpolicy.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  labels:     
+    app: eventrouter
+    heritage: Helm
+    release: my-eventrouter
+    chart: eventrouter-0.4.4
+  name: my-eventrouter
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app: eventrouter
+      release: my-eventrouter
+  policyTypes:
+    - Ingress
+  ingress:
+    - ports:
+      - port: 8080
+        protocol: TCP
+---
+# Source: eventrouter/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:     
+    app: eventrouter
+    heritage: Helm
+    release: my-eventrouter
+    chart: eventrouter-0.4.4
+  name: my-eventrouter
+  namespace: default
+---
+# Source: eventrouter/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-eventrouter
+  labels:     
+    app: eventrouter
+    heritage: Helm
+    release: my-eventrouter
+    chart: eventrouter-0.4.4
+  namespace: default
+data:
+  config.json: |-
+    {
+      "sink": "glog",
+      "enable-prometheus": "true"
+    }
+---
+# Source: eventrouter/templates/clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:     
+    app: eventrouter
+    heritage: Helm
+    release: my-eventrouter
+    chart: eventrouter-0.4.4
+  name: my-eventrouter
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - get
+      - list
+      - watch
+---
+# Source: eventrouter/templates/clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:     
+    app: eventrouter
+    heritage: Helm
+    release: my-eventrouter
+    chart: eventrouter-0.4.4
+  name: my-eventrouter
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-eventrouter
+subjects:
+  - kind: ServiceAccount
+    name: my-eventrouter
+    namespace: default
+---
+# Source: eventrouter/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:     
+    app: eventrouter
+    heritage: Helm
+    release: my-eventrouter
+    chart: eventrouter-0.4.4
+  name: my-eventrouter
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: eventrouter
+      release: my-eventrouter
+  template:
+    metadata:
+      labels:
+        app: eventrouter
+        release: my-eventrouter
+      annotations:
+        checksum/config: ebf4d4a4ef21eba4c3dad9f43ced0435d1fe45d5c30430f61ae15b9aa0a4503c
+        prometheus.io/port: "8080"
+        prometheus.io/scrape: "true"
+    spec:
+      containers:
+      - name: eventrouter
+        image: "docker-registry.wikimedia.org/eventrouter:0.4.0-2"
+        imagePullPolicy: IfNotPresent
+        volumeMounts:
+          - name: tmp
+            mountPath: /tmp
+          - name: config-volume
+            mountPath: /etc/eventrouter
+        ports:
+          - containerPort: 8080
+        resources:
+          {}
+      serviceAccountName: my-eventrouter
+      volumes:
+        - name: config-volume
+          configMap:
+            name: my-eventrouter
+        - name: tmp
+          emptyDir: {}

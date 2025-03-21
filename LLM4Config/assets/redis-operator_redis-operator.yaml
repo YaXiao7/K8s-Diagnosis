@@ -1,0 +1,205 @@
+---
+# Source: redis-operator/templates/service-account.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-redis-operator
+  namespace: default
+  labels:
+    helm.sh/chart: redis-operator-3.3.0
+    app.kubernetes.io/name: redis-operator
+    app.kubernetes.io/instance: my-redis-operator
+    app.kubernetes.io/version: "1.3.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: redis-operator
+---
+# Source: redis-operator/templates/service-account.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-redis-operator
+  labels:
+    helm.sh/chart: redis-operator-3.3.0
+    app.kubernetes.io/name: redis-operator
+    app.kubernetes.io/instance: my-redis-operator
+    app.kubernetes.io/version: "1.3.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: redis-operator
+rules:
+  - apiGroups:
+      - databases.spotahome.com
+    resources:
+      - redisfailovers
+      - redisfailovers/finalizers
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - apiextensions.k8s.io
+    resources:
+      - customresourcedefinitions
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+    - coordination.k8s.io
+    resources:
+    - leases
+    verbs:
+    - create
+    - get
+    - list
+    - update
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+      - services
+      - endpoints
+      - events
+      - configmaps
+      - persistentvolumeclaims
+      - persistentvolumeclaims/finalizers
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+    verbs:
+      - "get"
+  - apiGroups:
+      - apps
+    resources:
+      - deployments
+      - statefulsets
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - policy
+    resources:
+      - poddisruptionbudgets
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+---
+# Source: redis-operator/templates/service-account.yaml
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: my-redis-operator
+subjects:
+  - kind: ServiceAccount
+    name: my-redis-operator
+    namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-redis-operator
+---
+# Source: redis-operator/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-redis-operator
+  namespace: default
+  labels:
+    helm.sh/chart: redis-operator-3.3.0
+    app.kubernetes.io/name: redis-operator
+    app.kubernetes.io/instance: my-redis-operator
+    app.kubernetes.io/version: "1.3.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: redis-operator
+spec:
+  type: ClusterIP
+  ports:
+    - name: metrics
+      port: 9710
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: redis-operator
+    app.kubernetes.io/instance: my-redis-operator
+---
+# Source: redis-operator/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-redis-operator
+  namespace: default
+  labels:
+    helm.sh/chart: redis-operator-3.3.0
+    app.kubernetes.io/name: redis-operator
+    app.kubernetes.io/instance: my-redis-operator
+    app.kubernetes.io/version: "1.3.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: redis-operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: redis-operator
+      app.kubernetes.io/instance: my-redis-operator
+  strategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: redis-operator
+        app.kubernetes.io/instance: my-redis-operator
+    spec:
+      serviceAccountName: my-redis-operator
+      containers:
+      - name: redis-operator
+        image: "quay.io/spotahome/redis-operator:v1.3.0"
+        imagePullPolicy: IfNotPresent
+        ports:
+          - name: metrics
+            containerPort: 9710
+            protocol: TCP
+        readinessProbe:
+          tcpSocket:
+            port: 9710
+          initialDelaySeconds: 10
+          periodSeconds: 3
+          timeoutSeconds: 3
+        livenessProbe:
+          tcpSocket:
+            port: 9710
+          initialDelaySeconds: 30
+          periodSeconds: 5
+          timeoutSeconds: 5
+          failureThreshold: 6
+          successThreshold: 1
+        securityContext:
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+        resources:
+            {}

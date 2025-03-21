@@ -1,0 +1,125 @@
+---
+# Source: popeye/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-popeye
+  labels:
+    helm.sh/chart: popeye-2.1.1
+    app.kubernetes.io/name: popeye
+    app.kubernetes.io/instance: my-popeye
+    app.kubernetes.io/version: "v0.21.3"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: popeye/templates/clusterrole.yaml
+# Popeye needs get/list access on the following Kubernetes resources.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-popeye
+rules:
+- apiGroups: [""]
+  resources:
+    - configmaps
+    - endpoints
+    - horizontalpodautoscalers
+    - namespaces
+    - nodes
+    - persistentvolumes
+    - persistentvolumeclaims
+    - pods
+    - secrets
+    - serviceaccounts
+    - services
+  verbs: ["get", "list"]
+- apiGroups: ["apps"]
+  resources:
+    - deployments
+    - statefulsets
+    - replicasets
+    - daemonsets
+  verbs: ["get", "list"]
+- apiGroups: ["rbac.authorization.k8s.io"]
+  resources:
+    - clusterroles
+    - clusterrolebindings
+    - roles
+    - rolebindings
+  verbs: ["get", "list"]
+- apiGroups: ["metrics.k8s.io"]
+  resources:
+    - pods
+    - nodes
+  verbs: ["get", "list"]
+- apiGroups: ["networking.k8s.io"]
+  resources:
+    - networkpolicies
+    - ingresses
+  verbs: ["get", "list"]
+- apiGroups: ["policy"]
+  resources:
+    - poddisruptionbudgets
+    - podsecuritypolicies
+  verbs: ["get", "list"]
+- apiGroups: ["autoscaling"]
+  resources:
+    - horizontalpodautoscalers
+  verbs: ["get", "list"]
+---
+# Source: popeye/templates/clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-popeye
+subjects:
+  - kind: ServiceAccount
+    name: my-popeye
+    namespace: default
+roleRef:
+  kind: ClusterRole
+  name: my-popeye
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: popeye/templates/cronjob.yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: my-popeye
+  labels:
+    helm.sh/chart: popeye-2.1.1
+    app.kubernetes.io/name: popeye
+    app.kubernetes.io/instance: my-popeye
+    app.kubernetes.io/version: "v0.21.3"
+    app.kubernetes.io/managed-by: Helm
+  namespace: default
+spec:
+  schedule: "* */1 * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 30
+  failedJobsHistoryLimit: 1
+  successfulJobsHistoryLimit: 1
+  jobTemplate:
+    metadata:
+      labels:
+        helm.sh/chart: popeye-2.1.1
+        app.kubernetes.io/name: popeye
+        app.kubernetes.io/instance: my-popeye
+        app.kubernetes.io/version: "v0.21.3"
+        app.kubernetes.io/managed-by: Helm
+      namespace: default
+    spec:
+      template:
+        spec:
+          serviceAccountName: my-popeye
+          restartPolicy: Never
+          containers:
+            - name: popeye
+              image: "derailed/popeye:v0.21.3"
+              imagePullPolicy: Always
+              args:
+                - --force-exit-zero=true
+                - --out=standard
+              resources:
+                limits:
+                  cpu: 1000m
+                  memory: 1000Mi

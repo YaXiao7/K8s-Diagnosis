@@ -1,0 +1,194 @@
+---
+# Source: kroki/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-kroki
+  labels:
+    helm.sh/chart: kroki-5.3.0
+    app.kubernetes.io/name: kroki
+    app.kubernetes.io/instance: my-kroki
+    app.kubernetes.io/version: "0.25.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: kroki/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-kroki
+  labels:
+    helm.sh/chart: kroki-5.3.0
+    app.kubernetes.io/name: kroki
+    app.kubernetes.io/instance: my-kroki
+    app.kubernetes.io/version: "0.25.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+    - port: 8000
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: kroki
+    app.kubernetes.io/instance: my-kroki
+---
+# Source: kroki/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-kroki
+  labels:
+    helm.sh/chart: kroki-5.3.0
+    app.kubernetes.io/name: kroki
+    app.kubernetes.io/instance: my-kroki
+    app.kubernetes.io/version: "0.25.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kroki
+      app.kubernetes.io/instance: my-kroki
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kroki
+        app.kubernetes.io/instance: my-kroki
+    spec:
+      
+      serviceAccountName: my-kroki
+      securityContext:
+        {}
+      containers:
+        - name: kroki
+          securityContext:
+            {}
+          image: docker.io/yuzutech/kroki:0.25.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 0
+            periodSeconds: 10
+            timeoutSeconds: 1
+            failureThreshold: 3
+            successThreshold: 1
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 0
+            periodSeconds: 10
+            timeoutSeconds: 1
+            failureThreshold: 3
+            successThreshold: 1
+          resources:
+            {}
+        - name: bpmn
+          securityContext:
+            {}
+          image: docker.io/yuzutech/kroki-bpmn:0.25.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8003
+              protocol: TCP
+          resources:
+            {}
+        - name: diagramsnet
+          securityContext:
+            {}
+          image: docker.io/yuzutech/kroki-diagramsnet:0.25.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8005
+              protocol: TCP
+          resources:
+            {}
+        - name: excalidraw
+          securityContext:
+            {}
+          image: docker.io/yuzutech/kroki-excalidraw:0.25.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8004
+              protocol: TCP
+          resources:
+            {}
+        - name: mermaid
+          securityContext:
+            {}
+          image: docker.io/yuzutech/kroki-mermaid:0.25.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8002
+              protocol: TCP
+          resources:
+            {}
+---
+# Source: kroki/templates/tests/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-kroki-tests
+  labels:
+    helm.sh/chart: kroki-5.3.0
+    app.kubernetes.io/name: kroki
+    app.kubernetes.io/instance: my-kroki
+    app.kubernetes.io/version: "0.25.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: tests
+  annotations:
+    helm.sh/hook: test
+data:
+  test_all.py: |
+    import requests
+
+
+    def test_service_connection():
+        url = "http://my-kroki:8000/"
+
+        response = requests.get(url)
+
+        assert response.status_code == 200
+---
+# Source: kroki/templates/tests/pod.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-kroki-tests
+  labels:
+    helm.sh/chart: kroki-5.3.0
+    app.kubernetes.io/name: kroki
+    app.kubernetes.io/instance: my-kroki
+    app.kubernetes.io/version: "0.25.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: tests
+  annotations:
+    helm.sh/hook: test
+spec:
+  
+  containers:
+    - name: tests
+      image: ghcr.io/cowboysysop/pytest:1.0.41
+      imagePullPolicy: IfNotPresent
+      volumeMounts:
+        - name: tests
+          mountPath: /tests
+          readOnly: true
+      workingDir: /tests
+  restartPolicy: Never
+  volumes:
+    - name: tests
+      configMap:
+        name: my-kroki-tests

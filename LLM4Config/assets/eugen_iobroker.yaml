@@ -1,0 +1,262 @@
+---
+# Source: iobroker/templates/common.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: my-iobroker-config
+  namespace: default
+  labels:
+    app: "iobroker-0.2.6"
+    app.kubernetes.io/instance: "my-iobroker"
+    app.kubernetes.io/managed-by: "Helm"
+    app.kubernetes.io/name: "iobroker"
+    app.kubernetes.io/version: "v9.1.2"
+    helm-revision: "1"
+    helm.sh/chart: "iobroker-0.2.6"
+    release: "my-iobroker"
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+# Source: iobroker/templates/common.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-iobroker
+  namespace: default
+  labels:
+    app: "iobroker-0.2.6"
+    app.kubernetes.io/instance: "my-iobroker"
+    app.kubernetes.io/managed-by: "Helm"
+    app.kubernetes.io/name: "iobroker"
+    app.kubernetes.io/version: "v9.1.2"
+    helm-revision: "1"
+    helm.sh/chart: "iobroker-0.2.6"
+    release: "my-iobroker"
+    service.name: "main"
+spec:
+  type: ClusterIP
+  publishNotReadyAddresses: false
+  ports:
+    - name: main
+      port: 8081
+      protocol: TCP
+      targetPort: 8081
+  selector:
+    pod.name: main
+    app.kubernetes.io/name: iobroker
+    app.kubernetes.io/instance: my-iobroker
+---
+# Source: iobroker/templates/common.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-iobroker
+  namespace: default
+  labels:
+    app: "iobroker-0.2.6"
+    app.kubernetes.io/instance: "my-iobroker"
+    app.kubernetes.io/managed-by: "Helm"
+    app.kubernetes.io/name: "iobroker"
+    app.kubernetes.io/version: "v9.1.2"
+    helm-revision: "1"
+    helm.sh/chart: "iobroker-0.2.6"
+    release: "my-iobroker"
+spec:  
+  replicas: 1
+  revisionHistoryLimit: 3
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      pod.name: main
+      app.kubernetes.io/name: iobroker
+      app.kubernetes.io/instance: my-iobroker
+  template:
+    metadata:
+      labels:
+        app: "iobroker-0.2.6"
+        app.kubernetes.io/instance: "my-iobroker"
+        app.kubernetes.io/managed-by: "Helm"
+        app.kubernetes.io/name: "iobroker"
+        app.kubernetes.io/version: "v9.1.2"
+        helm-revision: "1"
+        helm.sh/chart: "iobroker-0.2.6"
+        pod.lifecycle: "permanent"
+        pod.name: "main"
+        release: "my-iobroker"
+      annotations:
+        rollme: "ouyir"
+    spec:
+      serviceAccountName: default
+      automountServiceAccountToken: false
+      runtimeClassName: 
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      shareProcessNamespace: false
+      enableServiceLinks: false
+      restartPolicy: Always
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      topologySpreadConstraints:
+        - maxSkew: 1
+          whenUnsatisfiable: ScheduleAnyway
+          topologyKey: "kubernetes.io/hostname"
+          labelSelector:
+            matchLabels:      
+              pod.name: main
+              app.kubernetes.io/name: iobroker
+              app.kubernetes.io/instance: my-iobroker
+          nodeAffinityPolicy: Honor
+          nodeTaintsPolicy: Honor
+      dnsPolicy: ClusterFirst
+      dnsConfig:
+        options:
+          - name: ndots
+            value: "1"
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        fsGroup: 568
+        fsGroupChangePolicy: OnRootMismatch
+        supplementalGroups:
+          - 568
+        sysctls: []
+      hostUsers: true
+      containers:
+        - name: my-iobroker
+          image: ghcr.io/buanet/iobroker:v9.1.2
+          imagePullPolicy: IfNotPresent
+          tty: false
+          stdin: false
+          ports:
+            - name: main
+              containerPort: 8081
+              protocol: TCP
+              hostPort: null
+          volumeMounts:
+            - name: config
+              mountPath: /opt/iobroker
+              readOnly: false
+            - name: devshm
+              mountPath: /dev/shm
+              readOnly: false
+            - name: shared
+              mountPath: /shared
+              readOnly: false
+            - name: tmp
+              mountPath: /tmp
+              readOnly: false
+            - name: varlogs
+              mountPath: /var/logs
+              readOnly: false
+            - name: varrun
+              mountPath: /var/run
+              readOnly: false
+          livenessProbe:
+            exec:
+              command:
+                - "/bin/bash"
+                - "/opt/scripts/healthcheck.sh"
+            initialDelaySeconds: 60
+            failureThreshold: 5
+            successThreshold: 1
+            timeoutSeconds: 5
+            periodSeconds: 5
+          readinessProbe:
+            exec:
+              command:
+                - "/bin/bash"
+                - "/opt/scripts/healthcheck.sh"
+            initialDelaySeconds: 10
+            failureThreshold: 5
+            successThreshold: 2
+            timeoutSeconds: 5
+            periodSeconds: 10
+          startupProbe:
+            exec:
+              command:
+                - "/bin/bash"
+                - "/opt/scripts/healthcheck.sh"
+            initialDelaySeconds: 10
+            failureThreshold: 60
+            successThreshold: 1
+            timeoutSeconds: 2
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 10m
+              memory: 50Mi
+            limits: 
+              cpu: 4000m 
+              memory: 8Gi
+          securityContext:
+            runAsNonRoot: false
+            runAsUser: 0
+            runAsGroup: 0
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: true
+            privileged: false
+            seccompProfile:
+              type: RuntimeDefault
+            capabilities:
+              add:
+                - NET_RAW
+                - CHOWN
+                - SETUID
+                - SETGID
+                - FOWNER
+                - DAC_OVERRIDE
+              drop: []
+          env:
+            - name: "TZ"
+              value: "UTC"
+            - name: "UMASK"
+              value: "0022"
+            - name: "UMASK_SET"
+              value: "0022"
+            - name: "NVIDIA_VISIBLE_DEVICES"
+              value: "void"
+            - name: "PUID"
+              value: "568"
+            - name: "USER_ID"
+              value: "568"
+            - name: "UID"
+              value: "568"
+            - name: "PGID"
+              value: "568"
+            - name: "GROUP_ID"
+              value: "568"
+            - name: "GID"
+              value: "568"
+            - name: "DEBUG"
+              value: "false"
+            - name: "SETGID"
+              value: "568"
+            - name: "SETUID"
+              value: "568"
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: my-iobroker-config
+        - name: devshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 8Gi
+        - name: shared
+          emptyDir: {}
+        - name: tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 8Gi
+        - name: varlogs
+          emptyDir:
+            medium: Memory
+            sizeLimit: 8Gi
+        - name: varrun
+          emptyDir:
+            medium: Memory
+            sizeLimit: 8Gi

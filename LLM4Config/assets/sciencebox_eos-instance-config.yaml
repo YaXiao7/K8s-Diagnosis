@@ -1,0 +1,204 @@
+---
+# Source: eos-instance-config/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-eos-instance-config-script
+  labels:
+    helm.sh/chart: eos-instance-config-0.0.5
+    app.kubernetes.io/name: eos-instance-config
+    app.kubernetes.io/instance: my-eos-instance-config
+    app.kubernetes.io/version: "4.8.78"
+    app.kubernetes.io/managed-by: Helm
+data:
+  instance_config.sh: |
+    #!/bin/bash
+    set -x
+    alias eos='eos -r 0 0'
+    shopt -s expand_aliases
+
+    init_probe() {
+      local cmd=$@
+      local max_wait=60
+      local sleep=5
+      start_time=$(date +%s)
+      rc=-1
+      while [ $rc -ne 0 ];
+      do
+        timeout --preserve-status $sleep $cmd >/dev/null 2>&1
+        rc=$?
+
+        # Bail out after max_wait
+        tot_wait=$(($(date +%s)-start_time))
+        echo "        $tot_wait seconds... (timeout at $max_wait)"
+        if [ $tot_wait -ge $max_wait ]; then
+          echo "ERROR: cmd \`$cmd\` failed after $tot_wait secs. Giving up."
+          exit 1
+        fi
+        sleep $sleep
+      done
+    }
+
+    # Wait for the MGM to be online
+    echo "INFO: Checking the MGM is online..."
+    init_probe eos ns
+    echo "INFO: MGM is online."
+
+    # Check if a previous configuration already exists. If so, don't touch.
+    echo "INFO: Looking for previous EOS configurations..."
+    if [ $(eos config ls | grep -w 'sciencebox_bootstrap' | wc -l) -eq 1 ]; then
+      echo "  ✓ EOS configurations found. Exiting."
+      exit 0
+    fi
+    echo "  ✓ None found. Configuring..."
+
+
+    ## Space
+    echo "INFO: Configuring space..."
+    echo "INFO: Defining space spare..."
+    eos space define spare
+
+    echo "INFO: Defining space default..."
+    eos space define default 8 1
+    echo "INFO: Activating space default..."
+    eos space set default on
+
+
+    ## OAuth2
+
+
+    ## System Attributes
+    echo "INFO: Configuring system attributes..."
+    eos attr -r set sys.recycle=/eos/user/proc/recycle/ /eos
+    eos attr -r set sys.versioning=10 /eos
+    eos attr -r set sys.forced.blockchecksum=crc32c /eos
+    eos attr -r set sys.forced.blocksize=4k /eos
+    eos attr -r set sys.forced.checksum=adler /eos
+    eos attr -r set sys.forced.layout=replica /eos
+    eos attr -r set sys.forced.maxsize=10000000000 /eos
+    eos attr -r set sys.forced.nstripes=2 /eos
+    eos attr -r set sys.forced.space=default /eos
+
+
+    ## EOS root ownership and mode
+    # eos chmod 2755 /eos
+
+
+    ## Recycle bin
+    echo "INFO: Configuring recycle bin..."
+    eos recycle config --inodes 10M
+    eos recycle config --lifetime 2592000
+    eos recycle config --ratio 0.2
+    eos recycle config --size 10G
+    # eos chmod 3711 /eos/user/proc/recycle
+
+
+    ## EOS directory tree
+    echo "INFO: Configuring directory tree..."
+    eos mkdir -p /eos/user
+    #eos attr set sys.mask="700" /eos/user
+    #eos attr set sys.owner.auth="*" /eos/user
+    for letter in {a..z}
+    do
+      eos mkdir -p /eos/user/$letter
+    done
+
+
+    ## EOS demo users
+    create_eos_homedir () {
+      if [ $# -lt 3 ]; then
+        echo "ERR: Unable to create homedir: Wrong number of parameters."
+        return
+      fi
+
+      local homedir=$1
+      local uid=$2
+      local gid=$3
+
+      eos mkdir -p $homedir
+      eos chown $uid:$gid $homedir
+      eos chmod 2700 $homedir
+      eos attr set sys.acl=u:$uid:rwx $homedir
+      eos attr set sys.mask="700" $homedir
+      eos attr set sys.allow.oc.sync="1" $homedir
+      eos attr set sys.mtime.propagation="1" $homedir
+      eos attr set sys.forced.atomic="1" $homedir
+      eos attr set sys.versioning="10" $homedir
+      ###
+      # TODO: `error: you cannot set quota from storage node with 'sss' authentication!`
+      #eos quota set -u $uid -v 1T -i 1M -p /eos/user
+      ###
+      eos access allow user $uid
+      sleep 3
+    }
+
+    echo "INFO: Configuring demo users..."
+    echo "INFO:   Users in bulk..."
+    gid=100
+    uid_start=1000
+    uname_prefix=user
+    uname_initial=$(echo $uname_prefix | cut -c 1)
+    for i in $(seq 10)
+    do
+      i=$(($i-1))  # Start from 0
+      uid=$(echo $uid_start + $i | bc -l)
+      uname="$uname_prefix$i"
+      homedir=/eos/user/$uname_initial/$uname
+      create_eos_homedir $homedir $uid $gid
+    done
+
+
+    ### Save config and leave
+    echo "INFO: Saving configuration..."
+    eos config save sciencebox_bootstrap -f
+    eos config save default -f
+
+    exit 0
+---
+# Source: eos-instance-config/templates/job.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: my-eos-instance-config
+  labels:
+    helm.sh/chart: eos-instance-config-0.0.5
+    app.kubernetes.io/name: eos-instance-config
+    app.kubernetes.io/instance: my-eos-instance-config
+    app.kubernetes.io/version: "4.8.78"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  template:
+    metadata:
+      labels:
+        component: eos-mgm
+        service: eos
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: eos-instance-config
+          image: gitlab-registry.cern.ch/dss/eos/eos-all:4.8.78
+          imagePullPolicy: Always
+          command: ["/bin/bash", "/root/instance_config.sh"]
+          env:
+            - name: XrdSecPROTOCOL
+              value: sss
+            - name: XrdSecsssKT
+              value: /etc/eos.keytab
+            - name: EOS_MGM_URL
+              value: root://my-eos-instance-config-mgm-0.my-eos-instance-config-mgm.default.svc.cluster.local
+          volumeMounts:
+            - name: eos-sss-keytab
+              mountPath: /etc/eos.keytab
+              subPath: eos.keytab
+            - name: eos-instance-config-script
+              mountPath: /root/instance_config.sh
+              subPath: instance_config.sh
+      volumes:
+        - name: eos-sss-keytab
+          secret:
+            secretName: eos-sss-keytab
+            defaultMode: 0400
+        - name: eos-instance-config-script
+          configMap:
+            name: my-eos-instance-config-script
+            defaultMode: 0755

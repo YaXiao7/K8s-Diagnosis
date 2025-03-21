@@ -1,0 +1,727 @@
+---
+# Source: analytics-platform/charts/redis/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-analytics-platform-redis
+  labels:
+    app: redis
+    chart: redis-10.5.6
+    release: "my-analytics-platform"
+    heritage: "Helm"
+type: Opaque
+data:
+  redis-password: "dXFEWjJPRU9wWA=="
+---
+# Source: analytics-platform/templates/secret/elasticsearch.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-analytics-platform-elasticsearch
+  labels:
+    app.kubernetes.io/name: analytics-platform
+    helm.sh/chart: analytics-platform-0.0.14
+    app.kubernetes.io/instance: my-analytics-platform
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  uri: "ZWxhc3RpY3NlYXJjaDo5MDAw"
+---
+# Source: analytics-platform/charts/redis/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-analytics-platform-redis
+  labels:
+    app: redis
+    chart: redis-10.5.6
+    heritage: Helm
+    release: my-analytics-platform
+data:
+  redis.conf: |-
+    # User-supplied configuration:
+    # Enable AOF https://redis.io/topics/persistence#append-only-file
+    appendonly yes
+    # Disable RDB persistence, AOF persistence already enabled.
+    save ""
+  master.conf: |-
+    dir /data
+    rename-command FLUSHDB ""
+    rename-command FLUSHALL ""
+  replica.conf: |-
+    dir /data
+    slave-read-only yes
+    rename-command FLUSHDB ""
+    rename-command FLUSHALL ""
+---
+# Source: analytics-platform/charts/redis/templates/health-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-analytics-platform-redis-health
+  labels:
+    app: redis
+    chart: redis-10.5.6
+    heritage: Helm
+    release: my-analytics-platform
+data:
+  ping_readiness_local.sh: |-
+    response=$(
+      timeout -s 9 $1 \
+      redis-cli \
+        -a $REDIS_PASSWORD --no-auth-warning \
+        -h localhost \
+        -p $REDIS_PORT \
+        ping
+    )
+    if [ "$response" != "PONG" ]; then
+      echo "$response"
+      exit 1
+    fi
+  ping_liveness_local.sh: |-
+    response=$(
+      timeout -s 9 $1 \
+      redis-cli \
+        -a $REDIS_PASSWORD --no-auth-warning \
+        -h localhost \
+        -p $REDIS_PORT \
+        ping
+    )
+    if [ "$response" != "PONG" ] && [ "$response" != "LOADING Redis is loading the dataset in memory" ]; then
+      echo "$response"
+      exit 1
+    fi
+  ping_readiness_master.sh: |-
+    response=$(
+      timeout -s 9 $1 \
+      redis-cli \
+        -a $REDIS_MASTER_PASSWORD --no-auth-warning \
+        -h $REDIS_MASTER_HOST \
+        -p $REDIS_MASTER_PORT_NUMBER \
+        ping
+    )
+    if [ "$response" != "PONG" ]; then
+      echo "$response"
+      exit 1
+    fi
+  ping_liveness_master.sh: |-
+    response=$(
+      timeout -s 9 $1 \
+      redis-cli \
+        -a $REDIS_MASTER_PASSWORD --no-auth-warning \
+        -h $REDIS_MASTER_HOST \
+        -p $REDIS_MASTER_PORT_NUMBER \
+        ping
+    )
+    if [ "$response" != "PONG" ] && [ "$response" != "LOADING Redis is loading the dataset in memory" ]; then
+      echo "$response"
+      exit 1
+    fi
+  ping_readiness_local_and_master.sh: |-
+    script_dir="$(dirname "$0")"
+    exit_status=0
+    "$script_dir/ping_readiness_local.sh" $1 || exit_status=$?
+    "$script_dir/ping_readiness_master.sh" $1 || exit_status=$?
+    exit $exit_status
+  ping_liveness_local_and_master.sh: |-
+    script_dir="$(dirname "$0")"
+    exit_status=0
+    "$script_dir/ping_liveness_local.sh" $1 || exit_status=$?
+    "$script_dir/ping_liveness_master.sh" $1 || exit_status=$?
+    exit $exit_status
+---
+# Source: analytics-platform/charts/redis/templates/headless-svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-analytics-platform-redis-headless
+  labels:
+    app: redis
+    chart: redis-10.5.6
+    release: my-analytics-platform
+    heritage: Helm
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+  - name: redis
+    port: 6379
+    targetPort: redis
+  selector:
+    app: redis
+    release: my-analytics-platform
+---
+# Source: analytics-platform/charts/redis/templates/redis-master-svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-analytics-platform-redis-master
+  labels:
+    app: redis
+    chart: redis-10.5.6
+    release: my-analytics-platform
+    heritage: Helm
+spec:
+  type: ClusterIP
+  ports:
+  - name: redis
+    port: 6379
+    targetPort: redis
+  selector:
+    app: redis
+    release: my-analytics-platform
+    role: master
+---
+# Source: analytics-platform/charts/redis/templates/redis-slave-svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-analytics-platform-redis-slave
+  labels:
+    app: redis
+    chart: redis-10.5.6
+    release: my-analytics-platform
+    heritage: Helm
+spec:
+  type: ClusterIP
+  ports:
+  - name: redis
+    port: 6379
+    targetPort: redis
+  selector:
+    app: redis
+    release: my-analytics-platform
+    role: slave
+---
+# Source: analytics-platform/templates/svc/portal.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-analytics-platform-portal
+  labels:
+    app.kubernetes.io/name: analytics-platform
+    helm.sh/chart: analytics-platform-0.0.14
+    app.kubernetes.io/instance: my-analytics-platform
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8000
+      targetPort: 8000
+      protocol: TCP
+      name: portal
+  selector:
+    app.kubernetes.io/name: analytics-platform
+    app.kubernetes.io/instance: my-analytics-platform
+    app.kubernetes.io/component: portal
+---
+# Source: analytics-platform/templates/svc/worker.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-analytics-platform-worker
+  labels:
+    app.kubernetes.io/name: analytics-platform
+    helm.sh/chart: analytics-platform-0.0.14
+    app.kubernetes.io/instance: my-analytics-platform
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8001
+      targetPort: 8000
+      protocol: TCP
+      name: worker
+  selector:
+    app.kubernetes.io/name: analytics-platform
+    app.kubernetes.io/instance: my-analytics-platform
+    app.kubernetes.io/component: worker
+---
+# Source: analytics-platform/templates/deploy/portal.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-analytics-platform-portal
+  labels:
+    app.kubernetes.io/name: analytics-platform
+    helm.sh/chart: analytics-platform-0.0.14
+    app.kubernetes.io/instance: my-analytics-platform
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: analytics-platform
+      app.kubernetes.io/instance: my-analytics-platform
+      app.kubernetes.io/component: portal
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: analytics-platform
+        app.kubernetes.io/instance: my-analytics-platform
+        app.kubernetes.io/component: portal
+    spec:
+      initContainers:
+      - name: "wait-for-db"
+        image: "alpine:3.10"
+        command:
+        - 'sh'
+        - '-c'
+        - >
+          until true; do
+            sleep 2;
+          done;
+      - name: "wait-for-redis"
+        image: "alpine:3.10"
+        securityContext:
+          runAsUser: 1337
+        command:
+        - 'sh'
+        - '-c'
+        - >
+          until nc -z -w 2 my-analytics-platform-redis-master 6379 && echo database ok; do
+            sleep 2;
+          done;
+      containers:
+        - name: analytics-platform
+          image: "repo.private.example.ca/docker/analytics-platform/portal:stable"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: portal
+              containerPort: 8000
+              protocol: TCP
+          command: ["sh"]
+          args: ["-c", "python setup.py develop && daaas run --host 0.0.0.0 --port 8000"]
+          env:
+          - name: POSTGRESQL_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: "my-analytics-platform-postgresql"
+                key: postgresql-password
+          - name: PORTAL_SQLALCHEMY_DATABASE_URI
+            value: postgresql+psycopg2://webportal:$(POSTGRESQL_PASSWORD)@my-analytics-platform-postgresql:5432/webportal
+          - name: PORTAL_ES_CONNECTION
+            valueFrom:
+              secretKeyRef:
+                name: "my-analytics-platform-elasticsearch"
+                key: uri
+          - name: REDIS_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: my-analytics-platform-redis
+                key: redis-password
+          - name: PORTAL_CELERY_RESULTS_URI
+            value: "redis://:$(REDIS_PASSWORD)@my-analytics-platform-redis-master"
+          - name: PORTAL_CELERY_BROKER_URI
+            value: "redis://:$(REDIS_PASSWORD)@my-analytics-platform-redis-master"
+          # livenessProbe:
+          #   httpGet:
+          #     path: /
+          #     port: portal
+          # readinessProbe:
+          #   httpGet:
+          #     path: /
+          #     port: portal
+          resources:
+            {}
+      imagePullSecrets:
+        - name: artifactory-prod
+---
+# Source: analytics-platform/templates/deploy/worker.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-analytics-platform-worker
+  labels:
+    app.kubernetes.io/name: analytics-platform
+    helm.sh/chart: analytics-platform-0.0.14
+    app.kubernetes.io/instance: my-analytics-platform
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: analytics-platform
+      app.kubernetes.io/instance: my-analytics-platform
+      app.kubernetes.io/component: worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: analytics-platform
+        app.kubernetes.io/instance: my-analytics-platform
+        app.kubernetes.io/component: worker
+    spec:
+      initContainers:
+      - name: "wait-for-db"
+        image: "alpine:3.10"
+        command:
+        - 'sh'
+        - '-c'
+        - >
+          until true; do
+            sleep 2;
+          done;
+      - name: "wait-for-redis"
+        image: "alpine:3.10"
+        securityContext:
+          runAsUser: 1337
+        command:
+        - 'sh'
+        - '-c'
+        - >
+          until nc -z -w 2 my-analytics-platform-redis-master 6379 && echo database ok; do
+            sleep 2;
+          done;
+      containers:
+        - name: analytics-platform
+          image: "repo.private.example.ca/docker/analytics-platform/portal:stable"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: worker
+              containerPort: 8000
+              protocol: TCP
+          command: ["sh"]
+          args: ["-c", "python setup.py develop && pip install watchdog[watchmedo] && watchmedo auto-restart --directory=./ --pattern=*.py --recursive -- celery -A portal.tasks worker --concurrency=1"]
+          env:
+          - name: POSTGRESQL_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: "my-analytics-platform-postgresql"
+                key: postgresql-password
+          - name: PORTAL_SQLALCHEMY_DATABASE_URI
+            value: postgresql+psycopg2://webportal:$(POSTGRESQL_PASSWORD)@my-analytics-platform-postgresql:5432/webportal
+          - name: PORTAL_ES_CONNECTION
+            valueFrom:
+              secretKeyRef:
+                name: "my-analytics-platform-elasticsearch"
+                key: uri
+          - name: REDIS_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: my-analytics-platform-redis
+                key: redis-password
+          - name: PORTAL_CELERY_RESULTS_URI
+            value: "redis://:$(REDIS_PASSWORD)@my-analytics-platform-redis-master"
+          - name: PORTAL_CELERY_BROKER_URI
+            value: "redis://:$(REDIS_PASSWORD)@my-analytics-platform-redis-master"
+          # livenessProbe:
+          #   httpGet:
+          #     path: /
+          #     port: worker
+          # readinessProbe:
+          #   httpGet:
+          #     path: /
+          #     port: worker
+          resources:
+            {}
+      imagePullSecrets:
+        - name: artifactory-prod
+---
+# Source: analytics-platform/charts/redis/templates/redis-master-statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-analytics-platform-redis-master
+  labels:
+    app: redis
+    chart: redis-10.5.6
+    release: my-analytics-platform
+    heritage: Helm
+spec:
+  selector:
+    matchLabels:
+      app: redis
+      release: my-analytics-platform
+      role: master
+  serviceName: my-analytics-platform-redis-headless
+  template:
+    metadata:
+      labels:
+        app: redis
+        chart: redis-10.5.6
+        release: my-analytics-platform
+        role: master
+      annotations:
+        checksum/health: 58f3f88f79c9daa0cc1e8b79966c870b0304e8b35d7d1e790e9ba38141109698
+        checksum/configmap: 9a126d59d4afba23c45c7d2964dfa1757997f5bf0a2d99164ffa62437707780a
+        checksum/secret: 850cc9df0fd8d464a177426ea50af401eed863cece409dcc330c5c6bafb19af0
+    spec:      
+      securityContext:
+        fsGroup: 1001
+      serviceAccountName: "default"
+      containers:
+      - name: my-analytics-platform-redis
+        image: "docker.io/bitnami/redis:5.0.7-debian-10-r32"
+        imagePullPolicy: "IfNotPresent"
+        securityContext:
+          runAsUser: 1001
+        command:
+        - /bin/bash
+        - -c
+        - |
+          if [[ -n $REDIS_PASSWORD_FILE ]]; then
+            password_aux=`cat ${REDIS_PASSWORD_FILE}`
+            export REDIS_PASSWORD=$password_aux
+          fi
+          if [[ ! -f /opt/bitnami/redis/etc/master.conf ]];then
+            cp /opt/bitnami/redis/mounted-etc/master.conf /opt/bitnami/redis/etc/master.conf
+          fi
+          if [[ ! -f /opt/bitnami/redis/etc/redis.conf ]];then
+            cp /opt/bitnami/redis/mounted-etc/redis.conf /opt/bitnami/redis/etc/redis.conf
+          fi
+          ARGS=("--port" "${REDIS_PORT}")
+          ARGS+=("--requirepass" "${REDIS_PASSWORD}")
+          ARGS+=("--masterauth" "${REDIS_PASSWORD}")
+          ARGS+=("--include" "/opt/bitnami/redis/etc/redis.conf")
+          ARGS+=("--include" "/opt/bitnami/redis/etc/master.conf")
+          /run.sh ${ARGS[@]}
+        env:
+        - name: REDIS_REPLICATION_MODE
+          value: master
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: my-analytics-platform-redis
+              key: redis-password
+        - name: REDIS_PORT
+          value: "6379"
+        ports:
+        - name: redis
+          containerPort: 6379
+        livenessProbe:
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 5
+          exec:
+            command:
+            - sh
+            - -c
+            - /health/ping_liveness_local.sh 5
+        readinessProbe:
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 1
+          successThreshold: 1
+          failureThreshold: 5
+          exec:
+            command:
+            - sh
+            - -c
+            - /health/ping_readiness_local.sh 5
+        resources:
+          null
+        volumeMounts:
+        - name: health
+          mountPath: /health
+        - name: redis-data
+          mountPath: /data
+          subPath: 
+        - name: config
+          mountPath: /opt/bitnami/redis/mounted-etc
+        - name: redis-tmp-conf
+          mountPath: /opt/bitnami/redis/etc/
+      volumes:
+      - name: health
+        configMap:
+          name: my-analytics-platform-redis-health
+          defaultMode: 0755
+      - name: config
+        configMap:
+          name: my-analytics-platform-redis
+      - name: redis-tmp-conf
+        emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: redis-data
+        labels:
+          app: redis
+          release: my-analytics-platform
+          heritage: Helm
+          component: master
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "8Gi"
+        
+        selector:
+  updateStrategy:
+    type: RollingUpdate
+---
+# Source: analytics-platform/charts/redis/templates/redis-slave-statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-analytics-platform-redis-slave
+  labels:
+    app: redis
+    chart: redis-10.5.6
+    release: my-analytics-platform
+    heritage: Helm
+spec:
+  replicas: 2
+  serviceName: my-analytics-platform-redis-headless
+  selector:
+    matchLabels:
+      app: redis
+      release: my-analytics-platform
+      role: slave
+  template:
+    metadata:
+      labels:
+        app: redis
+        release: my-analytics-platform
+        chart: redis-10.5.6
+        role: slave
+      annotations:
+        checksum/health: 58f3f88f79c9daa0cc1e8b79966c870b0304e8b35d7d1e790e9ba38141109698
+        checksum/configmap: 9a126d59d4afba23c45c7d2964dfa1757997f5bf0a2d99164ffa62437707780a
+        checksum/secret: 7788bdd107878741197cad40758693b060ade3caed1ff7fff6eacb36b18a3a6f
+    spec:      
+      securityContext:
+        fsGroup: 1001
+      serviceAccountName: "default"
+      containers:
+      - name: my-analytics-platform-redis
+        image: docker.io/bitnami/redis:5.0.7-debian-10-r32
+        imagePullPolicy: "IfNotPresent"
+        securityContext:
+          runAsUser: 1001
+        command:
+        - /bin/bash
+        - -c
+        - |
+          if [[ -n $REDIS_PASSWORD_FILE ]]; then
+            password_aux=`cat ${REDIS_PASSWORD_FILE}`
+            export REDIS_PASSWORD=$password_aux
+          fi
+          if [[ -n $REDIS_MASTER_PASSWORD_FILE ]]; then
+            password_aux=`cat ${REDIS_MASTER_PASSWORD_FILE}`
+            export REDIS_MASTER_PASSWORD=$password_aux
+          fi
+          if [[ ! -f /opt/bitnami/redis/etc/replica.conf ]];then
+            cp /opt/bitnami/redis/mounted-etc/replica.conf /opt/bitnami/redis/etc/replica.conf
+          fi
+          if [[ ! -f /opt/bitnami/redis/etc/redis.conf ]];then
+            cp /opt/bitnami/redis/mounted-etc/redis.conf /opt/bitnami/redis/etc/redis.conf
+          fi
+          ARGS=("--port" "${REDIS_PORT}")
+          ARGS+=("--slaveof" "${REDIS_MASTER_HOST}" "${REDIS_MASTER_PORT_NUMBER}")
+          ARGS+=("--requirepass" "${REDIS_PASSWORD}")
+          ARGS+=("--masterauth" "${REDIS_MASTER_PASSWORD}")
+          ARGS+=("--include" "/opt/bitnami/redis/etc/redis.conf")
+          ARGS+=("--include" "/opt/bitnami/redis/etc/replica.conf")
+          /run.sh "${ARGS[@]}"
+        env:
+        - name: REDIS_REPLICATION_MODE
+          value: slave
+        - name: REDIS_MASTER_HOST
+          value: my-analytics-platform-redis-master-0.my-analytics-platform-redis-headless.default.svc.cluster.local
+        - name: REDIS_PORT
+          value: "6379"
+        - name: REDIS_MASTER_PORT_NUMBER
+          value: "6379"
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: my-analytics-platform-redis
+              key: redis-password
+        - name: REDIS_MASTER_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: my-analytics-platform-redis
+              key: redis-password
+        ports:
+        - name: redis
+          containerPort: 6379
+        livenessProbe:
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 5
+          exec:
+            command:
+            - sh
+            - -c
+            - /health/ping_liveness_local_and_master.sh 5
+        readinessProbe:
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 10
+          successThreshold: 1
+          failureThreshold: 5
+          exec:
+            command:
+            - sh
+            - -c
+            - /health/ping_readiness_local_and_master.sh 5
+        resources:
+          null
+        volumeMounts:
+        - name: health
+          mountPath: /health
+        - name: redis-data
+          mountPath: /data
+        - name: config
+          mountPath: /opt/bitnami/redis/mounted-etc
+        - name: redis-tmp-conf
+          mountPath: /opt/bitnami/redis/etc
+      volumes:
+      - name: health
+        configMap:
+          name: my-analytics-platform-redis-health
+          defaultMode: 0755
+      - name: config
+        configMap:
+          name: my-analytics-platform-redis
+      - name: sentinel-tmp-conf
+        emptyDir: {}
+      - name: redis-tmp-conf
+        emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: redis-data
+        labels:
+          app: redis
+          release: my-analytics-platform
+          heritage: Helm
+          component: slave
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "8Gi"
+        
+        selector:
+  updateStrategy:
+    type: RollingUpdate
+---
+# Source: analytics-platform/templates/ing/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: my-analytics-platform
+  labels:
+    app.kubernetes.io/name: analytics-platform-portal
+    helm.sh/chart: analytics-platform-0.0.14
+    app.kubernetes.io/instance: my-analytics-platform
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    kubernetes.io/ingress.class: istio
+spec:
+  rules:
+    - host: "chart-example.local"
+      http:
+        paths:
+          - path: /*
+            pathType: ImplementationSpecific
+            backend:
+              service: 
+                name: my-analytics-platform-portal
+                port:
+                  number: 8000

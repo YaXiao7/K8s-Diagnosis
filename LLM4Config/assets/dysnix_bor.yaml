@@ -1,0 +1,510 @@
+---
+# Source: bor/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-bor
+  labels:
+    helm.sh/chart: bor-0.0.8
+    app.kubernetes.io/name: bor
+    app.kubernetes.io/instance: my-bor
+    app.kubernetes.io/version: "1.3.7"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: bor/templates/configmap-scripts.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-bor-scripts
+  labels:
+    helm.sh/chart: bor-0.0.8
+    app.kubernetes.io/name: bor
+    app.kubernetes.io/instance: my-bor
+    app.kubernetes.io/version: "1.3.7"
+    app.kubernetes.io/managed-by: Helm
+data:
+  readiness.sh: |-
+    #!/usr/bin/env sh
+    # shellcheck disable=SC3040
+    
+    # Node is ready when the latest block is fresh enough.
+    # We are checking the timestamp of the latest block and compare it to current local time.
+    
+    set -e
+    
+    HTTP_PORT="8545"
+    AGE_THRESHOLD=$1
+    
+    if [ -z "$AGE_THRESHOLD" ]; then
+        echo "Usage: $0 <block age threshold>"; exit 1
+    fi
+    
+    # expected output format: 0x65cb8ca8
+    get_block_timestamp() {
+        wget "http://localhost:$HTTP_PORT" -qO- \
+            --header 'Content-Type: application/json' \
+            --post-data '{"jsonrpc":"2.0","method":"eth_getBlockByNumber","params":["latest", false],"id":1}' \
+        | sed -r 's/.*"timestamp":"([^"]+)".*/\1/g'
+    }
+    
+    # using $(()) converts hex string to number
+    block_timestamp=$(($(get_block_timestamp)))
+    current_timestamp=$(date +%s)
+    
+    if ! echo "$block_timestamp" | grep -qE '^[0-9]+$'; then
+        echo "Error reading block timestamp"; exit 1
+    fi
+    
+    age=$((current_timestamp - block_timestamp))
+    
+    if [ $age -le $AGE_THRESHOLD ]; then
+        exit 0
+    else
+        echo "Latest block is $age seconds old. Threshold is $AGE_THRESHOLD seconds" && exit 1
+    fi
+  liveness.sh: |-
+    #!/usr/bin/env sh
+    # shellcheck disable=SC3040
+    
+    # Node is alive when new blocks are being imported.
+    # We are checking the age when last block import event occured.
+    
+    set -e
+    
+    AGE_THRESHOLD=$1
+    STATE_FILE=${2:-"/data/saved_block_number.txt"}
+    HTTP_PORT="8545"
+    
+    if [ -z "${AGE_THRESHOLD}" ] || [ -z "${STATE_FILE}" ]; then
+        echo "Usage: $0 <last block import age threshold> [state file]" 1>&2; exit 1
+    fi
+    
+    
+    # expected output format: 0x50938d
+    get_block_number() {
+        wget "http://localhost:$HTTP_PORT" -qO- \
+            --header 'Content-Type: application/json' \
+            --post-data '{"jsonrpc":"2.0","method":"eth_blockNumber","id":1}' \
+        | sed -r 's/.*"result":"([^"]+)".*/\1/g'
+    }
+    
+    # using $(()) converts hex string to number
+    block_number=$(($(get_block_number)))
+    saved_block_number=""
+    
+    if ! echo "$block_number" | grep -qE '^[0-9]+$'; then
+        echo "Error reading block number"; exit 1
+    fi
+    
+    if [ -f "${STATE_FILE}" ]; then
+        saved_block_number=$(cat "${STATE_FILE}")
+    fi
+    
+    if [ "${block_number}" != "${saved_block_number}" ]; then
+      mkdir -p "$(dirname "${STATE_FILE}")"
+      echo "${block_number}" > "${STATE_FILE}"
+    fi
+    
+    current_timestamp=$(date +%s)
+    last_import_timestamp=$(date -r "${STATE_FILE}" +%s)
+    
+    age=$((current_timestamp - last_import_timestamp))
+    
+    if [ $age -lt $AGE_THRESHOLD ]; then
+        exit 0
+    else
+        echo "Last block import event was $age seconds ago. Threshold is $AGE_THRESHOLD seconds"; exit 1
+    fi
+  download-snapshot.sh: |-
+    #!/bin/sh
+    
+    set -e
+    
+    if [ ! -f /data/.downloaded ]; then
+      apt-get -y update && apt-get -y install wget
+      wget -qO download.sh https://snapshot-download.polygon.technology/snapdown.sh
+      sed -i 's/sudo//g' download.sh
+      chmod +x download.sh
+    
+      ./download.sh --network mainnet --client bor --extract-dir /data/bor/chaindata --validate-checksum true
+      touch /data/.downloaded
+    else
+      echo "Initial snapshot already downloaded, skipping."
+    fi
+---
+# Source: bor/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-bor-config
+  labels:
+    helm.sh/chart: bor-0.0.8
+    app.kubernetes.io/name: bor
+    app.kubernetes.io/instance: my-bor
+    app.kubernetes.io/version: "1.3.7"
+    app.kubernetes.io/managed-by: Helm
+data:
+  config.toml: |-    
+    ancient = ""
+    "bor.logs" = false
+    chain = "mainnet"
+    datadir = "/data"
+    devfakeauthor = false
+    ethstats = ""
+    gcmode = "full"
+    identity = "my-bor"
+    keystore = ""
+    "rpc.batchlimit" = 100
+    "rpc.returndatalimit" = 100000
+    snapshot = true
+    syncmode = "full"
+    verbosity = 3
+    vmdebug = false
+    
+    [accounts]
+    allow-insecure-unlock = false
+    disable-bor-wallet = true
+    lightkdf = false
+    password = ""
+    unlock = []
+    
+    [cache]
+    cache = 1024
+    database = 50
+    fdlimit = 0
+    gc = 25
+    journal = "triecache"
+    noprefetch = false
+    preimages = false
+    rejournal = "1h0m0s"
+    snapshot = 10
+    timeout = "1h0m0s"
+    trie = 15
+    triesinmemory = 128
+    txlookuplimit = 2350000
+    
+    [developer]
+    dev = false
+    gaslimit = 11500000
+    period = 0
+    
+    ["eth.requiredblocks"]
+    
+    [gpo]
+    blocks = 20
+    ignoreprice = "2"
+    maxblockhistory = 1024
+    maxheaderhistory = 1024
+    maxprice = "5000000000000"
+    percentile = 60
+    
+    [grpc]
+    addr = ":3131"
+    
+    [heimdall]
+    "bor.runheimdall" = false
+    "bor.runheimdallargs" = ""
+    "bor.useheimdallapp" = false
+    "bor.without" = false
+    grpc-address = ""
+    url = "http://heimdall-rest:1317"
+    
+    [jsonrpc]
+    allow-unprotected-txs = false
+    evmtimeout = "5s"
+    gascap = 50000000
+    ipcdisable = false
+    ipcpath = ""
+    txfeecap = 5
+    
+    [jsonrpc.auth]
+    addr = "0.0.0.0"
+    jwtsecret = "/secrets/jwt.hex"
+    port = 8551
+    vhosts = ["*"]
+    
+    [jsonrpc.http]
+    api = ["eth", "net", "web3"]
+    corsdomain = ["*"]
+    enabled = true
+    ep-requesttimeout = "0s"
+    ep-size = 40
+    host = "0.0.0.0"
+    port = 8545
+    prefix = ""
+    vhosts = ["*"]
+    
+    [jsonrpc.timeouts]
+    idle = "2m0s"
+    read = "10s"
+    write = "30s"
+    
+    [jsonrpc.ws]
+    api = ["eth", "net", "web3"]
+    enabled = false
+    ep-requesttimeout = "0s"
+    ep-size = 40
+    host = "0.0.0.0"
+    origins = ["*"]
+    port = 8546
+    prefix = ""
+    
+    [log]
+    backtrace = ""
+    debug = false
+    json = false
+    vmodule = ""
+    
+    [miner]
+    commitinterrupt = true
+    etherbase = ""
+    extradata = ""
+    gaslimit = 30000000
+    gasprice = "1000000000"
+    mine = false
+    recommit = "2m5s"
+    
+    [p2p]
+    bind = "0.0.0.0"
+    maxpeers = 50
+    maxpendpeers = 50
+    nat = "any"
+    netrestrict = ""
+    nodekey = ""
+    nodekeyhex = ""
+    nodiscover = false
+    port = 30303
+    txarrivalwait = "500ms"
+    
+    [p2p.discovery]
+    bootnodes = ["enode://b8f1cc9c5d4403703fbf377116469667d2b1823c0daf16b7250aa576bacf399e42c3930ccfcb02c5df6879565a2b8931335565f0e8d3f8e72385ecf4a4bf160a@3.36.224.80:30303", "enode://8729e0c825f3d9cad382555f3e46dcff21af323e89025a0e6312df541f4a9e73abfa562d64906f5e59c51fe6f0501b3e61b07979606c56329c020ed739910759@54.194.245.5:30303", "enode://76316d1cb93c8ed407d3332d595233401250d48f8fbb1d9c65bd18c0495eca1b43ec38ee0ea1c257c0abb7d1f25d649d359cdfe5a805842159cfe36c5f66b7e8@52.78.36.216:30303", "enode://681ebac58d8dd2d8a6eef15329dfbad0ab960561524cf2dfde40ad646736fe5c244020f20b87e7c1520820bc625cfb487dd71d63a3a3bf0baea2dbb8ec7c79f1@34.240.245.39:30303"]
+    bootnodesv4 = []
+    bootnodesv5 = []
+    dns = []
+    static-nodes = []
+    trusted-nodes = []
+    v5disc = false
+    
+    [parallelevm]
+    enable = true
+    procs = 8
+    
+    [pprof]
+    addr = "0.0.0.0"
+    blockprofilerate = 0
+    memprofilerate = 524288
+    port = 6060
+    pprof = false
+    
+    [telemetry]
+    expensive = false
+    metrics = false
+    opencollector-endpoint = ""
+    prometheus-addr = "0.0.0.0:7071"
+    
+    [telemetry.influx]
+    bucket = ""
+    database = ""
+    endpoint = ""
+    influxdb = false
+    influxdbv2 = false
+    organization = ""
+    password = ""
+    token = ""
+    username = ""
+    
+    [txpool]
+    accountqueue = 16
+    accountslots = 16
+    globalqueue = 32768
+    globalslots = 32768
+    journal = "transactions.rlp"
+    lifetime = "3h0m0s"
+    locals = []
+    nolocals = false
+    pricebump = 10
+    pricelimit = 1
+    rejournal = "1h0m0s"
+---
+# Source: bor/templates/service-heimdall.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-bor-heimdall
+  labels:
+    service-type: heimdall
+    helm.sh/chart: bor-0.0.8
+    app.kubernetes.io/name: bor
+    app.kubernetes.io/instance: my-bor
+    app.kubernetes.io/version: "1.3.7"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  publishNotReadyAddresses: true
+  ports:
+    - name: http
+      port: 8545
+      targetPort: http
+  selector:
+    app.kubernetes.io/name: bor
+    app.kubernetes.io/instance: my-bor
+---
+# Source: bor/templates/service-p2p-disc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-bor-p2p-discovery
+  labels:
+    service-type: p2p-discovery
+    helm.sh/chart: bor-0.0.8
+    app.kubernetes.io/name: bor
+    app.kubernetes.io/instance: my-bor
+    app.kubernetes.io/version: "1.3.7"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: NodePort
+  publishNotReadyAddresses: true
+  ports:
+    - name: p2p-discovery
+      port: 30303
+      targetPort: p2p-discovery
+      protocol: UDP
+  selector:
+    app.kubernetes.io/name: bor
+    app.kubernetes.io/instance: my-bor
+---
+# Source: bor/templates/service-p2p.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-bor-p2p
+  labels:
+    service-type: p2p
+    helm.sh/chart: bor-0.0.8
+    app.kubernetes.io/name: bor
+    app.kubernetes.io/instance: my-bor
+    app.kubernetes.io/version: "1.3.7"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: NodePort
+  publishNotReadyAddresses: true
+  ports:
+    - name: p2p
+      port: 30303
+      targetPort: p2p
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: bor
+    app.kubernetes.io/instance: my-bor
+---
+# Source: bor/templates/service-rpc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-bor-rpc
+  labels:
+    service-type: rpc
+    helm.sh/chart: bor-0.0.8
+    app.kubernetes.io/name: bor
+    app.kubernetes.io/instance: my-bor
+    app.kubernetes.io/version: "1.3.7"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8545
+      targetPort: http
+  selector:
+    app.kubernetes.io/name: bor
+    app.kubernetes.io/instance: my-bor
+---
+# Source: bor/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-bor
+  labels:
+    helm.sh/chart: bor-0.0.8
+    app.kubernetes.io/name: bor
+    app.kubernetes.io/instance: my-bor
+    app.kubernetes.io/version: "1.3.7"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  serviceName: bor
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: bor
+      app.kubernetes.io/instance: my-bor
+  template:
+    metadata:
+      annotations:
+        checksum/config: 5c03ea9e01fc02435aab30c289dbdfdb6d40ae39bf6e9b467c0318f503ae934a
+        checksum/scripts: 5535284c3a11a8eaf7faa62408042f57af28480ba9d8427082e0c74ef2ef7eed
+      labels:
+        app.kubernetes.io/name: bor
+        app.kubernetes.io/instance: my-bor
+    spec:
+      enableServiceLinks: false
+      terminationGracePeriodSeconds: 300
+      serviceAccountName: my-bor
+      initContainers:
+      - name: download-genesis
+        image: "0xpolygon/bor:1.3.7"
+        imagePullPolicy: "IfNotPresent"
+        command:
+        - sh
+        - -ce
+        - >
+          wget -O /data/genesis.json
+          https://raw.githubusercontent.com/maticnetwork/bor/master/builder/files/genesis-mainnet-v1.json
+        volumeMounts:
+        - name: data
+          mountPath: /data
+      containers:
+      - name: bor
+        image: "0xpolygon/bor:1.3.7"
+        imagePullPolicy: "IfNotPresent" 
+        args:
+          - server
+          - --config
+          - /config/config.toml
+        ports:
+          - name: http
+            containerPort: 8545
+          - name: p2p
+            containerPort: 30303
+            protocol: TCP
+          - name: p2p-discovery
+            containerPort: 30303
+            protocol: UDP
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        - name: config
+          mountPath: /config
+        - name: scripts
+          mountPath: /scripts
+        resources:
+          {}
+      volumes:
+        - name: scripts
+          configMap:
+            name: my-bor-scripts
+        - name: config
+          configMap:
+            name: my-bor-config
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+      labels:
+        app.kubernetes.io/name: bor
+        app.kubernetes.io/instance: my-bor
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: "4Ti"

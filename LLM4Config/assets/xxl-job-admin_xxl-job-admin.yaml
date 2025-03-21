@@ -1,0 +1,271 @@
+---
+# Source: xxl-job-admin/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-xxl-job-admin
+  labels:
+    helm.sh/chart: xxl-job-admin-1.1.3
+    app.kubernetes.io/name: xxl-job-admin
+    app.kubernetes.io/instance: my-xxl-job-admin
+    app: xxl-job-admin
+    version: 2.4.0
+    app.kubernetes.io/version: "2.4.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: xxl-job-admin/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-xxl-job-admin-creds
+  labels:
+    helm.sh/chart: xxl-job-admin-1.1.3
+    app.kubernetes.io/name: xxl-job-admin
+    app.kubernetes.io/instance: my-xxl-job-admin
+    app: xxl-job-admin
+    version: 2.4.0
+    app.kubernetes.io/version: "2.4.0"
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  mysql.url: "eHhsLWpvYi1hZG1pbi5zcHJpbmcuZGF0YXNvdXJjZS51cmw="
+  mysql.user: "eHhsLWpvYg=="
+  mysql.password: "cGFzc3dvcmRfc3RyaW5n"
+  mysql.database: "eHhsX2pvYg=="
+---
+# Source: xxl-job-admin/templates/config.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-xxl-job-admin-config
+  labels:
+    helm.sh/chart: xxl-job-admin-1.1.3
+    app.kubernetes.io/name: xxl-job-admin
+    app.kubernetes.io/instance: my-xxl-job-admin
+    app: xxl-job-admin
+    version: 2.4.0
+    app.kubernetes.io/version: "2.4.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+  application.yaml: |
+    management:
+      health:
+        mail:
+          enabled: false
+      server:
+        servlet:
+          context-path: /actuator
+    mybatis:
+      mapper-locations: classpath:/mybatis-mapper/*Mapper.xml
+    server:
+      port: 8080
+      servlet:
+        context-path: /xxl-job-admin
+    spring:
+      datasource:
+        driver-class-name: com.mysql.cj.jdbc.Driver
+        hikari:
+          auto-commit: true
+          connection-test-query: SELECT 1
+          connection-timeout: 10000
+          idle-timeout: 30000
+          max-lifetime: 900000
+          maximum-pool-size: 30
+          minimum-idle: 10
+          pool-name: HikariCP
+          validation-timeout: 1000
+        password: ${mysql.password}
+        type: com.zaxxer.hikari.HikariDataSource
+        url: jdbc:mysql://${mysql.url}/${mysql.database}?useUnicode=true&characterEncoding=UTF-8&autoReconnect=true&serverTimezone=UTC
+        username: ${mysql.user}
+      freemarker:
+        charset: UTF-8
+        request-context-attribute: request
+        settings:
+          number_format: 0.##########
+        suffix: .ftl
+        templateLoaderPath: classpath:/templates/
+      mail:
+        from: null
+        host: null
+        password: null
+        port: null
+        properties:
+          mail:
+            smtp:
+              auth: true
+              socketFactory:
+                class: javax.net.ssl.SSLSocketFactory
+              starttls:
+                enable: true
+                required: true
+        username: null
+      mvc:
+        servlet:
+          load-on-startup: 0
+        static-path-pattern: /static/**
+      resources:
+        static-locations: classpath:/static/
+    xxl:
+      job:
+        accessToken: default_token_dev
+        i18n: zh_CN
+        logretentiondays: 10
+        triggerpool:
+          fast:
+            max: 200
+          slow:
+            max: 100
+---
+# Source: xxl-job-admin/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-xxl-job-admin
+  labels:
+    helm.sh/chart: xxl-job-admin-1.1.3
+    app.kubernetes.io/name: xxl-job-admin
+    app.kubernetes.io/instance: my-xxl-job-admin
+    app: xxl-job-admin
+    version: 2.4.0
+    app.kubernetes.io/version: "2.4.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: xxl-job-admin
+    app.kubernetes.io/instance: my-xxl-job-admin
+    app: xxl-job-admin
+    version: 2.4.0
+---
+# Source: xxl-job-admin/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-xxl-job-admin
+  labels:
+    helm.sh/chart: xxl-job-admin-1.1.3
+    app.kubernetes.io/name: xxl-job-admin
+    app.kubernetes.io/instance: my-xxl-job-admin
+    app: xxl-job-admin
+    version: 2.4.0
+    app.kubernetes.io/version: "2.4.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: xxl-job-admin
+      app.kubernetes.io/instance: my-xxl-job-admin
+      app: xxl-job-admin
+      version: 2.4.0
+  template:
+    metadata:
+      annotations:
+        checksum/secret-sha: 009afaba88f0c5f1c1b8972536d7ac8da61905c2ad325e3e3b08dfc0fc3b4977
+        checksum/config-sha: c214ba0e5bd12c700e6b2b14c83d09cc6b39ca782a30791c5a1887fa340a63e9
+      labels:
+        app.kubernetes.io/name: xxl-job-admin
+        app.kubernetes.io/instance: my-xxl-job-admin
+        app: xxl-job-admin
+        version: 2.4.0
+    spec:
+      volumes:
+        - name: config
+          configMap:
+            name: my-xxl-job-admin-config
+        - name: creds
+          secret:
+            secretName: my-xxl-job-admin-creds
+        - name: timezone-conf
+          emptyDir: { }
+      serviceAccountName: my-xxl-job-admin
+      securityContext:
+        {}
+      initContainers:
+        - name: change-timezone
+          image: "xuxueli/xxl-job-admin:2.4.0"
+          imagePullPolicy: IfNotPresent
+          command:
+            - "cp"
+            - "-rf"
+            - "/usr/share/zoneinfo/Asia/Shanghai"
+            - "/etc/localtime"
+          volumeMounts:
+            - mountPath: /etc
+              subPath: timezone
+              name: timezone-conf
+      containers:
+        - name: xxl-job-admin
+          securityContext:
+            {}
+          image: "xuxueli/xxl-job-admin:2.4.0"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: SPRING_CONFIG_IMPORT
+              value: optional:configtree:/var/run/secrets/spring/
+            - name: PARAMS
+              value: --spring.datasource.url=jdbc:mysql://x.x.x.x:3306/xxl_job?useUnicode=true&characterEncoding=UTF-8&autoReconnect=true&serverTimezone=UTC --spring.datasource.username=xxl-job --spring.datasource.password=password_string
+            - name: TZ
+              value: Asia/Shanghai
+          volumeMounts:
+            - name: config
+              mountPath: /config
+            - name: creds
+              mountPath: /var/run/secrets/spring/
+            - name: timezone-conf
+              mountPath: /etc
+              subPath: timezone
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /xxl-job-admin/actuator/health/liveness
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /xxl-job-admin/actuator/health/readiness
+              port: http
+          startupProbe:
+            httpGet:
+              port: http
+              path: /xxl-job-admin/actuator/health/liveness
+            initialDelaySeconds: 15
+            failureThreshold: 30
+          resources:
+            limits:
+              cpu: 1500m
+              memory: 1024Mi
+            requests:
+              cpu: 500m
+              memory: 512Mi
+---
+# Source: xxl-job-admin/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-xxl-job-admin-test-connection"
+  labels:
+    helm.sh/chart: xxl-job-admin-1.1.3
+    app.kubernetes.io/name: xxl-job-admin
+    app.kubernetes.io/instance: my-xxl-job-admin
+    app: xxl-job-admin
+    version: 2.4.0
+    app.kubernetes.io/version: "2.4.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-xxl-job-admin:8080']
+  restartPolicy: Never

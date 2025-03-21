@@ -1,0 +1,133 @@
+---
+# Source: akhq/templates/networkpolicy.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: my-akhq
+  labels:
+    app.kubernetes.io/name: akhq
+    helm.sh/chart: akhq-0.25.1
+    app.kubernetes.io/instance: my-akhq
+    app.kubernetes.io/managed-by: Helm
+spec:
+  policyTypes:
+    - Ingress
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: akhq
+      app.kubernetes.io/instance: my-akhq
+  ingress:
+  - ports:
+    - port: http
+    - port: management
+---
+# Source: akhq/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-akhq
+  labels:
+    app.kubernetes.io/name: akhq
+    helm.sh/chart: akhq-0.25.1
+    app.kubernetes.io/instance: my-akhq
+    app.kubernetes.io/managed-by: Helm
+data:
+  application.yml: |
+    akhq:
+      server:
+        access-log:
+          enabled: false
+          name: org.akhq.log.access
+---
+# Source: akhq/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-akhq
+  labels:
+    app.kubernetes.io/name: akhq
+    helm.sh/chart: akhq-0.25.1
+    app.kubernetes.io/instance: my-akhq
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+    - port: 28081
+      targetPort: management
+      protocol: TCP
+      name: management
+  selector:
+    app.kubernetes.io/name: akhq
+    app.kubernetes.io/instance: my-akhq
+---
+# Source: akhq/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-akhq
+  labels:
+    app.kubernetes.io/name: akhq
+    helm.sh/chart: akhq-0.25.1
+    app.kubernetes.io/instance: my-akhq
+    app.kubernetes.io/managed-by: Helm
+spec:
+  revisionHistoryLimit: 10
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: akhq
+      app.kubernetes.io/instance: my-akhq
+  template:
+    metadata:
+      annotations:
+        checksum/config: 1c617dad0f2265dcbd7ad9f51dda954af21557f56df5f954a52b27211d56a5fd
+      labels:
+        app.kubernetes.io/name: akhq
+        app.kubernetes.io/instance: my-akhq
+    spec:
+      serviceAccountName: default
+      containers:
+        - name: akhq
+          image: "tchiotludo/akhq:0.25.1"
+          imagePullPolicy: Always
+          env:
+          volumeMounts:
+            - name: config
+              mountPath: /app/application.yml
+              subPath: application.yml
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: management
+              containerPort: 28081
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: management
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: management
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 3
+          resources:
+            {}
+      volumes:
+      - name: config
+        configMap:
+          name: my-akhq

@@ -1,0 +1,80 @@
+---
+# Source: postfixadmin/templates/postfixadmin/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-postfixadmin
+type: Opaque
+stringData:
+  
+  POSTFIXADMIN_SETUP_PASSWORD: "\"FHKFU9tcQWhuI1IEqmD8vd7t3a3NKrN1GJSo61XcYozVaVlu\""
+---
+# Source: postfixadmin/templates/postfixadmin/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-postfixadmin
+  labels:
+    helm.sh/chart: postfixadmin-0.3.1
+    app.kubernetes.io/name: postfixadmin
+    app.kubernetes.io/instance: my-postfixadmin
+    app.kubernetes.io/version: "3.3.13"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: postfixadmin
+    app.kubernetes.io/instance: my-postfixadmin
+---
+# Source: postfixadmin/templates/postfixadmin/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-postfixadmin
+  labels:
+    helm.sh/chart: postfixadmin-0.3.1
+    app.kubernetes.io/name: postfixadmin
+    app.kubernetes.io/instance: my-postfixadmin
+    app.kubernetes.io/version: "3.3.13"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postfixadmin
+      app.kubernetes.io/instance: my-postfixadmin
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: postfixadmin
+        app.kubernetes.io/instance: my-postfixadmin
+    spec:
+      securityContext:
+        {}
+      containers:
+        - name: postfixadmin
+          envFrom:
+          - secretRef:
+              name: my-postfixadmin
+          securityContext:
+            {}
+          image: "docker.io/volkerraschek/postfixadmin:3.3.13"
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /login.php
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /login.php
+              port: http
+          resources:
+            {}

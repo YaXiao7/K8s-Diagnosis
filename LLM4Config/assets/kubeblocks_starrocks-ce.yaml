@@ -1,0 +1,487 @@
+---
+# Source: starrocks-ce/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: starrocks-ce-fe-cm
+  namespace: default
+  labels:
+    helm.sh/chart: starrocks-ce-0.9.0
+    app.kubernetes.io/name: starrocks-ce
+    app.kubernetes.io/instance: my-starrocks-ce
+    app.kubernetes.io/version: "3.3.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+  fe.conf: |
+    LOG_DIR = ${STARROCKS_HOME}/log
+    DATE = "$(date +%Y%m%d-%H%M%S)"
+    JAVA_OPTS="-Dlog4j2.formatMsgNoLookups=true -Xmx8192m -XX:+UseMembar -XX:SurvivorRatio=8 -XX:MaxTenuringThreshold=7 -XX:+PrintGCDateStamps -XX:+PrintGCDetails -XX:+UseConcMarkSweepGC -XX:+UseParNewGC -XX:+CMSClassUnloadingEnabled -XX:-CMSParallelRemarkEnabled -XX:CMSInitiatingOccupancyFraction=80 -XX:SoftRefLRUPolicyMSPerMB=0 -Xloggc:${LOG_DIR}/fe.gc.log.$DATE"
+    JAVA_OPTS_FOR_JDK_9="-Dlog4j2.formatMsgNoLookups=true -Xmx8192m -XX:SurvivorRatio=8 -XX:MaxTenuringThreshold=7 -XX:+CMSClassUnloadingEnabled -XX:-CMSParallelRemarkEnabled -XX:CMSInitiatingOccupancyFraction=80 -XX:SoftRefLRUPolicyMSPerMB=0 -Xlog:gc*:${LOG_DIR}/fe.gc.log.$DATE:time"
+    http_port = 8030
+    rpc_port = 9020
+    query_port = 9030
+    edit_log_port = 9010
+    mysql_service_nio_enabled = true
+    sys_log_level = INFO
+---
+# Source: starrocks-ce/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: starrocks-ce-be-cm
+  namespace: default
+  labels:
+    helm.sh/chart: starrocks-ce-0.9.0
+    app.kubernetes.io/name: starrocks-ce
+    app.kubernetes.io/instance: my-starrocks-ce
+    app.kubernetes.io/version: "3.3.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+  be.conf: |
+    be_port = 9060
+    webserver_port = 8040
+    heartbeat_service_port = 9050
+    brpc_port = 8060
+    sys_log_level = INFO
+    default_rowset_type = beta
+    starlet_use_star_cache = true
+---
+# Source: starrocks-ce/templates/scripts.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: starrocks-ce-scripts
+  labels:
+    helm.sh/chart: starrocks-ce-0.9.0
+    app.kubernetes.io/name: starrocks-ce
+    app.kubernetes.io/instance: my-starrocks-ce
+    app.kubernetes.io/version: "3.3.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+  fe-post-start.sh: |-
+    #!/usr/bin/env bash
+    
+    idx=${KB_POD_NAME##*-}
+    if [ $idx -ne 0 ]; then
+        exit 0
+    fi
+    
+    while true; do
+      # we don't use `select 1` here, because the starrocks will return the following error:
+      # ERROR 1064 (HY000) at line 1: Backend node not found. Check if any backend node is down.backend
+      mysql --connect-timeout=1 -h127.0.0.1 -uroot -P9030 -p${STARROCKS_PASSWORD} -e "show databases"
+      if [ $? == 0 ]; then
+        break
+      fi
+      MYSQL_PWD="" mysql --connect-timeout=1 -h127.0.0.1 -uroot -P9030 -e "SET PASSWORD = PASSWORD('${STARROCKS_PASSWORD}')"
+      sleep 1
+    done
+---
+# Source: starrocks-ce/templates/clusterdefinition.yaml
+apiVersion: apps.kubeblocks.io/v1alpha1
+kind: ClusterDefinition
+metadata:
+  name: starrocks-ce
+  labels:
+    helm.sh/chart: starrocks-ce-0.9.0
+    app.kubernetes.io/name: starrocks-ce
+    app.kubernetes.io/instance: my-starrocks-ce
+    app.kubernetes.io/version: "3.3.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  topologies:
+  - name: shared-nothing
+    components:
+    - name: fe
+      compDef: starrocks-ce-fe
+    - name: be
+      compDef: starrocks-ce-be
+    orders:
+      provision:
+      - fe
+      - be
+      terminate:
+      - be
+      - fe
+---
+# Source: starrocks-ce/templates/componentdefinition-be.yaml
+apiVersion: apps.kubeblocks.io/v1alpha1
+kind: ComponentDefinition
+metadata:
+  name: starrocks-ce-be
+  labels:
+    helm.sh/chart: starrocks-ce-0.9.0
+    app.kubernetes.io/name: starrocks-ce
+    app.kubernetes.io/instance: my-starrocks-ce
+    app.kubernetes.io/version: "3.3.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  provider: kubeblocks
+  description: A StarRocks BE component definition for Kubernetes
+  serviceKind: starrocks-be
+  updateStrategy: BestEffortParallel
+  services:
+  - name: be
+    serviceName: be
+    spec:
+      ipFamilyPolicy: PreferDualStack
+      ipFamilies:
+        - IPv4
+      ports:
+      - name: be-http
+        port: 8040
+        targetPort: http-port
+      - name: proxy-http
+        port: 8080
+        targetPort: proxy-port
+  configs:
+  - name: be-cm
+    templateRef: starrocks-ce-be-cm
+    namespace: default
+    volumeName: be-cm
+  volumes:
+  - name: data
+    needSnapshot: true
+  vars:
+  - name: FE_DISCOVERY_SERVICE_NAME
+    valueFrom:
+      serviceVarRef:
+        compDef: starrocks-ce-fe
+        name: fe
+        host: Required
+  - name: MYSQL_PWD
+    valueFrom:
+      credentialVarRef:
+        compDef: starrocks-ce-fe
+        name: root
+        optional: false
+        password: Required
+  runtime:
+    containers:
+    - name: be
+      imagePullPolicy: IfNotPresent
+      command:
+      - bash
+      - -c
+      - |
+        /opt/starrocks/be_entrypoint.sh ${FE_DISCOVERY_SERVICE_NAME}
+      env:
+      - name: HOST_TYPE
+        value: FQDN
+      - name: TZ
+        value: Asia/Shanghai
+      - name: POD_NAME
+        valueFrom:
+          fieldRef:
+            apiVersion: v1
+            fieldPath: metadata.name
+      - name: POD_IP
+        valueFrom:
+          fieldRef:
+            apiVersion: v1
+            fieldPath: status.podIP
+      - name: HOST_IP
+        valueFrom:
+          fieldRef:
+            apiVersion: v1
+            fieldPath: status.hostIP
+      - name: POD_NAMESPACE
+        valueFrom:
+          fieldRef:
+            apiVersion: v1
+            fieldPath: metadata.namespace
+      - name: COMPONENT_NAME
+        value: be
+      - name: FE_QUERY_PORT
+        value: "9030"
+      - name: CONFIGMAP_MOUNT_PATH
+        value: /etc/starrocks/be/conf
+      - name: SERVICE_PORT
+        value: "8040"
+      lifecycle:
+        preStop:
+          exec:
+            command:
+            - /opt/starrocks/be_prestop.sh
+      ports:
+      - containerPort: 9060
+        name: rpc-port
+        protocol: TCP
+      - containerPort: 8040
+        name: http-port
+        protocol: TCP
+      - containerPort: 9050
+        name: heartbeat-port
+        protocol: TCP
+      - containerPort: 8060
+        name: brpc-port
+        protocol: TCP
+      - containerPort: 9070
+        name: starlet-port
+        protocol: TCP
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: false
+      livenessProbe:
+        failureThreshold: 3
+        httpGet:
+          path: /api/health
+          port: 8040
+          scheme: HTTP
+        periodSeconds: 5
+        successThreshold: 1
+        timeoutSeconds: 1
+      readinessProbe:
+        failureThreshold: 3
+        httpGet:
+          path: /api/health
+          port: 8040
+          scheme: HTTP
+        periodSeconds: 5
+        successThreshold: 1
+        timeoutSeconds: 1
+      startupProbe:
+        failureThreshold: 60
+        httpGet:
+          path: /api/health
+          port: 8040
+          scheme: HTTP
+        periodSeconds: 5
+        successThreshold: 1
+        timeoutSeconds: 1
+      volumeMounts:
+      - mountPath: /opt/starrocks/be/conf/be.conf
+        name: be-cm
+        subPath: be.conf
+      - mountPath: /opt/starrocks/be/storage
+        name: data
+      - mountPath: /opt/starrocks/be/log
+        name: log
+    volumes:
+    - name: log
+      emptyDir: {}
+---
+# Source: starrocks-ce/templates/componentdefinition-fe.yaml
+apiVersion: apps.kubeblocks.io/v1alpha1
+kind: ComponentDefinition
+metadata:
+  name: starrocks-ce-fe
+  labels:
+    
+    helm.sh/chart: starrocks-ce-0.9.0
+    app.kubernetes.io/name: starrocks-ce
+    app.kubernetes.io/instance: my-starrocks-ce
+    app.kubernetes.io/version: "3.3.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  provider: kubeblocks
+  description: A StarRocks FE component definition for Kubernetes
+  # The FE can only perform leader election when the majority of members are active.
+  updateStrategy: Parallel
+  serviceKind: starrocks-fe
+  services:
+  - name: fe
+    serviceName: fe
+    spec:
+      ipFamilies:
+      - IPv4
+      ipFamilyPolicy: PreferDualStack
+      ports:
+      - name: fe-http
+        port: 8030
+        targetPort: http-port
+      - name: fe-mysql
+        port: 9030
+        targetPort: query-port
+  scripts:
+  - name: scripts
+    templateRef: starrocks-ce-scripts
+    namespace: default
+    volumeName: scripts
+    defaultMode: 0555
+  volumes:
+  - name: data
+    needSnapshot: true
+  systemAccounts:
+  - name: root
+    initAccount: true
+    passwordGenerationPolicy:
+      length: 10
+      numDigits: 5
+      numSymbols: 0
+      letterCase: MixedCases
+  configs:
+    - name: fe-cm
+      templateRef: starrocks-ce-fe-cm
+      namespace: default
+      volumeName: fe-cm
+  vars:
+  - name: FE_DISCOVERY_SERVICE_NAME
+    valueFrom:
+      serviceVarRef:
+        compDef: starrocks-ce-fe
+        name: fe
+        host: Required
+  - name: STARROCKS_USER
+    valueFrom:
+      credentialVarRef:
+        compDef: starrocks-ce-fe
+        name: root
+        optional: false
+        username: Required
+  - name: STARROCKS_PASSWORD
+    valueFrom:
+      credentialVarRef:
+        compDef: starrocks-ce-fe
+        name: root
+        optional: false
+        password: Required
+  - name: MYSQL_PWD
+    valueFrom:
+      credentialVarRef:
+        compDef: starrocks-ce-fe
+        name: root
+        optional: false
+        password: Required
+  runtime:
+    containers:
+    - name: fe
+      imagePullPolicy: IfNotPresent
+      command:
+      - bash
+      - -c
+      - |
+        /opt/starrocks/fe_entrypoint.sh ${FE_DISCOVERY_SERVICE_NAME}
+      ports:
+      - containerPort: 8030
+        name: http-port
+        protocol: TCP
+      - containerPort: 9020
+        name: rpc-port
+        protocol: TCP
+      - containerPort: 9030
+        name: query-port
+        protocol: TCP
+      - containerPort: 9010
+        name: edit-log-port
+        protocol: TCP
+      env:
+      - name: HOST_TYPE
+        value: FQDN
+      - name: TZ
+        value: Asia/Shanghai
+      - name: POD_NAME
+        valueFrom:
+          fieldRef:
+            apiVersion: v1
+            fieldPath: metadata.name
+      - name: POD_IP
+        valueFrom:
+          fieldRef:
+            apiVersion: v1
+            fieldPath: status.podIP
+      - name: HOST_IP
+        valueFrom:
+          fieldRef:
+            apiVersion: v1
+            fieldPath: status.hostIP
+      - name: POD_NAMESPACE
+        valueFrom:
+          fieldRef:
+            apiVersion: v1
+            fieldPath: metadata.namespace
+      - name: COMPONENT_NAME
+        value: fe
+      - name: CONFIGMAP_MOUNT_PATH
+        value: /etc/starrocks/fe/conf
+      - name: SERVICE_PORT
+        value: "8030"
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: false
+      livenessProbe:
+        failureThreshold: 3
+        httpGet:
+          path: /api/health
+          port: 8030
+          scheme: HTTP
+        periodSeconds: 5
+        successThreshold: 1
+        timeoutSeconds: 1
+      readinessProbe:
+        failureThreshold: 3
+        httpGet:
+          path: /api/health
+          port: 8030
+          scheme: HTTP
+        periodSeconds: 5
+        successThreshold: 1
+        timeoutSeconds: 1
+      startupProbe:
+        failureThreshold: 60
+        httpGet:
+          path: /api/health
+          port: 8030
+          scheme: HTTP
+        periodSeconds: 5
+        successThreshold: 1
+        timeoutSeconds: 1
+      lifecycle:
+        postStart:
+          exec:
+            command: ["/bin/sh", "-c", "/scripts/fe-post-start.sh"]
+        preStop:
+          exec:
+            command:
+            - /opt/starrocks/fe_prestop.sh
+      volumeMounts:
+      - mountPath: /opt/starrocks/fe/meta
+        name: data
+      - mountPath: /opt/starrocks/fe/conf
+        name: fe-cm
+      - mountPath: /scripts
+        name: scripts
+---
+# Source: starrocks-ce/templates/componentversion-be.yaml
+apiVersion: apps.kubeblocks.io/v1alpha1
+kind: ComponentVersion
+metadata:
+  name: starrocks-ce-be
+spec:
+  compatibilityRules:
+  - compDefs:
+    - starrocks-ce-be
+    releases:
+    - 3.2.2
+    - 3.3.0
+  releases:
+  - name: 3.2.2
+    serviceVersion: 3.2.2
+    images:
+      be: docker.io/apecloud/be-ubuntu:3.2.2
+  - name: 3.3.0
+    serviceVersion: 3.3.0
+    images:
+      be: docker.io/apecloud/be-ubuntu:3.3.0
+---
+# Source: starrocks-ce/templates/componentversion-fe.yaml
+apiVersion: apps.kubeblocks.io/v1alpha1
+kind: ComponentVersion
+metadata:
+  name: starrocks-ce-fe
+spec:
+  compatibilityRules:
+  - compDefs:
+    - starrocks-ce-fe
+    releases:
+    - 3.2.2
+    - 3.3.0
+  releases:
+  - name: 3.2.2
+    serviceVersion: 3.2.2
+    images:
+      fe: docker.io/apecloud/fe-ubuntu:3.2.2
+  - name: 3.3.0
+    serviceVersion: 3.3.0
+    images:
+      fe: docker.io/apecloud/fe-ubuntu:3.3.0

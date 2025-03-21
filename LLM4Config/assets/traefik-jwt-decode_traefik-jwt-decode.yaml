@@ -1,0 +1,100 @@
+---
+# Source: traefik-jwt-decode/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-traefik-jwt-decode
+  labels:
+    helm.sh/chart: traefik-jwt-decode-0.1.0
+    app.kubernetes.io/name: traefik-jwt-decode
+    app.kubernetes.io/instance: my-traefik-jwt-decode
+    app.kubernetes.io/managed-by: Helm
+data:
+  config.json:   |
+    {}
+---
+# Source: traefik-jwt-decode/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-traefik-jwt-decode
+  labels:
+    helm.sh/chart: traefik-jwt-decode-0.1.0
+    app.kubernetes.io/name: traefik-jwt-decode
+    app.kubernetes.io/instance: my-traefik-jwt-decode
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: traefik-jwt-decode
+    app.kubernetes.io/instance: my-traefik-jwt-decode
+---
+# Source: traefik-jwt-decode/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-traefik-jwt-decode
+  labels:
+    helm.sh/chart: traefik-jwt-decode-0.1.0
+    app.kubernetes.io/name: traefik-jwt-decode
+    app.kubernetes.io/instance: my-traefik-jwt-decode
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: traefik-jwt-decode
+      app.kubernetes.io/instance: my-traefik-jwt-decode
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: traefik-jwt-decode
+        app.kubernetes.io/instance: my-traefik-jwt-decode
+    spec:
+      volumes:
+        - name: claim-mappings
+          configMap:
+            name: my-traefik-jwt-decode
+      containers:
+        - name: traefik-jwt-decode
+          image: "simonschneider/traefik-jwt-decode:latest"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+            {}
+          env:
+          - name: AUTH_HEADER_KEY
+            value: "Authorization"
+          - name: CACHE_ENABLED
+            value: "true"
+          - name: CLAIM_MAPPING_FILE_PATH
+            value: "/claim-mappings/config.json"
+          - name: LOG_LEVEL
+            value: "info"
+          - name: LOG_TYPE
+            value: "json"
+          - name: MAX_CACHE_KEYS
+            value: "10000"
+          - name: PORT
+            value: "8080"
+          - name: TOKEN_VALIDATED_HEADER_KEY
+            value: "jwt-token-validated"
+          volumeMounts:
+            - name: claim-mappings
+              mountPath: /claim-mappings

@@ -1,0 +1,201 @@
+---
+# Source: first-mate/templates/rbac.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-first-mate
+  labels:
+    helm.sh/chart: first-mate-1.0.5
+    app.kubernetes.io/name: first-mate
+    app.kubernetes.io/instance: my-first-mate
+    app.kubernetes.io/version: "1.0.5"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: first-mate/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: my-first-mate-cluster
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - namespaces
+    verbs:
+      - list
+  - apiGroups:
+      - apps
+    resources:
+      - daemonsets
+      - deployments
+      - statefulsets
+    verbs:
+      - get
+      - list
+      - patch
+---
+# Source: first-mate/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: my-first-mate-cluster
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: my-first-mate-cluster
+subjects:
+  - kind: ServiceAccount
+    name: my-first-mate
+    namespace: default
+---
+# Source: first-mate/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: my-first-mate
+rules:
+  - apiGroups:
+      - apps
+    resources:
+      - daemonsets
+      - deployments
+      - statefulsets
+    verbs:
+      - get
+      - list
+      - patch
+---
+# Source: first-mate/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: my-first-mate
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: my-first-mate
+subjects:
+  - kind: ServiceAccount
+    name: my-first-mate
+    namespace: default
+---
+# Source: first-mate/templates/first-mate-job.yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: my-first-mate
+  labels:
+    helm.sh/chart: first-mate-1.0.5
+    app.kubernetes.io/name: first-mate
+    app.kubernetes.io/instance: my-first-mate
+    app.kubernetes.io/version: "1.0.5"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  jobTemplate:
+    metadata:
+      name: my-first-mate
+    spec:
+      template:
+        metadata:
+        spec:
+          serviceAccountName: my-first-mate
+          securityContext:
+            {}
+          containers:
+            - name: first-mate
+              securityContext:
+                capabilities:
+                  drop:
+                  - ALL
+                readOnlyRootFilesystem: true
+                runAsNonRoot: true
+                runAsUser: 100
+              image: "docker.io/chriswells0/first-mate:1.0.5"
+              imagePullPolicy: IfNotPresent
+              resources:
+                {}
+              command:
+                - sh
+                - -c
+                - |
+                  #!/bin/sh
+
+                  splitContainerNameAndImage() {
+                    CONTAINER=$(echo $1 | sed 's/"//g')
+                    IMAGE=$(echo "$2" | sed 's/"//g' | sed -E 's/:.+//')
+                    IMAGE_LABEL=$(echo "$2" | sed 's/"//g' | sed -E 's/[^:]+://')
+                  }
+                  NAMESPACES="$(kubectl get namespaces -o json | jq '.items[] | .metadata.name' | sed 's/"//g')"
+                  echo "NAMESPACES:
+                  ${NAMESPACES}"
+
+                  for NAMESPACE in ${NAMESPACES}; do
+                    echo "
+                  NAMESPACE: ${NAMESPACE}"
+                    if [ "${NAMESPACE}" = "kube-node-lease" ]; then
+                      echo "Ignoring namespace: ${NAMESPACE}"
+                      continue
+                    fi
+                    if [ "${NAMESPACE}" = "kube-public" ]; then
+                      echo "Ignoring namespace: ${NAMESPACE}"
+                      continue
+                    fi
+                    if [ "${NAMESPACE}" = "kube-system" ]; then
+                      echo "Ignoring namespace: ${NAMESPACE}"
+                      continue
+                    fi
+                    if [ "${NAMESPACE}" = "kubernetes-dashboard" ]; then
+                      echo "Ignoring namespace: ${NAMESPACE}"
+                      continue
+                    fi
+
+                    CONTROLLERS=$(kubectl -n ${NAMESPACE} get daemonsets,deployments,statefulsets -o json | jq '.items[] | "\(.kind)/\(.metadata.name)"' | sed 's/"//g')
+                    echo "CONTROLLERS:
+                  ${CONTROLLERS}"
+                    for CONTROLLER in ${CONTROLLERS}; do
+                      echo "
+                  Controller: ${CONTROLLER}"
+                      CONTAINER_NAMES_IMAGES=$(kubectl -n ${NAMESPACE} get ${CONTROLLER} -o json | jq '.spec.template.spec.containers[] | "\(.name) \(.image)"')
+                      for CONTAINER_NAME_IMAGE in "${CONTAINER_NAMES_IMAGES}"; do
+                        # echo "CONTAINER_NAME_IMAGE: ${CONTAINER_NAME_IMAGE}"
+                        splitContainerNameAndImage ${CONTAINER_NAME_IMAGE}
+                        echo "Container: ${CONTAINER}"
+                        echo "Image: ${IMAGE}"
+                        echo "Label: ${IMAGE_LABEL}"
+                        if [ "${IMAGE_LABEL}" = "latest" ]; then
+                          echo "Skipping ignored version: latest"
+                          continue
+                        fi
+                        IMAGE_MAJOR=$(echo ${IMAGE_LABEL} | grep -Eo '^[^.]+')
+
+                        UPDATED=false
+                        LATEST_TAGS=$(curl -s https://hub.docker.com/v2/repositories/${IMAGE}/tags?page_size=25 | jq '.results | map(select((.name | test("^[0-9.]+$")) and (.images[].architecture == "amd64")))[] | .name' | sed 's/"//g')
+                        for TAG in ${LATEST_TAGS}; do
+                          if [ "${IMAGE_LABEL}" = "${TAG}" ]; then
+                            echo "Label and tag are the same: ${TAG}"
+                            continue
+                          elif [ "${TAG}" = "latest" ]; then
+                            echo "Skipping ignored version: latest"
+                            continue
+                          fi
+                          TAG_MAJOR=$(echo ${TAG} | grep -Eo '^[^.]+')
+                          if [ "${IMAGE_MAJOR}" = "${TAG_MAJOR}" ]; then # Only update within the same major version.
+                            if [ $(/semver.sh ${IMAGE_LABEL} ${TAG}) = "-1" ]; then
+                              echo "Update: ${TAG}"
+                              kubectl -n ${NAMESPACE} set image ${CONTROLLER} ${CONTAINER}=${IMAGE}:${TAG}
+                              UPDATED=true
+                              break
+                            fi
+                          fi
+                        done
+                        if [ "$UPDATED" = 'false' ]; then
+                          echo 'No update found: already at the latest version.'
+                        fi
+                      done
+                    done
+                  done
+
+                  exit 0
+
+          restartPolicy: Never
+  schedule: "0 * * * *"

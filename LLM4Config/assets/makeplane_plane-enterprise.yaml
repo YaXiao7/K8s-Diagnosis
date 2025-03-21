@@ -1,0 +1,809 @@
+---
+# Source: plane-enterprise/templates/service-account.yaml
+apiVersion: v1
+automountServiceAccountToken: true
+kind: ServiceAccount
+metadata:
+  namespace: default
+  name: my-plane-enterprise-srv-account
+imagePullSecrets:
+  - name: my-plane-enterprise-docker-registry-credentials
+---
+# Source: plane-enterprise/templates/config-secrets/app-env.yaml
+apiVersion: v1
+kind: Secret
+type: Opaque
+metadata:
+  namespace: default
+  name: my-plane-enterprise-app-secrets
+data:
+  SECRET_KEY: "NjBncDBieWZ6MmR2ZmZhNDVjeGwyMHAxc2N5OXhicGY2ZDhjNXkwZ2VlamdreXAxYjU="
+---
+# Source: plane-enterprise/templates/config-secrets/doc-strore.yaml
+apiVersion: v1
+kind: Secret
+type: Opaque
+metadata:
+  namespace: default
+  name: my-plane-enterprise-doc-store-secrets
+data:
+  
+  MINIO_ROOT_PASSWORD: "cGFzc3dvcmQ="
+  AWS_SECRET_ACCESS_KEY: "cGFzc3dvcmQ="
+---
+# Source: plane-enterprise/templates/config-secrets/docker-registry.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  namespace: default
+  name: my-plane-enterprise-docker-registry-credentials
+data:
+  .dockerconfigjson: eyJhdXRocyI6eyJyZWdpc3RyeS5wbGFuZS50b29scyI6eyJ1c2VybmFtZSI6IiIsInBhc3N3b3JkIjoiIn19fQ==
+type: kubernetes.io/dockerconfigjson
+---
+# Source: plane-enterprise/templates/config-secrets/pgdb.yaml
+apiVersion: v1
+kind: Secret
+type: Opaque
+metadata:
+  namespace: default
+  name: my-plane-enterprise-pgdb-secrets
+data:
+  POSTGRES_PASSWORD: "cGxhbmU="
+---
+# Source: plane-enterprise/templates/config-secrets/app-env.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: default
+  name: my-plane-enterprise-app-vars
+data:
+    PRIME_HOST: "https://prime.plane.so"
+    LICENSE_KEY: ""
+    MACHINE_SIGNATURE: "ebdc3760675f27117df46ab7374560fa55c88905f882d448a53be5149918b048"
+    LICENSE_DOMAIN: "plane.example.com"
+    LICENSE_VERSION: "v1.2.1"
+    DEPLOY_PLATFORM: "KUBERNETES"
+
+    SENTRY_DSN: ""
+    SENTRY_ENVIRONMENT: ""
+    DEBUG: "0"
+    DOCKERIZED: "1"
+    GUNICORN_WORKERS: "1"
+
+    WEB_URL: "http://plane.example.com"
+    CORS_ALLOWED_ORIGINS: "http://plane.example.com,https://plane.example.com"
+    REDIS_URL: "redis://my-plane-enterprise-redis.default.svc.cluster.local:6379/"
+
+    
+    DATABASE_URL: "postgresql://plane:plane@my-plane-enterprise-pgdb.default.svc.cluster.local/plane"
+---
+# Source: plane-enterprise/templates/config-secrets/doc-strore.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: default
+  name: my-plane-enterprise-doc-store-vars
+data:
+  FILE_SIZE_LIMIT: "5242880"
+  AWS_S3_BUCKET_NAME: "uploads"
+  MINIO_ROOT_USER: "admin"
+  AWS_ACCESS_KEY_ID: "admin"
+  AWS_S3_ENDPOINT_URL: http://my-plane-enterprise-minio.default.svc.cluster.local:9000
+  USE_MINIO: "1"
+---
+# Source: plane-enterprise/templates/config-secrets/pgdb.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: default
+  name: my-plane-enterprise-pgdb-vars
+data:
+  POSTGRES_DB: "plane"
+  POSTGRES_USER: "plane"
+---
+# Source: plane-enterprise/templates/workloads/admin.deployment.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: default
+  name: my-plane-enterprise-admin
+  labels:
+    app.name: default-my-plane-enterprise-admin
+spec:
+  clusterIP: None
+  ports:
+  - name: admin-3000
+    port: 3000
+    protocol: TCP
+    targetPort: 3000
+  selector:
+    app.name: default-my-plane-enterprise-admin
+---
+# Source: plane-enterprise/templates/workloads/api.deployment.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: default
+  name: my-plane-enterprise-api
+  labels:
+    app.name: default-my-plane-enterprise-api
+spec:
+  clusterIP: None
+  ports:
+  - name: api-8000
+    port: 8000
+    protocol: TCP
+    targetPort: 8000
+  selector:
+    app.name: default-my-plane-enterprise-api
+---
+# Source: plane-enterprise/templates/workloads/minio.stateful.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: default
+  name: my-plane-enterprise-minio
+  labels:
+    app.name: default-my-plane-enterprise-minio
+spec:
+  clusterIP: None
+  ports:
+  - name: minio-api-9000
+    port: 9000
+    protocol: TCP
+    targetPort: 9000
+  - name: minio-console-9090
+    port: 9090
+    protocol: TCP
+    targetPort: 9090
+  selector:
+    app.name: default-my-plane-enterprise-minio
+---
+# Source: plane-enterprise/templates/workloads/postgres.stateful.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: default
+  name: my-plane-enterprise-pgdb
+  labels:
+    app.name: default-my-plane-enterprise-pgdb
+spec:
+  clusterIP: None
+  ports:
+  - name: pg-5432
+    port: 5432
+    protocol: TCP
+    targetPort: 5432
+  selector:
+    app.name: default-my-plane-enterprise-pgdb
+---
+# Source: plane-enterprise/templates/workloads/redis.stateful.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: default
+  name: my-plane-enterprise-redis
+  labels:
+    app.name: default-my-plane-enterprise-redis
+spec:
+  clusterIP: None
+  ports:
+  - name: redis-6379
+    port: 6379
+    protocol: TCP
+    targetPort: 6379
+  selector:
+    app.name: default-my-plane-enterprise-redis
+---
+# Source: plane-enterprise/templates/workloads/space.deployment.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: default
+  name: my-plane-enterprise-space
+  labels:
+    app.name: default-my-plane-enterprise-space
+spec:
+  clusterIP: None
+  ports:
+  - name: space-3000
+    port: 3000
+    protocol: TCP
+    targetPort: 3000
+  selector:
+    app.name: default-my-plane-enterprise-space
+---
+# Source: plane-enterprise/templates/workloads/web.deployment.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: default
+  name: my-plane-enterprise-web
+  labels:
+    app.name: default-my-plane-enterprise-web
+spec:
+  clusterIP: None
+  ports:
+  - name: web-3000
+    port: 3000
+    protocol: TCP
+    targetPort: 3000
+  selector:
+    app.name: default-my-plane-enterprise-web
+---
+# Source: plane-enterprise/templates/workloads/admin.deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: default
+  name: my-plane-enterprise-admin-wl
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.name: default-my-plane-enterprise-admin
+  template:
+    metadata:
+      namespace: default
+      labels:
+        app.name: default-my-plane-enterprise-admin
+      annotations:
+        timestamp: "2024-09-16 18:07:23.195515354 +0930 ACST m=+1.594363189"
+    spec:
+      containers:
+      - name: my-plane-enterprise-admin
+        imagePullPolicy: Always
+        image: registry.plane.tools/plane/admin-enterprise:v1.2.1
+        stdin: true
+        tty: true
+        resources:
+          requests:
+            memory: "50Mi"
+            cpu: "50m"
+          limits:
+            memory: "1000Mi"
+            cpu: "500m"
+        command:
+          - node
+        args:
+          - admin/server.js
+          - admin
+      serviceAccount: my-plane-enterprise-srv-account
+      serviceAccountName: my-plane-enterprise-srv-account
+---
+# Source: plane-enterprise/templates/workloads/api.deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: default
+  name: my-plane-enterprise-api-wl
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.name: default-my-plane-enterprise-api
+  template:
+    metadata:
+      namespace: default
+      labels:
+        app.name: default-my-plane-enterprise-api
+      annotations:
+        timestamp: "2024-09-16 18:07:23.195496364 +0930 ACST m=+1.594344189"
+    spec:
+      containers:
+      - name: my-plane-enterprise-api
+        imagePullPolicy: Always
+        image: registry.plane.tools/plane/backend-enterprise:v1.2.1
+        stdin: true
+        tty: true
+        resources:
+          requests:
+            memory: "50Mi"
+            cpu: "50m"
+          limits:
+            memory: "1000Mi"
+            cpu: "500m"
+        command:
+          - ./bin/docker-entrypoint-api-ee.sh
+        envFrom:
+          - configMapRef:
+              name: my-plane-enterprise-app-vars
+              optional: false
+          - secretRef:
+              name: my-plane-enterprise-app-secrets
+              optional: false
+          - configMapRef:
+              name: my-plane-enterprise-doc-store-vars
+              optional: false
+          - secretRef:
+              name: my-plane-enterprise-doc-store-secrets
+              optional: false
+        readinessProbe:
+          failureThreshold: 30
+          httpGet:
+            path: /
+            port: 8000
+            scheme: HTTP
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 1
+
+      serviceAccount: my-plane-enterprise-srv-account
+      serviceAccountName: my-plane-enterprise-srv-account
+---
+# Source: plane-enterprise/templates/workloads/beat-worker.deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: default
+  name: my-plane-enterprise-beat-worker-wl
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.name: default-my-plane-enterprise-beat-worker
+  template:
+    metadata:
+      namespace: default
+      labels:
+        app.name: default-my-plane-enterprise-beat-worker
+      annotations:
+        timestamp: "2024-09-16 18:07:23.195476025 +0930 ACST m=+1.594323850"
+    spec:
+      containers:
+      - name: my-plane-enterprise-beat-worker
+        imagePullPolicy: Always
+        image: registry.plane.tools/plane/backend-enterprise:v1.2.1
+        stdin: true
+        tty: true
+        resources:
+          requests:
+            memory: "50Mi"
+            cpu: "50m"
+          limits:
+            memory: "1000Mi"
+            cpu: "500m"
+        command:
+          - ./bin/docker-entrypoint-beat.sh
+        envFrom:
+          - configMapRef:
+              name: my-plane-enterprise-app-vars
+              optional: false
+          - secretRef:
+              name: my-plane-enterprise-app-secrets
+              optional: false
+          - configMapRef:
+              name: my-plane-enterprise-doc-store-vars
+              optional: false
+          - secretRef:
+              name: my-plane-enterprise-doc-store-secrets
+              optional: false
+
+      serviceAccount: my-plane-enterprise-srv-account
+      serviceAccountName: my-plane-enterprise-srv-account
+---
+# Source: plane-enterprise/templates/workloads/space.deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: default
+  name: my-plane-enterprise-space-wl
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.name: default-my-plane-enterprise-space
+  template:
+    metadata:
+      namespace: default
+      labels:
+        app.name: default-my-plane-enterprise-space
+      annotations:
+        timestamp: "2024-09-16 18:07:23.195390456 +0930 ACST m=+1.594238281"
+    spec:
+      containers:
+      - name: my-plane-enterprise-space
+        imagePullPolicy: Always
+        image: registry.plane.tools/plane/space-enterprise:v1.2.1
+        stdin: true
+        tty: true
+        resources:
+          requests:
+            memory: "50Mi"
+            cpu: "50m"
+          limits:
+            memory: "1000Mi"
+            cpu: "500m"
+        command:
+          - node
+        args:
+          - space/server.js
+          - space
+      serviceAccount: my-plane-enterprise-srv-account
+      serviceAccountName: my-plane-enterprise-srv-account
+---
+# Source: plane-enterprise/templates/workloads/web.deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: default
+  name: my-plane-enterprise-web-wl
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.name: default-my-plane-enterprise-web
+  template:
+    metadata:
+      namespace: default
+      labels:
+        app.name: default-my-plane-enterprise-web
+      annotations:
+        timestamp: "2024-09-16 18:07:23.195369396 +0930 ACST m=+1.594217221"
+    spec:
+      containers:
+      - name: my-plane-enterprise-web
+        imagePullPolicy: Always
+        image: registry.plane.tools/plane/web-enterprise:v1.2.1
+        stdin: true
+        tty: true
+        resources:
+          requests:
+            memory: "50Mi"
+            cpu: "50m"
+          limits:
+            memory: "1000Mi"
+            cpu: "500m"
+        command:
+          - node
+        args:
+          - web/server.js
+          - web
+      serviceAccount: my-plane-enterprise-srv-account
+      serviceAccountName: my-plane-enterprise-srv-account
+---
+# Source: plane-enterprise/templates/workloads/worker.deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: default
+  name: my-plane-enterprise-worker-wl
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.name: default-my-plane-enterprise-worker
+  template:
+    metadata:
+      namespace: default
+      labels:
+        app.name: default-my-plane-enterprise-worker
+      annotations:
+        timestamp: "2024-09-16 18:07:23.195317057 +0930 ACST m=+1.594164902"
+    spec:
+      containers:
+      - name: my-plane-enterprise-worker
+        imagePullPolicy: Always
+        image: registry.plane.tools/plane/backend-enterprise:v1.2.1
+        stdin: true
+        tty: true
+        resources:
+          requests:
+            memory: "50Mi"
+            cpu: "50m"
+          limits:
+            memory: "1000Mi"
+            cpu: "500m"
+        command:
+          - ./bin/docker-entrypoint-worker.sh
+        envFrom:
+          - configMapRef:
+              name: my-plane-enterprise-app-vars
+              optional: false
+          - secretRef:
+              name: my-plane-enterprise-app-secrets
+              optional: false
+          - configMapRef:
+              name: my-plane-enterprise-doc-store-vars
+              optional: false
+          - secretRef:
+              name: my-plane-enterprise-doc-store-secrets
+              optional: false
+
+      serviceAccount: my-plane-enterprise-srv-account
+      serviceAccountName: my-plane-enterprise-srv-account
+---
+# Source: plane-enterprise/templates/workloads/minio.stateful.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  namespace: default
+  name: my-plane-enterprise-minio-wl
+spec:
+  selector:
+    matchLabels:
+      app.name: default-my-plane-enterprise-minio
+  serviceName:  my-plane-enterprise-minio
+  template:
+    metadata:
+      labels:
+        app.name: default-my-plane-enterprise-minio
+    spec:
+      containers:
+      - image: registry.plane.tools/plane/minio:latest
+        imagePullPolicy: Always
+        name: my-plane-enterprise-minio
+        stdin: true
+        tty: true
+        # command:
+        args:
+          - server
+          - /data
+          - --console-address 
+          - :9090
+        envFrom:
+          - configMapRef:
+              name: my-plane-enterprise-doc-store-vars
+              optional: false
+          - secretRef:
+              name: my-plane-enterprise-doc-store-secrets
+              optional: false
+        volumeMounts:
+        - mountPath: /data
+          name: pvc-my-plane-enterprise-minio-vol
+          subPath: ''
+      serviceAccount: my-plane-enterprise-srv-account
+      serviceAccountName: my-plane-enterprise-srv-account
+  volumeClaimTemplates:
+  - apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      creationTimestamp: null
+      namespace: default
+      name: pvc-my-plane-enterprise-minio-vol
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: "3Gi"
+      storageClassName: "longhorn"
+      volumeMode: Filesystem
+---
+# Source: plane-enterprise/templates/workloads/postgres.stateful.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  namespace: default
+  name: my-plane-enterprise-pgdb-wl
+spec:
+  selector:
+    matchLabels:
+      app.name: default-my-plane-enterprise-pgdb
+  serviceName:  my-plane-enterprise-pgdb
+  template:
+    metadata:
+      labels:
+        app.name: default-my-plane-enterprise-pgdb
+    spec:
+      containers:
+      - image: registry.plane.tools/plane/postgres:15.5-alpine
+        imagePullPolicy: Always
+        name: my-plane-enterprise-pgdb
+        stdin: true
+        tty: true
+        env:
+          - name: PGDATA
+            value: /var/lib/postgresql/data/plane
+        envFrom:
+          - configMapRef:
+              name: my-plane-enterprise-pgdb-vars
+              optional: false
+          - secretRef:
+              name: my-plane-enterprise-pgdb-secrets
+              optional: false
+        volumeMounts:
+        - mountPath: /var/lib/postgresql/data
+          name: pvc-my-plane-enterprise-pgdb-vol
+          subPath: ''
+      serviceAccount: my-plane-enterprise-srv-account
+      serviceAccountName: my-plane-enterprise-srv-account
+  volumeClaimTemplates:
+  - apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      creationTimestamp: null
+      namespace: default
+      name: pvc-my-plane-enterprise-pgdb-vol
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: "2Gi"
+      storageClassName: "longhorn"
+      volumeMode: Filesystem
+---
+# Source: plane-enterprise/templates/workloads/redis.stateful.yaml
+# REDIS WORKLOAD
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  namespace: default
+  name: my-plane-enterprise-redis-wl
+spec:
+  selector:
+    matchLabels:
+      app.name: default-my-plane-enterprise-redis
+  serviceName:  my-plane-enterprise-redis
+  template:
+    metadata:
+      labels:
+        app.name: default-my-plane-enterprise-redis
+    spec:
+      containers:
+      - image: registry.plane.tools/plane/valkey:7.2.5-alpine
+        imagePullPolicy: Always
+        name: my-plane-enterprise-redis
+        stdin: true
+        tty: true
+        volumeMounts:
+        - mountPath: /data
+          name: pvc-my-plane-enterprise-redis-vol
+          subPath: ''
+      serviceAccount: my-plane-enterprise-srv-account
+      serviceAccountName: my-plane-enterprise-srv-account
+  volumeClaimTemplates:
+  - apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      creationTimestamp: null
+      namespace: default
+      name: pvc-my-plane-enterprise-redis-vol
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: "500Mi"
+      storageClassName: "longhorn"
+      volumeMode: Filesystem
+---
+# Source: plane-enterprise/templates/workloads/migrator.job.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  namespace: default
+  name: my-plane-enterprise-api-migrate-1
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app.name: default-my-plane-enterprise-api-migrate
+      annotations:
+        timestamp: "2024-09-16 18:07:23.195463815 +0930 ACST m=+1.594311640"
+    spec:
+      containers:
+      - name: my-plane-enterprise-api-migrate
+        image: registry.plane.tools/plane/backend-enterprise:v1.2.1
+        command: 
+          - ./bin/docker-entrypoint-migrator.sh
+        imagePullPolicy: Always
+        envFrom:
+          - configMapRef:
+              name: my-plane-enterprise-app-vars
+              optional: false
+          - secretRef:
+              name: my-plane-enterprise-app-secrets
+              optional: false
+          - configMapRef:
+              name: my-plane-enterprise-doc-store-vars
+              optional: false
+          - secretRef:
+              name: my-plane-enterprise-doc-store-secrets
+              optional: false
+      restartPolicy: OnFailure
+      serviceAccount: my-plane-enterprise-srv-account
+      serviceAccountName: my-plane-enterprise-srv-account
+---
+# Source: plane-enterprise/templates/workloads/minio.stateful.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  namespace: default
+  name: my-plane-enterprise-minio-bucket
+spec:
+  backoffLimit: 6
+  completionMode: NonIndexed
+  template:
+    metadata:
+      namespace: default
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        - name: init
+          image: busybox
+          command: ['sh', '-c', "until nslookup  my-plane-enterprise-minio.default.svc.cluster.local; do echo waiting for  my-plane-enterprise-minio; sleep 2; done"]
+      containers:
+        - command:
+            - /bin/sh
+          args:
+            - '-c'
+            - >-
+              /usr/bin/mc config host add plane-app-minio
+              http://my-plane-enterprise-minio.default.svc.cluster.local:9000 "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY"; 
+              /usr/bin/mc mb plane-app-minio/$AWS_S3_BUCKET_NAME; 
+              /usr/bin/mc anonymous set download plane-app-minio/$AWS_S3_BUCKET_NAME; exit 0;
+          envFrom:
+            - configMapRef:
+                name: my-plane-enterprise-doc-store-vars
+                optional: false
+            - secretRef:
+                name: my-plane-enterprise-doc-store-secrets
+                optional: false
+          image: minio/mc
+          imagePullPolicy: Always
+          name: my-plane-enterprise-minio-bucket
+      serviceAccount: my-plane-enterprise-srv-account
+      serviceAccountName: my-plane-enterprise-srv-account
+      terminationGracePeriodSeconds: 120
+---
+# Source: plane-enterprise/templates/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  namespace: default
+  name: my-plane-enterprise-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "5m"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: plane.example.com
+      http:
+        paths:
+          - backend:
+              service:
+                port:
+                  number: 3000
+                name: my-plane-enterprise-web
+            path: /
+            pathType: Prefix
+          - backend:
+              service:
+                port:
+                  number: 3000
+                name: my-plane-enterprise-space
+            path: /spaces/
+            pathType: Prefix
+          - backend:
+              service:
+                port:
+                  number: 3000
+                name: my-plane-enterprise-admin
+            path: /god-mode/
+            pathType: Prefix
+          - backend:
+              service:
+                port:
+                  number: 8000
+                name: my-plane-enterprise-api
+            path: /api/
+            pathType: Prefix
+          - backend:
+              service:
+                port:
+                  number: 8000
+                name: my-plane-enterprise-api
+            path: /auth/
+            pathType: Prefix
+          - backend:
+              service:
+                port:
+                  number: 9000
+                name: my-plane-enterprise-minio
+            path: /uploads/
+            pathType: Prefix

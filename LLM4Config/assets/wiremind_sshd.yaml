@@ -1,0 +1,85 @@
+---
+# Source: sshd/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  namespace: 
+  name: sshd
+type: Opaque
+data:
+  authorized_keys: ""
+---
+# Source: sshd/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-sshd
+  labels:
+    app: sshd
+    chart: sshd-0.1.1
+    release: my-sshd
+    heritage: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 22
+      targetPort: ssh
+      protocol: TCP
+      name: ssh
+  selector:
+    app: sshd
+    release: my-sshd
+---
+# Source: sshd/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-sshd
+  labels:
+    app: sshd
+    chart: sshd-0.1.1
+    release: my-sshd
+    heritage: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sshd
+      release: my-sshd
+  template:
+    metadata:
+      labels:
+        app: sshd
+        release: my-sshd
+      annotations:
+        checksum/config: 7d7611700bd1efa0a423d1064ebf3cfb55ef8b496fc888fba16e488a1ed7eaa9
+    spec:
+      containers:
+        - name: sshd
+          image: "wiremind/sshd:latest"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: ssh
+              containerPort: 22
+              protocol: TCP
+          readinessProbe:
+            tcpSocket:
+              port: 22
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 22
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            {}
+          volumeMounts:
+          - name: authorizedkeys
+            readOnly: true
+            mountPath: "/authorized_keys"
+      volumes:
+        - name: authorizedkeys
+          secret:
+            secretName: sshd
+            defaultMode: 256

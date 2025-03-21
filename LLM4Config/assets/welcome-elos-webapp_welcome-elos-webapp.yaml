@@ -1,0 +1,110 @@
+---
+# Source: welcome-elos-webapp/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-welcome-elos-webapp
+  labels:
+    helm.sh/chart: welcome-elos-webapp-1.0.0
+    app.kubernetes.io/name: welcome-elos-webapp
+    app.kubernetes.io/instance: my-welcome-elos-webapp
+    app.kubernetes.io/version: "1.0.0"
+    app.kubernetes.io/managed-by: Helm
+automountServiceAccountToken: true
+---
+# Source: welcome-elos-webapp/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-welcome-elos-webapp
+  labels:
+    helm.sh/chart: welcome-elos-webapp-1.0.0
+    app.kubernetes.io/name: welcome-elos-webapp
+    app.kubernetes.io/instance: my-welcome-elos-webapp
+    app.kubernetes.io/version: "1.0.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  loadBalancerIP: 
+  ports:
+    - port: 80
+      targetPort: 8080
+      protocol: TCP
+# If the type field is not equal to ClusterIP AND the annotations field is not empty
+  selector:
+    app.kubernetes.io/name: welcome-elos-webapp
+    app.kubernetes.io/instance: my-welcome-elos-webapp
+---
+# Source: welcome-elos-webapp/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-welcome-elos-webapp
+  labels:
+    helm.sh/chart: welcome-elos-webapp-1.0.0
+    app.kubernetes.io/name: welcome-elos-webapp
+    app.kubernetes.io/instance: my-welcome-elos-webapp
+    app.kubernetes.io/version: "1.0.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: welcome-elos-webapp
+      app.kubernetes.io/instance: my-welcome-elos-webapp
+  template:
+    metadata:
+      labels:
+        helm.sh/chart: welcome-elos-webapp-1.0.0
+        app.kubernetes.io/name: welcome-elos-webapp
+        app.kubernetes.io/instance: my-welcome-elos-webapp
+        app.kubernetes.io/version: "1.0.0"
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      serviceAccountName: my-welcome-elos-webapp
+      securityContext:
+        {}
+      containers:
+        - name: welcome-elos-webapp
+          securityContext:
+            {}
+          image: "pococze/python-hello-elos:1.0.0"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          resources:
+            {}
+---
+# Source: welcome-elos-webapp/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "my-welcome-elos-webapp-test-connection"
+  labels:
+    helm.sh/chart: welcome-elos-webapp-1.0.0
+    app.kubernetes.io/name: welcome-elos-webapp
+    app.kubernetes.io/instance: my-welcome-elos-webapp
+    app.kubernetes.io/version: "1.0.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['my-welcome-elos-webapp:80']
+  restartPolicy: Never
